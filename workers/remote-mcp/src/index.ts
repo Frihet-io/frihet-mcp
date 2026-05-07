@@ -302,6 +302,94 @@ const AGENTS_JSON = JSON.stringify({
   },
 }, null, 2);
 
+// /sitemap.xml — minimal sitemap for mcp.frihet.io
+const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://mcp.frihet.io/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://mcp.frihet.io/openapi.json</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://mcp.frihet.io/.well-known/mcp</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://mcp.frihet.io/llms.txt</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://mcp.frihet.io/agents.json</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://mcp.frihet.io/mcp.json</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://mcp.frihet.io/releases.json</loc><changefreq>daily</changefreq><priority>0.7</priority></url>
+</urlset>`;
+
+// /ai.txt — AI training and crawl disclosure
+const AI_TXT = `User-agent: *
+Allow: /
+
+Trained-for-AI: yes
+Contact: ayuda@frihet.io
+License: https://www.frihet.io/legal/terms
+
+# AI crawlers — explicitly allowed for training and indexing
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+# Machine-readable surfaces
+Llms-txt: https://mcp.frihet.io/llms.txt
+OpenAPI: https://mcp.frihet.io/openapi.json
+MCP: https://mcp.frihet.io/.well-known/mcp
+MCP-Endpoint: https://mcp.frihet.io/mcp
+`;
+
+// /mcp.json — MCP server descriptor (alias for /.well-known/mcp, discoverable without .well-known path)
+const MCP_JSON = JSON.stringify({
+  mcp_version: "2025-11-05",
+  name: "Frihet ERP MCP Server",
+  description: "AI-native ERP MCP server — 62 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
+  endpoint: "https://mcp.frihet.io/mcp",
+  auth: {
+    type: "oauth2",
+    authorization_server: "https://mcp.frihet.io/.well-known/oauth-authorization-server",
+    authorization_endpoint: "https://mcp.frihet.io/authorize",
+    token_endpoint: "https://mcp.frihet.io/token",
+    registration_endpoint: "https://mcp.frihet.io/register",
+    scopes: ["read", "write"],
+  },
+  openapi: "https://api.frihet.io/openapi.json",
+  docs: "https://docs.frihet.io/desarrolladores/mcp-server",
+  npm: "@frihet/mcp-server",
+  install_local: "npx @frihet/mcp-server",
+  tools_count: 62,
+  resources_count: 11,
+  prompts_count: 10,
+  registry: [
+    "https://smithery.ai/server/frihet/frihet-mcp",
+    "https://registry.modelcontextprotocol.io/?q=io.frihet",
+  ],
+}, null, 2);
+
+// /openapi.yaml — note redirecting to canonical JSON
+const OPENAPI_YAML_NOTE = `# Frihet API OpenAPI Specification
+# The canonical machine-readable spec is available in JSON format.
+# Redirect: https://api.frihet.io/openapi.json
+#
+# To convert to YAML locally:
+#   curl https://api.frihet.io/openapi.json | python3 -c "import sys,json,yaml;print(yaml.dump(json.load(sys.stdin)))"
+canonical: https://api.frihet.io/openapi.json
+format: JSON
+note: Use the JSON endpoint for programmatic access.
+`;
+
 // /.well-known/mcp — describes this server's MCP endpoint and OAuth metadata
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
@@ -533,25 +621,62 @@ export default {
         });
       }
 
-      // /openapi.json — proxy from api.frihet.io (canonical location)
+      if (pathname === "/mcp.json") {
+        return new Response(MCP_JSON, {
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+            ...BASE_SECURITY_HEADERS,
+          },
+        });
+      }
+
+      if (pathname === "/sitemap.xml") {
+        return new Response(SITEMAP_XML, {
+          headers: {
+            "Content-Type": "application/xml; charset=utf-8",
+            "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+            ...BASE_SECURITY_HEADERS,
+          },
+        });
+      }
+
+      if (pathname === "/ai.txt") {
+        return new Response(AI_TXT, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+            ...BASE_SECURITY_HEADERS,
+          },
+        });
+      }
+
+      if (pathname === "/openapi.yaml") {
+        return new Response(OPENAPI_YAML_NOTE, {
+          headers: {
+            "Content-Type": "text/yaml; charset=utf-8",
+            "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+            ...BASE_SECURITY_HEADERS,
+          },
+        });
+      }
+
+      // /openapi.json — served from ASSETS binding (public/openapi.json)
+      // Note: Cannot proxy api.frihet.io/openapi.json — same-zone Worker subrequest is blocked by Cloudflare (522).
+      // Instead, openapi.json is bundled into public/ at deploy time (copied from Frihet-ERP/functions/src/openapi.json).
       if (pathname === "/openapi.json") {
-        try {
-          const upstream = await fetch("https://api.frihet.io/openapi.json", {
-            headers: { Accept: "application/json" },
-            signal: AbortSignal.timeout(10000),
-          });
-          if (upstream.ok) {
-            return new Response(upstream.body, {
-              status: 200,
-              headers: {
-                "Content-Type": "application/json; charset=utf-8",
-                "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
-                ...BASE_SECURITY_HEADERS,
-              },
-            });
+        if (env.ASSETS) {
+          const assetReq = new Request(new URL("/openapi.json", request.url).toString());
+          const assetResp = await env.ASSETS.fetch(assetReq);
+          if (assetResp.ok) {
+            const headers = new Headers();
+            for (const [key, value] of Object.entries(BASE_SECURITY_HEADERS)) {
+              headers.set(key, value);
+            }
+            headers.set("Content-Type", "application/json; charset=utf-8");
+            headers.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+            return new Response(assetResp.body, { status: 200, headers });
           }
-        } catch {
-          // Fall through — return 502 below only if nothing else handles it
         }
         return new Response(
           JSON.stringify({ error: "OpenAPI spec temporarily unavailable", canonical: "https://api.frihet.io/openapi.json" }),

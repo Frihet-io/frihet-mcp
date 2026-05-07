@@ -203,6 +203,88 @@ const AGENTS_JSON = JSON.stringify({
   },
 }, null, 2);
 
+// /sitemap.xml — minimal sitemap pointing to key machine-readable surfaces
+const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://api.frihet.io/openapi.json</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://api.frihet.io/.well-known/mcp</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://api.frihet.io/llms.txt</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://api.frihet.io/agents.json</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://api.frihet.io/mcp.json</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+</urlset>`;
+
+// /ai.txt — AI training and crawl disclosure
+const AI_TXT = `User-agent: *
+Allow: /
+
+Trained-for-AI: yes
+Contact: ayuda@frihet.io
+License: https://www.frihet.io/legal/terms
+
+# AI crawlers — explicitly allowed for training and indexing
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+# Machine-readable surfaces
+Llms-txt: https://api.frihet.io/llms.txt
+OpenAPI: https://api.frihet.io/openapi.json
+MCP: https://api.frihet.io/.well-known/mcp
+`;
+
+// /mcp.json — MCP server descriptor (alias for /.well-known/mcp)
+const MCP_JSON = JSON.stringify({
+  mcp_version: "2025-11-05",
+  name: "Frihet ERP MCP Server",
+  description: "AI-native ERP MCP server — 62 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
+  endpoint: "https://mcp.frihet.io/mcp",
+  auth: {
+    type: "oauth2",
+    authorization_server: "https://mcp.frihet.io/.well-known/oauth-authorization-server",
+    scopes: ["read", "write"],
+  },
+  openapi: "https://api.frihet.io/openapi.json",
+  docs: "https://docs.frihet.io/desarrolladores/mcp-server",
+  npm: "@frihet/mcp-server",
+  install_local: "npx @frihet/mcp-server",
+  tools_count: 62,
+  resources_count: 11,
+  prompts_count: 10,
+  registry: [
+    "https://smithery.ai/server/frihet/frihet-mcp",
+    "https://registry.modelcontextprotocol.io/?q=io.frihet",
+  ],
+}, null, 2);
+
+// /openapi.yaml — note redirecting to canonical JSON (pragmatic: no YAML transpile needed)
+const OPENAPI_YAML_NOTE = `# Frihet API OpenAPI Specification
+# The canonical machine-readable spec is available in JSON format.
+# Redirect: https://api.frihet.io/openapi.json
+#
+# To convert to YAML locally:
+#   curl https://api.frihet.io/openapi.json | python3 -c "import sys,json,yaml;print(yaml.dump(json.load(sys.stdin)))"
+canonical: https://api.frihet.io/openapi.json
+format: JSON
+note: Use the JSON endpoint for programmatic access.
+`;
+
 // /.well-known/mcp — MCP discovery metadata
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
@@ -399,6 +481,46 @@ export default {
         });
       }
 
+      if (pathname === "/mcp.json") {
+        return new Response(MCP_JSON, {
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+            ...SECURITY_HEADERS,
+          },
+        });
+      }
+
+      if (pathname === "/sitemap.xml") {
+        return new Response(SITEMAP_XML, {
+          headers: {
+            "Content-Type": "application/xml; charset=utf-8",
+            "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+            ...SECURITY_HEADERS,
+          },
+        });
+      }
+
+      if (pathname === "/ai.txt") {
+        return new Response(AI_TXT, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+            ...SECURITY_HEADERS,
+          },
+        });
+      }
+
+      if (pathname === "/openapi.yaml" || pathname === "/v1/openapi.yaml") {
+        return new Response(OPENAPI_YAML_NOTE, {
+          headers: {
+            "Content-Type": "text/yaml; charset=utf-8",
+            "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+            ...SECURITY_HEADERS,
+          },
+        });
+      }
+
       // ---------------------------------------------------------------------------
       // /openapi.json — served statically from ASSETS binding (public/openapi.json)
       // Bypasses upstream Firebase which returns 404 for this route.
@@ -423,8 +545,31 @@ export default {
       }
     }
 
+    // Root landing — return a minimal JSON descriptor so GET / → 200 (not 404)
+    if (request.method === "GET" && url.pathname === "/") {
+      const landing = JSON.stringify({
+        name: "Frihet API",
+        version: "1.0.0",
+        description: "REST API for Frihet ERP — AI-native business management platform.",
+        docs: "https://docs.frihet.io/desarrolladores/api",
+        openapi: "https://api.frihet.io/openapi.json",
+        mcp: "https://mcp.frihet.io",
+        llms_txt: "https://api.frihet.io/llms.txt",
+      }, null, 2);
+      const headers = new Headers(SECURITY_HEADERS);
+      headers.set("Content-Type", "application/json; charset=utf-8");
+      headers.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+      const corsHeaders = getCorsHeaders(request);
+      if (corsHeaders) {
+        for (const [key, value] of Object.entries(corsHeaders)) {
+          headers.set(key, value);
+        }
+      }
+      return new Response(landing, { status: 200, headers });
+    }
+
     // Public routes: forward to /publicApi/ (no /api/ prefix) for root-level endpoints
-    const PUBLIC_PATHS = ['/', '/openapi.yaml', '/v1', '/v1/', '/v1/openapi.yaml', '/health', '/v1/health'];
+    const PUBLIC_PATHS = ['/openapi.yaml', '/v1', '/v1/', '/v1/openapi.yaml', '/health', '/v1/health'];
     if (request.method === "GET" && PUBLIC_PATHS.includes(url.pathname)) {
       const upstream = new URL(url.pathname, UPSTREAM);
       upstream.pathname = "/publicApi" + url.pathname;
