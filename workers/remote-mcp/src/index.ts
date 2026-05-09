@@ -308,6 +308,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <url><loc>https://mcp.frihet.io/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>https://mcp.frihet.io/openapi.json</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
   <url><loc>https://mcp.frihet.io/.well-known/mcp</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://mcp.frihet.io/.well-known/jsonld</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://mcp.frihet.io/llms.txt</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
   <url><loc>https://mcp.frihet.io/agents.json</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://mcp.frihet.io/mcp.json</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
@@ -350,6 +351,79 @@ OpenAPI: https://mcp.frihet.io/openapi.json
 MCP: https://mcp.frihet.io/.well-known/mcp
 MCP-Endpoint: https://mcp.frihet.io/mcp
 `;
+
+// /.well-known/jsonld — Schema.org JSON-LD entity graph for AI/LLM discoverability
+// Helps search engines (Google AIO, Perplexity, ChatGPT browse) understand Frihet as an entity.
+const WELL_KNOWN_JSONLD = JSON.stringify([
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Frihet MCP Server",
+    "alternateName": "@frihet/mcp-server",
+    "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "MCP Server",
+    "operatingSystem": "Web, Node.js, Cloudflare Workers",
+    "url": "https://mcp.frihet.io",
+    "downloadUrl": "https://www.npmjs.com/package/@frihet/mcp-server",
+    "description": "MCP server for Frihet ERP. 62 tools for invoicing, expenses, accounting, tax compliance (VeriFactu), banking, CRM, and HR. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
+    "featureList": [
+      "62 MCP tools for ERP operations",
+      "OAuth 2.0 + PKCE authentication",
+      "VeriFactu Spanish e-invoicing compliance",
+      "REST API proxy (OpenAPI 3.1)",
+      "Works with Claude, ChatGPT, Gemini, Cursor, Windsurf, Copilot",
+      "MIT licensed npm package",
+      "Cloudflare Worker remote endpoint"
+    ],
+    "softwareVersion": "1.7.0",
+    "license": "https://opensource.org/licenses/MIT",
+    "codeRepository": "https://github.com/Frihet-io/frihet-mcp",
+    "offers": {
+      "@type": "Offer",
+      "name": "Free (Open Source)",
+      "price": 0,
+      "priceCurrency": "EUR",
+      "availability": "https://schema.org/InStock",
+      "url": "https://www.npmjs.com/package/@frihet/mcp-server"
+    },
+    "provider": {
+      "@type": "Organization",
+      "name": "Frihet",
+      "url": "https://www.frihet.io"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Frihet",
+    "url": "https://www.frihet.io",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://www.frihet.io/logo.png",
+      "width": 512,
+      "height": 512
+    },
+    "foundingDate": "2026-02-13",
+    "founder": {
+      "@type": "Person",
+      "name": "Viktor Berthelius",
+      "url": "https://brthls.com"
+    },
+    "sameAs": [
+      "https://github.com/Frihet-io",
+      "https://www.producthunt.com/products/frihet",
+      "https://www.linkedin.com/company/frihet-erp/",
+      "https://bsky.app/profile/frihet.io",
+      "https://twitter.com/frihet_io",
+      "https://www.npmjs.com/package/@frihet/mcp-server"
+    ],
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "email": "ayuda@frihet.io",
+      "contactType": "customer support"
+    }
+  }
+], null, 2);
 
 // /mcp.json — MCP server descriptor (alias for /.well-known/mcp, discoverable without .well-known path)
 const MCP_JSON = JSON.stringify({
@@ -604,6 +678,17 @@ export default {
         return new Response(AGENTS_JSON, {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+            ...BASE_SECURITY_HEADERS,
+          },
+        });
+      }
+
+      // /.well-known/jsonld — schema.org entity graph for AI/LLM discoverability
+      if (pathname === "/.well-known/jsonld") {
+        return new Response(WELL_KNOWN_JSONLD, {
+          headers: {
+            "Content-Type": "application/ld+json; charset=utf-8",
             "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
             ...BASE_SECURITY_HEADERS,
           },
