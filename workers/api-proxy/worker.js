@@ -501,7 +501,7 @@ export default {
         });
       }
 
-      if (pathname === "/ai.txt") {
+      if (pathname === "/ai.txt" || pathname === "/.well-known/ai.txt") {
         return new Response(AI_TXT, {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
