@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.frihet/erp",
   "title": "Frihet ERP",
-  "description": "AI-native business management — 55 tools for invoicing, CRM, accounting & tax.",
+  "description": "AI-native business management — 94 tools for invoicing, CRM, accounting, tax, banking, fiscal compliance, POS, vacation rentals, time tracking & recurring.",
   "repository": {
     "url": "https://github.com/Frihet-io/frihet-mcp",
     "source": "github"
   },
-  "version": "1.5.4",
+  "version": "1.9.0-beta.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@frihet/mcp-server",
-      "version": "1.5.4",
+      "version": "1.9.0-beta.1",
       "transport": {
         "type": "stdio"
       }
