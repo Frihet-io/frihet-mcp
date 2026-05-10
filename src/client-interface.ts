@@ -116,4 +116,27 @@ export interface IFrihetClient {
   getSale(id: string): Promise<Record<string, unknown>>;
   listSales(params?: { terminalId?: string; status?: string; from?: string; to?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
   refundSale(id: string, data?: { amountCents?: number; reason?: string }): Promise<Record<string, unknown>>;
+
+  // Banking endpoints (/v1/banking/*)
+  listBankAccounts(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  getBankAccount(id: string): Promise<Record<string, unknown>>;
+  listTransactions(params?: { accountId?: string; from?: string; to?: string; status?: string; category?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  categorizeTransaction(id: string, data: { category: string; notes?: string }): Promise<Record<string, unknown>>;
+  matchTransactionToDocument(transactionId: string, data: { documentId: string; documentType: "invoice" | "expense"; notes?: string }): Promise<Record<string, unknown>>;
+
+  // Fiscal endpoints (/v1/fiscal/*)
+  getFiscalModeloSummary(modeloCode: string, period?: string): Promise<Record<string, unknown>>;
+  getVerifactuStatus(invoiceId: string): Promise<Record<string, unknown>>;
+  resubmitVerifactu(invoiceId: string): Promise<Record<string, unknown>>;
+  getTicketbaiStatus(invoiceId: string): Promise<Record<string, unknown>>;
+
+  // Time tracking endpoints (/v1/time/*)
+  listTimeEntries(params?: { userId?: string; projectId?: string; from?: string; to?: string; billable?: boolean; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  createTimeEntry(data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  updateTimeEntry(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  deleteTimeEntry(id: string): Promise<void>;
+
+  // Recurring invoice endpoints (/v1/recurring/*)
+  listRecurringInvoices(params?: { status?: string; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  runRecurringNow(templateId: string, options?: { draftOnly?: boolean }): Promise<Record<string, unknown>>;
 }

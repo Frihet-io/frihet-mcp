@@ -736,4 +736,125 @@ export class FrihetClient {
       quarter,
     });
   }
+
+  // ---------------------------------------------------------------- Banking
+  // NOTE: /v1/banking/* endpoints are planned — 404 propagates until backend ships.
+
+  async listBankAccounts(
+    params?: { limit?: number; offset?: number },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/banking/accounts", undefined, {
+      limit: params?.limit,
+      offset: params?.offset,
+    });
+  }
+
+  async getBankAccount(id: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/banking/accounts/${encodeURIComponent(id)}`);
+  }
+
+  async listTransactions(
+    params?: { accountId?: string; from?: string; to?: string; status?: string; category?: string; limit?: number; offset?: number; after?: string },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/banking/transactions", undefined, {
+      accountId: params?.accountId,
+      from: params?.from,
+      to: params?.to,
+      status: params?.status,
+      category: params?.category,
+      limit: params?.limit,
+      offset: params?.offset,
+      after: params?.after,
+    });
+  }
+
+  async categorizeTransaction(
+    id: string,
+    data: { category: string; notes?: string },
+  ): Promise<Record<string, unknown>> {
+    return this.request("PATCH", `/banking/transactions/${encodeURIComponent(id)}/categorize`, data);
+  }
+
+  async matchTransactionToDocument(
+    transactionId: string,
+    data: { documentId: string; documentType: "invoice" | "expense"; notes?: string },
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", `/banking/transactions/${encodeURIComponent(transactionId)}/match`, data);
+  }
+
+  // ---------------------------------------------------------------- Fiscal
+  // NOTE: /v1/fiscal/* endpoints are planned — 404 propagates until backend ships.
+
+  async getFiscalModeloSummary(
+    modeloCode: string,
+    period?: string,
+  ): Promise<Record<string, unknown>> {
+    return this.request("GET", `/fiscal/modelo/${encodeURIComponent(modeloCode)}`, undefined, {
+      period,
+    });
+  }
+
+  async getVerifactuStatus(invoiceId: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/fiscal/verifactu/${encodeURIComponent(invoiceId)}/status`);
+  }
+
+  async resubmitVerifactu(invoiceId: string): Promise<Record<string, unknown>> {
+    return this.request("POST", `/fiscal/verifactu/${encodeURIComponent(invoiceId)}/resubmit`, {});
+  }
+
+  async getTicketbaiStatus(invoiceId: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/fiscal/ticketbai/${encodeURIComponent(invoiceId)}/status`);
+  }
+
+  // ---------------------------------------------------------------- Time Tracking
+  // NOTE: /v1/time/* endpoints are planned — 404 propagates until backend ships.
+
+  async listTimeEntries(
+    params?: { userId?: string; projectId?: string; from?: string; to?: string; billable?: boolean; limit?: number; offset?: number; after?: string },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/time/entries", undefined, {
+      userId: params?.userId,
+      projectId: params?.projectId,
+      from: params?.from,
+      to: params?.to,
+      billable: params?.billable !== undefined ? (params.billable ? 1 : 0) : undefined,
+      limit: params?.limit,
+      offset: params?.offset,
+      after: params?.after,
+    });
+  }
+
+  async createTimeEntry(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request("POST", "/time/entries", data);
+  }
+
+  async updateTimeEntry(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request("PATCH", `/time/entries/${encodeURIComponent(id)}`, data);
+  }
+
+  async deleteTimeEntry(id: string): Promise<void> {
+    return this.request("DELETE", `/time/entries/${encodeURIComponent(id)}`);
+  }
+
+  // ---------------------------------------------------------------- Recurring Invoices
+  // NOTE: /v1/recurring/* endpoints are planned — 404 propagates until backend ships.
+
+  async listRecurringInvoices(
+    params?: { status?: string; limit?: number; offset?: number },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/recurring/invoices", undefined, {
+      status: params?.status,
+      limit: params?.limit,
+      offset: params?.offset,
+    });
+  }
+
+  async runRecurringNow(
+    templateId: string,
+    options?: { draftOnly?: boolean },
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", `/recurring/invoices/${encodeURIComponent(templateId)}/run`, {
+      draftOnly: options?.draftOnly ?? true,
+    });
+  }
 }

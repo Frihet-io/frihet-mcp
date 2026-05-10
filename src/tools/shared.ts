@@ -559,6 +559,96 @@ export const actionResultOutput = z.object({
   message: z.string().optional(),
 }).passthrough();
 
+/* --- Banking item schemas -------------------------------------------------- */
+
+export const bankAccountItemOutput = z.object({
+  id: z.string(),
+  alias: z.string().optional(),
+  ibanLast4: z.string().optional().describe("Last 4 digits of IBAN (security masked)"),
+  currency: z.string().optional(),
+  balance: z.number().optional(),
+  lastSyncedAt: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+export const bankTransactionItemOutput = z.object({
+  id: z.string(),
+  accountId: z.string().optional(),
+  amount: z.number(),
+  currency: z.string().optional(),
+  description: z.string().optional(),
+  postedAt: z.string().optional(),
+  category: z.string().optional(),
+  status: z.enum(["pending", "posted", "excluded"]).optional(),
+  matchedDocId: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+/* --- Fiscal item schemas --------------------------------------------------- */
+
+export const fiscalModeloSummaryOutput = z.object({
+  modeloCode: z.string(),
+  period: z.string().optional(),
+  totalsByRate: z.record(z.string(), z.number()).optional(),
+  totalDeductible: z.number().optional(),
+  totalDue: z.number().optional(),
+  deadline: z.string().optional(),
+}).passthrough();
+
+export const verifactuStatusOutput = z.object({
+  invoiceId: z.string(),
+  lastSubmissionAt: z.string().optional(),
+  hash: z.string().optional(),
+  status: z.enum(["success", "pending", "failed"]).optional(),
+  aeatResponse: z.string().optional(),
+  qrUrl: z.string().optional(),
+}).passthrough();
+
+export const ticketbaiStatusOutput = z.object({
+  invoiceId: z.string(),
+  lastSubmissionAt: z.string().optional(),
+  hash: z.string().optional(),
+  status: z.enum(["success", "pending", "failed"]).optional(),
+  aeatResponse: z.string().optional(),
+  qrUrl: z.string().optional(),
+  province: z.enum(["araba", "bizkaia", "gipuzkoa"]).optional(),
+}).passthrough();
+
+/* --- Time entry item schemas ----------------------------------------------- */
+
+export const timeEntryItemOutput = z.object({
+  id: z.string(),
+  userId: z.string().optional(),
+  projectId: z.string().optional(),
+  hours: z.number(),
+  description: z.string().optional(),
+  billable: z.boolean().optional(),
+  date: z.string().optional(),
+  status: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+/* --- Recurring invoice item schemas ---------------------------------------- */
+
+export const recurringInvoiceItemOutput = z.object({
+  id: z.string(),
+  templateName: z.string().optional(),
+  frequency: z.string().optional(),
+  nextRun: z.string().optional(),
+  recipient: z.string().optional(),
+  lineItems: z.array(z.object({
+    description: z.string(),
+    quantity: z.number(),
+    unitPrice: z.number(),
+  })).optional(),
+  status: z.enum(["active", "paused"]).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
 /** Schema for PDF results */
 export const pdfResultOutput = z.object({
   id: z.string(),

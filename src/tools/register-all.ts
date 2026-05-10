@@ -1,12 +1,12 @@
 /**
- * Barrel module that registers all 75 Frihet ERP tools on an McpServer.
+ * Barrel module that registers all 94 Frihet ERP tools on an McpServer.
  *
  * Used by both the local (stdio) and remote (Cloudflare Workers) servers
  * so tool definitions stay in sync — one source of truth.
  *
  * Langfuse observability is injected by patching server.registerTool once
  * before any tool registration. This wraps every tool callback with
- * traceMCPTool so all 75 tools are instrumented at zero per-tool cost.
+ * traceMCPTool so all 94 tools are instrumented at zero per-tool cost.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -25,6 +25,10 @@ import { registerDepositTools } from "./deposits.js";
 import { registerEInvoiceTools } from "./einvoice.js";
 import { registerStayTools } from "./stay.js";
 import { registerPosTools } from "./pos.js";
+import { registerBankingTools } from "./banking.js";
+import { registerFiscalTools } from "./fiscal.js";
+import { registerTimeTools } from "./time.js";
+import { registerRecurringTools } from "./recurring.js";
 
 /**
  * Patches server.registerTool to wrap every tool callback with Langfuse tracing.
@@ -72,4 +76,8 @@ export function registerAllTools(server: McpServer, client: IFrihetClient): void
   registerEInvoiceTools(server, client);
   registerStayTools(server, client);
   registerPosTools(server, client);
+  registerBankingTools(server, client);
+  registerFiscalTools(server, client);
+  registerTimeTools(server, client);
+  registerRecurringTools(server, client);
 }
