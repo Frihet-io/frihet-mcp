@@ -824,6 +824,10 @@ export class FrihetClient {
     });
   }
 
+  async getTimeEntry(id: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/time/entries/${encodeURIComponent(id)}`);
+  }
+
   async createTimeEntry(data: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.request("POST", "/time/entries", data);
   }
@@ -834,6 +838,18 @@ export class FrihetClient {
 
   async deleteTimeEntry(id: string): Promise<void> {
     return this.request("DELETE", `/time/entries/${encodeURIComponent(id)}`);
+  }
+
+  async getTimeSummary(
+    params: { from: string; to: string; userId?: string; projectId?: string; groupBy?: string },
+  ): Promise<Record<string, unknown>> {
+    return this.request("GET", "/time/summary", undefined, {
+      from: params.from,
+      to: params.to,
+      userId: params?.userId,
+      projectId: params?.projectId,
+      groupBy: params?.groupBy,
+    });
   }
 
   // ---------------------------------------------------------------- Recurring Invoices
@@ -849,6 +865,30 @@ export class FrihetClient {
     });
   }
 
+  async getRecurringInvoice(id: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/recurring/invoices/${encodeURIComponent(id)}`);
+  }
+
+  async createRecurringInvoice(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request("POST", "/recurring/invoices", data);
+  }
+
+  async updateRecurringInvoice(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request("PATCH", `/recurring/invoices/${encodeURIComponent(id)}`, data);
+  }
+
+  async pauseRecurringInvoice(id: string): Promise<Record<string, unknown>> {
+    return this.request("POST", `/recurring/invoices/${encodeURIComponent(id)}/pause`, {});
+  }
+
+  async resumeRecurringInvoice(id: string): Promise<Record<string, unknown>> {
+    return this.request("POST", `/recurring/invoices/${encodeURIComponent(id)}/resume`, {});
+  }
+
+  async deleteRecurringInvoice(id: string): Promise<void> {
+    return this.request("DELETE", `/recurring/invoices/${encodeURIComponent(id)}`);
+  }
+
   async runRecurringNow(
     templateId: string,
     options?: { draftOnly?: boolean },
@@ -856,5 +896,31 @@ export class FrihetClient {
     return this.request("POST", `/recurring/invoices/${encodeURIComponent(templateId)}/run`, {
       draftOnly: options?.draftOnly ?? true,
     });
+  }
+
+  // ---------------------------------------------------------------- Team Management
+  // NOTE: /v1/team/* endpoints are planned — 404 propagates until backend ships.
+
+  async listTeamMembers(
+    params?: { role?: string; status?: string; limit?: number; offset?: number },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/team/members", undefined, {
+      role: params?.role,
+      status: params?.status,
+      limit: params?.limit,
+      offset: params?.offset,
+    });
+  }
+
+  async inviteTeamMember(data: { email: string; role: string; name?: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", "/team/members/invite", data);
+  }
+
+  async updateTeamMemberRole(memberId: string, role: string): Promise<Record<string, unknown>> {
+    return this.request("PATCH", `/team/members/${encodeURIComponent(memberId)}/role`, { role });
+  }
+
+  async removeTeamMember(memberId: string): Promise<void> {
+    return this.request("DELETE", `/team/members/${encodeURIComponent(memberId)}`);
   }
 }

@@ -1,13 +1,15 @@
 /**
- * Time tracking tools for the Frihet MCP server — Wave 6 (4 tools).
+ * Time tracking tools for the Frihet MCP server — Wave Mature 3 (6 tools).
  *
  * Tools:
- *   1. list_time_entries  — list timesheets (filter: user, project, date range)
- *   2. create_time_entry  — log time (project, hours, description, billable flag)
- *   3. update_time_entry  — modify existing time entry
- *   4. delete_time_entry  — soft delete (Trust Area: requires confirm)
+ *   1. list_time_entries   — list timesheets (filter: user, project, date range)
+ *   2. get_time_entry      — get a single time entry by ID
+ *   3. create_time_entry   — log time (project, hours, description, billable flag)
+ *   4. update_time_entry   — modify existing time entry
+ *   5. delete_time_entry   — soft delete (Trust Area: requires confirm)
+ *   6. get_time_summary    — aggregate hours/cost by workspace or member
  *
- * REST surface: /v1/time/entries
+ * REST surface: /v1/time/entries, /v1/time/summary
  *
  * NOTE: ERP backend endpoints /v1/time/* are planned. Tools are wired
  * and will surface 404 errors until the backend ships.
@@ -29,6 +31,7 @@ import {
   paginatedOutput,
   deleteResultOutput,
   timeEntryItemOutput,
+  timeSummaryOutput,
 } from "./shared.js";
 
 export function registerTimeTools(server: McpServer, client: IFrihetClient): void {
@@ -66,6 +69,32 @@ export function registerTimeTools(server: McpServer, client: IFrihetClient): voi
           structuredContent: result as unknown as Record<string, unknown>,
         };
       }),
+  );
+
+  // -- get_time_entry --
+
+  server.registerTool(
+    "get_time_entry",
+    {
+      title: "Get Time Entry",
+      description:
+        "Get full details of a single time tracking entry by ID. " +
+        "Returns project, user, hours, description, billable flag, date and status. " +
+        "/ Obtiene los detalles completos de una entrada de tiempo por su ID. " +
+        "Devuelve proyecto, usuario, horas, descripcion, facturabilidad, fecha y estado.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: {
+        id: z.string().describe("Time entry ID / ID de la entrada de tiempo"),
+      },
+      outputSchema: timeEntryItemOutput,
+    },
+    async ({ id }) => withToolLogging("get_time_entry", async () => {
+      const result = await client.getTimeEntry(id);
+      return {
+        content: [getContent(formatRecord("Time entry", result))],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    }),
   );
 
   // -- create_time_entry --
@@ -175,5 +204,38 @@ export function registerTimeTools(server: McpServer, client: IFrihetClient): voi
         structuredContent: { success: true, id } as unknown as Record<string, unknown>,
       };
     }),
+  );
+
+  // -- get_time_summary --
+
+  server.registerTool(
+    "get_time_summary",
+    {
+      title: "Get Time Summary",
+      description:
+        "Get aggregated time tracking summary for a workspace or specific team member. " +
+        "Returns total hours, billable hours, non-billable hours, and estimated cost for the period. " +
+        "Filter by date range and optionally by user ID for per-member breakdowns. " +
+        "/ Obtiene el resumen agregado de seguimiento de tiempo para el espacio de trabajo o un miembro. " +
+        "Devuelve horas totales, facturables, no facturables y coste estimado del periodo. " +
+        "Filtra por rango de fechas y opcionalmente por usuario para desglose por miembro.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: {
+        from: z.string().describe("Start date ISO 8601 (YYYY-MM-DD) / Fecha inicio"),
+        to: z.string().describe("End date ISO 8601 (YYYY-MM-DD) / Fecha fin"),
+        userId: z.string().optional().describe("Filter to a specific member (omit for workspace total) / Filtrar a un miembro concreto (omitir para total workspace)"),
+        projectId: z.string().optional().describe("Filter to a specific project / Filtrar a un proyecto concreto"),
+        groupBy: z.enum(["user", "project", "day"]).optional().describe("Group results by user, project, or day (default: no grouping) / Agrupar resultados por usuario, proyecto o dia"),
+      },
+      outputSchema: timeSummaryOutput,
+    },
+    async ({ from, to, userId, projectId, groupBy }) =>
+      withToolLogging("get_time_summary", async () => {
+        const result = await client.getTimeSummary({ from, to, userId, projectId, groupBy });
+        return {
+          content: [getContent(formatRecord("Time summary", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
   );
 }
