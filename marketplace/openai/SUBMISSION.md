@@ -24,7 +24,7 @@
 | Field | Max | Value |
 |-------|-----|-------|
 | App name | 60 chars | `Frihet ERP` |
-| Short description (tagline) | 120 chars | `Create invoices, manage clients, and handle Spanish tax compliance through ChatGPT — 94 tools, zero install.` |
+| Short description (tagline) | 120 chars | `Create invoices, manage clients, and handle Spanish tax compliance through ChatGPT — 111 tools, zero install.` |
 | Long description | 2,000 chars | See below |
 | Category | — | `Finance & Accounting` |
 | App icon URL | — | `https://frihet.io/favicon.svg` |
@@ -42,7 +42,7 @@ Frihet ERP connects ChatGPT directly to your business data.
 
 Create invoices by describing what you sold. Log expenses in plain language. Check your cash position. Prepare quarterly tax filings. All from inside ChatGPT — no forms, no dashboards, just conversation.
 
-94 tools across every business domain: invoices, expenses, clients, CRM, products, quotes, deposits, banking (accounts + transactions + reconciliation), fiscal compliance for Spain (Modelo 303, 130, 390, 180, 347), VeriFactu real-time invoice signing, TicketBAI, e-invoicing in 7 formats (PEPPOL, XRechnung, FatturaPA, Factur-X, Facturae, UBL, CII), vacation rental management, point-of-sale, time tracking, and recurring invoices.
+111 tools across every business domain: invoices, expenses, clients, CRM (contacts/activities/notes), products, quotes, deposits, vendors, banking (accounts + transactions + reconciliation), fiscal compliance for Spain (Modelo 303, 130, 390, 180, 347), VeriFactu real-time invoice signing, TicketBAI, e-invoicing in 7 formats (PEPPOL, XRechnung, FatturaPA, Factur-X, Facturae, UBL, CII), vacation rental management (Stay), point-of-sale, time tracking, recurring invoices, and team management.
 
 Connect via OAuth 2.0 in seconds — no API key required. Get a free Frihet account at app.frihet.io.
 
