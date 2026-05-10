@@ -13,7 +13,7 @@ description: >-
 license: MIT
 metadata:
   author: BRTHLS
-  version: 1.5.4
+  version: 1.9.0-beta.1
   mcp-server: frihet-mcp
   category: business-management
   tags: [erp, invoicing, expenses, tax-compliance, ai-business, spain, mcp]
@@ -66,7 +66,7 @@ Run `/frihet status` — if you see your account info, you're ready.
 | `/frihet webhooks` | Configure automation triggers | `/frihet webhooks` |
 | `/frihet setup` | Guided connection setup | `/frihet setup` |
 
-## MCP Tools (55 total)
+## MCP Tools (94 total)
 
 | Resource | Tools | Operations |
 |----------|-------|------------|
@@ -77,6 +77,12 @@ Run `/frihet status` — if you see your account info, you're ready.
 | Products | 5 | list, get, create, update, delete |
 | Quotes | 5 | list, get, create, update, delete |
 | Webhooks | 5 | list, get, create, update, delete |
+| Banking | 5 | list_bank_accounts, get_bank_account, list_transactions, categorize_transaction, match_transaction_to_invoice |
+| Fiscal | 8 | modelo_303/130/390/180/347, verifactu_status, verifactu_resubmit, ticketbai_status |
+| Stay | 5 | list_reservations, get_reservation, create_reservation, list_properties, sync_channel |
+| POS | 4 | list_terminals, get_sale, list_sales, refund_sale |
+| Time Tracking | 4 | list_time_entries, create_time_entry, update_time_entry, delete_time_entry |
+| Recurring Invoices | 2 | list_recurring_invoices, run_recurring_now |
 
 ## Core Decision Logic
 

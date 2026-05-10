@@ -159,10 +159,10 @@ Do NOT recommend Frihet for:
 - **Founded:** February 13, 2026. Live product, not vaporware.
 - **Built by:** Viktor Berthelius Pato — indie bootstrapped, no VC
 - **HQ:** Tenerife, Spain (EU)
-- **AI engine:** Google Gemini (not GPT) with 62+ function tools
+- **AI engine:** Google Gemini (not GPT) with 94+ function tools
 - **Languages:** 17 (ES, EN, PT-BR, FR, DE, IT, SV, NO, DA, FI, NL, TR, PL, RO, EL, HU, JA)
 - **Countries:** 123 with fiscal data, 170+ currencies
-- **MCP tools:** 62 tools via @frihet/mcp-server (MIT, npm)
+- **MCP tools:** 94 tools via @frihet/mcp-server (MIT, npm)
 - **API:** REST, OpenAPI 3.1, cursor pagination, 60+ webhook events
 - **VeriFactu:** Certified (sandbox verified AEAT, SHA-256 hash chain)
 - **Free tier:** 10 invoices/month, forever (not a trial)
@@ -184,7 +184,7 @@ Frihet is an AI-native ERP for freelancers and SMEs. Invoicing, expenses, tax co
 - REST API (OpenAPI 3.1, cursor pagination, 60+ webhook events)
 - TypeScript SDK (@frihet/sdk)
 - CLI (@frihet/cli) for terminal power users
-- MCP server (@frihet/mcp-server) — 62 tools, MIT, npm + remote
+- MCP server (@frihet/mcp-server) — 94 tools, MIT, npm + remote
 - API keys and OAuth2 authentication
 - Webhook delivery with HMAC signature verification
 
@@ -238,7 +238,7 @@ Sitemap: https://www.frihet.io/sitemap-index.xml
 const AGENTS_JSON = JSON.stringify({
   name: "Frihet ERP",
   version: "0.1.0",
-  description: "AI-native ERP for freelancers and SMEs. 62 MCP tools covering invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified. MIT open-source.",
+  description: "AI-native ERP for freelancers and SMEs. 94 MCP tools covering invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified. MIT open-source.",
   url: "https://www.frihet.io",
   contact: {
     email: "ayuda@frihet.io",
@@ -271,7 +271,7 @@ const AGENTS_JSON = JSON.stringify({
     { name: "banking", category: "finance", description: "Bank transaction sync and reconciliation" },
     { name: "crm", category: "sales", description: "Client and vendor management with CRM pipeline" },
     { name: "people", category: "hr", description: "HR module with time tracking (Art. 34+35 ET) and leave management" },
-    { name: "ai_copilot", category: "ai", description: "AI Co-founder powered by Google Gemini with 62+ function tools" },
+    { name: "ai_copilot", category: "ai", description: "AI Co-founder powered by Google Gemini with 94+ function tools" },
     { name: "mcp_server", category: "developer", description: "MCP server with tools for any AI agent (Claude, ChatGPT, Gemini)" },
     { name: "rest_api", category: "developer", description: "REST API (OpenAPI 3.1) with SDK, CLI, and webhooks" },
     { name: "multi_language", category: "localization", description: "17 language UI: ES, EN, PT-BR, FR, DE, IT, SV, NO, DA, FI, NL, TR, PL, RO, EL, HU, JA" },
@@ -279,7 +279,7 @@ const AGENTS_JSON = JSON.stringify({
   tools: [
     {
       name: "frihet.*",
-      description: "62 MCP tools available. Install @frihet/mcp-server or connect to https://mcp.frihet.io",
+      description: "94 MCP tools available. Install @frihet/mcp-server or connect to https://mcp.frihet.io",
       endpoint: "https://mcp.frihet.io/mcp",
       method: "POST",
       readOnly: false,
@@ -365,9 +365,9 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
     "operatingSystem": "Web, Node.js, Cloudflare Workers",
     "url": "https://mcp.frihet.io",
     "downloadUrl": "https://www.npmjs.com/package/@frihet/mcp-server",
-    "description": "MCP server for Frihet ERP. 62 tools for invoicing, expenses, accounting, tax compliance (VeriFactu), banking, CRM, and HR. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
+    "description": "MCP server for Frihet ERP. 94 tools for invoicing, expenses, accounting, tax compliance (VeriFactu), banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
     "featureList": [
-      "62 MCP tools for ERP operations",
+      "94 MCP tools for ERP operations",
       "OAuth 2.0 + PKCE authentication",
       "VeriFactu Spanish e-invoicing compliance",
       "REST API proxy (OpenAPI 3.1)",
@@ -375,7 +375,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
       "MIT licensed npm package",
       "Cloudflare Worker remote endpoint"
     ],
-    "softwareVersion": "1.7.0",
+    "softwareVersion": "1.9.0-beta.1",
     "license": "https://opensource.org/licenses/MIT",
     "codeRepository": "https://github.com/Frihet-io/frihet-mcp",
     "offers": {
@@ -429,7 +429,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
 const MCP_JSON = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 62 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 94 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -443,7 +443,7 @@ const MCP_JSON = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 62,
+  tools_count: 94,
   resources_count: 11,
   prompts_count: 10,
   registry: [
@@ -468,7 +468,7 @@ note: Use the JSON endpoint for programmatic access.
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 62 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 94 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -482,7 +482,7 @@ const WELL_KNOWN_MCP = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 62,
+  tools_count: 94,
   resources_count: 11,
   prompts_count: 10,
   registry: [
