@@ -12,7 +12,9 @@
     "test": "npm run build && node --test dist/__tests__/einvoice-tools.test.js dist/__tests__/stay-tools.test.js dist/__tests__/pos-tools.test.js dist/__tests__/banking-tools.test.js dist/__tests__/fiscal-tools.test.js dist/__tests__/time-tools.test.js dist/__tests__/recurring-tools.test.js dist/__tests__/team-tools.test.js",
     "start": "node dist/index.js",
     "postinstall": "node scripts/postinstall.js || true",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "audit:mcp-refs": "node scripts/audit-mcp-refs.mjs",
+    "audit:mcp-refs:fix": "node scripts/audit-mcp-refs.mjs --fix"
   },
   "keywords": [
     "accounting",

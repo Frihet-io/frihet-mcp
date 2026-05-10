@@ -1,0 +1,265 @@
+#!/usr/bin/env node
+// Audit cross-repo refs to @frihet/mcp-server tool count + version.
+// Source of truth = this repo's package.json + actual registerTool count.
+// Run from anywhere; flags any sister-repo file with stale numbers.
+//
+// Usage:
+//   node scripts/audit-mcp-refs.mjs                # check (exit 1 if stale)
+//   node scripts/audit-mcp-refs.mjs --fix          # auto-replace stale numbers
+//   node scripts/audit-mcp-refs.mjs --json         # machine-readable
+//   node scripts/audit-mcp-refs.mjs --repo <name>  # limit to one repo
+//
+// Whitelist: lines matching SAFE_PATTERNS skip the tool-count check.
+// Inline: append "// mcp-refs:ok" or "# mcp-refs:ok" to ignore one line.
+
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { resolve, join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SELF = resolve(__dirname, '..');
+const HOME = homedir();
+const ARGS = process.argv.slice(2);
+const FIX = ARGS.includes('--fix');
+const JSON_OUT = ARGS.includes('--json');
+const REPO_FILTER = ARGS.includes('--repo') ? ARGS[ARGS.indexOf('--repo') + 1] : null;
+
+// === SOURCE OF TRUTH ===
+const pkg = JSON.parse(readFileSync(join(SELF, 'package.json'), 'utf8'));
+const VERSION = pkg.version;
+
+// Real tool count = registerTool calls in src/tools/*.ts minus meta-tools in register-all.ts
+const toolDir = join(SELF, 'src/tools');
+let total = 0;
+let metaCount = 0;
+for (const f of readdirSync(toolDir)) {
+  if (!f.endsWith('.ts')) continue;
+  const txt = readFileSync(join(toolDir, f), 'utf8');
+  const matches = (txt.match(/registerTool/g) || []).length;
+  if (f === 'register-all.ts') metaCount = matches;
+  else total += matches;
+}
+const TOOL_COUNT = total;
+
+// === TARGETS ===
+const REPOS = {
+  'frihet-mcp': {
+    root: SELF,
+    files: [
+      'server.json',
+      'README.md',
+      'CHANGELOG.md',
+      'skill/SKILL.md',
+      'workers/remote-mcp/src/index.ts',
+      'workers/remote-mcp/public/releases.json',
+    ],
+  },
+  'Frihet-ERP': {
+    root: join(HOME, 'Documents/Frihet-ERP'),
+    files: [
+      'CLAUDE.md',
+      'apps/erp/public/llms.txt',
+      'packages/manifest/src/data/product.ts',
+      'packages/manifest/src/data/comparisons.ts',
+      'packages/manifest/src/emit/schema-org.ts',
+      'packages/ui/src/manifestBrowser/data.json',
+      'docs/dev/mcp-tools-coverage.md',
+    ],
+  },
+  'Frihet-Saas-Website': {
+    root: join(HOME, 'Documents/Frihet-Saas-Website'),
+    files: [
+      'public/.well-known/llms.txt',
+      'public/.well-known/llms-full.txt',
+      'public/.well-known/agents.json',
+      'src/data/comparisons.json',
+      'src/data/schema-org.json',
+      'src/i18n/es.json',
+      'src/layouts/Base.astro',
+    ],
+  },
+  'frihet-docs': {
+    root: join(HOME, 'Documents/frihet-docs'),
+    files: [
+      'docs/desarrolladores/mcp-server.md',
+      'static/.well-known/jsonld',
+    ],
+  },
+};
+
+// Tool-count nouns across 17 langs
+const TOOL_NOUNS = [
+  'tool', 'tools',
+  'herramienta', 'herramientas',
+  'outil', 'outils',
+  'Werkzeug', 'Werkzeuge',
+  'strumento', 'strumenti',
+  'ferramenta', 'ferramentas',
+  'verktyg',
+  'tyokalu', 'tyokalua', 'työkalu', 'työkalua',
+  'gereedschap', 'gereedschappen',
+  'narzedzie', 'narzedzi', 'narzędzie', 'narzędzi',
+  'instrument', 'instrumente',
+  'εργαλείο', 'εργαλεία',
+  'araç', 'araçlar', 'araclar',
+  'eszköz', 'eszközök',
+  'ツール',
+];
+const TOOL_NOUN_RE = TOOL_NOUNS.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+// e.g. "94 tools", "94 herramientas"
+const TOOL_COUNT_RE = new RegExp(`\\b(\\d{1,4})[\\s_-]+(${TOOL_NOUN_RE})\\b`, 'gi');
+
+// Lines containing any of these phrases are NOT checked for tool-count drift.
+// (different concept than MCP tool count)
+const SAFE_PATTERNS = [
+  /55\+?\s+(herramientas|tools)/i,                      // Gemini in-app function tools
+  /\d+\s+(?:tools?|herramientas)\s+copiloto/i,          // Gemini copiloto tools
+  /(?:function[- ]tools?|function[- ]calls?)/i,         // Gemini function tools
+  /\bGemini\b/i,                                        // Gemini-related lines
+  /\d+\s+(?:tipos? de webhook|webhook events?|tipos webhook)/i, // webhook event types
+  /\d+\s+(?:tipos? de evento|event types?)/i,           // event type counts
+  /\bnpm\s+install\b/i,                                 // version pin lines
+  /node[- ]?modules/i,
+  /mcp-refs:ok/i,                                       // inline annotation
+  // Historical / changelog / release-note context
+  /\bdelta\b/i,
+  /\+\d+\s+(tools?|herramientas?)/i,                    // "+N tools" delta
+  /Wave\s+\d/i,                                         // wave N references
+  /\bnotes?\b\s*[:=]/i,                                 // notes field in JSON/release entries
+  /history|hist[oó]rico|previous|earlier|legacy|deprecated|prior|former/i,
+  /(?:Banking|POS|Stay|Fiscal|Time|Recurring|Team|Invoices|Expenses|Clients|Products|Quotes|CRM|Deposits|Vendors|Webhooks|Einvoice|Intelligence)\s*\(\d+\s+(tools?|herramientas?)\)/i,
+  // Counts of resources/prompts (separate concept from tools)
+  /\d+\s+(resources?|recursos?|prompts?)/i,
+];
+
+// Version pattern: catches "v1.5.4", "1.7.0-beta.1", "@frihet/mcp-server@1.6.0", etc.
+// Only flagged when line context contains MCP markers.
+const VERSION_RE = /v?(\d+\.\d+\.\d+(?:-[a-z]+\.\d+)?)/g;
+const MCP_CONTEXT_RE = /(@frihet\/mcp-server|frihet-mcp|servidor\s+mcp|mcp\s+server|mcp\.frihet\.io)/i;
+
+const findings = [];
+
+for (const [repoName, cfg] of Object.entries(REPOS)) {
+  if (REPO_FILTER && repoName !== REPO_FILTER) continue;
+  if (!existsSync(cfg.root)) {
+    findings.push({ repo: repoName, severity: 'warn', msg: `repo dir not found: ${cfg.root}` });
+    continue;
+  }
+  for (const rel of cfg.files) {
+    const abs = join(cfg.root, rel);
+    if (!existsSync(abs)) {
+      findings.push({ repo: repoName, file: rel, severity: 'warn', msg: 'file missing' });
+      continue;
+    }
+    const lines = readFileSync(abs, 'utf8').split('\n');
+
+    lines.forEach((line, idx) => {
+      // Skip safe-pattern lines for tool-count check
+      const safeLine = SAFE_PATTERNS.some((re) => re.test(line));
+
+      if (!safeLine) {
+        TOOL_COUNT_RE.lastIndex = 0;
+        let m;
+        while ((m = TOOL_COUNT_RE.exec(line)) !== null) {
+          const n = parseInt(m[1], 10);
+          if (n === TOOL_COUNT) continue;
+          // Heuristic: only flag if number is in MCP context OR it's an obviously MCP-related file
+          const mcpFile = /llms\.txt|llms-full\.txt|server\.json|releases\.json|mcp[-_]server|skill\/SKILL|jsonld|agents\.json|manifestBrowser|schema-org|comparisons|product\.ts|emit\/schema-org/i.test(rel);
+          if (!mcpFile && !MCP_CONTEXT_RE.test(line)) continue;
+          findings.push({
+            repo: repoName,
+            file: rel,
+            line: idx + 1,
+            severity: 'fail',
+            kind: 'tool-count',
+            found: n,
+            expected: TOOL_COUNT,
+            snippet: line.trim().slice(0, 120),
+          });
+        }
+      }
+
+      // Version check — only if line matches MCP context
+      if (MCP_CONTEXT_RE.test(line)) {
+        VERSION_RE.lastIndex = 0;
+        let v;
+        while ((v = VERSION_RE.exec(line)) !== null) {
+          const ver = v[1];
+          // Only flag versions that look like @frihet/mcp-server (semver with optional prerelease, 0.x or 1.x for now)
+          if (!/^\d+\.\d+\.\d+/.test(ver)) continue;
+          if (ver === VERSION) continue;
+          // Skip schema URL versions (e.g., "2025-12-11")
+          if (/\d{4}-\d{2}-\d{2}/.test(line) && !line.includes('@frihet/mcp-server')) continue;
+          findings.push({
+            repo: repoName,
+            file: rel,
+            line: idx + 1,
+            severity: 'fail',
+            kind: 'version',
+            found: ver,
+            expected: VERSION,
+            snippet: line.trim().slice(0, 120),
+          });
+        }
+      }
+    });
+
+    if (FIX) {
+      let txt = readFileSync(abs, 'utf8');
+      let mutated = false;
+      // Replace tool-count: only on flagged file lines
+      const fileFails = findings.filter((f) => f.repo === repoName && f.file === rel && f.kind === 'tool-count');
+      for (const fail of fileFails) {
+        // Replace exact pattern "N tools/herramientas" → "TOOL_COUNT $noun"
+        const re = new RegExp(`\\b${fail.found}([\\s_-]+(?:${TOOL_NOUN_RE}))\\b`, 'gi');
+        const newTxt = txt.replace(re, `${TOOL_COUNT}$1`);
+        if (newTxt !== txt) { txt = newTxt; mutated = true; }
+      }
+      const verFails = findings.filter((f) => f.repo === repoName && f.file === rel && f.kind === 'version');
+      for (const fail of verFails) {
+        const re = new RegExp(fail.found.replace(/\./g, '\\.'), 'g');
+        const newTxt = txt.replace(re, VERSION);
+        if (newTxt !== txt) { txt = newTxt; mutated = true; }
+      }
+      if (mutated) {
+        writeFileSync(abs, txt);
+        findings.push({ repo: repoName, file: rel, severity: 'fixed', msg: 'auto-replaced' });
+      }
+    }
+  }
+}
+
+if (JSON_OUT) {
+  console.log(JSON.stringify({
+    sot: { version: VERSION, toolCount: TOOL_COUNT, metaCount },
+    findings,
+  }, null, 2));
+} else {
+  console.log(`SoT: @frihet/mcp-server@${VERSION} · ${TOOL_COUNT} tools (+${metaCount} meta)\n`);
+  const fails = findings.filter((f) => f.severity === 'fail');
+  const warns = findings.filter((f) => f.severity === 'warn');
+  const fixed = findings.filter((f) => f.severity === 'fixed');
+  if (fails.length === 0 && warns.length === 0 && fixed.length === 0) {
+    console.log('OK — all refs match SoT.');
+  } else {
+    if (fails.length) {
+      console.log(`STALE (${fails.length}):`);
+      for (const f of fails) {
+        console.log(`  ${f.repo}/${f.file}:${f.line} [${f.kind}] found=${f.found} expected=${f.expected}`);
+        console.log(`    ${f.snippet}`);
+      }
+    }
+    if (warns.length) {
+      console.log(`\nWARN (${warns.length}):`);
+      for (const w of warns) console.log(`  ${w.repo}${w.file ? '/' + w.file : ''}: ${w.msg}`);
+    }
+    if (fixed.length) {
+      console.log(`\nFIXED (${fixed.length}):`);
+      for (const f of fixed) console.log(`  ${f.repo}/${f.file}: ${f.msg}`);
+    }
+  }
+}
+
+const exitFail = findings.some((f) => f.severity === 'fail');
+process.exit(exitFail && !FIX ? 1 : 0);
