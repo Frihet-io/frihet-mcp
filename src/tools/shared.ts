@@ -656,6 +656,41 @@ export const pdfResultOutput = z.object({
   contentType: z.string().optional(),
 }).passthrough();
 
+/* --- Time summary schema --------------------------------------------------- */
+
+const timeSummaryGroupItemSchema = z.object({
+  key: z.string().describe("Group key (userId, projectId, or date)"),
+  label: z.string().optional(),
+  totalHours: z.number(),
+  billableHours: z.number(),
+  nonBillableHours: z.number(),
+  estimatedCostEur: z.number().optional(),
+});
+
+export const timeSummaryOutput = z.object({
+  from: z.string(),
+  to: z.string(),
+  totalHours: z.number(),
+  billableHours: z.number(),
+  nonBillableHours: z.number(),
+  estimatedCostEur: z.number().optional(),
+  groups: z.array(timeSummaryGroupItemSchema).optional(),
+}).passthrough();
+
+/* --- Team member item schema ----------------------------------------------- */
+
+export const teamMemberItemOutput = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  email: z.string(),
+  role: z.enum(["owner", "admin", "member", "viewer"]).optional(),
+  status: z.enum(["active", "pending"]).optional(),
+  invitedAt: z.string().optional(),
+  joinedAt: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
 /* ------------------------------------------------------------------ */
 /*  Tool execution wrapper with logging + metrics                      */
 /* ------------------------------------------------------------------ */

@@ -1,17 +1,19 @@
 /**
- * Tests for Time Tracking MCP tools — Wave 6 (4 tools).
+ * Tests for Time Tracking MCP tools — Wave Mature 3 (6 tools).
  *
  * Uses Node.js built-in test runner (node:test + node:assert).
  * Run: npm test (after build)
  *
  * Coverage:
- *   1. Tool registration — all 4 time tools registered
+ *   1. Tool registration — all 6 time tools registered
  *   2. list_time_entries — success path + structuredContent shape
- *   3. create_time_entry — success path
- *   4. update_time_entry — success path + partial update
- *   5. delete_time_entry — confirm=false gate
- *   6. delete_time_entry — confirm=true success path
- *   7. API error — 404 propagated as isError=true
+ *   3. get_time_entry — success path
+ *   4. create_time_entry — success path
+ *   5. update_time_entry — success path + partial update
+ *   6. delete_time_entry — confirm=false gate
+ *   7. delete_time_entry — confirm=true success path
+ *   8. get_time_summary — success path + aggregation fields
+ *   9. API error — 404 propagated as isError=true
  */
 
 import { test, describe, beforeEach } from "node:test";
@@ -68,14 +70,28 @@ const MOCK_ENTRIES_LIST = {
   offset: 0,
 };
 
+const MOCK_TIME_SUMMARY = {
+  from: "2026-05-01",
+  to: "2026-05-31",
+  totalHours: 42.5,
+  billableHours: 38.0,
+  nonBillableHours: 4.5,
+  estimatedCostEur: 6375.0,
+  groups: [
+    { key: "proj_xyz", label: "Project Alpha", totalHours: 42.5, billableHours: 38.0, nonBillableHours: 4.5 },
+  ],
+};
+
 // ── Client stubs ─────────────────────────────────────────────────────────────
 
 function makeSuccessClient(): import("../client-interface.js").IFrihetClient {
   return {
     listTimeEntries: async () => MOCK_ENTRIES_LIST,
+    getTimeEntry: async (_id: string) => MOCK_ENTRY,
     createTimeEntry: async (_data: Record<string, unknown>) => MOCK_ENTRY,
     updateTimeEntry: async (_id: string, data: Record<string, unknown>) => ({ ...MOCK_ENTRY, ...data }),
     deleteTimeEntry: async (_id: string) => undefined,
+    getTimeSummary: async () => MOCK_TIME_SUMMARY,
   } as unknown as import("../client-interface.js").IFrihetClient;
 }
 
@@ -86,9 +102,11 @@ function make404Client(): import("../client-interface.js").IFrihetClient {
   };
   return {
     listTimeEntries: notFound,
+    getTimeEntry: notFound,
     createTimeEntry: notFound,
     updateTimeEntry: notFound,
     deleteTimeEntry: notFound,
+    getTimeSummary: notFound,
   } as unknown as import("../client-interface.js").IFrihetClient;
 }
 
@@ -115,8 +133,8 @@ describe("Time Tools — Registration", () => {
     server = await makeServer(makeSuccessClient);
   });
 
-  test("registers exactly 4 time tools", () => {
-    assert.equal(server.tools.size, 4);
+  test("registers exactly 6 time tools", () => {
+    assert.equal(server.tools.size, 6);
   });
 
   test("registers list_time_entries", () => {
@@ -133,6 +151,44 @@ describe("Time Tools — Registration", () => {
 
   test("registers delete_time_entry", () => {
     assert.ok(server.tools.has("delete_time_entry"));
+  });
+
+  test("registers get_time_entry", () => {
+    assert.ok(server.tools.has("get_time_entry"));
+  });
+
+  test("registers get_time_summary", () => {
+    assert.ok(server.tools.has("get_time_summary"));
+  });
+});
+
+// ── get_time_entry ───────────────────────────────────────────────────────────
+
+describe("get_time_entry — success path", () => {
+  test("returns single entry with expected fields", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_time_entry")!;
+    const result = await tool.handler({ id: "te_abc123" });
+
+    assert.ok(!result.isError);
+    const sc = result.structuredContent!;
+    assert.equal(sc["id"], "te_abc123");
+    assert.equal(sc["hours"], 2.5);
+    assert.equal(sc["billable"], true);
+  });
+
+  test("content block has type text", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_time_entry")!;
+    const result = await tool.handler({ id: "te_abc123" });
+    assert.equal(result.content[0]!.type, "text");
+  });
+
+  test("404 propagates as isError=true", async () => {
+    const server = await makeServer(make404Client);
+    const tool = server.tools.get("get_time_entry")!;
+    const result = await tool.handler({ id: "te_missing" });
+    assert.ok(result.isError);
   });
 });
 
@@ -261,6 +317,52 @@ describe("delete_time_entry — trust area gate", () => {
     const server = await makeServer(make404Client);
     const tool = server.tools.get("delete_time_entry")!;
     const result = await tool.handler({ id: "te_missing", confirm: true });
+    assert.ok(result.isError);
+  });
+});
+
+// ── get_time_summary ─────────────────────────────────────────────────────────
+
+describe("get_time_summary — success path", () => {
+  test("returns summary with aggregation fields", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_time_summary")!;
+    const result = await tool.handler({ from: "2026-05-01", to: "2026-05-31" });
+
+    assert.ok(!result.isError);
+    const sc = result.structuredContent!;
+    assert.equal(sc["totalHours"], 42.5);
+    assert.equal(sc["billableHours"], 38.0);
+    assert.equal(sc["nonBillableHours"], 4.5);
+  });
+
+  test("content block has type text", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_time_summary")!;
+    const result = await tool.handler({ from: "2026-05-01", to: "2026-05-31" });
+    assert.equal(result.content[0]!.type, "text");
+  });
+
+  test("groups array present when returned", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_time_summary")!;
+    const result = await tool.handler({ from: "2026-05-01", to: "2026-05-31", groupBy: "project" });
+    const sc = result.structuredContent!;
+    assert.ok(Array.isArray(sc["groups"]));
+    assert.equal((sc["groups"] as unknown[]).length, 1);
+  });
+
+  test("userId filter accepted without error", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_time_summary")!;
+    const result = await tool.handler({ from: "2026-05-01", to: "2026-05-31", userId: "usr_viktor" });
+    assert.ok(!result.isError);
+  });
+
+  test("404 propagates as isError=true", async () => {
+    const server = await makeServer(make404Client);
+    const tool = server.tools.get("get_time_summary")!;
+    const result = await tool.handler({ from: "2026-05-01", to: "2026-05-31" });
     assert.ok(result.isError);
   });
 });

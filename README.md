@@ -17,7 +17,7 @@
   <a href="https://smithery.ai/server/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
-  <img src="https://img.shields.io/badge/tools-94-18181b?style=flat&labelColor=09090b" alt="94 tools">
+  <img src="https://img.shields.io/badge/tools-111-18181b?style=flat&labelColor=09090b" alt="111 tools">
   <img src="https://img.shields.io/badge/node-%3E%3D18-18181b?style=flat&labelColor=09090b" alt="node >=18">
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
@@ -33,9 +33,9 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-94 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
+111 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
 
-<!-- v1.9.0-beta.1 — Wave Mature 1: Banking (5) + Fiscal (8) + Stay (5) + POS (4) + Time (4) + Recurring (2) = 94 tools total -->
+<!-- v1.10.0-beta.1 — Wave Mature 3 Track F: Time (6) + Recurring (8) + Team (4) = 111 tools total -->
 
 ---
 
@@ -163,7 +163,7 @@ Talk to your ERP. These are real prompts, not marketing copy.
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 94 tools are CRUD operations over the REST API.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 111 tools are CRUD operations over the REST API.
 
 **Works great:**
 
@@ -190,7 +190,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ---
 
-## Tools (94)
+## Tools (111)
 
 ### Invoices (6)
 
@@ -285,7 +285,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_quarterly_taxes` | Quarterly tax prep: Modelo 303/130 fields, collected vs deductible, liability |
 | `duplicate_invoice` | Clone an invoice for recurring billing (copies items/client/tax, starts as draft) |
 
-## E-Invoicing (4 new in v1.7 pre-release)
+### E-Invoicing (4)
 
 > **Status: beta — CF endpoints rolling out 2026-04-21 to 2026-04-28.** Tools call `api.frihet.io/v1/einvoice/*` directly. If an endpoint is not yet deployed (404), the tool falls back to `{ _stub: true, _note: "CF endpoint pending deploy", _plannedEndpoint: "..." }` so the server remains usable while transport ships.
 
@@ -296,7 +296,46 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `validate_einvoice_xml` | Validate raw XML against format schema + schematron rules (KOSIT / Mustang / XSD / Schematron) |
 | `export_datev` | Export accounting data as DATEV EXTF (Buchungsstapel / Debitoren / Kreditoren) in CP1252 encoding |
 
-All 94 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
+### Time Tracking (6)
+
+> **Status: stub** — `/v1/time/*` endpoints planned. Tools surface 404 until backend ships.
+
+| Tool | What it does |
+|------|-------------|
+| `list_time_entries` | List time entries with filter by user, project, date range, billable status |
+| `get_time_entry` | Get full details of a single time entry by ID |
+| `create_time_entry` | Log hours for a project (billable flag, description, date) |
+| `update_time_entry` | Update any field on an existing time entry (PATCH semantics) |
+| `delete_time_entry` | Soft-delete a time entry (confirm=true required) |
+| `get_time_summary` | Aggregate total/billable/non-billable hours for a period, with optional groupBy (user/project/day) |
+
+### Recurring Invoices (8)
+
+> **Status: stub** — `/v1/recurring/*` endpoints planned. Tools surface 404 until backend ships.
+
+| Tool | What it does |
+|------|-------------|
+| `list_recurring_invoices` | List all recurring invoice templates (filter by active/paused) |
+| `get_recurring_invoice` | Get full details of a recurring template by ID |
+| `create_recurring_invoice` | Create a new recurring invoice template (daily/weekly/monthly/quarterly/yearly) |
+| `update_recurring_invoice` | Update template fields — affects future generated invoices only |
+| `pause_recurring_invoice` | Pause an active template — no invoices generated while paused |
+| `resume_recurring_invoice` | Resume a paused template — next invoice on next scheduled cycle |
+| `delete_recurring_invoice` | Permanently delete a template (confirm=true required) |
+| `run_recurring_now` | Manually trigger immediate generation of the next invoice instance |
+
+### Team Management (4)
+
+> **Status: stub** — `/v1/team/*` endpoints planned. Tools surface 404 until backend ships.
+
+| Tool | What it does |
+|------|-------------|
+| `list_team_members` | List all workspace members with role and invite status |
+| `invite_team_member` | Invite a new member by email with role (admin/member/viewer) |
+| `update_team_member_role` | Change an existing member's role |
+| `remove_team_member` | Remove a member from the workspace (confirm=true required) |
+
+All 111 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
 
 ---
 

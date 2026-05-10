@@ -132,11 +132,25 @@ export interface IFrihetClient {
 
   // Time tracking endpoints (/v1/time/*)
   listTimeEntries(params?: { userId?: string; projectId?: string; from?: string; to?: string; billable?: boolean; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  getTimeEntry(id: string): Promise<Record<string, unknown>>;
   createTimeEntry(data: Record<string, unknown>): Promise<Record<string, unknown>>;
   updateTimeEntry(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
   deleteTimeEntry(id: string): Promise<void>;
+  getTimeSummary(params: { from: string; to: string; userId?: string; projectId?: string; groupBy?: string }): Promise<Record<string, unknown>>;
 
   // Recurring invoice endpoints (/v1/recurring/*)
   listRecurringInvoices(params?: { status?: string; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  getRecurringInvoice(id: string): Promise<Record<string, unknown>>;
+  createRecurringInvoice(data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  updateRecurringInvoice(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  pauseRecurringInvoice(id: string): Promise<Record<string, unknown>>;
+  resumeRecurringInvoice(id: string): Promise<Record<string, unknown>>;
+  deleteRecurringInvoice(id: string): Promise<void>;
   runRecurringNow(templateId: string, options?: { draftOnly?: boolean }): Promise<Record<string, unknown>>;
+
+  // Team management endpoints (/v1/team/*)
+  listTeamMembers(params?: { role?: string; status?: string; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  inviteTeamMember(data: { email: string; role: string; name?: string }): Promise<Record<string, unknown>>;
+  updateTeamMemberRole(memberId: string, role: string): Promise<Record<string, unknown>>;
+  removeTeamMember(memberId: string): Promise<void>;
 }

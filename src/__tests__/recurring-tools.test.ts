@@ -1,16 +1,23 @@
 /**
- * Tests for Recurring Invoice MCP tools — Wave 6 (2 tools).
+ * Tests for Recurring Invoice MCP tools — Wave Mature 3 (8 tools: 2 original + 6 new).
  *
  * Uses Node.js built-in test runner (node:test + node:assert).
  * Run: npm test (after build)
  *
  * Coverage:
- *   1. Tool registration — both recurring tools registered
- *   2. list_recurring_invoices — success path + structuredContent shape
- *   3. list_recurring_invoices — status filter accepted
- *   4. run_recurring_now — success path (default draftOnly=true)
- *   5. run_recurring_now — draftOnly=false passes through
- *   6. API error — 404 propagated as isError=true
+ *   1.  Tool registration — all 8 recurring tools registered
+ *   2.  list_recurring_invoices — success path + structuredContent shape
+ *   3.  list_recurring_invoices — status filter accepted
+ *   4.  get_recurring_invoice — success path
+ *   5.  create_recurring_invoice — success path
+ *   6.  update_recurring_invoice — success path + partial update
+ *   7.  pause_recurring_invoice — success path
+ *   8.  resume_recurring_invoice — success path
+ *   9.  delete_recurring_invoice — confirm=false gate
+ *   10. delete_recurring_invoice — confirm=true success path
+ *   11. run_recurring_now — success path (default draftOnly=true)
+ *   12. run_recurring_now — draftOnly=false passes through
+ *   13. API error — 404 propagated as isError=true
  */
 
 import { test, describe, beforeEach } from "node:test";
@@ -74,11 +81,23 @@ const MOCK_RUN_RESULT = {
   message: "Invoice draft created from template rec_abc123",
 };
 
+const MOCK_ACTION = {
+  success: true,
+  id: "rec_abc123",
+  message: "Operation completed",
+};
+
 // ── Client stubs ─────────────────────────────────────────────────────────────
 
 function makeSuccessClient(): import("../client-interface.js").IFrihetClient {
   return {
     listRecurringInvoices: async () => MOCK_RECURRING_LIST,
+    getRecurringInvoice: async (_id: string) => MOCK_RECURRING_INVOICE,
+    createRecurringInvoice: async (_data: Record<string, unknown>) => MOCK_RECURRING_INVOICE,
+    updateRecurringInvoice: async (_id: string, data: Record<string, unknown>) => ({ ...MOCK_RECURRING_INVOICE, ...data }),
+    pauseRecurringInvoice: async (_id: string) => ({ ...MOCK_ACTION, message: "Template paused" }),
+    resumeRecurringInvoice: async (_id: string) => ({ ...MOCK_ACTION, message: "Template resumed" }),
+    deleteRecurringInvoice: async (_id: string) => undefined,
     runRecurringNow: async (_templateId: string, _options?: Record<string, unknown>) => MOCK_RUN_RESULT,
   } as unknown as import("../client-interface.js").IFrihetClient;
 }
@@ -90,6 +109,12 @@ function make404Client(): import("../client-interface.js").IFrihetClient {
   };
   return {
     listRecurringInvoices: notFound,
+    getRecurringInvoice: notFound,
+    createRecurringInvoice: notFound,
+    updateRecurringInvoice: notFound,
+    pauseRecurringInvoice: notFound,
+    resumeRecurringInvoice: notFound,
+    deleteRecurringInvoice: notFound,
     runRecurringNow: notFound,
   } as unknown as import("../client-interface.js").IFrihetClient;
 }
@@ -117,12 +142,36 @@ describe("Recurring Tools — Registration", () => {
     server = await makeServer(makeSuccessClient);
   });
 
-  test("registers exactly 2 recurring tools", () => {
-    assert.equal(server.tools.size, 2);
+  test("registers exactly 8 recurring tools", () => {
+    assert.equal(server.tools.size, 8);
   });
 
   test("registers list_recurring_invoices", () => {
     assert.ok(server.tools.has("list_recurring_invoices"));
+  });
+
+  test("registers get_recurring_invoice", () => {
+    assert.ok(server.tools.has("get_recurring_invoice"));
+  });
+
+  test("registers create_recurring_invoice", () => {
+    assert.ok(server.tools.has("create_recurring_invoice"));
+  });
+
+  test("registers update_recurring_invoice", () => {
+    assert.ok(server.tools.has("update_recurring_invoice"));
+  });
+
+  test("registers pause_recurring_invoice", () => {
+    assert.ok(server.tools.has("pause_recurring_invoice"));
+  });
+
+  test("registers resume_recurring_invoice", () => {
+    assert.ok(server.tools.has("resume_recurring_invoice"));
+  });
+
+  test("registers delete_recurring_invoice", () => {
+    assert.ok(server.tools.has("delete_recurring_invoice"));
   });
 
   test("registers run_recurring_now", () => {
@@ -183,6 +232,180 @@ describe("list_recurring_invoices — success path", () => {
     const server = await makeServer(make404Client);
     const tool = server.tools.get("list_recurring_invoices")!;
     const result = await tool.handler({});
+    assert.ok(result.isError);
+  });
+});
+
+// ── get_recurring_invoice ────────────────────────────────────────────────────
+
+describe("get_recurring_invoice — success path", () => {
+  test("returns template with expected fields", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123" });
+
+    assert.ok(!result.isError);
+    const sc = result.structuredContent!;
+    assert.equal(sc["id"], "rec_abc123");
+    assert.equal(sc["frequency"], "monthly");
+    assert.equal(sc["status"], "active");
+  });
+
+  test("content block has type text", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123" });
+    assert.equal(result.content[0]!.type, "text");
+  });
+
+  test("404 propagates as isError=true", async () => {
+    const server = await makeServer(make404Client);
+    const tool = server.tools.get("get_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_missing" });
+    assert.ok(result.isError);
+  });
+});
+
+// ── create_recurring_invoice ─────────────────────────────────────────────────
+
+describe("create_recurring_invoice — success path", () => {
+  test("returns created template with expected fields", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("create_recurring_invoice")!;
+    const result = await tool.handler({
+      templateName: "Factura mensual Acme",
+      clientId: "cli_acme",
+      frequency: "monthly",
+      lineItems: [{ description: "Servicio SaaS", quantity: 1, unitPrice: 299.0 }],
+    });
+
+    assert.ok(!result.isError);
+    const sc = result.structuredContent!;
+    assert.equal(sc["id"], "rec_abc123");
+    assert.equal(sc["frequency"], "monthly");
+  });
+
+  test("content block mentions created", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("create_recurring_invoice")!;
+    const result = await tool.handler({
+      templateName: "Test",
+      clientId: "cli_test",
+      frequency: "weekly",
+      lineItems: [],
+    });
+    assert.ok(result.content[0]!.text.includes("created"));
+  });
+
+  test("404 propagates as isError=true", async () => {
+    const server = await makeServer(make404Client);
+    const tool = server.tools.get("create_recurring_invoice")!;
+    const result = await tool.handler({ templateName: "T", clientId: "c", frequency: "monthly", lineItems: [] });
+    assert.ok(result.isError);
+  });
+});
+
+// ── update_recurring_invoice ─────────────────────────────────────────────────
+
+describe("update_recurring_invoice — success path", () => {
+  test("returns updated template", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("update_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123", templateName: "Factura mensual Acme v2" });
+
+    assert.ok(!result.isError);
+    const sc = result.structuredContent!;
+    assert.equal(sc["templateName"], "Factura mensual Acme v2");
+  });
+
+  test("content block mentions updated", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("update_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123", frequency: "quarterly" });
+    assert.ok(result.content[0]!.text.includes("updated"));
+  });
+});
+
+// ── pause_recurring_invoice ──────────────────────────────────────────────────
+
+describe("pause_recurring_invoice — success path", () => {
+  test("returns action result with success=true", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("pause_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123" });
+
+    assert.ok(!result.isError);
+    assert.equal(result.structuredContent!["success"], true);
+  });
+
+  test("content block mentions paused", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("pause_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123" });
+    assert.ok(result.content[0]!.text.includes("paused"));
+  });
+
+  test("404 propagates as isError=true", async () => {
+    const server = await makeServer(make404Client);
+    const tool = server.tools.get("pause_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_missing" });
+    assert.ok(result.isError);
+  });
+});
+
+// ── resume_recurring_invoice ─────────────────────────────────────────────────
+
+describe("resume_recurring_invoice — success path", () => {
+  test("returns action result with success=true", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("resume_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123" });
+
+    assert.ok(!result.isError);
+    assert.equal(result.structuredContent!["success"], true);
+  });
+
+  test("content block mentions resumed", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("resume_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123" });
+    assert.ok(result.content[0]!.text.includes("resumed"));
+  });
+
+  test("404 propagates as isError=true", async () => {
+    const server = await makeServer(make404Client);
+    const tool = server.tools.get("resume_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_missing" });
+    assert.ok(result.isError);
+  });
+});
+
+// ── delete_recurring_invoice ─────────────────────────────────────────────────
+
+describe("delete_recurring_invoice — trust area gate", () => {
+  test("confirm=false returns isError=true without calling API", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("delete_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123", confirm: false });
+
+    assert.ok(result.isError);
+    assert.ok(result.content[0]!.text.includes("confirm=true"));
+  });
+
+  test("confirm=true succeeds and returns success=true", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("delete_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_abc123", confirm: true });
+
+    assert.ok(!result.isError);
+    assert.equal(result.structuredContent!["success"], true);
+    assert.equal(result.structuredContent!["id"], "rec_abc123");
+  });
+
+  test("confirm=true with 404 propagates isError=true", async () => {
+    const server = await makeServer(make404Client);
+    const tool = server.tools.get("delete_recurring_invoice")!;
+    const result = await tool.handler({ id: "rec_missing", confirm: true });
     assert.ok(result.isError);
   });
 });
