@@ -13,8 +13,7 @@
  *
  * REST surface: /v1/recurring/invoices
  *
- * NOTE: ERP backend endpoints /v1/recurring/* are planned. Tools are wired
- * and will surface 404 errors until the backend ships.
+ * Backend: /v1/recurring/* endpoints live as of Wave 4-A (Frihet-ERP functions/src/publicApi.ts).
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

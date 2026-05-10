@@ -807,7 +807,7 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Time Tracking
-  // NOTE: /v1/time/* endpoints are planned — 404 propagates until backend ships.
+  // Backend: /v1/time/* endpoints live as of Wave 4-A (Frihet-ERP functions/src/publicApi.ts).
 
   async listTimeEntries(
     params?: { userId?: string; projectId?: string; from?: string; to?: string; billable?: boolean; limit?: number; offset?: number; after?: string },
@@ -853,7 +853,7 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Recurring Invoices
-  // NOTE: /v1/recurring/* endpoints are planned — 404 propagates until backend ships.
+  // Backend: /v1/recurring/* endpoints live as of Wave 4-A (Frihet-ERP functions/src/publicApi.ts).
 
   async listRecurringInvoices(
     params?: { status?: string; limit?: number; offset?: number },
@@ -899,7 +899,7 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Team Management
-  // NOTE: /v1/team/* endpoints are planned — 404 propagates until backend ships.
+  // Backend: /v1/team/* endpoints live as of Wave 4-A (Frihet-ERP functions/src/publicApi.ts).
 
   async listTeamMembers(
     params?: { role?: string; status?: string; limit?: number; offset?: number },

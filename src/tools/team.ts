@@ -9,8 +9,7 @@
  *
  * REST surface: /v1/team/members
  *
- * NOTE: ERP backend endpoints /v1/team/* are planned. Tools are wired
- * and will surface 404 errors until the backend ships.
+ * Backend: /v1/team/* endpoints live as of Wave 4-A (Frihet-ERP functions/src/publicApi.ts).
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
