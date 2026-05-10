@@ -24,6 +24,20 @@
 
 ---
 
+## Distribution
+
+| Channel | Status | Install |
+|---------|--------|---------|
+| **npm** | Live | `npx @frihet/mcp-server` |
+| **Remote endpoint** | Live | `https://mcp.frihet.io/mcp` (zero install, OAuth or API key) |
+| **Smithery** | Live | [smithery.ai/server/frihet/frihet-mcp](https://smithery.ai/server/frihet/frihet-mcp) |
+| **MCP Registry** | Live | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/?q=io.frihet) |
+| **Cursor Marketplace** | Coming soon | [cursor.com/marketplace](https://cursor.com/marketplace) |
+| **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
+| **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
+
+---
+
 ## What is this
 
 An MCP server that connects your AI assistant to [Frihet](https://frihet.io). Create invoices by talking. Query expenses in natural language. Manage your entire business from your IDE.
