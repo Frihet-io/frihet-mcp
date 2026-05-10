@@ -103,4 +103,17 @@ export interface IFrihetClient {
   getEInvoiceStatus(workflowRunId: string): Promise<{ status: "queued" | "running" | "succeeded" | "failed" | "cancelled"; step: string; error?: string; ackId?: string; pdfA3Url?: string; xmlUrl?: string }>;
   validateEInvoiceXml(params: { xml: string; format: string }): Promise<{ valid: boolean; errors: Array<{ severity: string; location: string; message: string; rule: string }>; validator: "kosit" | "mustang" | "xsd" | "schematron"; durationMs: number }>;
   exportDatev(params: { periodStart: string; periodEnd: string; format: string }): Promise<{ fileUrl: string; filename: string; rowCount: number; fiscalPeriod: string; encoding: "cp1252" }>;
+
+  // Stay — vacation rental endpoints (/v1/stay/*)
+  listReservations(params?: { propertyId?: string; status?: string; checkInFrom?: string; checkInTo?: string; fields?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  getReservation(id: string): Promise<Record<string, unknown>>;
+  createReservation(data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  listProperties(params?: { q?: string; isActive?: boolean; fields?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  syncChannel(channelId: string, direction: "pull" | "push" | "both"): Promise<Record<string, unknown>>;
+
+  // POS — point of sale endpoints (/v1/pos/*)
+  listTerminals(params?: { locationId?: string; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  getSale(id: string): Promise<Record<string, unknown>>;
+  listSales(params?: { terminalId?: string; status?: string; from?: string; to?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  refundSale(id: string, data?: { amountCents?: number; reason?: string }): Promise<Record<string, unknown>>;
 }

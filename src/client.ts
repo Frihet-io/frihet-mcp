@@ -636,6 +636,88 @@ export class FrihetClient {
     return this.request("POST", "/einvoice/export-datev", params);
   }
 
+  // ---------------------------------------------------------------- Stay (Vacation Rental)
+  // ----------------------------------------------------------------
+  // NOTE: ERP backend endpoints /v1/stay/* land in Frihet-ERP S2 sprint.
+  // These methods target the documented v1 surface; 404 responses will
+  // propagate as FrihetApiError(404) to tool handlers.
+
+  async listReservations(
+    params?: { propertyId?: string; status?: string; checkInFrom?: string; checkInTo?: string; fields?: string; limit?: number; offset?: number; after?: string },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/stay/reservations", undefined, {
+      propertyId: params?.propertyId,
+      status: params?.status,
+      checkInFrom: params?.checkInFrom,
+      checkInTo: params?.checkInTo,
+      fields: params?.fields,
+      limit: params?.limit,
+      offset: params?.offset,
+      after: params?.after,
+    });
+  }
+
+  async getReservation(id: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/stay/reservations/${encodeURIComponent(id)}`);
+  }
+
+  async createReservation(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request("POST", "/stay/reservations", data);
+  }
+
+  async listProperties(
+    params?: { q?: string; isActive?: boolean; fields?: string; limit?: number; offset?: number; after?: string },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/stay/properties", undefined, {
+      q: params?.q,
+      isActive: params?.isActive !== undefined ? (params.isActive ? 1 : 0) : undefined,
+      fields: params?.fields,
+      limit: params?.limit,
+      offset: params?.offset,
+      after: params?.after,
+    });
+  }
+
+  async syncChannel(channelId: string, direction: "pull" | "push" | "both"): Promise<Record<string, unknown>> {
+    return this.request("POST", `/stay/channels/${encodeURIComponent(channelId)}/sync`, { direction });
+  }
+
+  // ---------------------------------------------------------------- POS (Point of Sale)
+  // ----------------------------------------------------------------
+  // NOTE: ERP backend endpoints /v1/pos/* land in Frihet-ERP S2 sprint.
+
+  async listTerminals(
+    params?: { locationId?: string; limit?: number; offset?: number },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/pos/terminals", undefined, {
+      locationId: params?.locationId,
+      limit: params?.limit,
+      offset: params?.offset,
+    });
+  }
+
+  async getSale(id: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/pos/sales/${encodeURIComponent(id)}`);
+  }
+
+  async listSales(
+    params?: { terminalId?: string; status?: string; from?: string; to?: string; limit?: number; offset?: number; after?: string },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/pos/sales", undefined, {
+      terminalId: params?.terminalId,
+      status: params?.status,
+      from: params?.from,
+      to: params?.to,
+      limit: params?.limit,
+      offset: params?.offset,
+      after: params?.after,
+    });
+  }
+
+  async refundSale(id: string, data?: { amountCents?: number; reason?: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", `/pos/sales/${encodeURIComponent(id)}/refund`, data ?? {});
+  }
+
   // ---------------------------------------------------------------- Intelligence
   // ----------------------------------------------------------------
 

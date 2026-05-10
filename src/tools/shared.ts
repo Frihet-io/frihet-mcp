@@ -485,6 +485,73 @@ export const depositItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
+/* --- Stay item schemas ----------------------------------------------------- */
+
+export const reservationItemOutput = z.object({
+  id: z.string(),
+  propertyId: z.string(),
+  guestId: z.string().optional(),
+  status: z.enum(["confirmed", "pending", "cancelled", "completed", "no_show"]),
+  checkIn: z.string(),
+  checkOut: z.string(),
+  nights: z.number().int().min(1).optional(),
+  guestCount: z.number().int().min(1),
+  channelId: z.string().optional(),
+  totalAmount: z.number().nonnegative().optional(),
+  currency: z.string().optional(),
+  notes: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+export const propertyItemOutput = z.object({
+  id: z.string(),
+  name: z.string(),
+  address: z.object({
+    street: z.string().optional(),
+    city: z.string().optional(),
+    region: z.string().optional(),
+    postalCode: z.string().optional(),
+    country: z.string().optional(),
+  }).optional(),
+  capacity: z.number().int().min(1).optional(),
+  ownerName: z.string().optional(),
+  licenseNumber: z.string().optional(),
+  isActive: z.boolean().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+/* --- POS item schemas ------------------------------------------------------ */
+
+export const posTerminalItemOutput = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  deviceType: z.string().optional(),
+  locationId: z.string().optional(),
+  status: z.enum(["online", "offline", "unknown"]).optional(),
+  stripeReaderId: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+export const posSaleItemOutput = z.object({
+  id: z.string(),
+  terminalId: z.string().optional(),
+  status: z.enum(["succeeded", "pending", "cancelled", "refunded", "partially_refunded"]).optional(),
+  amountCents: z.number().int().nonnegative().optional(),
+  currency: z.string().optional(),
+  paymentMethod: z.string().optional(),
+  items: z.array(z.object({
+    description: z.string(),
+    quantity: z.number(),
+    unitPriceCents: z.number().int(),
+  })).optional(),
+  refundedAmountCents: z.number().int().nonnegative().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
 /** Schema for action results (send, mark paid, etc.) */
 export const actionResultOutput = z.object({
   success: z.boolean(),
