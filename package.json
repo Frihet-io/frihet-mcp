@@ -1,6 +1,6 @@
 {
   "name": "@frihet/mcp-server",
-  "version": "1.10.0-beta.1",
+  "version": "1.10.0-beta.2",
   "description": "AI-native MCP server for business management — invoices, expenses, deposits, clients, products, quotes, webhooks, CRM, e-invoicing, vacation rentals, POS, banking, fiscal (Modelo 303/130/390/180/347, VeriFactu, TicketBAI), time tracking, recurring invoices, team management. 111 tools. Remote endpoint at mcp.frihet.io (zero install). Works with Claude, Cursor, Windsurf, Cline.",
   "type": "module",
   "main": "./dist/index.js",
