@@ -923,4 +923,60 @@ export class FrihetClient {
   async removeTeamMember(memberId: string): Promise<void> {
     return this.request("DELETE", `/team/members/${encodeURIComponent(memberId)}`);
   }
+
+  // ---------------------------------------------------------------- Gestoria (Wave Fase 1)
+  // Backend: /v1/gestoria/* endpoints land with Frihet-ERP Wave Fase 1 closure.
+  // PRs: #383 gestoriaBulkSendRequests callable (live), #384 aging consolidated,
+  // #385 contextual messaging. REST shell proxies the callables + Firestore reads.
+  // Tools surface 404 until backend ships.
+
+  async sendGestoriaMessage(data: {
+    workspaceId: string;
+    parentType: "documentRequest" | "filingItem" | "obligation";
+    parentId: string;
+    body: string;
+  }): Promise<Record<string, unknown>> {
+    return this.request("POST", "/gestoria/messages", data);
+  }
+
+  async listGestoriaMessages(params: {
+    workspaceId: string;
+    parentType: "documentRequest" | "filingItem" | "obligation";
+    parentId: string;
+    limit?: number;
+    before?: string;
+  }): Promise<{ messages: Array<Record<string, unknown>>; hasMore: boolean }> {
+    return this.request("GET", "/gestoria/messages", undefined, {
+      workspaceId: params.workspaceId,
+      parentType: params.parentType,
+      parentId: params.parentId,
+      limit: params.limit,
+      before: params.before,
+    });
+  }
+
+  async createGestoriaTemplate(data: {
+    name: string;
+    title: string;
+    description: string;
+    dueDateOffsetDays: number;
+    attachmentRequired?: boolean;
+    variables?: Array<{ key: string; label?: string; defaultValue?: string }>;
+  }): Promise<{ templateId: string }> {
+    return this.request("POST", "/gestoria/templates", data);
+  }
+
+  async bulkSendGestoriaTemplate(data: {
+    templateId: string;
+    clientWorkspaceIds: string[];
+    periodOverrides?: { quarter?: string | number; year?: string | number; month?: string | number };
+  }): Promise<Record<string, unknown>> {
+    return this.request("POST", "/gestoria/templates/bulk-send", data);
+  }
+
+  async getGestoriaAgingConsolidated(params?: { ownerUid?: string }): Promise<Record<string, unknown>> {
+    return this.request("GET", "/gestoria/aging/consolidated", undefined, {
+      ownerUid: params?.ownerUid,
+    });
+  }
 }

@@ -153,4 +153,35 @@ export interface IFrihetClient {
   inviteTeamMember(data: { email: string; role: string; name?: string }): Promise<Record<string, unknown>>;
   updateTeamMemberRole(memberId: string, role: string): Promise<Record<string, unknown>>;
   removeTeamMember(memberId: string): Promise<void>;
+
+  // Gestoria endpoints (/v1/gestoria/*) — Wave Fase 1 surface for accountants.
+  // Backend lands with Frihet-ERP PRs #383 (bulk send), #384 (aging), #385
+  // (messaging). REST routes will proxy callables + Firestore reads.
+  sendGestoriaMessage(data: {
+    workspaceId: string;
+    parentType: "documentRequest" | "filingItem" | "obligation";
+    parentId: string;
+    body: string;
+  }): Promise<Record<string, unknown>>;
+  listGestoriaMessages(params: {
+    workspaceId: string;
+    parentType: "documentRequest" | "filingItem" | "obligation";
+    parentId: string;
+    limit?: number;
+    before?: string;
+  }): Promise<{ messages: Array<Record<string, unknown>>; hasMore: boolean }>;
+  createGestoriaTemplate(data: {
+    name: string;
+    title: string;
+    description: string;
+    dueDateOffsetDays: number;
+    attachmentRequired?: boolean;
+    variables?: Array<{ key: string; label?: string; defaultValue?: string }>;
+  }): Promise<{ templateId: string }>;
+  bulkSendGestoriaTemplate(data: {
+    templateId: string;
+    clientWorkspaceIds: string[];
+    periodOverrides?: { quarter?: string | number; year?: string | number; month?: string | number };
+  }): Promise<Record<string, unknown>>;
+  getGestoriaAgingConsolidated(params?: { ownerUid?: string }): Promise<Record<string, unknown>>;
 }

@@ -691,6 +691,103 @@ export const teamMemberItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
+/* --- Gestoria item schemas ------------------------------------------------- */
+
+/**
+ * Gestoria message — single message in a contextual thread attached to a
+ * document request, filing item, or fiscal obligation. Used by both gestor
+ * and client; `senderRole` distinguishes them.
+ */
+export const gestoriaMessageItemOutput = z.object({
+  id: z.string(),
+  parentType: z.enum(["documentRequest", "filingItem", "obligation"]).optional(),
+  parentId: z.string().optional(),
+  senderUid: z.string().optional(),
+  senderRole: z.enum(["gestor", "client"]).optional(),
+  body: z.string(),
+  createdAt: z.string().optional(),
+  readAt: z.string().optional(),
+}).passthrough();
+
+/** Result of `gestoria_message_send` — message metadata + per-side unread counts. */
+export const gestoriaMessageSendResultOutput = z.object({
+  messageId: z.string(),
+  createdAt: z.string().optional(),
+  unreadCounts: z.object({
+    gestor: z.number().int().nonnegative().optional(),
+    client: z.number().int().nonnegative().optional(),
+  }).passthrough().optional(),
+}).passthrough();
+
+/**
+ * Document request template — reusable template gestores can bulk-send to N
+ * client workspaces in one call.
+ */
+export const gestoriaTemplateItemOutput = z.object({
+  id: z.string(),
+  name: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  dueDateOffsetDays: z.number().int().optional(),
+  attachmentRequired: z.boolean().optional(),
+  variables: z.array(z.object({
+    key: z.string(),
+    label: z.string().optional(),
+    defaultValue: z.string().optional(),
+  }).passthrough()).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+/** Result of `gestoria_template_create` — minimal handle for chaining. */
+export const gestoriaTemplateCreateResultOutput = z.object({
+  templateId: z.string(),
+}).passthrough();
+
+/**
+ * Result of `gestoria_template_bulk_send` — per-client outcome summary.
+ * Mirrors callable `gestoriaBulkSendRequests` shape (Frihet-ERP PR #383).
+ */
+export const gestoriaBulkSendResultOutput = z.object({
+  success: z.number().int().nonnegative(),
+  failed: z.array(z.object({
+    clientWorkspaceId: z.string(),
+    reason: z.string().optional(),
+  }).passthrough()),
+  totalDuration: z.number().int().nonnegative().optional().describe("Wall-clock duration in ms"),
+}).passthrough();
+
+/**
+ * Cross-client aging report — totals per overdue bucket + per-workspace
+ * breakdown + top-N overdue invoices. Returned by `gestoria_aging_consolidated`.
+ */
+export const gestoriaAgingConsolidatedOutput = z.object({
+  totals: z.object({
+    current: z.number().nonnegative(),
+    "30_60": z.number().nonnegative(),
+    "60_90": z.number().nonnegative(),
+    "90_plus": z.number().nonnegative(),
+  }).passthrough(),
+  byWorkspace: z.array(z.object({
+    workspaceId: z.string(),
+    workspaceName: z.string().optional(),
+    current: z.number().nonnegative().optional(),
+    "30_60": z.number().nonnegative().optional(),
+    "60_90": z.number().nonnegative().optional(),
+    "90_plus": z.number().nonnegative().optional(),
+    total: z.number().nonnegative().optional(),
+  }).passthrough()),
+  topOverdue: z.array(z.object({
+    invoiceId: z.string(),
+    workspaceId: z.string().optional(),
+    clientName: z.string().optional(),
+    amountDue: z.number().optional(),
+    daysOverdue: z.number().int().optional(),
+    dueDate: z.string().optional(),
+  }).passthrough()),
+  generatedAt: z.string().optional(),
+}).passthrough();
+
 /* ------------------------------------------------------------------ */
 /*  Tool execution wrapper with logging + metrics                      */
 /* ------------------------------------------------------------------ */

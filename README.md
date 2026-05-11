@@ -49,7 +49,7 @@ Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,6
 
 111 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
 
-<!-- v1.10.0-beta.1 — Wave Mature 3 Track F: Time (6) + Recurring (8) + Team (4) = 111 tools total -->
+<!-- v1.10.0-beta.3 — Wave Fase 1 Gestoria: messaging + bulk send + consolidated aging (5) = 111 tools total -->
 
 ---
 
@@ -348,6 +348,18 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `invite_team_member` | Invite a new member by email with role (admin/member/viewer) |
 | `update_team_member_role` | Change an existing member's role |
 | `remove_team_member` | Remove a member from the workspace (confirm=true required) |
+
+### Gestoria — Accountants (5)
+
+> **Status: stub** — `/v1/gestoria/*` REST surface lands with Wave Fase 1 closure (PRs #383 bulk send, #384 aging, #385 messaging). Tools surface 404 until the backend ships.
+
+| Tool | What it does |
+|------|-------------|
+| `gestoria_message_send` | Send a message in a contextual thread (documentRequest / filingItem / obligation) |
+| `gestoria_messages_list` | List messages in a thread, newest first; paginate backwards with `before` |
+| `gestoria_template_create` | Create a reusable document request template with variables + due-date offset |
+| `gestoria_template_bulk_send` | Bulk send a template to up to 500 client workspaces in one call |
+| `gestoria_aging_consolidated` | Cross-client AR aging report (buckets, per-workspace breakdown, top overdue) |
 
 All 111 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
 

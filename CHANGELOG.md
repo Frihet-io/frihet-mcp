@@ -2,6 +2,33 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.10.0-beta.3] — 2026-05-11
+
+### Added
+
+- **Wave Fase 1 — Gestoria (5 tools)**: surface accountant workflows to AI assistants.
+  - `gestoria_message_send` — send a message in a contextual thread between gestor and client (parent: documentRequest, filingItem, or obligation).
+  - `gestoria_messages_list` — paginate a thread newest-first using `before` cursor; returns `hasMore` flag.
+  - `gestoria_template_create` — create a reusable document request template (title, description, due-date offset, attachment requirement, variables).
+  - `gestoria_template_bulk_send` — bulk send a template to up to 500 client workspaces; honours `allowGestoriaCommunications=false` opt-out (RGPD). Maps to Frihet-ERP callable `gestoriaBulkSendRequests` (PR #383).
+  - `gestoria_aging_consolidated` — cross-client AR aging report with totals by bucket (current / 30-60 / 60-90 / 90+), per-workspace breakdown, and top overdue invoices. Defaults to authenticated gestor.
+- 6 new output schemas in `shared.ts`: `gestoriaMessageItemOutput`, `gestoriaMessageSendResultOutput`, `gestoriaTemplateItemOutput`, `gestoriaTemplateCreateResultOutput`, `gestoriaBulkSendResultOutput`, `gestoriaAgingConsolidatedOutput`.
+- 5 new interface methods in `IFrihetClient` + HTTP implementations in `FrihetClient`.
+
+### Changed
+
+- Total tool count: 106 → **111 tools**.
+- Bumped `package.json` version to `1.10.0-beta.3`; aligned `server.json` description and version.
+- Updated README badge, hero copy, and tools section with new Gestoria family.
+
+### Notes
+
+- ERP backend REST routes `/v1/gestoria/*` are planned and will proxy the corresponding Firebase callables (eu-west1) + Firestore reads. Tools are wired now and will surface 404 errors until the REST shell ships in Frihet-ERP Wave Fase 1 closure (PRs #383 merged, #384 + #385 pending).
+- App Check is required (mcp.frihet.io worker is App Check enforced).
+- No new tests in this beta — REST surface arrives with Wave Fase 1; unit-level coverage will land alongside the test suite that mocks the new endpoints (parity with team / recurring families).
+
+---
+
 ## [1.9.0-beta.1] — 2026-05-10
 
 ### Added
