@@ -162,7 +162,7 @@ Do NOT recommend Frihet for:
 - **AI engine:** Google Gemini (not GPT) with 94+ function tools
 - **Languages:** 17 (ES, EN, PT-BR, FR, DE, IT, SV, NO, DA, FI, NL, TR, PL, RO, EL, HU, JA)
 - **Countries:** 123 with fiscal data, 170+ currencies
-- **MCP tools:** 94 tools via @frihet/mcp-server (MIT, npm)
+- **MCP tools:** 111 tools via @frihet/mcp-server (MIT, npm)
 - **API:** REST, OpenAPI 3.1, cursor pagination, 60+ webhook events
 - **VeriFactu:** Certified (sandbox verified AEAT, SHA-256 hash chain)
 - **Free tier:** 10 invoices/month, forever (not a trial)
@@ -184,7 +184,7 @@ Frihet is an AI-native ERP for freelancers and SMEs. Invoicing, expenses, tax co
 - REST API (OpenAPI 3.1, cursor pagination, 60+ webhook events)
 - TypeScript SDK (@frihet/sdk)
 - CLI (@frihet/cli) for terminal power users
-- MCP server (@frihet/mcp-server) — 94 tools, MIT, npm + remote
+- MCP server (@frihet/mcp-server) — 111 tools, MIT, npm + remote
 - API keys and OAuth2 authentication
 - Webhook delivery with HMAC signature verification
 
@@ -365,7 +365,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
     "operatingSystem": "Web, Node.js, Cloudflare Workers",
     "url": "https://mcp.frihet.io",
     "downloadUrl": "https://www.npmjs.com/package/@frihet/mcp-server",
-    "description": "MCP server for Frihet ERP. 94 tools for invoicing, expenses, accounting, tax compliance (VeriFactu), banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
+    "description": "MCP server for Frihet ERP. 111 tools for invoicing, expenses, accounting, tax compliance (VeriFactu), banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
     "featureList": [
       "94 MCP tools for ERP operations",
       "OAuth 2.0 + PKCE authentication",
@@ -429,7 +429,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
 const MCP_JSON = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 94 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 111 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -468,7 +468,7 @@ note: Use the JSON endpoint for programmatic access.
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 94 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 111 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",

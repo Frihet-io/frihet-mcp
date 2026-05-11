@@ -30,6 +30,7 @@ import { registerFiscalTools } from "./fiscal.js";
 import { registerTimeTools } from "./time.js";
 import { registerRecurringTools } from "./recurring.js";
 import { registerTeamTools } from "./team.js";
+import { registerGestoriaTools } from "./gestoria.js";
 
 /**
  * Patches server.registerTool to wrap every tool callback with Langfuse tracing.
@@ -82,4 +83,5 @@ export function registerAllTools(server: McpServer, client: IFrihetClient): void
   registerTimeTools(server, client);
   registerRecurringTools(server, client);
   registerTeamTools(server, client);
+  registerGestoriaTools(server, client);
 }
