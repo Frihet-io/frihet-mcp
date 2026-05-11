@@ -1,12 +1,12 @@
 /**
- * Barrel module that registers all 111 Frihet ERP tools on an McpServer.
+ * Barrel module that registers all 127 Frihet ERP tools on an McpServer.
  *
  * Used by both the local (stdio) and remote (Cloudflare Workers) servers
  * so tool definitions stay in sync — one source of truth.
  *
  * Langfuse observability is injected by patching server.registerTool once
  * before any tool registration. This wraps every tool callback with
- * traceMCPTool so all 111 tools are instrumented at zero per-tool cost.
+ * traceMCPTool so all 127 tools are instrumented at zero per-tool cost.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -31,6 +31,12 @@ import { registerTimeTools } from "./time.js";
 import { registerRecurringTools } from "./recurring.js";
 import { registerTeamTools } from "./team.js";
 import { registerGestoriaTools } from "./gestoria.js";
+import { registerAuditGLTools } from "./audit_gl.js";
+import { registerPortalDomainTools } from "./portal_domain.js";
+import { registerOnboardViesTools } from "./onboard_vies.js";
+import { registerIgicTools } from "./igic.js";
+import { registerImpuestoSociedadesTools } from "./impuesto_sociedades.js";
+import { registerBankRulesTools } from "./bank_rules.js";
 
 /**
  * Patches server.registerTool to wrap every tool callback with Langfuse tracing.
@@ -84,4 +90,10 @@ export function registerAllTools(server: McpServer, client: IFrihetClient): void
   registerRecurringTools(server, client);
   registerTeamTools(server, client);
   registerGestoriaTools(server, client);
+  registerAuditGLTools(server, client);
+  registerPortalDomainTools(server, client);
+  registerOnboardViesTools(server, client);
+  registerIgicTools(server, client);
+  registerImpuestoSociedadesTools(server, client);
+  registerBankRulesTools(server, client);
 }

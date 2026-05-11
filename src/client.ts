@@ -979,4 +979,92 @@ export class FrihetClient {
       ownerUid: params?.ownerUid,
     });
   }
+
+  // ---------------------------------------------------------------- Audit GL
+  // NOTE: /v1/gl/* endpoints proxy Firebase callables (PR #395). 404 until REST shell ships.
+
+  async approveGLEntry(entryId: string, notes?: string): Promise<Record<string, unknown>> {
+    return this.request("POST", `/gl/entries/${encodeURIComponent(entryId)}/approve`, { notes });
+  }
+
+  async rejectGLEntry(entryId: string, reason: string): Promise<Record<string, unknown>> {
+    return this.request("POST", `/gl/entries/${encodeURIComponent(entryId)}/reject`, { reason });
+  }
+
+  async getGLEntryAuditLog(entryId: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/gl/entries/${encodeURIComponent(entryId)}/audit-log`);
+  }
+
+  // ---------------------------------------------------------------- White-label Portal Domain
+  // NOTE: /v1/portal/domain/* endpoints proxy Firebase callables (PR #397). 404 until REST shell ships.
+
+  async addCustomPortalDomain(data: { domain: string; workspaceId?: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", "/portal/domain", data);
+  }
+
+  async verifyCustomPortalDomain(data: { domain: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", `/portal/domain/${encodeURIComponent(data.domain)}/verify`, {});
+  }
+
+  async removeCustomPortalDomain(data: { domain: string }): Promise<Record<string, unknown>> {
+    return this.request("DELETE", `/portal/domain/${encodeURIComponent(data.domain)}`);
+  }
+
+  // ---------------------------------------------------------------- Self-onboard + VIES
+  // NOTE: /v1/portal/onboard/* endpoints proxy Firebase callables (PR #398). 404 until REST shell ships.
+
+  async generatePortalOnboardLink(data: { email: string; name?: string; expiresInHours?: number; workspaceId?: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", "/portal/onboard/link", data);
+  }
+
+  async lookupTaxIdViaVIES(data: { vatNumber: string; countryCode: string }): Promise<Record<string, unknown>> {
+    return this.request("GET", "/tax/vies/lookup", undefined, {
+      vatNumber: data.vatNumber,
+      countryCode: data.countryCode,
+    });
+  }
+
+  // ---------------------------------------------------------------- IGIC (Canary Islands)
+  // NOTE: /v1/igic/* endpoints (PR #390). 404 until REST shell ships.
+
+  async getIgicModeloSummary(modeloCode: string, params?: { year?: string; period?: string }): Promise<Record<string, unknown>> {
+    return this.request("GET", `/igic/modelo/${encodeURIComponent(modeloCode)}`, undefined, {
+      year: params?.year,
+      period: params?.period,
+    });
+  }
+
+  async calculateAiem(data: { ncCode: string; amount: number; description?: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", "/igic/aiem/calculate", data);
+  }
+
+  // ---------------------------------------------------------------- Impuesto Sociedades (IS)
+  // NOTE: /v1/is/* endpoints (PR #392). 404 until REST shell ships.
+
+  async getISSummary(modeloCode: string, params?: { year?: string; installment?: string }): Promise<Record<string, unknown>> {
+    return this.request("GET", `/is/modelo/${encodeURIComponent(modeloCode)}`, undefined, {
+      year: params?.year,
+      installment: params?.installment,
+    });
+  }
+
+  // ---------------------------------------------------------------- Bank Rules
+  // NOTE: /v1/banking/rules Q3-flagged (PR #394). 404 until callable wrapper ships.
+
+  async listBankRules(params?: { isActive?: boolean; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.request("GET", "/banking/rules", undefined, {
+      isActive: params?.isActive !== undefined ? String(params.isActive) : undefined,
+      limit: params?.limit,
+      offset: params?.offset,
+    });
+  }
+
+  async createBankRule(data: {
+    name: string;
+    conditions: Array<{ field: string; operator: string; value: string }>;
+    actions: Array<{ type: string; value: string }>;
+    isActive?: boolean;
+  }): Promise<Record<string, unknown>> {
+    return this.request("POST", "/banking/rules", data);
+  }
 }
