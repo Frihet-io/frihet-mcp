@@ -8,11 +8,24 @@
 //   node scripts/audit-mcp-refs.mjs --fix          # auto-replace stale numbers
 //   node scripts/audit-mcp-refs.mjs --json         # machine-readable
 //   node scripts/audit-mcp-refs.mjs --repo <name>  # limit to one repo
+//   node scripts/audit-mcp-refs.mjs --allow-dirty  # bypass worktree-clean guard
+//
+// Exit codes:
+//   0 = clean (or --fix succeeded)
+//   1 = stale refs found
+//   2 = invalid --repo argument
+//   3 = sister repo dirty (use --allow-dirty to override)
+//
+// Limitations:
+//   - grep-based, not AST. False positives possible — extend SAFE_PATTERNS
+//     or add "// mcp-refs:ok" annotation to skip a line.
+//   - Sister repos must be cloned at ~/Documents/<repo-name>.
 //
 // Whitelist: lines matching SAFE_PATTERNS skip the tool-count check.
 // Inline: append "// mcp-refs:ok" or "# mcp-refs:ok" to ignore one line.
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -24,6 +37,7 @@ const ARGS = process.argv.slice(2);
 const FIX = ARGS.includes('--fix');
 const JSON_OUT = ARGS.includes('--json');
 const REPO_FILTER = ARGS.includes('--repo') ? ARGS[ARGS.indexOf('--repo') + 1] : null;
+const ALLOW_DIRTY = ARGS.includes('--allow-dirty');
 
 // === SOURCE OF TRUTH ===
 const pkg = JSON.parse(readFileSync(join(SELF, 'package.json'), 'utf8'));
@@ -48,9 +62,11 @@ const REPOS = {
     root: SELF,
     files: [
       'server.json',
+      'package.json',
       'README.md',
       'CHANGELOG.md',
       'skill/SKILL.md',
+      'src/index.ts',
       'workers/remote-mcp/src/index.ts',
       'workers/remote-mcp/public/releases.json',
     ],
@@ -128,7 +144,13 @@ const SAFE_PATTERNS = [
   /Wave\s+\d/i,                                         // wave N references
   /\bnotes?\b\s*[:=]/i,                                 // notes field in JSON/release entries
   /history|hist[oó]rico|previous|earlier|legacy|deprecated|prior|former/i,
-  /(?:Banking|POS|Stay|Fiscal|Time|Recurring|Team|Invoices|Expenses|Clients|Products|Quotes|CRM|Deposits|Vendors|Webhooks|Einvoice|Intelligence)\s*\(\d+\s+(tools?|herramientas?)\)/i,
+  /(?:Banking|POS|Stay|Fiscal|Time|Recurring|Team|Invoices|Expenses|Clients|Products|Quotes|CRM|Deposits|Vendors|Webhooks|Einvoice|Intelligence|EInvoice)\s*\(\d+\s+(tools?|herramientas?)\)/i,
+  // ES families (frihet-docs)
+  /(?:Facturas?|Gastos?|Clientes?|Productos?|Presupuestos?|Proveedores?|Inteligencia|Anticipos?|Dep[oó]sitos?|CRM|Webhooks?|E[- ]?facturas?|Banca|TPV|Alojamientos?|Fiscal|Tiempo|Recurrentes?|Equipo)\s*\(\d+\s+(tools?|herramientas?)\)/i,
+  // Generic: markdown section header with parenthesized count → category breakdown
+  /^#{2,5}\s+.*\(\d+\s+(?:tools?|herramientas?)\)/i,
+  // Generic: list item with parenthesized count
+  /^\s*[*\-+]\s+.*\(\d+\s+(?:tools?|herramientas?)\)\s*[—:]/i,
   // Counts of resources/prompts (separate concept from tools)
   /\d+\s+(resources?|recursos?|prompts?)/i,
 ];
@@ -137,6 +159,38 @@ const SAFE_PATTERNS = [
 // Only flagged when line context contains MCP markers.
 const VERSION_RE = /v?(\d+\.\d+\.\d+(?:-[a-z]+\.\d+)?)/g;
 const MCP_CONTEXT_RE = /(@frihet\/mcp-server|frihet-mcp|servidor\s+mcp|mcp\s+server|mcp\.frihet\.io)/i;
+
+// Validate --repo argument
+if (REPO_FILTER && !Object.keys(REPOS).includes(REPO_FILTER)) {
+  console.error(`Unknown repo: ${REPO_FILTER}`);
+  console.error(`Valid: ${Object.keys(REPOS).join(', ')}`);
+  process.exit(2);
+}
+
+// Worktree-clean guard for sister repos when --fix is active.
+// Skip self-repo guard (caller likely on dev branch in frihet-mcp itself).
+function isDirty(root) {
+  try {
+    const out = execSync('git status --porcelain', { cwd: root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+    return out.trim().length > 0;
+  } catch {
+    return false; // not a git repo → don't block
+  }
+}
+
+if (FIX && !ALLOW_DIRTY) {
+  const dirty = [];
+  for (const [name, cfg] of Object.entries(REPOS)) {
+    if (REPO_FILTER && name !== REPO_FILTER) continue;
+    if (name === 'frihet-mcp') continue; // skip self
+    if (existsSync(cfg.root) && isDirty(cfg.root)) dirty.push(name);
+  }
+  if (dirty.length) {
+    console.error(`Refusing --fix: sister repos dirty: ${dirty.join(', ')}`);
+    console.error(`Commit/stash there first, or pass --allow-dirty.`);
+    process.exit(3);
+  }
+}
 
 const findings = [];
 
@@ -164,8 +218,10 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
         while ((m = TOOL_COUNT_RE.exec(line)) !== null) {
           const n = parseInt(m[1], 10);
           if (n === TOOL_COUNT) continue;
-          // Heuristic: only flag if number is in MCP context OR it's an obviously MCP-related file
-          const mcpFile = /llms\.txt|llms-full\.txt|server\.json|releases\.json|mcp[-_]server|skill\/SKILL|jsonld|agents\.json|manifestBrowser|schema-org|comparisons|product\.ts|emit\/schema-org/i.test(rel);
+          // Heuristic: only flag if number is in MCP context OR it's an obviously MCP-related file.
+          // All files inside frihet-mcp repo are MCP-related by definition.
+          const mcpFile = repoName === 'frihet-mcp'
+            || /llms\.txt|llms-full\.txt|server\.json|releases\.json|mcp[-_]server|skill\/SKILL|jsonld|agents\.json|manifestBrowser|schema-org|comparisons|product\.ts|emit\/schema-org/i.test(rel);
           if (!mcpFile && !MCP_CONTEXT_RE.test(line)) continue;
           findings.push({
             repo: repoName,
