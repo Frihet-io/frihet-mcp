@@ -17,7 +17,7 @@
   <a href="https://smithery.ai/server/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
-  <img src="https://img.shields.io/badge/tools-111-18181b?style=flat&labelColor=09090b" alt="111 tools">
+  <img src="https://img.shields.io/badge/tools-127-18181b?style=flat&labelColor=09090b" alt="127 tools">
   <img src="https://img.shields.io/badge/node-%3E%3D18-18181b?style=flat&labelColor=09090b" alt="node >=18">
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
@@ -47,9 +47,9 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-111 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
+127 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
 
-<!-- v1.10.0-beta.3 — Wave Fase 1 Gestoria: messaging + bulk send + consolidated aging (5) = 111 tools total -->
+<!-- v1.10.0-beta.4 — Day 1 Megasprint: GL audit (3), portal domain (3), VIES (2), IGIC/AIEM (4), IS M200/M202 (2), bank rules (2) = +16 = 127 tools total -->
 
 ---
 
@@ -177,7 +177,7 @@ Talk to your ERP. These are real prompts, not marketing copy.
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 111 tools are CRUD operations over the REST API.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 125 tools are CRUD operations over the REST API.
 
 **Works great:**
 
@@ -204,7 +204,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ---
 
-## Tools (111)
+## Tools (127)
 
 ### Invoices (6)
 
@@ -361,7 +361,65 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `gestoria_template_bulk_send` | Bulk send a template to up to 500 client workspaces in one call |
 | `gestoria_aging_consolidated` | Cross-client AR aging report (buckets, per-workspace breakdown, top overdue) |
 
-All 111 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
+### Audit GL (3)
+
+> **Status: stub** — `/v1/gl/*` proxies callables `approveGLEntry`, `rejectGLEntry`, `getGLEntryAuditLog` (PR #395). Tools surface 404 until backend ships.
+
+| Tool | What it does |
+|------|-------------|
+| `frihet_gl_entry_approve` | Approve a GL journal entry (gestor/admin only — TRUST AREA) |
+| `frihet_gl_entry_reject` | Reject a GL entry with a mandatory reason (TRUST AREA) |
+| `frihet_gl_entry_audit_log` | Retrieve full audit trail for a GL entry |
+
+### White-label Portal Domain (3)
+
+> **Status: stub** — `/v1/portal/domain/*` proxies callables `addCustomPortalDomain`, `verifyCustomPortalDomain`, `removeCustomPortalDomain` (PR #397).
+
+| Tool | What it does |
+|------|-------------|
+| `frihet_portal_domain_add` | Add a custom domain to the client portal (returns DNS CNAME records) |
+| `frihet_portal_domain_verify` | Verify DNS propagation for a custom portal domain |
+| `frihet_portal_domain_remove` | Remove a custom portal domain (reverts to default Frihet subdomain) |
+
+### Self-onboard & VIES (2)
+
+> **Status: stub** — `/v1/portal/onboard/*` proxies callables `generatePortalOnboardLink`, `lookupTaxIdViaVIES` (PR #398). Public portal flows excluded from MCP.
+
+| Tool | What it does |
+|------|-------------|
+| `frihet_portal_onboard_link_generate` | Generate a time-limited self-onboard link for a prospective client |
+| `frihet_tax_id_vies_lookup` | Validate an EU VAT number (CIF intracomunitario) via VIES |
+
+### IGIC — Canary Islands Indirect Tax (4)
+
+> **Status: stub** — `/v1/igic/*` service-layer reads (PR #390). ATC SOAP excluded (internal infra).
+
+| Tool | What it does |
+|------|-------------|
+| `frihet_modelo_415_summary` | M415 annual operations >€3,005 (Canarias equivalent of M347) |
+| `frihet_modelo_425_summary` | M425 annual IGIC recap for Canary Islands businesses |
+| `frihet_modelo_418_summary` | M418 monthly IGIC return for large enterprises (grandes empresas) |
+| `frihet_aiem_calculate` | Calculate AIEM (Arbitrio Importación) for imported/produced goods in Canarias |
+
+### Impuesto sobre Sociedades — Corporate Tax (2)
+
+> **Status: stub** — `/v1/is/*` service-layer reads for Spanish SLs/SAs (PR #392).
+
+| Tool | What it does |
+|------|-------------|
+| `frihet_modelo_200_summary` | Modelo 200 annual IS return (taxable base, deductions, net payable) |
+| `frihet_modelo_202_summary` | Modelo 202 installment payments (1P April, 2P October, 3P December) |
+
+### Bank Categorization Rules (2)
+
+> **Status: stub** — `/v1/banking/rules` Q3-flagged (PR #394). Webhook handlers excluded.
+
+| Tool | What it does |
+|------|-------------|
+| `frihet_bank_rules_list` | List all bank auto-categorization rules (conditions + actions + status) |
+| `frihet_bank_rule_create` | Create a new rule to auto-categorize transactions by description, amount, counterparty |
+
+All 127 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
 
 ---
 

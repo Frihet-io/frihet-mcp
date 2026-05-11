@@ -154,6 +154,31 @@ export interface IFrihetClient {
   updateTeamMemberRole(memberId: string, role: string): Promise<Record<string, unknown>>;
   removeTeamMember(memberId: string): Promise<void>;
 
+  // Audit GL endpoints (/v1/gl/*) — Day 1 Megasprint PR #395.
+  approveGLEntry(entryId: string, notes?: string): Promise<Record<string, unknown>>;
+  rejectGLEntry(entryId: string, reason: string): Promise<Record<string, unknown>>;
+  getGLEntryAuditLog(entryId: string): Promise<Record<string, unknown>>;
+
+  // White-label portal domain endpoints (/v1/portal/domain/*) — Day 1 Megasprint PR #397.
+  addCustomPortalDomain(data: { domain: string; workspaceId?: string }): Promise<Record<string, unknown>>;
+  verifyCustomPortalDomain(data: { domain: string }): Promise<Record<string, unknown>>;
+  removeCustomPortalDomain(data: { domain: string }): Promise<Record<string, unknown>>;
+
+  // Self-onboard + VIES endpoints (/v1/portal/onboard/*) — Day 1 Megasprint PR #398.
+  generatePortalOnboardLink(data: { email: string; name?: string; expiresInHours?: number; workspaceId?: string }): Promise<Record<string, unknown>>;
+  lookupTaxIdViaVIES(data: { vatNumber: string; countryCode: string }): Promise<Record<string, unknown>>;
+
+  // IGIC endpoints (/v1/igic/*) — Day 1 Megasprint PR #390.
+  getIgicModeloSummary(modeloCode: string, params?: { year?: string; period?: string }): Promise<Record<string, unknown>>;
+  calculateAiem(data: { ncCode: string; amount: number; description?: string }): Promise<Record<string, unknown>>;
+
+  // Impuesto Sociedades endpoints (/v1/is/*) — Day 1 Megasprint PR #392.
+  getISSummary(modeloCode: string, params?: { year?: string; installment?: string }): Promise<Record<string, unknown>>;
+
+  // Bank rules endpoints (/v1/banking/rules) — Day 1 Megasprint PR #394 (Q3-flagged).
+  listBankRules(params?: { isActive?: boolean; limit?: number; offset?: number }): Promise<import("./types.js").PaginatedResponse<Record<string, unknown>>>;
+  createBankRule(data: { name: string; conditions: Array<{ field: string; operator: string; value: string }>; actions: Array<{ type: string; value: string }>; isActive?: boolean }): Promise<Record<string, unknown>>;
+
   // Gestoria endpoints (/v1/gestoria/*) — Wave Fase 1 surface for accountants.
   // Backend lands with Frihet-ERP PRs #383 (bulk send), #384 (aging), #385
   // (messaging). REST routes will proxy callables + Firestore reads.
