@@ -636,6 +636,77 @@ export class FrihetClient {
     return this.request("POST", "/einvoice/export-datev", params);
   }
 
+  // ---------------------------------------------------------------- E-Invoice Day 4 (PR #414 + FACe PR #411 + TicketBAI PR #356)
+  // ----------------------------------------------------------------
+  // New per-invoice endpoints: /v1/invoices/:id/einvoice/export, /face/*, /ticketbai/*
+  // 404 responses propagate to tool handlers which fall back to stub responses.
+
+  async exportEInvoice(params: {
+    invoiceId: string;
+    format: string;
+    signed?: boolean;
+  }): Promise<{
+    xmlUrl: string;
+    filename: string;
+    format: string;
+    signed: boolean;
+  }> {
+    const { invoiceId, ...body } = params;
+    return this.request("POST", `/invoices/${encodeURIComponent(invoiceId)}/einvoice/export`, body);
+  }
+
+  async faceSubmit(params: {
+    invoiceId: string;
+    mode: "mock" | "sandbox" | "production";
+  }): Promise<{
+    registroFACe: string;
+    status: "submitted" | "error";
+    submittedAt: string;
+    mode: string;
+  }> {
+    const { invoiceId, mode } = params;
+    return this.request("POST", `/invoices/${encodeURIComponent(invoiceId)}/face/submit`, { mode });
+  }
+
+  async faceStatus(params: {
+    invoiceId: string;
+  }): Promise<{
+    registroFACe: string;
+    statusCode: string;
+    statusDescription: string;
+    rejectionReason?: string;
+  }> {
+    return this.request("GET", `/invoices/${encodeURIComponent(params.invoiceId)}/face/status`);
+  }
+
+  async ticketbaiSubmit(params: {
+    invoiceId: string;
+    sandbox: boolean;
+  }): Promise<{
+    tbaiId: string;
+    territory: "bizkaia" | "gipuzkoa" | "araba";
+    status: "submitted" | "accepted" | "rejected" | "error";
+    sandbox: boolean;
+    qrUrl?: string;
+  }> {
+    const { invoiceId, sandbox } = params;
+    return this.request("POST", `/invoices/${encodeURIComponent(invoiceId)}/ticketbai/submit`, { sandbox });
+  }
+
+  async ticketbaiStatus(params: {
+    invoiceId: string;
+  }): Promise<{
+    tbaiId: string;
+    territory: "bizkaia" | "gipuzkoa" | "araba";
+    status: "submitted" | "accepted" | "rejected" | "error";
+    rejectionReason?: string;
+    error?: string;
+  }> {
+    return this.request("GET", `/invoices/${encodeURIComponent(params.invoiceId)}/ticketbai/status`);
+  }
+
+  // kSeFSubmit intentionally omitted — ksef_submit tool is always-stub until PR #417 merges.
+
   // ---------------------------------------------------------------- Stay (Vacation Rental)
   // ----------------------------------------------------------------
   // NOTE: ERP backend endpoints /v1/stay/* land in Frihet-ERP S2 sprint.

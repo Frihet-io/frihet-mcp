@@ -6,7 +6,7 @@
  * Or via: npm test (after build: node --test dist/__tests__/einvoice-tools.test.js)
  *
  * Coverage:
- *   1. Tool registration — all 4 tools registered on McpServer (62→66)
+ *   1. Tool registration — all original 4 tools registered on McpServer (plus 6 Day 4 = 10 total)
  *   2. 404-fallback path — when CF endpoint returns 404, stub fallback fires
  *   3. Success path — when CF endpoint returns real data, it is passed through
  *   4. Stub response shape — matches declared outputSchema (via fallback)
@@ -116,8 +116,8 @@ describe("E-Invoice Tools — Registration", () => {
     registerEInvoiceTools(server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, clientStub);
   });
 
-  test("registers exactly 4 e-invoice tools", () => {
-    assert.equal(server.tools.size, 4);
+  test("registers exactly 10 e-invoice tools (4 original + 6 Day 4)", () => {
+    assert.equal(server.tools.size, 10);
   });
 
   test("registers send_einvoice", () => {
@@ -137,8 +137,8 @@ describe("E-Invoice Tools — Registration", () => {
   });
 });
 
-describe("E-Invoice Tools — registerAllTools includes new tools (62→66)", () => {
-  test("registerAllTools wires 4 new e-invoice tools via patchServerWithTracing", async () => {
+describe("E-Invoice Tools — registerAllTools includes new tools (127→133)", () => {
+  test("registerAllTools wires 10 e-invoice tools via patchServerWithTracing", async () => {
     const server = new StubMcpServer();
     const clientStub = make404Client();
 
@@ -152,7 +152,7 @@ describe("E-Invoice Tools — registerAllTools includes new tools (62→66)", ()
     ): void {
       wrappedCount++;
       // Verify Langfuse tracing wrapper would be applied (traceMCPTool wraps cb)
-      // We confirm the patch captures all tool registrations including our 4 new ones
+      // We confirm the patch captures all tool registrations including all 10 einvoice tools
       const wrappedCb: ToolHandler = async (args) => {
         langfuseCallCount++;
         return cb(args);
@@ -163,8 +163,8 @@ describe("E-Invoice Tools — registerAllTools includes new tools (62→66)", ()
     const { registerEInvoiceTools } = await import("../tools/einvoice.js");
     registerEInvoiceTools(server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, clientStub);
 
-    assert.equal(wrappedCount, 4, `Expected 4 tools wrapped, got ${wrappedCount}`);
-    assert.equal(server.tools.size, 4);
+    assert.equal(wrappedCount, 10, `Expected 10 tools wrapped, got ${wrappedCount}`);
+    assert.equal(server.tools.size, 10);
   });
 });
 
@@ -374,7 +374,7 @@ describe("export_datev — stub response shape", () => {
 });
 
 describe("Langfuse wrapper — patchServerWithTracing wraps all tool callbacks", () => {
-  test("patched registerTool intercepts all 4 einvoice tools (simulates traceMCPTool path)", async () => {
+  test("patched registerTool intercepts all 10 einvoice tools (simulates traceMCPTool path)", async () => {
     const server = new StubMcpServer();
     const clientStub = make404Client();
 
@@ -398,8 +398,8 @@ describe("Langfuse wrapper — patchServerWithTracing wraps all tool callbacks",
     const { registerEInvoiceTools } = await import("../tools/einvoice.js");
     registerEInvoiceTools(server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, clientStub);
 
-    // All 4 tools were intercepted by the patch
-    assert.equal(interceptCount, 4, `Expected 4 tools intercepted by tracing patch, got ${interceptCount}`);
+    // All 10 tools were intercepted by the patch (4 original + 6 Day 4)
+    assert.equal(interceptCount, 10, `Expected 10 tools intercepted by tracing patch, got ${interceptCount}`);
 
     // Exercise each tool to confirm the traced wrapper runs
     for (const [name, tool] of server.tools) {
@@ -407,7 +407,7 @@ describe("Langfuse wrapper — patchServerWithTracing wraps all tool callbacks",
       await tool.handler(args);
     }
 
-    assert.equal(langfuseCallCount, 4, `Expected 4 Langfuse trace calls (one per tool), got ${langfuseCallCount}`);
+    assert.equal(langfuseCallCount, 10, `Expected 10 Langfuse trace calls (one per tool), got ${langfuseCallCount}`);
   });
 });
 
@@ -421,6 +421,19 @@ function getValidArgs(toolName: string): Record<string, unknown> {
       return { xml: "<Invoice/>", format: "cii" };
     case "export_datev":
       return { periodStart: "2026-01-01", periodEnd: "2026-01-31", format: "extf-buchungsstapel" };
+    // Day 4 tools
+    case "einvoice_export":
+      return { invoiceId: "inv_123", format: "facturae" };
+    case "face_submit":
+      return { invoiceId: "inv_123", mode: "production" };
+    case "face_status":
+      return { invoiceId: "inv_123" };
+    case "ticketbai_submit":
+      return { invoiceId: "inv_123" };
+    case "ticketbai_status":
+      return { invoiceId: "inv_123" };
+    case "ksef_submit":
+      return { invoiceId: "inv_123", mode: "production" };
     default:
       return {};
   }

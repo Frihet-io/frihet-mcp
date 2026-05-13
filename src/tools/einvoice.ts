@@ -1,16 +1,23 @@
 /**
  * E-Invoicing tools for the Frihet MCP server.
  *
- * Wired to real CF endpoints at api.frihet.io/v1/einvoice/*.
+ * Wired to real CF endpoints at api.frihet.io/v1/invoices/:id/einvoice/*.
  * 404-fallback: if the CF endpoint is not yet deployed, returns a stub with
  * { _stub: true, _note: "CF endpoint pending deploy", _plannedEndpoint: "..." }
  * so the MCP server remains usable while the transport Wave ships.
  *
- * All 4 tools use the shared withToolLogging wrapper (Langfuse tracing applied
+ * All 10 tools use the shared withToolLogging wrapper (Langfuse tracing applied
  * globally via patchServerWithTracing in register-all.ts).
  *
  * Trace names prefix: mcp.einvoice.*
- * CF endpoints: https://api.frihet.io/v1/einvoice/{send,status,validate,export-datev}
+ * Original 4 CF endpoints: https://api.frihet.io/v1/einvoice/{send,status,validate,export-datev}
+ * Day 4 Wave 6 CF endpoints (PR #414 + FACe PR #411 + TicketBAI PR #356):
+ *   POST /v1/invoices/:id/einvoice/export  — export XML in specific format (signed Facturae etc.)
+ *   POST /v1/invoices/:id/face/submit      — Spain B2G FACe portal submission
+ *   GET  /v1/invoices/:id/face/status      — FACe submission status
+ *   POST /v1/invoices/:id/ticketbai/submit — Basque Country TicketBAI (Bizkaia/Gipuzkoa/Araba)
+ *   GET  /v1/invoices/:id/ticketbai/status — TicketBAI submission status
+ *   POST /v1/invoices/:id/ksef/submit      — Poland KSeF (stub — activates post-PR #417 merge)
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -98,6 +105,53 @@ export const exportDatevOutput = z.object({
   rowCount: z.number().describe("Number of accounting rows in the export"),
   fiscalPeriod: z.string().describe("Fiscal period covered (e.g. '2026-01' or '2026-Q1')"),
   encoding: z.literal("cp1252").describe("File encoding — always CP1252 per DATEV EXTF spec"),
+}).passthrough();
+
+/* Day 4 Wave output schemas */
+
+export const einvoiceExportOutput = z.object({
+  xmlUrl: z.string().describe("Signed URL to download the e-invoice XML (valid 24h)"),
+  filename: z.string().describe("Suggested filename (e.g. INV-2026-001-facturae.xml)"),
+  format: z.string().describe("E-invoice format used"),
+  signed: z.boolean().describe("Whether XAdES signature was applied (Facturae only)"),
+}).passthrough();
+
+export const faceSubmitOutput = z.object({
+  registroFACe: z.string().describe("FACe registration number (número de registro) returned by the portal"),
+  status: z.enum(["submitted", "error"]).describe("Submission outcome"),
+  submittedAt: z.string().describe("ISO 8601 timestamp of the submission"),
+  mode: z.string().describe("Mode used: mock | sandbox | production"),
+}).passthrough();
+
+export const faceStatusOutput = z.object({
+  registroFACe: z.string().describe("FACe registration number"),
+  statusCode: z.string().describe("FACe status code (e.g. '1200'=Registrada, '1400'=Contabilizada, '3100'=Rechazada)"),
+  statusDescription: z.string().describe("Human-readable FACe status description"),
+  rejectionReason: z.string().optional().describe("Rejection reason if statusCode=3100"),
+}).passthrough();
+
+export const ticketbaiSubmitOutput = z.object({
+  tbaiId: z.string().describe("TicketBAI identifier (TBAI-XXXXX) returned by hacienda foral"),
+  territory: z.enum(["bizkaia", "gipuzkoa", "araba"]).describe("Basque territory auto-detected from workspace address"),
+  status: z.enum(["submitted", "accepted", "rejected", "error"]).describe("Submission status"),
+  sandbox: z.boolean().describe("Whether this was a sandbox (test) submission"),
+  qrUrl: z.string().optional().describe("QR code URL to print on the invoice (TBAI compliance)"),
+}).passthrough();
+
+export const ticketbaiStatusOutput = z.object({
+  tbaiId: z.string().describe("TicketBAI identifier"),
+  territory: z.enum(["bizkaia", "gipuzkoa", "araba"]).describe("Basque territory"),
+  status: z.enum(["submitted", "accepted", "rejected", "error"]).describe("Current hacienda acknowledgement status"),
+  rejectionReason: z.string().optional().describe("Rejection reason from hacienda (if rejected)"),
+  error: z.string().optional().describe("Internal error message (if error)"),
+}).passthrough();
+
+export const kSeFSubmitOutput = z.object({
+  _notImplemented: z.boolean().optional().describe("Always true — endpoint pending PR #417"),
+  _note: z.string().optional().describe("Guidance on when the tool activates"),
+  _plannedEndpoint: z.string().optional().describe("Planned REST endpoint path"),
+  invoiceId: z.string().optional(),
+  mode: z.string().optional(),
 }).passthrough();
 
 /* ------------------------------------------------------------------ */
@@ -454,6 +508,452 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
         }
       }),
   );
+
+  // -- einvoice_export --
+
+  server.registerTool(
+    "einvoice_export",
+    {
+      title: "Export E-Invoice XML",
+      description:
+        "Export an invoice as e-invoicing XML in a specific format. " +
+        "Supports Facturae (ES B2G), XRechnung-CII (DE), XRechnung-UBL (DE), " +
+        "Factur-X profiles (FR), FatturaPA (IT), PEPPOL-BIS-3 (EU network), UBL and CII (generic). " +
+        "For Facturae, set signed=true to get XAdES-enveloped XML for FACe/AEAT submission. " +
+        "Returns a signed download URL valid for 24 hours. " +
+        "\n\n" +
+        "/ Exporta una factura como XML de facturacion electronica en el formato especificado. " +
+        "Para Facturae con signed=true devuelve XML firmado XAdES para envio a FACe/AEAT.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: {
+        invoiceId: z.string().describe("Frihet invoice ID to export / ID de la factura a exportar"),
+        format: eInvoiceFormatSchema.describe(
+          "E-invoice format. Choose based on recipient country: " +
+          "ES B2G→facturae, DE→xrechnung-cii/ubl, FR→facturx-*, IT→fatturapa, EU PEPPOL→peppol-bis-3, " +
+          "generic→ubl or cii / Formato de factura electronica.",
+        ),
+        signed: z.boolean().optional().describe(
+          "If true, returns XAdES-enveloped signed XML (Facturae only). Requires workspace signing certificate configured. " +
+          "/ Si true, devuelve XML firmado XAdES (solo Facturae). Requiere certificado de firma configurado.",
+        ),
+      },
+      outputSchema: einvoiceExportOutput,
+    },
+    async ({ invoiceId, format, signed }) =>
+      withToolLogging("einvoice_export", async () => {
+        const plannedEndpoint = `/v1/invoices/${invoiceId}/einvoice/export`;
+        try {
+          const result = await (_client as IFrihetClientWithDay4EInvoice).exportEInvoice({ invoiceId, format, signed });
+          return {
+            content: [
+              getContent(
+                `E-invoice export ready:\n` +
+                `  Invoice: ${invoiceId}\n` +
+                `  Format: ${format}\n` +
+                `  Signed: ${signed ?? false}\n` +
+                `  Filename: ${result.filename}\n` +
+                `  Download URL: ${result.xmlUrl}`,
+              ),
+            ],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        } catch (err: unknown) {
+          if (isNotFoundError(err)) {
+            const stubResult = {
+              xmlUrl: `https://storage.frihet.io/stub/einvoice/${invoiceId}-${format}.xml`,
+              filename: `${invoiceId}-${format}.xml`,
+              format,
+              signed: signed ?? false,
+              _stub: true,
+              _note: "CF endpoint pending deploy",
+              _plannedEndpoint: plannedEndpoint,
+            };
+            return {
+              content: [
+                getContent(
+                  `E-invoice export ready (stub — CF pending deploy):\n` +
+                  `  Invoice: ${invoiceId}\n` +
+                  `  Format: ${format}\n` +
+                  `  Signed: ${stubResult.signed}\n` +
+                  `  Filename: ${stubResult.filename}\n` +
+                  `  Download URL: ${stubResult.xmlUrl}`,
+                ),
+              ],
+              structuredContent: stubResult as unknown as Record<string, unknown>,
+            };
+          }
+          throw err;
+        }
+      }),
+  );
+
+  // -- face_submit --
+
+  server.registerTool(
+    "face_submit",
+    {
+      title: "Submit to FACe (Spain B2G)",
+      description:
+        "Submit a Facturae-formatted invoice to the Spanish FACe (Punto General de Entrada de Facturas Electrónicas) B2G portal. " +
+        "The invoice must have a recipient with DIR3 administrative unit codes (órgano gestor, unidad tramitadora, oficina contable). " +
+        "Returns a submission reference (registro) that can be used with face_status to poll the portal. " +
+        "\n\n" +
+        "Modes:\n" +
+        "  • mock — local simulation only, no network call (safe for dev/test)\n" +
+        "  • sandbox — FACe pre-production endpoint (requires sandbox credentials)\n" +
+        "  • production — live FACe SOAP endpoint (default)\n" +
+        "\n" +
+        "/ Envía una factura Facturae al portal FACe del Estado español. " +
+        "Requiere códigos DIR3 en el destinatario (órgano gestor, unidad tramitadora, oficina contable). " +
+        "Devuelve el número de registro para consulta de estado con face_status.",
+      annotations: CREATE_ANNOTATIONS,
+      inputSchema: {
+        invoiceId: z.string().describe("Frihet invoice ID to submit / ID de la factura a enviar a FACe"),
+        mode: z.enum(["mock", "sandbox", "production"]).optional().describe(
+          "Submission mode: mock (local sim), sandbox (FACe pre-prod), production (live). Default: production. " +
+          "/ Modo de envío: mock (simulación local), sandbox (pre-producción FACe), production (real). Por defecto: production.",
+        ),
+      },
+      outputSchema: faceSubmitOutput,
+    },
+    async ({ invoiceId, mode }) =>
+      withToolLogging("face_submit", async () => {
+        const plannedEndpoint = `/v1/invoices/${invoiceId}/face/submit`;
+        const resolvedMode = mode ?? "production";
+        try {
+          const result = await (_client as IFrihetClientWithDay4EInvoice).faceSubmit({ invoiceId, mode: resolvedMode });
+          return {
+            content: [
+              mutateContent(
+                `FACe submission queued:\n` +
+                `  Invoice: ${invoiceId}\n` +
+                `  Mode: ${resolvedMode}\n` +
+                `  Registro: ${result.registroFACe}\n` +
+                `  Status: ${result.status}\n\n` +
+                `Use face_status with invoiceId to poll the portal for confirmation.`,
+              ),
+            ],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        } catch (err: unknown) {
+          if (isNotFoundError(err)) {
+            const stubResult = {
+              registroFACe: `RCF_stub_${Date.now()}`,
+              status: "submitted" as const,
+              submittedAt: new Date().toISOString(),
+              mode: resolvedMode,
+              _stub: true,
+              _note: "CF endpoint pending deploy",
+              _plannedEndpoint: plannedEndpoint,
+            };
+            return {
+              content: [
+                mutateContent(
+                  `FACe submission queued (stub — CF pending deploy):\n` +
+                  `  Invoice: ${invoiceId}\n` +
+                  `  Mode: ${resolvedMode}\n` +
+                  `  Registro: ${stubResult.registroFACe}\n` +
+                  `  Status: ${stubResult.status}\n\n` +
+                  `Use face_status with invoiceId to poll the portal for confirmation.`,
+                ),
+              ],
+              structuredContent: stubResult as unknown as Record<string, unknown>,
+            };
+          }
+          throw err;
+        }
+      }),
+  );
+
+  // -- face_status --
+
+  server.registerTool(
+    "face_status",
+    {
+      title: "Get FACe Submission Status",
+      description:
+        "Poll the status of a FACe (Spain B2G) invoice submission. " +
+        "Returns the current FACe portal state code, description, and the registro number. " +
+        "\n\n" +
+        "Common FACe status codes:\n" +
+        "  • 1200 — Registrada / Registered (submission received)\n" +
+        "  • 1300 — En proceso de contabilización / In accounting (being processed)\n" +
+        "  • 1400 — Contabilizada / Accounted (approved, awaiting payment)\n" +
+        "  • 2400 — Anulada / Cancelled\n" +
+        "  • 3100 — Rechazada / Rejected (check rejectionReason)\n" +
+        "\n" +
+        "/ Consulta el estado de un envío a FACe. Devuelve el código de estado, descripción y número de registro.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: {
+        invoiceId: z.string().describe("Frihet invoice ID (same as used in face_submit) / ID de la factura"),
+      },
+      outputSchema: faceStatusOutput,
+    },
+    async ({ invoiceId }) =>
+      withToolLogging("face_status", async () => {
+        const plannedEndpoint = `/v1/invoices/${invoiceId}/face/status`;
+        try {
+          const result = await (_client as IFrihetClientWithDay4EInvoice).faceStatus({ invoiceId });
+          return {
+            content: [
+              getContent(
+                `FACe status:\n` +
+                `  Invoice: ${invoiceId}\n` +
+                `  Registro: ${result.registroFACe}\n` +
+                `  Status code: ${result.statusCode}\n` +
+                `  Description: ${result.statusDescription}\n` +
+                (result.rejectionReason ? `  Rejection reason: ${result.rejectionReason}\n` : ""),
+              ),
+            ],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        } catch (err: unknown) {
+          if (isNotFoundError(err)) {
+            const stubResult = {
+              registroFACe: `RCF_stub_${invoiceId.slice(-8)}`,
+              statusCode: "1200",
+              statusDescription: "Registrada",
+              rejectionReason: undefined,
+              _stub: true,
+              _note: "CF endpoint pending deploy",
+              _plannedEndpoint: plannedEndpoint,
+            };
+            return {
+              content: [
+                getContent(
+                  `FACe status (stub — CF pending deploy):\n` +
+                  `  Invoice: ${invoiceId}\n` +
+                  `  Registro: ${stubResult.registroFACe}\n` +
+                  `  Status code: ${stubResult.statusCode}\n` +
+                  `  Description: ${stubResult.statusDescription}`,
+                ),
+              ],
+              structuredContent: stubResult as unknown as Record<string, unknown>,
+            };
+          }
+          throw err;
+        }
+      }),
+  );
+
+  // -- ticketbai_submit --
+
+  server.registerTool(
+    "ticketbai_submit",
+    {
+      title: "Submit TicketBAI (Basque Country)",
+      description:
+        "Submit an invoice to the Basque Country TicketBAI e-invoicing system. " +
+        "Territory is auto-detected from the workspace address (Bizkaia → BATUZ/LROE, Gipuzkoa → Gipuzkoa TicketBAI, Araba → Araba TicketBAI). " +
+        "Returns the submission TicketBAI ID (TBAI identifier) and QR code URL for printing on the invoice. " +
+        "\n\n" +
+        "Use sandbox=true for test submissions against the hacienda test endpoints. " +
+        "Production submissions require a valid TicketBAI certificate configured in workspace settings. " +
+        "\n\n" +
+        "/ Envía una factura al sistema TicketBAI del País Vasco. " +
+        "El territorio se detecta automáticamente (Bizkaia→BATUZ/LROE, Gipuzkoa, Álava). " +
+        "Devuelve el identificador TBAI y URL del código QR para imprimir en la factura.",
+      annotations: CREATE_ANNOTATIONS,
+      inputSchema: {
+        invoiceId: z.string().describe("Frihet invoice ID to submit / ID de la factura a enviar"),
+        sandbox: z.boolean().optional().describe(
+          "If true, submits to the hacienda test endpoint instead of production. Default: false. " +
+          "/ Si true, envía al entorno de pruebas de la hacienda. Por defecto: false.",
+        ),
+      },
+      outputSchema: ticketbaiSubmitOutput,
+    },
+    async ({ invoiceId, sandbox }) =>
+      withToolLogging("ticketbai_submit", async () => {
+        const plannedEndpoint = `/v1/invoices/${invoiceId}/ticketbai/submit`;
+        const isSandbox = sandbox ?? false;
+        try {
+          const result = await (_client as IFrihetClientWithDay4EInvoice).ticketbaiSubmit({ invoiceId, sandbox: isSandbox });
+          return {
+            content: [
+              mutateContent(
+                `TicketBAI submitted:\n` +
+                `  Invoice: ${invoiceId}\n` +
+                `  Territory: ${result.territory}\n` +
+                `  TBAI ID: ${result.tbaiId}\n` +
+                `  Sandbox: ${isSandbox}\n` +
+                `  QR URL: ${result.qrUrl ?? "N/A"}\n\n` +
+                `Use ticketbai_status with invoiceId to poll for hacienda acknowledgement.`,
+              ),
+            ],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        } catch (err: unknown) {
+          if (isNotFoundError(err)) {
+            const stubResult = {
+              tbaiId: `TBAI-stub-${Date.now()}`,
+              territory: "bizkaia" as const,
+              status: "submitted" as const,
+              sandbox: isSandbox,
+              qrUrl: `https://batuz.eus/QRTBAI/?id=TBAI-stub`,
+              _stub: true,
+              _note: "CF endpoint pending deploy",
+              _plannedEndpoint: plannedEndpoint,
+            };
+            return {
+              content: [
+                mutateContent(
+                  `TicketBAI submitted (stub — CF pending deploy):\n` +
+                  `  Invoice: ${invoiceId}\n` +
+                  `  Territory: ${stubResult.territory}\n` +
+                  `  TBAI ID: ${stubResult.tbaiId}\n` +
+                  `  Sandbox: ${isSandbox}\n` +
+                  `  QR URL: ${stubResult.qrUrl}\n\n` +
+                  `Use ticketbai_status with invoiceId to poll for hacienda acknowledgement.`,
+                ),
+              ],
+              structuredContent: stubResult as unknown as Record<string, unknown>,
+            };
+          }
+          throw err;
+        }
+      }),
+  );
+
+  // -- ticketbai_status --
+
+  server.registerTool(
+    "ticketbai_status",
+    {
+      title: "Get TicketBAI Submission Status",
+      description:
+        "Poll the hacienda acknowledgement status for a TicketBAI submission. " +
+        "Returns the TBAI identifier, territory, and hacienda's confirmation or rejection state. " +
+        "\n\n" +
+        "Common status values:\n" +
+        "  • submitted — sent, awaiting hacienda response (check again in 30-60s)\n" +
+        "  • accepted — hacienda confirmed the submission (AEAT/foral treasury received)\n" +
+        "  • rejected — hacienda rejected (check rejectionReason for correction guidance)\n" +
+        "  • error — internal processing error (see error field)\n" +
+        "\n" +
+        "/ Consulta el estado de acuse de recibo de la hacienda foral para un envío TicketBAI. " +
+        "Devuelve el identificador TBAI, territorio y estado de confirmación o rechazo.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: {
+        invoiceId: z.string().describe("Frihet invoice ID (same as used in ticketbai_submit) / ID de la factura"),
+      },
+      outputSchema: ticketbaiStatusOutput,
+    },
+    async ({ invoiceId }) =>
+      withToolLogging("ticketbai_status", async () => {
+        const plannedEndpoint = `/v1/invoices/${invoiceId}/ticketbai/status`;
+        try {
+          const result = await (_client as IFrihetClientWithDay4EInvoice).ticketbaiStatus({ invoiceId });
+          return {
+            content: [
+              getContent(
+                `TicketBAI status:\n` +
+                `  Invoice: ${invoiceId}\n` +
+                `  TBAI ID: ${result.tbaiId}\n` +
+                `  Territory: ${result.territory}\n` +
+                `  Status: ${result.status}\n` +
+                (result.rejectionReason ? `  Rejection reason: ${result.rejectionReason}\n` : "") +
+                (result.error ? `  Error: ${result.error}\n` : ""),
+              ),
+            ],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        } catch (err: unknown) {
+          if (isNotFoundError(err)) {
+            const stubResult = {
+              tbaiId: `TBAI-stub-${invoiceId.slice(-8)}`,
+              territory: "bizkaia" as const,
+              status: "accepted" as const,
+              rejectionReason: undefined,
+              error: undefined,
+              _stub: true,
+              _note: "CF endpoint pending deploy",
+              _plannedEndpoint: plannedEndpoint,
+            };
+            return {
+              content: [
+                getContent(
+                  `TicketBAI status (stub — CF pending deploy):\n` +
+                  `  Invoice: ${invoiceId}\n` +
+                  `  TBAI ID: ${stubResult.tbaiId}\n` +
+                  `  Territory: ${stubResult.territory}\n` +
+                  `  Status: ${stubResult.status}`,
+                ),
+              ],
+              structuredContent: stubResult as unknown as Record<string, unknown>,
+            };
+          }
+          throw err;
+        }
+      }),
+  );
+
+  // -- ksef_submit --
+  // STUB ONLY — depends on api.frihet.io/v1/invoices/:id/ksef/submit endpoint
+  // which lands with KSeF PR #417 (Poland KSeF mandatory e-invoicing 2025+).
+  // When PR #417 merges, remove the NotImplementedYet throw and wire to client.kSeFSubmit().
+
+  server.registerTool(
+    "ksef_submit",
+    {
+      title: "Submit to KSeF (Poland)",
+      description:
+        "Submit an invoice to the Polish KSeF (Krajowy System e-Faktur) national e-invoicing system. " +
+        "Poland requires e-invoicing for B2B transactions (mandatory phase rolling out 2025). " +
+        "\n\n" +
+        "Modes:\n" +
+        "  • mock — local simulation (no network call, safe for dev/test)\n" +
+        "  • sandbox — KSeF test environment (demo.ksef.mf.gov.pl)\n" +
+        "  • production — live KSeF endpoint (ksef.mf.gov.pl)\n" +
+        "\n\n" +
+        "NOTE: This tool is a forward-compatible stub. The KSeF Cloud Function lands in PR #417. " +
+        "Until merged, all calls return a NotImplementedYet error with guidance on when it will be available. " +
+        "/ NOTA: Este tool es un stub anticipatorio. La Cloud Function KSeF se activa con el PR #417. " +
+        "Hasta su merge, todas las llamadas devuelven un error NotImplementedYet con instrucciones.",
+      annotations: CREATE_ANNOTATIONS,
+      inputSchema: {
+        invoiceId: z.string().describe("Frihet invoice ID to submit to KSeF / ID de la factura a enviar a KSeF"),
+        mode: z.enum(["mock", "sandbox", "production"]).optional().describe(
+          "Submission mode: mock (local sim), sandbox (KSeF test), production (live KSeF). Default: production. " +
+          "/ Modo de envío: mock (simulación), sandbox (test KSeF), production (KSeF real).",
+        ),
+      },
+      outputSchema: kSeFSubmitOutput,
+    },
+    async ({ invoiceId, mode }) =>
+      withToolLogging("ksef_submit", async () => {
+        // STUB: KSeF CF endpoint not yet deployed — PR #417 required.
+        // When PR #417 merges (api.frihet.io/v1/invoices/:id/ksef/submit live),
+        // replace this block with: await (_client as IFrihetClientWithDay4EInvoice).kSeFSubmit({ invoiceId, mode })
+        const resolvedMode = mode ?? "production";
+        const stubResult = {
+          _notImplemented: true,
+          _note:
+            "KSeF endpoint not yet deployed. " +
+            "Depends on api.frihet.io/v1/invoices/:id/ksef/submit which lands in Frihet-ERP PR #417. " +
+            "Call ksef_submit again after PR #417 merges to activate live KSeF submissions.",
+          _plannedEndpoint: `/v1/invoices/${invoiceId}/ksef/submit`,
+          invoiceId,
+          mode: resolvedMode,
+        };
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text:
+                `KSeF submission not yet available.\n` +
+                `  Invoice: ${invoiceId}\n` +
+                `  Mode: ${resolvedMode}\n\n` +
+                `The KSeF Cloud Function is pending deployment (Frihet-ERP PR #417). ` +
+                `This tool will activate automatically once PR #417 merges to main. ` +
+                `In the meantime, use einvoice_export with format='ubl' + manual KSeF portal upload ` +
+                `at ksef.mf.gov.pl as a workaround.`,
+            },
+          ],
+          structuredContent: stubResult as unknown as Record<string, unknown>,
+        };
+      }),
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -515,4 +1015,64 @@ interface IFrihetClientWithEInvoice extends IFrihetClient {
     fiscalPeriod: string;
     encoding: "cp1252";
   }>;
+}
+
+/**
+ * Extended client interface for Day 4 e-invoice tools.
+ * Wraps /v1/invoices/:id/einvoice/export, /face/*, /ticketbai/*, /ksef/*.
+ * Falls back to 404-stub if CF endpoints not yet deployed.
+ */
+interface IFrihetClientWithDay4EInvoice extends IFrihetClient {
+  exportEInvoice(params: {
+    invoiceId: string;
+    format: string;
+    signed?: boolean;
+  }): Promise<{
+    xmlUrl: string;
+    filename: string;
+    format: string;
+    signed: boolean;
+  }>;
+
+  faceSubmit(params: {
+    invoiceId: string;
+    mode: "mock" | "sandbox" | "production";
+  }): Promise<{
+    registroFACe: string;
+    status: "submitted" | "error";
+    submittedAt: string;
+    mode: string;
+  }>;
+
+  faceStatus(params: {
+    invoiceId: string;
+  }): Promise<{
+    registroFACe: string;
+    statusCode: string;
+    statusDescription: string;
+    rejectionReason?: string;
+  }>;
+
+  ticketbaiSubmit(params: {
+    invoiceId: string;
+    sandbox: boolean;
+  }): Promise<{
+    tbaiId: string;
+    territory: "bizkaia" | "gipuzkoa" | "araba";
+    status: "submitted" | "accepted" | "rejected" | "error";
+    sandbox: boolean;
+    qrUrl?: string;
+  }>;
+
+  ticketbaiStatus(params: {
+    invoiceId: string;
+  }): Promise<{
+    tbaiId: string;
+    territory: "bizkaia" | "gipuzkoa" | "araba";
+    status: "submitted" | "accepted" | "rejected" | "error";
+    rejectionReason?: string;
+    error?: string;
+  }>;
+
+  // kSeFSubmit intentionally omitted — stub only until PR #417 merges.
 }

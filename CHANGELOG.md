@@ -2,6 +2,38 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.11.0-beta.1] — 2026-05-13
+
+### Added
+
+- **Day 4 Wave — E-Invoicing REST tools (6 tools)**: per-invoice endpoints wrapping Frihet-ERP PR #414, FACe PR #411, and TicketBAI PR #356.
+  - `einvoice_export` — export an invoice as XML in a specific format (Facturae/XRechnung-CII/XRechnung-UBL/Factur-X/FatturaPA/PEPPOL-BIS-3/UBL/CII). `signed=true` returns XAdES-enveloped Facturae for FACe/AEAT. REST: `POST /v1/invoices/:id/einvoice/export`.
+  - `face_submit` — submit a Facturae invoice to the Spanish FACe B2G portal (mock/sandbox/production modes, requires DIR3 codes on recipient). REST: `POST /v1/invoices/:id/face/submit`.
+  - `face_status` — poll the FACe submission status by invoice ID (status codes: 1200=Registrada, 1300=Contabilizándose, 1400=Contabilizada, 2400=Anulada, 3100=Rechazada). REST: `GET /v1/invoices/:id/face/status`.
+  - `ticketbai_submit` — submit to the Basque Country TicketBAI system (territory auto-routed: Bizkaia→BATUZ/LROE, Gipuzkoa, Álava; sandbox flag; returns TBAI identifier + QR URL). REST: `POST /v1/invoices/:id/ticketbai/submit`.
+  - `ticketbai_status` — poll hacienda foral acknowledgement status for a TicketBAI submission. REST: `GET /v1/invoices/:id/ticketbai/status`.
+  - `ksef_submit` — **stub only** — forward-compatible stub for Poland KSeF national e-invoicing. Returns `_notImplemented=true` with activation guidance until Frihet-ERP PR #417 merges to main. REST planned: `POST /v1/invoices/:id/ksef/submit`.
+- 6 new output schemas in `einvoice.ts`: `einvoiceExportOutput`, `faceSubmitOutput`, `faceStatusOutput`, `ticketbaiSubmitOutput`, `ticketbaiStatusOutput`, `kSeFSubmitOutput`.
+- 5 new Day 4 interface methods in `IFrihetClient` + HTTP implementations in `FrihetClient` (`exportEInvoice`, `faceSubmit`, `faceStatus`, `ticketbaiSubmit`, `ticketbaiStatus`).
+- `einvoice-day4-tools.test.ts` — 35 new tests covering registration, 404-fallback stubs, live client success paths, 403 error handling, and KSeF always-stub behavior.
+
+### Changed
+
+- Total tool count: **127 → 133 tools**.
+- Bumped `package.json` version to `1.11.0-beta.1`.
+- Updated `package.json` description to include FACe, TicketBAI, and KSeF coverage.
+- `register-all.ts` comment updated to reflect 133 tools.
+- `einvoice-tools.test.ts` updated to expect 10 einvoice tools (4 original + 6 Day 4).
+- Test script includes new `einvoice-day4-tools.test.js`.
+
+### Notes
+
+- All 5 live tools (`einvoice_export`, `face_{submit,status}`, `ticketbai_{submit,status}`) include 404-fallback stubs so the server remains usable while CF endpoints are deploying.
+- `ksef_submit` is intentionally always-stub to future-proof the API surface — activation requires only removing the stub block when PR #417 merges.
+- 404-fallback pattern mirrors existing Day 3 einvoice tools for consistency.
+
+---
+
 ## [1.10.0-beta.3] — 2026-05-11
 
 ### Added

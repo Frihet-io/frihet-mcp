@@ -1,5 +1,5 @@
 /**
- * Barrel module that registers all 127 Frihet ERP tools on an McpServer.
+ * Barrel module that registers all 133 Frihet ERP tools on an McpServer.
  *
  * Used by both the local (stdio) and remote (Cloudflare Workers) servers
  * so tool definitions stay in sync — one source of truth.
@@ -41,11 +41,14 @@ import { registerBankRulesTools } from "./bank_rules.js";
 /**
  * Patches server.registerTool to wrap every tool callback with Langfuse tracing.
  *
- * The patch is applied once before tool registration so all 62 tools are
+ * The patch is applied once before tool registration so all 133 tools are
  * instrumented without per-tool edits. Tool call signatures are unchanged —
  * existing MCP clients continue to work identically.
  *
  * traceMCPTool is fail-open: any Langfuse error → warn log, tool proceeds.
+ *
+ * Day 4 Wave (v1.11.0-beta.1): 6 new e-invoicing tools added to registerEInvoiceTools:
+ *   einvoice_export, face_submit, face_status, ticketbai_submit, ticketbai_status, ksef_submit
  */
 function patchServerWithTracing(server: McpServer): void {
   // eslint-disable-next-line @typescript-eslint/unbound-method

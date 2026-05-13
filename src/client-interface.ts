@@ -104,6 +104,14 @@ export interface IFrihetClient {
   validateEInvoiceXml(params: { xml: string; format: string }): Promise<{ valid: boolean; errors: Array<{ severity: string; location: string; message: string; rule: string }>; validator: "kosit" | "mustang" | "xsd" | "schematron"; durationMs: number }>;
   exportDatev(params: { periodStart: string; periodEnd: string; format: string }): Promise<{ fileUrl: string; filename: string; rowCount: number; fiscalPeriod: string; encoding: "cp1252" }>;
 
+  // E-Invoicing Day 4 endpoints (PR #414 + FACe PR #411 + TicketBAI PR #356; 404 → stub fallback)
+  exportEInvoice(params: { invoiceId: string; format: string; signed?: boolean }): Promise<{ xmlUrl: string; filename: string; format: string; signed: boolean }>;
+  faceSubmit(params: { invoiceId: string; mode: "mock" | "sandbox" | "production" }): Promise<{ registroFACe: string; status: "submitted" | "error"; submittedAt: string; mode: string }>;
+  faceStatus(params: { invoiceId: string }): Promise<{ registroFACe: string; statusCode: string; statusDescription: string; rejectionReason?: string }>;
+  ticketbaiSubmit(params: { invoiceId: string; sandbox: boolean }): Promise<{ tbaiId: string; territory: "bizkaia" | "gipuzkoa" | "araba"; status: "submitted" | "accepted" | "rejected" | "error"; sandbox: boolean; qrUrl?: string }>;
+  ticketbaiStatus(params: { invoiceId: string }): Promise<{ tbaiId: string; territory: "bizkaia" | "gipuzkoa" | "araba"; status: "submitted" | "accepted" | "rejected" | "error"; rejectionReason?: string; error?: string }>;
+  // kSeFSubmit omitted — stub only (PR #417 pending)
+
   // Stay — vacation rental endpoints (/v1/stay/*)
   listReservations(params?: { propertyId?: string; status?: string; checkInFrom?: string; checkInTo?: string; fields?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
   getReservation(id: string): Promise<Record<string, unknown>>;
