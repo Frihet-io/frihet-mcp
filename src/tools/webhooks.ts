@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, webhookItemOutput } from "./shared.js";
+import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, webhookItemOutput, webhookTestResultOutput } from "./shared.js";
 
 export function registerWebhookTools(server: McpServer, client: IFrihetClient): void {
   // -- list_webhooks --
@@ -152,6 +152,39 @@ export function registerWebhookTools(server: McpServer, client: IFrihetClient): 
       return {
         content: [mutateContent(`Webhook ${id} deleted successfully. / Webhook ${id} eliminado correctamente.`)],
         structuredContent: { success: true, id } as unknown as Record<string, unknown>,
+      };
+    }),
+  );
+
+  // -- test_webhook --
+  // D4-B megasprint: fire a synthetic event to verify endpoint reachability + signature validation.
+
+  server.registerTool(
+    "test_webhook",
+    {
+      title: "Test Webhook",
+      description:
+        "Fire a synthetic test event to the webhook endpoint and return the delivery result. " +
+        "Useful to verify endpoint reachability, signature validation, and TLS configuration. " +
+        "Optionally specify the eventType to simulate (default: 'webhook.test'). " +
+        "Example: id='wh_abc', eventType='invoice.paid' " +
+        "/ Envia un evento de prueba sintetico al endpoint del webhook. " +
+        "Util para verificar accesibilidad, validacion de firma y configuracion TLS.",
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      inputSchema: {
+        id: z.string().describe("Webhook ID / ID del webhook"),
+        eventType: z
+          .string()
+          .optional()
+          .describe("Event type to simulate (default: 'webhook.test') / Tipo de evento a simular"),
+      },
+      outputSchema: webhookTestResultOutput,
+    },
+    async ({ id, eventType }) => withToolLogging("test_webhook", async () => {
+      const result = await client.testWebhook(id, { eventType });
+      return {
+        content: [mutateContent(formatRecord("Webhook test", result))],
+        structuredContent: result as unknown as Record<string, unknown>,
       };
     }),
   );

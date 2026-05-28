@@ -788,6 +788,155 @@ export const gestoriaAgingConsolidatedOutput = z.object({
   generatedAt: z.string().optional(),
 }).passthrough();
 
+/* --- D4-B: HR / Webhook test / Payroll / Onboarding / Permissions / Period close --- */
+
+/** Leave/PTO request — backend `/v1/leaves`. */
+export const leaveRequestItemOutput = z.object({
+  id: z.string(),
+  employeeId: z.string().optional(),
+  type: z.string().optional().describe("Leave type slug (vacation, sick, personal, etc.)"),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  durationDays: z.number().optional(),
+  status: z.enum(["pending", "approved", "rejected", "cancelled"]).optional(),
+  reason: z.string().optional(),
+  decisionReason: z.string().optional(),
+  decidedAt: z.string().optional(),
+  decidedBy: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+/** Attendance / time-entry record — backend `/v1/time-entries`. */
+export const attendanceEntryItemOutput = z.object({
+  id: z.string(),
+  employeeId: z.string().optional(),
+  clockInAt: z.string().optional(),
+  clockOutAt: z.string().optional(),
+  durationMinutes: z.number().optional(),
+  mood: z.string().optional(),
+  location: z.string().optional(),
+  status: z.enum(["open", "closed"]).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+/** Overtime aggregated report. */
+export const overtimeReportOutput = z.object({
+  period: z.string(),
+  totalRegularHours: z.number().optional(),
+  totalOvertimeHours: z.number().optional(),
+  estimatedCostEur: z.number().optional(),
+  byEmployee: z.array(z.object({
+    employeeId: z.string(),
+    employeeName: z.string().optional(),
+    regularHours: z.number().optional(),
+    overtimeHours: z.number().optional(),
+  }).passthrough()).optional(),
+  generatedAt: z.string().optional(),
+}).passthrough();
+
+/** Anomaly detection record — backend `/v1/anomalies`. */
+export const anomalyItemOutput = z.object({
+  id: z.string(),
+  type: z.string().optional().describe("Anomaly type slug (e.g. duplicate_clock_in, overtime_spike)"),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional(),
+  subjectId: z.string().optional().describe("Related entity ID (employee, transaction, invoice)"),
+  description: z.string().optional(),
+  detectedAt: z.string().optional(),
+  resolvedAt: z.string().optional(),
+  status: z.enum(["open", "acknowledged", "resolved", "dismissed"]).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+/** Webhook test result — backend `/v1/webhooks/:id/test`. */
+export const webhookTestResultOutput = z.object({
+  webhookId: z.string(),
+  delivered: z.boolean(),
+  statusCode: z.number().int().optional(),
+  responseTimeMs: z.number().int().optional(),
+  eventType: z.string().optional(),
+  attemptedAt: z.string().optional(),
+  error: z.string().optional(),
+}).passthrough();
+
+/** Payroll export result — backend `/v1/payroll/prep/export`. */
+export const payrollExportOutput = z.object({
+  format: z.enum(["a3", "contasol", "sage", "holded", "siltra"]),
+  month: z.string(),
+  fileUrl: z.string().optional(),
+  filename: z.string().optional(),
+  rowCount: z.number().int().optional(),
+  generatedAt: z.string().optional(),
+}).passthrough();
+
+/** Payroll checklist — backend `/v1/payroll/prep/employees`. */
+export const payrollChecklistOutput = z.object({
+  month: z.string(),
+  totalEmployees: z.number().int().optional(),
+  readyEmployees: z.number().int().optional(),
+  missingEmployees: z.number().int().optional(),
+  employees: z.array(z.object({
+    employeeId: z.string(),
+    employeeName: z.string().optional(),
+    status: z.enum(["ready", "missing_data", "blocked"]).optional(),
+    missingFields: z.array(z.string()).optional(),
+  }).passthrough()).optional(),
+  generatedAt: z.string().optional(),
+}).passthrough();
+
+/** Onboarding workspace state — backend `/v1/onboarding/status`. */
+export const onboardingStatusOutput = z.object({
+  workspaceId: z.string().optional(),
+  persona: z.enum(["autonomo", "empresa", "agencia", "gestoria"]).optional(),
+  completedSteps: z.array(z.string()).optional(),
+  pendingSteps: z.array(z.string()).optional(),
+  percentComplete: z.number().min(0).max(100).optional(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
+}).passthrough();
+
+/** Onboarding persona update result. */
+export const onboardingPersonaResultOutput = z.object({
+  workspaceId: z.string().optional(),
+  persona: z.enum(["autonomo", "empresa", "agencia", "gestoria"]),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+/** Permissions matrix — backend `/v1/permissions/matrix`. */
+export const permissionsMatrixOutput = z.object({
+  roles: z.array(z.object({
+    role: z.string(),
+    permissions: z.array(z.string()),
+  }).passthrough()).optional(),
+  resources: z.array(z.string()).optional(),
+  generatedAt: z.string().optional(),
+}).passthrough();
+
+/** Caller's own permissions — backend `/v1/permissions/me`. */
+export const permissionsMeOutput = z.object({
+  userId: z.string().optional(),
+  role: z.string().optional(),
+  permissions: z.array(z.string()).optional(),
+  workspaceId: z.string().optional(),
+}).passthrough();
+
+/** Accounting period state — backend `/v1/periods/*`. */
+export const periodStatusOutput = z.object({
+  id: z.string(),
+  type: z.enum(["monthly", "quarterly"]).optional(),
+  status: z.enum(["open", "closing", "closed", "reopened"]).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  closedAt: z.string().optional(),
+  closedBy: z.string().optional(),
+  reopenedAt: z.string().optional(),
+  reopenReason: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
 /* ------------------------------------------------------------------ */
 /*  Tool execution wrapper with logging + metrics                      */
 /* ------------------------------------------------------------------ */

@@ -2,6 +2,34 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.12.0-beta.1] — 2026-05-16
+
+### Added
+
+- **D4-B megasprint — HR / Payroll / Onboarding / Permissions / Period close (19 new tools across 5 new files + 1 webhook test)**: wraps D1+D2 Frihet-ERP features previously absent from MCP surface (D3-T6 audit finding).
+  - **HR (9 tools, `src/tools/hr.ts`)**: `leave_request_create`, `leave_approve`, `leave_reject`, `leave_cancel`, `leave_list`, `attendance_clock_in`, `attendance_clock_out`, `overtime_report`, `anomaly_list`. Wraps REST `/v1/leaves`, `/v1/time-entries`, `/v1/anomalies`.
+  - **Webhook trust (1 tool, extended `src/tools/webhooks.ts`)**: `test_webhook` — fire synthetic event to verify endpoint reachability + signature validation. REST `POST /v1/webhooks/:id/test`.
+  - **Payroll (2 tools, `src/tools/payroll.ts`)**: `payroll_export` (A3/Contasol/Sage/Holded/SILTRA gestoria formats), `payroll_checklist` (employee readiness per payroll month). REST `/v1/payroll/prep/export`, `/v1/payroll/prep/employees`. Frihet stages data → gestoria processes payroll.
+  - **Onboarding (2 tools, `src/tools/onboarding.ts`)**: `onboarding_status`, `onboarding_persona_set` (autonomo/empresa/agencia/gestoria). REST `/v1/onboarding/status`, `/v1/onboarding/persona`.
+  - **Permissions (2 tools, `src/tools/permissions.ts`)**: `permissions_matrix`, `permissions_me`. REST `/v1/permissions/matrix`, `/v1/permissions/me`.
+  - **Period close (3 tools, `src/tools/accountingClose.ts`)**: `period_close_status`, `period_close` (TRUST AREA: `confirm=true` gate), `period_reopen` (TRUST AREA: `confirm=true` + reason required). REST `/v1/periods/current`, `/v1/periods/close`, `/v1/periods/:id/reopen`.
+- 12 new output schemas in `shared.ts`: `leaveRequestItemOutput`, `attendanceEntryItemOutput`, `overtimeReportOutput`, `anomalyItemOutput`, `webhookTestResultOutput`, `payrollExportOutput`, `payrollChecklistOutput`, `onboardingStatusOutput`, `onboardingPersonaResultOutput`, `permissionsMatrixOutput`, `permissionsMeOutput`, `periodStatusOutput`.
+- 19 new `IFrihetClient` methods + HTTP implementations in `FrihetClient`.
+- `d4b-hr-payroll-onboarding-tools.test.ts` — 41 new tests covering registration counts, happy paths, trust-area `confirm=false` gates, and 404 error propagation.
+
+### Changed
+
+- Total tool count: **133 → 152 tools**.
+- Bumped `package.json` version to `1.12.0-beta.1`.
+- `register-all.ts` updated to register 5 new tool modules; comment reflects 152 tools.
+- Test script includes new `d4b-hr-payroll-onboarding-tools.test.js`.
+
+### Notes
+
+- ERP backend endpoints land in parallel D4-A wave; until then the tools surface 404 errors as `isError=true` (consistent with existing banking/fiscal stub-or-propagate pattern). TODO comments mark `logLeaveDecision` callable wiring, A3 column confirmation, and SILTRA file extension.
+- `period_close` and `period_reopen` follow the Trust Area `confirm=true` gate pattern (same as `match_transaction_to_invoice`).
+- Npm publish deferred to D15 batch.
+
 ## [1.11.0-beta.1] — 2026-05-13
 
 ### Added

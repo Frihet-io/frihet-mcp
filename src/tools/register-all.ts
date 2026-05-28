@@ -1,5 +1,5 @@
 /**
- * Barrel module that registers all 133 Frihet ERP tools on an McpServer.
+ * Barrel module that registers all 152 Frihet ERP tools on an McpServer.
  *
  * Used by both the local (stdio) and remote (Cloudflare Workers) servers
  * so tool definitions stay in sync — one source of truth.
@@ -37,6 +37,11 @@ import { registerOnboardViesTools } from "./onboard_vies.js";
 import { registerIgicTools } from "./igic.js";
 import { registerImpuestoSociedadesTools } from "./impuesto_sociedades.js";
 import { registerBankRulesTools } from "./bank_rules.js";
+import { registerHrTools } from "./hr.js";
+import { registerPayrollTools } from "./payroll.js";
+import { registerOnboardingTools } from "./onboarding.js";
+import { registerPermissionsTools } from "./permissions.js";
+import { registerAccountingCloseTools } from "./accountingClose.js";
 
 /**
  * Patches server.registerTool to wrap every tool callback with Langfuse tracing.
@@ -49,6 +54,15 @@ import { registerBankRulesTools } from "./bank_rules.js";
  *
  * Day 4 Wave (v1.11.0-beta.1): 6 new e-invoicing tools added to registerEInvoiceTools:
  *   einvoice_export, face_submit, face_status, ticketbai_submit, ticketbai_status, ksef_submit
+ *
+ * D4-B megasprint (v1.12.0-beta.1): 19 new tools across 5 new files + 1 webhook test:
+ *   HR (9): leave_request_create, leave_approve, leave_reject, leave_cancel, leave_list,
+ *           attendance_clock_in, attendance_clock_out, overtime_report, anomaly_list
+ *   Webhook trust (1): test_webhook (added to registerWebhookTools)
+ *   Payroll (2): payroll_export, payroll_checklist
+ *   Onboarding (2): onboarding_status, onboarding_persona_set
+ *   Permissions (2): permissions_matrix, permissions_me
+ *   Period close (3): period_close_status, period_close, period_reopen
  */
 function patchServerWithTracing(server: McpServer): void {
   // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -99,4 +113,9 @@ export function registerAllTools(server: McpServer, client: IFrihetClient): void
   registerIgicTools(server, client);
   registerImpuestoSociedadesTools(server, client);
   registerBankRulesTools(server, client);
+  registerHrTools(server, client);
+  registerPayrollTools(server, client);
+  registerOnboardingTools(server, client);
+  registerPermissionsTools(server, client);
+  registerAccountingCloseTools(server, client);
 }

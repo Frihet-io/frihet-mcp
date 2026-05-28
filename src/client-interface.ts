@@ -217,4 +217,35 @@ export interface IFrihetClient {
     periodOverrides?: { quarter?: string | number; year?: string | number; month?: string | number };
   }): Promise<Record<string, unknown>>;
   getGestoriaAgingConsolidated(params?: { ownerUid?: string }): Promise<Record<string, unknown>>;
+
+  // HR endpoints (/v1/leaves, /v1/time-entries, /v1/anomalies) — D4-B megasprint (404→propagate; ERP backend pending parallel D4-A).
+  listLeaves(params?: { employeeId?: string; status?: string; from?: string; to?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  createLeaveRequest(data: { employeeId: string; type: string; startDate: string; endDate: string; reason?: string }): Promise<Record<string, unknown>>;
+  approveLeave(leaveId: string, data?: { reason?: string }): Promise<Record<string, unknown>>;
+  rejectLeave(leaveId: string, data: { reason: string }): Promise<Record<string, unknown>>;
+  cancelLeave(leaveId: string): Promise<Record<string, unknown>>;
+  attendanceClockIn(data: { employeeId: string; mood?: string; location?: string }): Promise<Record<string, unknown>>;
+  attendanceClockOut(entryId: string): Promise<Record<string, unknown>>;
+  getOvertimeReport(params: { period: string; employeeId?: string }): Promise<Record<string, unknown>>;
+  listAnomalies(params?: { type?: string; severity?: string; from?: string; to?: string; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
+
+  // Webhook trust-area extensions (/v1/webhooks/:id/test) — D4-B megasprint.
+  testWebhook(id: string, data?: { eventType?: string }): Promise<Record<string, unknown>>;
+
+  // Payroll endpoints (/v1/payroll/prep/*) — D4-B megasprint.
+  exportPayroll(params: { format: "a3" | "contasol" | "sage" | "holded" | "siltra"; month: string }): Promise<Record<string, unknown>>;
+  getPayrollChecklist(params: { month: string }): Promise<Record<string, unknown>>;
+
+  // Onboarding endpoints (/v1/onboarding/*) — D4-B megasprint.
+  getOnboardingStatus(): Promise<Record<string, unknown>>;
+  setOnboardingPersona(data: { persona: "autonomo" | "empresa" | "agencia" | "gestoria" }): Promise<Record<string, unknown>>;
+
+  // Permissions endpoints (/v1/permissions/*) — D4-B megasprint.
+  getPermissionsMatrix(): Promise<Record<string, unknown>>;
+  getMyPermissions(): Promise<Record<string, unknown>>;
+
+  // Period close endpoints (/v1/periods/*) — D4-B megasprint.
+  getCurrentPeriod(params?: { periodId?: string }): Promise<Record<string, unknown>>;
+  closePeriod(data: { type: "monthly" | "quarterly" }): Promise<Record<string, unknown>>;
+  reopenPeriod(data: { periodId: string; reason: string }): Promise<Record<string, unknown>>;
 }

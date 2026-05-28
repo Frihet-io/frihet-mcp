@@ -1138,4 +1138,138 @@ export class FrihetClient {
   }): Promise<Record<string, unknown>> {
     return this.request("POST", "/banking/rules", data);
   }
+
+  // ---------------------------------------------------------------- HR (Leaves + Attendance + Anomalies)
+  // NOTE: /v1/leaves, /v1/time-entries, /v1/anomalies — D4-A parallel deploy. 404 propagates until backend ships.
+
+  async listLeaves(
+    params?: { employeeId?: string; status?: string; from?: string; to?: string; limit?: number; offset?: number; after?: string },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/leaves", undefined, {
+      employeeId: params?.employeeId,
+      status: params?.status,
+      from: params?.from,
+      to: params?.to,
+      limit: params?.limit,
+      offset: params?.offset,
+      after: params?.after,
+    });
+  }
+
+  async createLeaveRequest(
+    data: { employeeId: string; type: string; startDate: string; endDate: string; reason?: string },
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", "/leaves", data);
+  }
+
+  async approveLeave(leaveId: string, data?: { reason?: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", `/leaves/${encodeURIComponent(leaveId)}/approve`, data ?? {});
+  }
+
+  async rejectLeave(leaveId: string, data: { reason: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", `/leaves/${encodeURIComponent(leaveId)}/reject`, data);
+  }
+
+  async cancelLeave(leaveId: string): Promise<Record<string, unknown>> {
+    return this.request("POST", `/leaves/${encodeURIComponent(leaveId)}/cancel`, {});
+  }
+
+  async attendanceClockIn(
+    data: { employeeId: string; mood?: string; location?: string },
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", "/time-entries/clock-in", data);
+  }
+
+  async attendanceClockOut(entryId: string): Promise<Record<string, unknown>> {
+    return this.request("PATCH", `/time-entries/${encodeURIComponent(entryId)}/clock-out`, {});
+  }
+
+  async getOvertimeReport(
+    params: { period: string; employeeId?: string },
+  ): Promise<Record<string, unknown>> {
+    return this.request("GET", "/time-entries/overtime", undefined, {
+      period: params.period,
+      employeeId: params.employeeId,
+    });
+  }
+
+  async listAnomalies(
+    params?: { type?: string; severity?: string; from?: string; to?: string; limit?: number; offset?: number },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/anomalies", undefined, {
+      type: params?.type,
+      severity: params?.severity,
+      from: params?.from,
+      to: params?.to,
+      limit: params?.limit,
+      offset: params?.offset,
+    });
+  }
+
+  // ---------------------------------------------------------------- Webhook Trust-Area Extensions
+  // NOTE: /v1/webhooks/:id/test — D4-A parallel deploy. 404 propagates until backend ships.
+
+  async testWebhook(id: string, data?: { eventType?: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", `/webhooks/${encodeURIComponent(id)}/test`, data ?? {});
+  }
+
+  // ---------------------------------------------------------------- Payroll
+  // NOTE: /v1/payroll/prep/* — D4-A parallel deploy. 404 propagates until backend ships.
+
+  async exportPayroll(
+    params: { format: "a3" | "contasol" | "sage" | "holded" | "siltra"; month: string },
+  ): Promise<Record<string, unknown>> {
+    return this.request("GET", "/payroll/prep/export", undefined, {
+      format: params.format,
+      month: params.month,
+    });
+  }
+
+  async getPayrollChecklist(params: { month: string }): Promise<Record<string, unknown>> {
+    return this.request("GET", "/payroll/prep/employees", undefined, {
+      month: params.month,
+    });
+  }
+
+  // ---------------------------------------------------------------- Onboarding
+  // NOTE: /v1/onboarding/* — D4-A parallel deploy. 404 propagates until backend ships.
+
+  async getOnboardingStatus(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/onboarding/status");
+  }
+
+  async setOnboardingPersona(
+    data: { persona: "autonomo" | "empresa" | "agencia" | "gestoria" },
+  ): Promise<Record<string, unknown>> {
+    return this.request("PATCH", "/onboarding/persona", data);
+  }
+
+  // ---------------------------------------------------------------- Permissions
+  // NOTE: /v1/permissions/* — D4-A parallel deploy. 404 propagates until backend ships.
+
+  async getPermissionsMatrix(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/permissions/matrix");
+  }
+
+  async getMyPermissions(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/permissions/me");
+  }
+
+  // ---------------------------------------------------------------- Period Close
+  // NOTE: /v1/periods/* — D4-A parallel deploy. 404 propagates until backend ships.
+
+  async getCurrentPeriod(params?: { periodId?: string }): Promise<Record<string, unknown>> {
+    if (params?.periodId) {
+      return this.request("GET", `/periods/${encodeURIComponent(params.periodId)}`);
+    }
+    return this.request("GET", "/periods/current");
+  }
+
+  async closePeriod(data: { type: "monthly" | "quarterly" }): Promise<Record<string, unknown>> {
+    return this.request("POST", "/periods/close", data);
+  }
+
+  async reopenPeriod(data: { periodId: string; reason: string }): Promise<Record<string, unknown>> {
+    return this.request("POST", `/periods/${encodeURIComponent(data.periodId)}/reopen`, { reason: data.reason });
+  }
 }
