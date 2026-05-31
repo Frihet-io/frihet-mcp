@@ -17,7 +17,7 @@
   <a href="https://smithery.ai/server/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
-  <img src="https://img.shields.io/badge/tools-127-18181b?style=flat&labelColor=09090b" alt="127 tools">
+  <img src="https://img.shields.io/badge/tools-152-18181b?style=flat&labelColor=09090b" alt="152 tools">
   <img src="https://img.shields.io/badge/node-%3E%3D18-18181b?style=flat&labelColor=09090b" alt="node >=18">
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
@@ -32,6 +32,9 @@
 | **Remote endpoint** | Live | `https://mcp.frihet.io/mcp` (zero install, OAuth or API key) |
 | **Smithery** | Live | [smithery.ai/server/frihet/frihet-mcp](https://smithery.ai/server/frihet/frihet-mcp) |
 | **MCP Registry** | Live | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/?q=io.frihet) |
+| **Glama** | Pending submission | [glama.ai/mcp/servers](https://glama.ai/mcp/servers) — `glama.json` ready |
+| **mcp.so** | Pending submission | [mcp.so](https://mcp.so) — indexed from npm + GitHub |
+| **PulseMCP** | Pending submission | [pulsemcp.com](https://pulsemcp.com) — indexed from npm + GitHub |
 | **Cursor Marketplace** | Coming soon | [cursor.com/marketplace](https://cursor.com/marketplace) |
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
@@ -47,9 +50,9 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-127 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
+152 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
 
-<!-- v1.10.0-beta.4 — Day 1 Megasprint: GL audit (3), portal domain (3), VIES (2), IGIC/AIEM (4), IS M200/M202 (2), bank rules (2) = +16 = 127 tools total -->
+<!-- v1.12.0-beta.1 — D4-B megasprint: HR (9), payroll (2), onboarding (2), permissions (2), period close (3), webhook test (1) = +19 = 152 tools total -->
 
 ---
 
@@ -177,7 +180,7 @@ Talk to your ERP. These are real prompts, not marketing copy.
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 125 tools are CRUD operations over the REST API.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 152 tools are CRUD operations over the REST API.
 
 **Works great:**
 
@@ -204,9 +207,9 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ---
 
-## Tools (127)
+## Tools (152)
 
-### Invoices (6)
+### Invoices (12)
 
 | Tool | What it does |
 |------|-------------|
@@ -215,7 +218,13 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `create_invoice` | Create a new invoice with line items |
 | `update_invoice` | Update any invoice field |
 | `delete_invoice` | Permanently delete an invoice |
-| `search_invoices` | Find invoices by client name |
+| `search_invoices` | Find invoices by client name, date, or status |
+| `send_invoice` | Email invoice to client (PDF attachment) |
+| `mark_invoice_paid` | Mark an invoice as paid with optional payment date |
+| `get_invoice_pdf` | Get a download URL for the invoice PDF |
+| `get_invoice_einvoice` | Get the e-invoice XML for a given invoice ID |
+| `create_credit_note` | Create a credit note linked to an existing invoice |
+| `apply_late_fee` | Apply a late payment fee to an overdue invoice |
 
 ### Expenses (5)
 
@@ -270,7 +279,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `update_product` | Update pricing or details |
 | `delete_product` | Remove a product |
 
-### Quotes (5)
+### Quotes (6)
 
 | Tool | What it does |
 |------|-------------|
@@ -279,8 +288,9 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `create_quote` | Draft a new quote |
 | `update_quote` | Modify a quote |
 | `delete_quote` | Delete a quote |
+| `send_quote` | Email quote to client for acceptance |
 
-### Webhooks (5)
+### Webhooks (6)
 
 | Tool | What it does |
 |------|-------------|
@@ -289,6 +299,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `create_webhook` | Register a new webhook endpoint |
 | `update_webhook` | Modify events or URL |
 | `delete_webhook` | Remove a webhook |
+| `test_webhook` | Send a test payload to a configured webhook endpoint |
 
 ### Intelligence (4)
 
@@ -299,9 +310,9 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_quarterly_taxes` | Quarterly tax prep: Modelo 303/130 fields, collected vs deductible, liability |
 | `duplicate_invoice` | Clone an invoice for recurring billing (copies items/client/tax, starts as draft) |
 
-### E-Invoicing (4)
+### E-Invoicing (10)
 
-> **Status: beta — CF endpoints rolling out 2026-04-21 to 2026-04-28.** Tools call `api.frihet.io/v1/einvoice/*` directly. If an endpoint is not yet deployed (404), the tool falls back to `{ _stub: true, _note: "CF endpoint pending deploy", _plannedEndpoint: "..." }` so the server remains usable while transport ships.
+> **Status: beta.** Tools call `api.frihet.io/v1/einvoice/*` directly. If an endpoint is not yet deployed (404), the tool falls back to `{ _stub: true, _note: "CF endpoint pending deploy", _plannedEndpoint: "..." }` so the server remains usable while transport ships.
 
 | Tool | What it does |
 |------|-------------|
@@ -309,6 +320,12 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_einvoice_status` | Poll Hatchet workflow run status until succeeded/failed — returns ackId, XML URL, PDF/A-3 URL |
 | `validate_einvoice_xml` | Validate raw XML against format schema + schematron rules (KOSIT / Mustang / XSD / Schematron) |
 | `export_datev` | Export accounting data as DATEV EXTF (Buchungsstapel / Debitoren / Kreditoren) in CP1252 encoding |
+| `einvoice_export` | Export e-invoice data in machine-readable formats (JSON/XML) for archival or integration |
+| `face_submit` | Submit invoice to FACe (Spain B2G government e-invoicing platform) |
+| `face_status` | Poll submission status from FACe for a submitted invoice |
+| `ticketbai_submit` | Submit TicketBAI fiscal record to Basque Country tax authority (Hacienda) |
+| `ticketbai_status` | Poll TicketBAI submission status from the Basque tax authority |
+| `ksef_submit` | Submit invoice to KSeF (Poland national e-invoicing system — stub) |
 
 ### Time Tracking (6)
 
@@ -419,7 +436,114 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `frihet_bank_rules_list` | List all bank auto-categorization rules (conditions + actions + status) |
 | `frihet_bank_rule_create` | Create a new rule to auto-categorize transactions by description, amount, counterparty |
 
-All 127 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
+### Deposits (7)
+
+| Tool | What it does |
+|------|-------------|
+| `list_deposits` | List deposits with pagination |
+| `get_deposit` | Get deposit details by ID |
+| `create_deposit` | Record a new client deposit |
+| `update_deposit` | Update deposit fields |
+| `delete_deposit` | Delete a deposit (confirm=true required) |
+| `apply_deposit` | Apply a deposit balance against an invoice |
+| `refund_deposit` | Issue a refund for a deposit |
+
+### Vendors (5)
+
+| Tool | What it does |
+|------|-------------|
+| `list_vendors` | List all vendors/suppliers |
+| `get_vendor` | Get vendor details |
+| `create_vendor` | Add a new vendor |
+| `update_vendor` | Update vendor info |
+| `delete_vendor` | Remove a vendor |
+
+### Banking (5)
+
+| Tool | What it does |
+|------|-------------|
+| `list_bank_accounts` | List connected bank accounts |
+| `get_bank_account` | Get details for a bank account |
+| `list_transactions` | List bank transactions with filters |
+| `categorize_transaction` | Assign a category and expense/income type to a transaction |
+| `match_transaction_to_invoice` | Link a bank transaction to an existing invoice |
+
+### Fiscal — Spanish Tax Models (8)
+
+| Tool | What it does |
+|------|-------------|
+| `get_modelo_303_summary` | Quarterly IVA return (Modelo 303) — collected vs deductible, net payable |
+| `get_modelo_130_summary` | Quarterly IRPF installment for self-employed (Modelo 130) |
+| `get_modelo_390_summary` | Annual IVA summary (Modelo 390) |
+| `get_modelo_180_summary` | Annual withholding summary for rentals (Modelo 180) |
+| `get_modelo_347_summary` | Annual third-party transactions >€3,005 (Modelo 347) |
+| `verifactu_status` | Get VeriFactu submission status for a fiscal record |
+| `verifactu_resubmit` | Resubmit a rejected VeriFactu fiscal record |
+| `ticketbai_status` | Poll TicketBAI submission status (also available in E-Invoicing section) |
+
+### Vacation Rentals / Stay (5)
+
+| Tool | What it does |
+|------|-------------|
+| `list_reservations` | List rental reservations with filters |
+| `get_reservation` | Get reservation details |
+| `create_reservation` | Create a new reservation |
+| `list_properties` | List all rental properties |
+| `sync_channel` | Trigger OTA channel sync (Airbnb, Booking.com, etc.) |
+
+### POS — Point of Sale (4)
+
+| Tool | What it does |
+|------|-------------|
+| `list_terminals` | List registered POS terminals |
+| `get_sale` | Get details for a POS sale transaction |
+| `list_sales` | List POS sales with pagination |
+| `refund_sale` | Issue a refund for a POS sale |
+
+### HR — Human Resources (9)
+
+| Tool | What it does |
+|------|-------------|
+| `leave_request_create` | Create a leave request (vacation, sick, personal) |
+| `leave_approve` | Approve a pending leave request |
+| `leave_reject` | Reject a leave request with a reason |
+| `leave_cancel` | Cancel an approved or pending leave request |
+| `leave_list` | List leave requests with filters (user, status, date range) |
+| `attendance_clock_in` | Record clock-in for an employee |
+| `attendance_clock_out` | Record clock-out for an employee |
+| `overtime_report` | Generate overtime report for a period |
+| `anomaly_list` | List attendance anomalies (missing punches, excessive overtime) |
+
+### Payroll (2)
+
+| Tool | What it does |
+|------|-------------|
+| `payroll_export` | Export payroll data for a period (CSV/PDF for gestoría) |
+| `payroll_checklist` | Generate pre-payroll checklist: pending leaves, anomalies, overtime |
+
+### Onboarding (2)
+
+| Tool | What it does |
+|------|-------------|
+| `onboarding_status` | Get onboarding completion status for the current workspace |
+| `onboarding_persona_set` | Set or update the business persona (freelancer, SME, gestoría, etc.) |
+
+### Permissions (2)
+
+| Tool | What it does |
+|------|-------------|
+| `permissions_matrix` | Get the full permissions matrix for all roles in the workspace |
+| `permissions_me` | Get the current API key's effective permissions |
+
+### Period Close (3)
+
+| Tool | What it does |
+|------|-------------|
+| `period_close_status` | Get the close status for an accounting period |
+| `period_close` | Close an accounting period (gestor/admin only — TRUST AREA) |
+| `period_reopen` | Reopen a closed period with a mandatory reason (TRUST AREA) |
+
+All 152 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
 
 ---
 
@@ -598,7 +722,7 @@ npm run build   # must pass before submitting
 
 | Package | What it is |
 |---------|-----------|
-| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (94 tools, 8 resources, 7 prompts) |
+| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (152 tools, 8 resources, 7 prompts) |
 | [`@frihet/sdk`](https://github.com/Frihet-io/frihet-sdk) | TypeScript SDK (`frihet.invoices.create()`) |
 | [`frihet`](https://www.npmjs.com/package/frihet) | CLI (`frihet invoices list --status overdue`) |
 | [`n8n-nodes-frihet`](https://www.npmjs.com/package/n8n-nodes-frihet) | n8n community node for workflow automation |
@@ -614,6 +738,7 @@ npm run build   # must pass before submitting
 - [MCP server docs](https://docs.frihet.io/desarrolladores/mcp-server) -- Setup guides, troubleshooting
 - [npm](https://www.npmjs.com/package/@frihet/mcp-server) -- Package registry
 - [Smithery](https://smithery.ai/server/frihet/frihet-mcp) -- Smithery marketplace
+- [MCP Registry](https://registry.modelcontextprotocol.io/?q=io.frihet) -- Anthropic official registry
 - [Remote endpoint](https://mcp.frihet.io) -- Hosted MCP server (Cloudflare Workers)
 - [OpenAPI spec](https://api.frihet.io/openapi.yaml) -- Machine-readable API definition
 
