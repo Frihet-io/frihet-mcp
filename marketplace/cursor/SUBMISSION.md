@@ -36,7 +36,7 @@ A Frihet submission is primarily an **MCP server plugin** with an optional **Ski
 | Field | Max | Value |
 |-------|-----|-------|
 | Plugin name | 60 chars | `Frihet ERP` |
-| Tagline / short description | 100 chars | `AI-native ERP — 94 tools for invoicing, CRM, tax & banking via natural language.` |
+| Tagline / short description | 100 chars | `AI-native ERP — 111 tools for invoicing, CRM, tax & banking via natural language.` |
 | Long description | 2,000 chars | See below |
 | Category | — | `Finance & Accounting` (primary) / `Business Tools` (secondary) |
 | GitHub repository | — | `https://github.com/Frihet-io/frihet-mcp` |
@@ -54,7 +54,7 @@ Frihet MCP Server connects Cursor directly to your Frihet ERP account.
 
 Talk to your business in natural language from inside Cursor. Create invoices, log expenses, manage clients, check cash flow, prepare quarterly taxes — all without leaving the editor.
 
-94 tools across invoicing, CRM, products, quotes, expenses, banking, fiscal compliance (Modelo 303/130, VeriFactu, TicketBAI), e-invoicing (PEPPOL, XRechnung, FatturaPA), vacation rental management, point-of-sale, time tracking, and recurring invoices.
+111 tools across invoicing, CRM, products, quotes, expenses, banking, fiscal compliance (Modelo 303/130/390/180/347, VeriFactu, TicketBAI), e-invoicing (PEPPOL, XRechnung, FatturaPA, Factur-X, Facturae), vacation rental management (Stay), point-of-sale, time tracking, recurring invoices, and team management.
 
 Zero install — connect via the remote endpoint at mcp.frihet.io with OAuth or API key. Also available as npx @frihet/mcp-server for local stdio transport.
 
@@ -104,9 +104,9 @@ Works with the free Frihet plan. Get an API key at app.frihet.io.
 ```json
 {
   "name": "frihet-erp",
-  "version": "1.9.0-beta.1",
+  "version": "1.10.0-beta.2",
   "displayName": "Frihet ERP",
-  "description": "AI-native ERP — 94 tools for invoicing, CRM, tax & banking via natural language.",
+  "description": "AI-native ERP — 111 tools for invoicing, CRM, tax & banking via natural language.",
   "icon": "https://frihet.io/favicon.svg",
   "homepage": "https://frihet.io",
   "repository": "https://github.com/Frihet-io/frihet-mcp",

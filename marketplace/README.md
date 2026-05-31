@@ -3,7 +3,7 @@
 > **DO NOT SUBMIT anything here without Viktor's explicit OK.**
 > Each `SUBMISSION.md` file is a complete, copy-paste-ready package — not a trigger to submit.
 
-Wave Mature 3 — prepared May 2026.
+Wave Mature 3 — prepared May 2026. Refreshed 10-may-2026 for v1.10.0-beta.2 / 111 tools.
 
 ---
 
@@ -45,7 +45,7 @@ Wave Mature 3 — prepared May 2026.
 
 - [ ] `https://mcp.frihet.io/mcp` reachable with valid MCP response
 - [ ] `server.json` description ≤ 100 chars (PR #fix/server-json-desc-100chars merged)
-- [ ] All 94 tools have `readOnlyHint` correctly set
+- [ ] All 111 tools have `readOnlyHint` correctly set (verify via `grep -rn "readOnlyHint" src/tools/`)
 - [ ] `https://frihet.io/legal/privacy` live
 - [ ] `https://frihet.io/legal/terms` live
 - [ ] `https://docs.frihet.io/desarrolladores/mcp-server` live and public
@@ -69,7 +69,7 @@ No binary files are stored in this repo — assets live in `Frihet-Saas-Website/
 |----------|--------|---------------|
 | Anthropic MCP Registry (`registry.modelcontextprotocol.io`) | LIVE — `io.frihet/erp` | Keep `server.json` updated on releases |
 | Smithery | LIVE — `smithery.ai/server/frihet/frihet-mcp` | Track install rate weekly |
-| npm | LIVE — `@frihet/mcp-server` v1.9.0-beta.1 | Bump to stable on v2.0.0 |
+| npm | LIVE — `@frihet/mcp-server` v1.10.0-beta.2 (111 tools) | Bump to stable on v2.0.0 |
 | Glama / mcpservers.org | Not verified | Submit separately (15min) |
 | PulseMCP | Not verified | Submit separately (15min) |
 | mcp.so | Not verified | Submit separately (15min) |

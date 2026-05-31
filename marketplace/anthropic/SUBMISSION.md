@@ -28,17 +28,17 @@
 | Server identifier (MCP name) | — | `io.frihet/erp` |
 | Server URL (remote endpoint) | — | `https://mcp.frihet.io/mcp` |
 | npm package | — | `@frihet/mcp-server` |
-| Version | — | `1.9.0-beta.1` |
+| Version | — | `1.10.0-beta.2` |
 | License | — | `MIT` |
 | GitHub repository | — | `https://github.com/Frihet-io/frihet-mcp` |
 | Homepage / docs | — | `https://docs.frihet.io/desarrolladores/mcp-server` |
 
-**Long description (copy-paste ready, 618 chars):**
+**Long description (copy-paste ready, 660 chars):**
 
 ```
 Frihet MCP Server connects your AI assistant to Frihet ERP — the AI-native business platform for freelancers and SMEs in Spain and the EU.
 
-94 tools across 17 domains: invoices, expenses, clients, CRM, quotes, products, deposits, webhooks, e-invoicing (XRechnung, Factur-X, FatturaPA, PEPPOL, Facturae), banking, fiscal (Modelo 303/130/390/180/347), VeriFactu compliance, TicketBAI, vacation rentals (Stay), point-of-sale, time tracking, and recurring invoices.
+111 tools across 20 domains: invoices, expenses, clients, CRM (contacts/activities/notes), quotes, products, deposits, vendors, webhooks, e-invoicing (XRechnung, Factur-X, FatturaPA, PEPPOL, Facturae), banking, fiscal (Modelo 303/130/390/180/347), VeriFactu compliance, TicketBAI, vacation rentals (Stay), point-of-sale, kitchen orchestration, time tracking, recurring invoices, and team management.
 
 Zero install: connect via the remote endpoint at mcp.frihet.io with OAuth 2.0 + PKCE or API key. Also available as npm @frihet/mcp-server for local stdio use.
 ```
@@ -61,15 +61,15 @@ Zero install: connect via the remote endpoint at mcp.frihet.io with OAuth 2.0 + 
 
 ### Section 3 — Tools & Resources
 
-**Tool count:** 94 tools, 8 resources, 7 prompts
+**Tool count:** 111 tools, 8 resources, 7 prompts (verified against `npm view @frihet/mcp-server` description + `src/tools/*.ts`)
 
 **Domains covered:**
-- Invoices (6), Expenses (5), Clients (5), CRM/Contacts (3), CRM/Activities (2), CRM/Notes (3)
-- Products (5), Quotes (5), Deposits (7), Vendors (5), Webhooks (5)
+- Invoices (12), Expenses (5), Clients (5), CRM/Contacts (3), CRM/Activities (2), CRM/Notes (3)
+- Products (5), Quotes (6), Deposits (7), Vendors (5), Webhooks (5)
 - E-Invoicing (4), Intelligence (4)
 - Banking (5), Fiscal — Modelo 303/130/390/180/347 + VeriFactu + TicketBAI (8)
 - Stay / Vacation Rentals (5), POS / Point-of-Sale (4)
-- Time Tracking (4), Recurring Invoices (2)
+- Time Tracking (6), Recurring Invoices (8), Team Management (4)
 
 **Tool annotations (all tools comply):**
 - Read-only tools (`list_*`, `get_*`, `search_*`): `readOnlyHint: true`
@@ -139,7 +139,7 @@ Before submitting:
 
 - [ ] Server is publicly reachable: `curl -s https://mcp.frihet.io/mcp` returns valid MCP response
 - [ ] OAuth redirect URIs include both `https://claude.ai/api/mcp/auth_callback` AND `https://claude.com/api/mcp/auth_callback`
-- [ ] All 94 tools have `readOnlyHint` set correctly (verify in `src/tools/*.ts`)
+- [ ] All 111 tools have `readOnlyHint` set correctly (verify in `src/tools/*.ts`)
 - [ ] Privacy policy page is live at `https://frihet.io/legal/privacy`
 - [ ] Documentation page is live and public at `https://docs.frihet.io/desarrolladores/mcp-server`
 - [ ] Test account created and credentials ready
