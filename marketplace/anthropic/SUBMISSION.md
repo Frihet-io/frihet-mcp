@@ -82,8 +82,8 @@ Zero install: connect via the remote endpoint at mcp.frihet.io with OAuth 2.0 + 
 
 | Field | Value |
 |-------|-------|
-| Privacy policy URL | `https://frihet.io/legal/privacy` |
-| Terms of service URL | `https://frihet.io/legal/terms` |
+| Privacy policy URL | `https://www.frihet.io/en/privacy` |
+| Terms of service URL | `https://www.frihet.io/en/terms` |
 | Data residency | EU (europe-west1, Frankfurt) |
 | GDPR compliant | Yes — see privacy policy |
 | Data stored | Tool inputs/outputs are not stored server-side beyond the API request lifecycle |
@@ -140,7 +140,7 @@ Before submitting:
 - [ ] Server is publicly reachable: `curl -s https://mcp.frihet.io/mcp` returns valid MCP response
 - [ ] OAuth redirect URIs include both `https://claude.ai/api/mcp/auth_callback` AND `https://claude.com/api/mcp/auth_callback`
 - [ ] All 94 tools have `readOnlyHint` set correctly (verify in `src/tools/*.ts`)
-- [ ] Privacy policy page is live at `https://frihet.io/legal/privacy`
+- [ ] Privacy policy page is live at `https://www.frihet.io/en/privacy`
 - [ ] Documentation page is live and public at `https://docs.frihet.io/desarrolladores/mcp-server`
 - [ ] Test account created and credentials ready
 - [ ] Logo/icon assets prepared at required sizes (see Section 6)

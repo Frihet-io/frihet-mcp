@@ -46,8 +46,8 @@ Wave Mature 3 — prepared May 2026.
 - [ ] `https://mcp.frihet.io/mcp` reachable with valid MCP response
 - [ ] `server.json` description ≤ 100 chars (PR #fix/server-json-desc-100chars merged)
 - [ ] All 94 tools have `readOnlyHint` correctly set
-- [ ] `https://frihet.io/legal/privacy` live
-- [ ] `https://frihet.io/legal/terms` live
+- [ ] `https://www.frihet.io/en/privacy` live
+- [ ] `https://www.frihet.io/en/terms` live
 - [ ] `https://docs.frihet.io/desarrolladores/mcp-server` live and public
 - [ ] Test account created at app.frihet.io with sample data
 - [ ] App icon 512×512 PNG exported from favicon.svg

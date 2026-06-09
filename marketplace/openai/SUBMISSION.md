@@ -31,8 +31,8 @@
 | Homepage | — | `https://frihet.io` |
 | Developer name | — | `BRTHLS / Viktor` |
 | Developer email | — | `hola@frihet.io` |
-| Privacy policy URL | — | `https://frihet.io/legal/privacy` |
-| Terms of service URL | — | `https://frihet.io/legal/terms` |
+| Privacy policy URL | — | `https://www.frihet.io/en/privacy` |
+| Terms of service URL | — | `https://www.frihet.io/en/terms` |
 | Support URL | — | `https://docs.frihet.io/desarrolladores/mcp-server` |
 
 **Long description (copy-paste ready, 790 chars):**
@@ -138,7 +138,7 @@ OpenAI enforces strict OAuth 2.1 compliance. Verify before submitting:
 |-------|-------|
 | Data storage | Per-request only — no persistent storage of user data server-side |
 | Data residency | EU (europe-west1) |
-| GDPR | Yes — see `https://frihet.io/legal/privacy` |
+| GDPR | Yes — see `https://www.frihet.io/en/privacy` |
 | PII handling | API key / Bearer token transmitted in headers only. No PII logged. |
 | EU users | Yes — primary market (Spain + EU) |
 
@@ -164,8 +164,8 @@ Before submitting:
 - [ ] `/.well-known/openai-apps-challenge` route added to Worker (deploy BEFORE submitting)
 - [ ] OpenAI redirect URI added to OAuth allowlist (exact URI provided by OpenAI during submission)
 - [ ] OAuth state parameter handler accepts strings of 400+ chars (no truncation)
-- [ ] Privacy policy live at `https://frihet.io/legal/privacy`
-- [ ] Terms of service live at `https://frihet.io/legal/terms`
+- [ ] Privacy policy live at `https://www.frihet.io/en/privacy`
+- [ ] Terms of service live at `https://www.frihet.io/en/terms`
 - [ ] App icon (512×512 PNG) prepared from `favicon.svg`
 - [ ] Screenshots prepared (min 2)
 - [ ] Test account created and credentials ready

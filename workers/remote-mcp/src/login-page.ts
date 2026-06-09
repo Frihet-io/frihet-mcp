@@ -240,7 +240,7 @@ export function getLoginPage(opts: {
     </div>
 
     <div class="footer">
-      <a href="https://frihet.io/en/legal/privacy" target="_blank">Privacy Policy</a>
+      <a href="https://www.frihet.io/en/privacy" target="_blank">Privacy Policy</a>
       &middot;
       <a href="https://docs.frihet.io" target="_blank">Documentation</a>
     </div>

@@ -293,8 +293,8 @@ const AGENTS_JSON = JSON.stringify({
     { input: "I just uploaded a receipt photo — categorize it", description: "Scan expense receipt", expectedOutput: "Receipt scanned: €45.50, Restaurant, deductible 50% (IVA 10%), category: meals" },
   ],
   legal: {
-    privacyPolicy: "https://www.frihet.io/legal/privacy",
-    termsOfService: "https://www.frihet.io/legal/terms",
+    privacyPolicy: "https://www.frihet.io/en/privacy",
+    termsOfService: "https://www.frihet.io/en/terms",
   },
   rateLimit: {
     tier: "pro",
@@ -321,7 +321,7 @@ Allow: /
 
 Trained-for-AI: yes
 Contact: ayuda@frihet.io
-License: https://www.frihet.io/legal/terms
+License: https://www.frihet.io/en/terms
 
 # AI crawlers — explicitly allowed for training and indexing
 User-agent: GPTBot
@@ -657,7 +657,7 @@ Allow: /
 
 Trained-for-AI: yes
 Contact: ayuda@frihet.io
-License: https://www.frihet.io/legal/terms
+License: https://www.frihet.io/en/terms
 
 # Machine-readable surfaces (ChatGPT connector)
 Llms-txt: ${OPENAI_HOST}/llms.txt
