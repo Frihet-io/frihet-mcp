@@ -1,9 +1,9 @@
 {
   "integrationCount": 0,
   "languageCount": 17,
-  "lastEmit": "2026-06-01T00:10:38.257Z",
-  "manifestChecksum": "a227aaf46c65a3c3db81a3eeea7e9d07c484b33ddc4864bca8336c349192435c",
-  "mcpToolCount": 0,
+  "lastEmit": "2026-06-09T12:00:00.000Z",
+  "manifestChecksum": "659abd5b9923ef22c1f1a5f0c8d5af0dd0c957c3bd7c3227e02f15fff20c64f3",
+  "mcpToolCount": 151,
   "products": {
     "app": {
       "status": "live",
@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.0.0"
+      "version": "1.12.0-beta.1"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -28,5 +28,36 @@
       "version": "0.1.0"
     }
   },
-  "version": "0.1.0"
+  "releasedAt": "2026-05-16",
+  "version": "1.12.0-beta.1",
+  "releases": [
+    {
+      "version": "1.12.0-beta.1",
+      "releasedAt": "2026-05-16",
+      "mcpToolCount": 151,
+      "delta": "+57 tools since 1.9.0-beta.1",
+      "notes": "Gestoria messaging/bulk/aging (5), Day-1 megasprint callables (audit GL, portal domain, IGIC, IS, VIES, bank rules), Day-4 e-invoicing (einvoice_export, face_submit/status, ticketbai_submit, ksef_submit stub), D4-B HR + Payroll + Onboarding + Permissions + Period close (19). ticketbai_status dedupe corrected count 152 to 151."
+    },
+    {
+      "version": "1.9.0-beta.1",
+      "releasedAt": "2026-05-10",
+      "mcpToolCount": 94,
+      "delta": "+19 tools (Wave Mature 1)",
+      "notes": "Wave Mature 1: Banking (5) + Fiscal (8) + Time (4) + Recurring (2) tool families. Trust Area gates on match_transaction_to_invoice, verifactu_resubmit, delete_time_entry. 4 new test files ~35 tests."
+    },
+    {
+      "version": "1.8.0-beta.1",
+      "releasedAt": "2026-05-10",
+      "mcpToolCount": 75,
+      "delta": "+9 tools",
+      "notes": "Wave 4/5: Stay (5 tools) + POS (4 tools). Vacation rental management and point-of-sale tools with Trust Area confirmation gate on refund_sale."
+    },
+    {
+      "version": "1.7.0-beta.1",
+      "releasedAt": "2026-05-05",
+      "mcpToolCount": 66,
+      "delta": "+4 tools",
+      "notes": "E-invoicing beta: send_einvoice, get_einvoice_status, validate_einvoice_xml, export_datev. CF endpoints rolling out."
+    }
+  ]
 }
