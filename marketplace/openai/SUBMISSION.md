@@ -23,8 +23,8 @@
 
 | Field | Max | Value |
 |-------|-----|-------|
-| App name | 60 chars | `Frihet ERP` |
-| Short description (tagline) | 120 chars | `Create invoices, manage clients, and handle Spanish tax compliance through ChatGPT — 94 tools, zero install.` |
+| App name | 60 chars | `Frihet` |
+| Short description (tagline) | 120 chars | `Manage invoices, expenses, clients, products, quotes, and webhooks through ChatGPT.` |
 | Long description | 2,000 chars | See below |
 | Category | — | `Finance & Accounting` |
 | App icon URL | — | `https://frihet.io/favicon.svg` |
@@ -35,18 +35,18 @@
 | Terms of service URL | — | `https://frihet.io/legal/terms` |
 | Support URL | — | `https://docs.frihet.io/desarrolladores/mcp-server` |
 
-**Long description (copy-paste ready, 814 chars):**
+**Long description (copy-paste ready, 790 chars):**
 
 ```
-Frihet ERP connects ChatGPT directly to your business data.
+Frihet connects ChatGPT directly to your business workspace.
 
-Create invoices by describing what you sold. Log expenses in plain language. Check your cash position. Prepare quarterly tax filings. All from inside ChatGPT — no forms, no dashboards, just conversation.
+Create invoices by describing what you sold. Log expenses in plain language. Look up clients, products, vendors, quotes, and monthly business summaries. Keep routine admin moving from inside ChatGPT without switching tabs.
 
-94 tools across every business domain: invoices, expenses, clients, CRM, products, quotes, deposits, banking (accounts + transactions + reconciliation), fiscal compliance for Spain (Modelo 303, 130, 390, 180, 347), VeriFactu real-time invoice signing, TicketBAI, e-invoicing in 7 formats (PEPPOL, XRechnung, FatturaPA, Factur-X, Facturae, UBL, CII), vacation rental management, point-of-sale, time tracking, and recurring invoices.
+The ChatGPT app exposes a reviewed 53-tool OpenAI-safe surface: invoices, expenses, clients, CRM contacts/activities/notes, products, quotes, vendors, monthly summaries, and webhook management. Government IDs, webhook secrets, recipient override emails, payroll, HR, stay/PMS, e-invoicing XML, VIES lookup, and quarterly filing tools are not exposed in this OpenAI profile.
 
-Connect via OAuth 2.0 in seconds — no API key required. Get a free Frihet account at app.frihet.io.
+Connect via OAuth 2.0 in seconds. No API key required.
 
-First official AI-native MCP server for a Spanish ERP.
+Frihet is built for freelancers and small businesses that want AI-native business management.
 ```
 
 ---
@@ -55,11 +55,11 @@ First official AI-native MCP server for a Spanish ERP.
 
 | Field | Value |
 |-------|-------|
-| MCP server URL | `https://mcp.frihet.io/mcp` |
+| MCP server URL | `https://openai-mcp.frihet.io/mcp` |
 | Transport type | `streamable-http` |
 | Authentication type | OAuth 2.0 + PKCE |
-| Authorization endpoint | `https://mcp.frihet.io/oauth/authorize` |
-| Token endpoint | `https://mcp.frihet.io/oauth/token` |
+| Authorization endpoint | `https://openai-mcp.frihet.io/oauth/authorize` |
+| Token endpoint | `https://openai-mcp.frihet.io/oauth/token` |
 | Scopes | `read write` |
 
 **Required: Add OpenAI's redirect URI to your OAuth config before submitting.**
@@ -72,13 +72,13 @@ OpenAI's callback URL (exact value provided during submission — add it alongsi
 OpenAI verifies domain ownership before publishing. The verification flow:
 
 1. OpenAI provides a token (e.g., `abc123xyz789`) during submission
-2. You must serve it at: `GET https://mcp.frihet.io/.well-known/openai-apps-challenge`
+2. You must serve it at: `GET https://openai-mcp.frihet.io/.well-known/openai-apps-challenge`
 3. Response must be **plain text** (not JSON, not HTML) — just the token string
 4. OpenAI pings immediately on form submission — deploy the file BEFORE clicking submit
 
-**Current `.well-known` routes on `mcp.frihet.io` Worker:**
+**Current `.well-known` routes on the Worker:**
 
-The Worker already serves `.well-known/mcp`, `.well-known/ai.txt`. Add `openai-apps-challenge` route BEFORE submitting:
+The Worker already has an `openai-apps-challenge` route. Replace the token in `workers/remote-mcp/src/index.ts` with the current token OpenAI provides during submission, then deploy `--env openai` BEFORE submitting:
 
 ```typescript
 // In the Cloudflare Worker (wrangler.toml / src/index.ts), add:
@@ -91,7 +91,7 @@ if (url.pathname === '/.well-known/openai-apps-challenge') {
 
 Replace `OPENAI_TOKEN_GOES_HERE` with the actual token OpenAI provides during submission. Deploy to Cloudflare before clicking submit.
 
-**Alternative:** If `mcp.frihet.io` serves from a subpath (e.g., `/mcp`), OpenAI's domain verification may require the challenge at the root domain. Note: OpenAI has a known limitation with subpath-hosted servers — file a support request if domain verification fails.
+**Alternative:** If OpenAI verifies a different host from the MCP URL, put the same challenge route on that host too. The intended OpenAI host is `openai-mcp.frihet.io`.
 Reference: https://community.openai.com/t/chatgpt-app-submissions-domain-verification-step-does-not-support-subpath-hosted-mcp-servers/1379021
 
 ---
@@ -112,7 +112,7 @@ OpenAI enforces strict OAuth 2.1 compliance. Verify before submitting:
 
 **Critical:** If `code_challenge_methods_supported` is missing or doesn't include `S256`, ChatGPT will reject the OAuth flow with "unsupported OAuth config type". This is a hard block.
 
-**OpenAI's OAuth state parameter** is 400+ chars of base64-encoded JSON. Ensure the OAuth state handler on `mcp.frihet.io` accepts long state values (no length truncation).
+**OpenAI's OAuth state parameter** is 400+ chars of base64-encoded JSON. Ensure the OAuth state handler on `openai-mcp.frihet.io` accepts long state values (no length truncation).
 
 ---
 
@@ -127,7 +127,7 @@ OpenAI enforces strict OAuth 2.1 compliance. Verify before submitting:
 **Screenshots to prepare (Viktor action required):**
 1. ChatGPT: `"Show me all unpaid invoices"` → structured table response
 2. ChatGPT: `"Create an invoice for Acme SL, 5 hours consulting at 100/h"` → invoice created
-3. ChatGPT: `"What's my tax liability for Q1 2026 — Modelo 303?"` → fiscal breakdown
+3. ChatGPT: `"Summarize my revenue and expenses for March 2026"` → monthly summary
 4. ChatGPT: `"Log a 89 EUR expense for Adobe CC, category software"` → expense logged
 
 ---
@@ -157,8 +157,10 @@ OpenAI reviewers will test the app end-to-end using OAuth flow:
 
 Before submitting:
 
-- [ ] `https://mcp.frihet.io/mcp` is reachable with valid MCP response
-- [ ] OAuth metadata at `https://mcp.frihet.io/.well-known/oauth-authorization-server` includes `code_challenge_methods_supported: ["S256"]`
+- [ ] `https://openai-mcp.frihet.io/mcp` is reachable with valid MCP response
+- [ ] OAuth metadata at `https://openai-mcp.frihet.io/.well-known/oauth-authorization-server` includes `code_challenge_methods_supported: ["S256"]`
+- [ ] `FRIHET_OPENAI_MODE=true` is active and exposes exactly 53 tools
+- [ ] MCP prompts are hidden in OpenAI mode
 - [ ] `/.well-known/openai-apps-challenge` route added to Worker (deploy BEFORE submitting)
 - [ ] OpenAI redirect URI added to OAuth allowlist (exact URI provided by OpenAI during submission)
 - [ ] OAuth state parameter handler accepts strings of 400+ chars (no truncation)
@@ -175,9 +177,9 @@ Before submitting:
 
 Test the full flow in ChatGPT before submitting:
 1. Go to https://chatgpt.com → Settings → Developer Mode → "Create App"
-2. Paste MCP URL: `https://mcp.frihet.io/mcp`
-3. Complete OAuth flow (should redirect to `mcp.frihet.io/oauth/authorize` → Frihet login → back to ChatGPT)
-4. Test 5 representative tools: `list_invoices`, `create_invoice`, `list_expenses`, `get_business_context`, `get_quarterly_taxes`
+2. Paste MCP URL: `https://openai-mcp.frihet.io/mcp`
+3. Complete OAuth flow (should redirect to `openai-mcp.frihet.io/oauth/authorize` → Frihet login → back to ChatGPT)
+4. Test 5 representative tools: `list_invoices`, `create_invoice`, `list_expenses`, `get_business_context`, `create_quote`
 5. Verify structured JSON responses, not prose
 6. Only submit after all 5 pass
 

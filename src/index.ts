@@ -17,7 +17,7 @@ import { FrihetClient } from "./client.js";
 import { registerAllTools } from "./tools/register-all.js";
 import { registerAllResources } from "./resources/register-all.js";
 import { registerAllPrompts } from "./prompts/register-all.js";
-import { applyOpenAIProfile, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT } from "./openai-profile.js";
+import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT } from "./openai-profile.js";
 import { log } from "./logger.js";
 import { registerShutdownHook } from "./metrics.js";
 import { setTraceContext } from "./observability.js";
@@ -92,7 +92,7 @@ function main(): void {
     applyOpenAIProfile(server);
     log({
       level: "info",
-      message: `OpenAI safety profile active — ${OPENAI_EXCLUDED_COUNT} tools + ${OPENAI_EXCLUDED_RESOURCE_COUNT} resources excluded, gov IDs + credentials redacted`,
+      message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions, ${OPENAI_EXCLUDED_RESOURCE_COUNT} resources excluded, gov IDs + credentials redacted`,
       operation: "startup",
     });
   }
