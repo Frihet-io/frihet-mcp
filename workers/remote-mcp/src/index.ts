@@ -86,7 +86,10 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
       mcpVersion: "mcp/1.0",
     });
 
-    const client = new FrihetClient(apiKey);
+    // Full IFrihetClient (143 methods) — adapter over root src/client.ts with
+    // 25s Workers timeout. Base URL comes from the FRIHET_API_BASE secret
+    // (normalized to /v1); falls back to https://api.frihet.io/v1 if unset.
+    const client = new FrihetClient(apiKey, this.env.FRIHET_API_BASE);
 
     // The worker and root project both use @modelcontextprotocol/sdk 1.26.0 but
     // TypeScript sees them as separate types due to different node_modules paths.
