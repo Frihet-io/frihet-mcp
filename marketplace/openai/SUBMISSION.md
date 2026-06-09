@@ -58,8 +58,9 @@ Frihet is built for freelancers and small businesses that want AI-native busines
 | MCP server URL | `https://openai-mcp.frihet.io/mcp` |
 | Transport type | `streamable-http` |
 | Authentication type | OAuth 2.0 + PKCE |
-| Authorization endpoint | `https://openai-mcp.frihet.io/oauth/authorize` |
-| Token endpoint | `https://openai-mcp.frihet.io/oauth/token` |
+| Authorization endpoint | `https://openai-mcp.frihet.io/authorize` |
+| Token endpoint | `https://openai-mcp.frihet.io/token` |
+| Dynamic client registration | `https://openai-mcp.frihet.io/register` |
 | Scopes | `read write` |
 
 **Required: Add OpenAI's redirect URI to your OAuth config before submitting.**
@@ -178,7 +179,7 @@ Before submitting:
 Test the full flow in ChatGPT before submitting:
 1. Go to https://chatgpt.com → Settings → Developer Mode → "Create App"
 2. Paste MCP URL: `https://openai-mcp.frihet.io/mcp`
-3. Complete OAuth flow (should redirect to `openai-mcp.frihet.io/oauth/authorize` → Frihet login → back to ChatGPT)
+3. Complete OAuth flow (should redirect to `openai-mcp.frihet.io/authorize` → Frihet login → back to ChatGPT)
 4. Test 5 representative tools: `list_invoices`, `create_invoice`, `list_expenses`, `get_business_context`, `create_quote`
 5. Verify structured JSON responses, not prose
 6. Only submit after all 5 pass

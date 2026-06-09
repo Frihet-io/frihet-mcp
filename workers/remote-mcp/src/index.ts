@@ -34,6 +34,8 @@ import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
 import { authHandler } from "./auth-handler.js";
 
+const MCP_SERVER_VERSION = "1.12.0-beta.1";
+
 // ---------------------------------------------------------------------------
 // Auth props — stored in OAuth token, available via this.props in McpAgent
 // ---------------------------------------------------------------------------
@@ -53,7 +55,7 @@ export type AuthProps = {
 export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
   server = new McpServer({
     name: "Frihet",
-    version: "1.5.2",
+    version: MCP_SERVER_VERSION,
   });
 
   async init(): Promise<void> {
@@ -881,7 +883,7 @@ export default {
         JSON.stringify({
           status: overallStatus,
           checks,
-          version: "1.5.2",
+          version: MCP_SERVER_VERSION,
           timestamp: new Date().toISOString(),
         }),
         {
