@@ -1,5 +1,5 @@
 /**
- * Fiscal tools for the Frihet MCP server — Wave 6 (8 tools).
+ * Fiscal tools for the Frihet MCP server — Wave 6 (7 tools).
  *
  * Tools:
  *   1. get_modelo_303_summary   — IVA quarterly Spain
@@ -9,7 +9,8 @@
  *   5. get_modelo_347_summary   — Operations >€3005 annual third-party recap
  *   6. verifactu_status         — VeriFactu submission status for an invoice
  *   7. verifactu_resubmit       — Re-submit a failed VeriFactu submission (TRUST AREA)
- *   8. ticketbai_status         — Basque Country e-invoicing status
+ *
+ * NOTE: ticketbai_status is registered by einvoice.ts (canonical, more complete impl).
  *
  * REST surface: /v1/fiscal/* (documented: pending — backend ships separately)
  *
@@ -28,7 +29,6 @@ import {
   READ_ONLY_ANNOTATIONS,
   fiscalModeloSummaryOutput,
   verifactuStatusOutput,
-  ticketbaiStatusOutput,
 } from "./shared.js";
 
 export function registerFiscalTools(server: McpServer, client: IFrihetClient): void {
@@ -254,29 +254,5 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
     }),
   );
 
-  // -- ticketbai_status --
-
-  server.registerTool(
-    "ticketbai_status",
-    {
-      title: "Get TicketBAI Status (Basque Country)",
-      description:
-        "Get the TicketBAI e-invoicing status for an invoice (Basque Country fiscal territories: Araba, Bizkaia, Gipuzkoa). " +
-        "Returns submission status, hash, territory province, and AEAT-PV/Bizkaia/Gipuzkoa response. " +
-        "/ Obtiene el estado TicketBAI de una factura (territorios forales vascos: Araba, Bizkaia, Gipuzkoa). " +
-        "Devuelve estado de envio, hash, provincia y respuesta de la hacienda foral.",
-      annotations: READ_ONLY_ANNOTATIONS,
-      inputSchema: {
-        invoiceId: z.string().describe("Invoice ID / ID de la factura"),
-      },
-      outputSchema: ticketbaiStatusOutput,
-    },
-    async ({ invoiceId }) => withToolLogging("ticketbai_status", async () => {
-      const result = await client.getTicketbaiStatus(invoiceId);
-      return {
-        content: [getContent(formatRecord("TicketBAI Status", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
-  );
 }
+

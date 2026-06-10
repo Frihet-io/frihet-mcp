@@ -1,11 +1,11 @@
 /**
- * Tests for Fiscal MCP tools — Wave 6 (8 tools).
+ * Tests for Fiscal MCP tools — Wave 6 (7 tools).
  *
  * Uses Node.js built-in test runner (node:test + node:assert).
  * Run: npm test (after build)
  *
  * Coverage:
- *   1. Tool registration — all 8 fiscal tools registered
+ *   1. Tool registration — all 7 fiscal tools registered
  *   2. get_modelo_303_summary — success path + period param
  *   3. get_modelo_130_summary — success path
  *   4. get_modelo_390_summary — success path
@@ -13,8 +13,9 @@
  *   6. get_modelo_347_summary — success path
  *   7. verifactu_status — success path
  *   8. verifactu_resubmit — confirm=false gate + confirm=true success
- *   9. ticketbai_status — success path + province field
- *  10. API error — 404 propagated as isError=true
+ *   9. API error — 404 propagated as isError=true
+ *
+ * NOTE: ticketbai_status is tested in einvoice-day4-tools.test.ts (canonical).
  */
 
 import { test, describe, beforeEach } from "node:test";
@@ -131,8 +132,8 @@ describe("Fiscal Tools — Registration", () => {
     server = await makeServer(makeSuccessClient);
   });
 
-  test("registers exactly 8 fiscal tools", () => {
-    assert.equal(server.tools.size, 8);
+  test("registers exactly 7 fiscal tools", () => {
+    assert.equal(server.tools.size, 7);
   });
 
   for (const name of [
@@ -143,7 +144,6 @@ describe("Fiscal Tools — Registration", () => {
     "get_modelo_347_summary",
     "verifactu_status",
     "verifactu_resubmit",
-    "ticketbai_status",
   ]) {
     test(`registers ${name}`, () => {
       assert.ok(server.tools.has(name), `${name} not registered`);
@@ -273,25 +273,4 @@ describe("verifactu_resubmit — trust area gate", () => {
   });
 });
 
-// ── ticketbai_status ─────────────────────────────────────────────────────────
-
-describe("ticketbai_status — success path", () => {
-  test("returns status with province field", async () => {
-    const server = await makeServer(makeSuccessClient);
-    const tool = server.tools.get("ticketbai_status")!;
-    const result = await tool.handler({ invoiceId: "inv_def456" });
-
-    assert.ok(!result.isError);
-    const sc = result.structuredContent!;
-    assert.equal(sc["invoiceId"], "inv_def456");
-    assert.equal(sc["province"], "bizkaia");
-    assert.equal(sc["status"], "success");
-  });
-
-  test("404 propagates as isError=true", async () => {
-    const server = await makeServer(make404Client);
-    const tool = server.tools.get("ticketbai_status")!;
-    const result = await tool.handler({ invoiceId: "inv_missing" });
-    assert.ok(result.isError);
-  });
-});
+// ticketbai_status is tested in einvoice-day4-tools.test.ts (canonical location).

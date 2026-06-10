@@ -18,7 +18,7 @@ All these share the same justifications:
 
 ---
 
-## CREATE TOOLS (11 tools — standard, no external effects)
+## CREATE TOOLS (12 tools — standard, no external effects)
 
 | Field | Justification |
 |-------|---------------|
@@ -26,11 +26,11 @@ All these share the same justifications:
 | **Open World: No** | This tool only writes to the Frihet database via api.frihet.io. It does not contact external services. |
 | **Destructive: No** | This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later. |
 
-**Tools:** `create_invoice`, `duplicate_invoice`, `create_credit_note`, `apply_late_fee`, `create_expense`, `create_client`, `create_client_contact`, `log_client_activity`, `create_client_note`, `create_product`, `create_quote`
+**Tools:** `create_invoice`, `duplicate_invoice`, `create_credit_note`, `apply_late_fee`, `create_expense`, `create_client`, `create_client_contact`, `log_client_activity`, `create_client_note`, `create_product`, `create_quote`, `create_vendor`
 
 ---
 
-## UPDATE TOOLS (6 tools — standard, no external effects)
+## UPDATE TOOLS (7 tools — standard, no external effects)
 
 | Field | Justification |
 |-------|---------------|
@@ -90,11 +90,11 @@ All these share the same justifications:
 
 ---
 
-## EXCLUDED TOOLS (2 — not visible, for reference only)
+## EXCLUDED / HIDDEN TOOLS
 
-- `get_quarterly_taxes` — excluded (returns tax filing data with government IDs)
-- `get_invoice_einvoice` — excluded (returns e-invoice XML with NIF/CIF)
+OpenAI mode uses an explicit allowlist of the 53 tools above. Everything else in the full MCP server is hidden from the ChatGPT app submission surface, including payroll, HR, stay/PMS, POS, banking, e-invoicing XML, VIES lookup, VeriFactu/FACe/TicketBAI/KSeF submission, time tracking, recurring invoices, gestoria bulk-send, permissions, onboarding, period-close tools, and all MCP prompts.
 
-## CREATE VENDOR (special — same as standard CREATE)
+Explicit defense-in-depth exclusions:
 
-`create_vendor` uses the same justifications as the standard CREATE tools above.
+- `get_quarterly_taxes` — returns tax filing data with government identifiers
+- `get_invoice_einvoice` — returns e-invoice XML with NIF/CIF

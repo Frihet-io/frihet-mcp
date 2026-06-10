@@ -1,9 +1,9 @@
 {
   "integrationCount": 0,
   "languageCount": 17,
-  "lastEmit": "2026-05-10T00:00:00.000Z",
-  "manifestChecksum": "bd93c8fee76e36a16ecfe3abe82756318be57816390c9a6f413dbf8d065c414e",
-  "mcpToolCount": 94,
+  "lastEmit": "2026-06-09T12:00:00.000Z",
+  "manifestChecksum": "659abd5b9923ef22c1f1a5f0c8d5af0dd0c957c3bd7c3227e02f15fff20c64f3",
+  "mcpToolCount": 151,
   "products": {
     "app": {
       "status": "live",
@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.9.0-beta.1"
+      "version": "1.12.0-beta.1"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -28,9 +28,16 @@
       "version": "0.1.0"
     }
   },
-  "releasedAt": "2026-05-10",
-  "version": "1.9.0-beta.1",
+  "releasedAt": "2026-05-16",
+  "version": "1.12.0-beta.1",
   "releases": [
+    {
+      "version": "1.12.0-beta.1",
+      "releasedAt": "2026-05-16",
+      "mcpToolCount": 151,
+      "delta": "+57 tools since 1.9.0-beta.1",
+      "notes": "Gestoria messaging/bulk/aging (5), Day-1 megasprint callables (audit GL, portal domain, IGIC, IS, VIES, bank rules), Day-4 e-invoicing (einvoice_export, face_submit/status, ticketbai_submit, ksef_submit stub), D4-B HR + Payroll + Onboarding + Permissions + Period close (19). ticketbai_status dedupe corrected count 152 to 151."
+    },
     {
       "version": "1.9.0-beta.1",
       "releasedAt": "2026-05-10",

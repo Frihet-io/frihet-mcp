@@ -17,7 +17,7 @@ import { FrihetClient } from "./client.js";
 import { registerAllTools } from "./tools/register-all.js";
 import { registerAllResources } from "./resources/register-all.js";
 import { registerAllPrompts } from "./prompts/register-all.js";
-import { applyOpenAIProfile, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT } from "./openai-profile.js";
+import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT } from "./openai-profile.js";
 import { log } from "./logger.js";
 import { registerShutdownHook } from "./metrics.js";
 import { setTraceContext } from "./observability.js";
@@ -78,10 +78,10 @@ function main(): void {
 
   const server = new McpServer({
     name: "frihet-erp",
-    version: "1.5.2",
+    version: "1.12.0-beta.1",
     description:
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
-      "Provides 59 tools (including business context, monthly summaries, quarterly taxes, invoice duplication, CRM subcollections, and deposit management), " +
+      "Provides 151 tools (including business context, monthly summaries, quarterly taxes, invoice duplication, CRM subcollections, and deposit management), " +
       "11 resources (8 static + 3 live), and 10 workflow prompts for business management " +
       "with full Spanish tax compliance (IVA, IGIC, IPSI).",
   });
@@ -92,7 +92,7 @@ function main(): void {
     applyOpenAIProfile(server);
     log({
       level: "info",
-      message: `OpenAI safety profile active — ${OPENAI_EXCLUDED_COUNT} tools + ${OPENAI_EXCLUDED_RESOURCE_COUNT} resources excluded, gov IDs + credentials redacted`,
+      message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions, ${OPENAI_EXCLUDED_RESOURCE_COUNT} resources excluded, gov IDs + credentials redacted`,
       operation: "startup",
     });
   }
@@ -112,12 +112,12 @@ function main(): void {
   // Connect via stdio transport
   const transport = new StdioServerTransport();
   server.connect(transport).then(() => {
-    console.error("[frihet-mcp] v1.5.2 | 59 tools | https://github.com/Frihet-io/frihet-mcp");
+    console.error("[frihet-mcp] v1.12.0-beta.1 | 151 tools | https://github.com/Frihet-io/frihet-mcp");
     log({
       level: "info",
       message: "Frihet MCP server running on stdio",
       operation: "startup",
-      metadata: { version: "1.5.2", transport: "stdio" },
+      metadata: { version: "1.12.0-beta.1", transport: "stdio" },
     });
   }).catch((error: unknown) => {
     log({

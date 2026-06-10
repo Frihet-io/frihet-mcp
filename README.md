@@ -17,7 +17,7 @@
   <a href="https://smithery.ai/server/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
-  <img src="https://img.shields.io/badge/tools-152-18181b?style=flat&labelColor=09090b" alt="152 tools">
+  <img src="https://img.shields.io/badge/tools-151-18181b?style=flat&labelColor=09090b" alt="151 tools">
   <img src="https://img.shields.io/badge/node-%3E%3D18-18181b?style=flat&labelColor=09090b" alt="node >=18">
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
@@ -50,9 +50,9 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-152 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
+151 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
 
-<!-- v1.12.0-beta.1 — D4-B megasprint: HR (9), payroll (2), onboarding (2), permissions (2), period close (3), webhook test (1) = +19 = 152 tools total -->
+<!-- v1.12.0-beta.1 — D4-B megasprint: HR (9), payroll (2), onboarding (2), permissions (2), period close (3), webhook test (1) = +19 = 151 tools total -->
 
 ---
 
@@ -180,7 +180,7 @@ Talk to your ERP. These are real prompts, not marketing copy.
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 152 tools are CRUD operations over the REST API.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 151 tools are CRUD operations over the REST API.
 
 **Works great:**
 
@@ -207,7 +207,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ---
 
-## Tools (152)
+## Tools (151)
 
 ### Invoices (12)
 
@@ -543,7 +543,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `period_close` | Close an accounting period (gestor/admin only — TRUST AREA) |
 | `period_reopen` | Reopen a closed period with a mandatory reason (TRUST AREA) |
 
-All 152 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
+All 151 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
 
 ---
 
@@ -722,7 +722,7 @@ npm run build   # must pass before submitting
 
 | Package | What it is |
 |---------|-----------|
-| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (152 tools, 8 resources, 7 prompts) |
+| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (151 tools, 8 resources, 7 prompts) |
 | [`@frihet/sdk`](https://github.com/Frihet-io/frihet-sdk) | TypeScript SDK (`frihet.invoices.create()`) |
 | [`frihet`](https://www.npmjs.com/package/frihet) | CLI (`frihet invoices list --status overdue`) |
 | [`n8n-nodes-frihet`](https://www.npmjs.com/package/n8n-nodes-frihet) | n8n community node for workflow automation |

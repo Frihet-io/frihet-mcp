@@ -24,11 +24,20 @@ export class FrihetApiError extends Error {
   }
 }
 
+export interface FrihetClientOptions {
+  /**
+   * Per-request timeout in milliseconds. Defaults to 30000.
+   * Cloudflare Workers should pass ≤25000 to leave margin under the ~30s limit.
+   */
+  timeoutMs?: number;
+}
+
 export class FrihetClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  private readonly timeoutMs: number;
 
-  constructor(apiKey: string, baseUrl?: string) {
+  constructor(apiKey: string, baseUrl?: string, options?: FrihetClientOptions) {
     if (!apiKey) {
       throw new Error(
         "FRIHET_API_KEY is required. Set it as an environment variable or pass it to the constructor.",
@@ -36,6 +45,7 @@ export class FrihetClient {
     }
     this.apiKey = apiKey;
     this.baseUrl = baseUrl ?? BASE_URL;
+    this.timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
   }
 
   // ------------------------------------------------------------------ HTTP
@@ -65,7 +75,7 @@ export class FrihetClient {
     };
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
     const startTime = Date.now();
     let response: Response;
@@ -83,7 +93,7 @@ export class FrihetClient {
         throw new FrihetApiError(
           408,
           "request_timeout",
-          `Request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds`,
+          `Request timed out after ${this.timeoutMs / 1000} seconds`,
         );
       }
       logApiCall(method, path, 0, durationMs);

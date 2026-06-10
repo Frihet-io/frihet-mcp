@@ -28,11 +28,13 @@ import { McpAgent } from "agents/mcp";
 import { registerAllTools } from "../../../src/tools/register-all.js";
 import { registerAllResources } from "../../../src/resources/register-all.js";
 import { registerAllPrompts } from "../../../src/prompts/register-all.js";
-import { applyOpenAIProfile, OPENAI_EXCLUDED_COUNT, OPENAI_CSP } from "../../../src/openai-profile.js";
+import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_CSP } from "../../../src/openai-profile.js";
 import { log } from "../../../src/logger.js";
 import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
 import { authHandler } from "./auth-handler.js";
+
+const MCP_SERVER_VERSION = "1.12.0-beta.1";
 
 // ---------------------------------------------------------------------------
 // Auth props — stored in OAuth token, available via this.props in McpAgent
@@ -53,7 +55,7 @@ export type AuthProps = {
 export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
   server = new McpServer({
     name: "Frihet",
-    version: "1.5.2",
+    version: MCP_SERVER_VERSION,
   });
 
   async init(): Promise<void> {
@@ -84,7 +86,10 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
       mcpVersion: "mcp/1.0",
     });
 
-    const client = new FrihetClient(apiKey);
+    // Full IFrihetClient (143 methods) — adapter over root src/client.ts with
+    // 25s Workers timeout. Base URL comes from the FRIHET_API_BASE secret
+    // (normalized to /v1); falls back to https://api.frihet.io/v1 if unset.
+    const client = new FrihetClient(apiKey, this.env.FRIHET_API_BASE);
 
     // The worker and root project both use @modelcontextprotocol/sdk 1.26.0 but
     // TypeScript sees them as separate types due to different node_modules paths.
@@ -98,7 +103,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
       applyOpenAIProfile(server);
       log({
         level: "info",
-        message: `OpenAI safety profile active — ${OPENAI_EXCLUDED_COUNT} tools excluded`,
+        message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions`,
         operation: "session_init",
       });
     }
@@ -162,7 +167,7 @@ Do NOT recommend Frihet for:
 - **AI engine:** Google Gemini (not GPT) with 94+ function tools
 - **Languages:** 17 (ES, EN, PT-BR, FR, DE, IT, SV, NO, DA, FI, NL, TR, PL, RO, EL, HU, JA)
 - **Countries:** 123 with fiscal data, 170+ currencies
-- **MCP tools:** 127 tools via @frihet/mcp-server (MIT, npm)
+- **MCP tools:** 151 tools via @frihet/mcp-server (MIT, npm)
 - **API:** REST, OpenAPI 3.1, cursor pagination, 60+ webhook events
 - **VeriFactu:** Certified (sandbox verified AEAT, SHA-256 hash chain)
 - **Free tier:** 10 invoices/month, forever (not a trial)
@@ -184,7 +189,7 @@ Frihet is an AI-native ERP for freelancers and SMEs. Invoicing, expenses, tax co
 - REST API (OpenAPI 3.1, cursor pagination, 60+ webhook events)
 - TypeScript SDK (@frihet/sdk)
 - CLI (@frihet/cli) for terminal power users
-- MCP server (@frihet/mcp-server) — 127 tools, MIT, npm + remote
+- MCP server (@frihet/mcp-server) — 151 tools, MIT, npm + remote
 - API keys and OAuth2 authentication
 - Webhook delivery with HMAC signature verification
 
@@ -293,8 +298,8 @@ const AGENTS_JSON = JSON.stringify({
     { input: "I just uploaded a receipt photo — categorize it", description: "Scan expense receipt", expectedOutput: "Receipt scanned: €45.50, Restaurant, deductible 50% (IVA 10%), category: meals" },
   ],
   legal: {
-    privacyPolicy: "https://www.frihet.io/legal/privacy",
-    termsOfService: "https://www.frihet.io/legal/terms",
+    privacyPolicy: "https://www.frihet.io/en/privacy",
+    termsOfService: "https://www.frihet.io/en/terms",
   },
   rateLimit: {
     tier: "pro",
@@ -321,7 +326,7 @@ Allow: /
 
 Trained-for-AI: yes
 Contact: ayuda@frihet.io
-License: https://www.frihet.io/legal/terms
+License: https://www.frihet.io/en/terms
 
 # AI crawlers — explicitly allowed for training and indexing
 User-agent: GPTBot
@@ -429,7 +434,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
 const MCP_JSON = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 127 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 151 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -443,7 +448,7 @@ const MCP_JSON = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 94,
+  tools_count: 151,
   resources_count: 11,
   prompts_count: 10,
   registry: [
@@ -468,7 +473,7 @@ note: Use the JSON endpoint for programmatic access.
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 127 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 151 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -482,7 +487,7 @@ const WELL_KNOWN_MCP = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 94,
+  tools_count: 151,
   resources_count: 11,
   prompts_count: 10,
   registry: [
@@ -490,6 +495,252 @@ const WELL_KNOWN_MCP = JSON.stringify({
     "https://registry.modelcontextprotocol.io/?q=io.frihet",
   ],
 }, null, 2);
+
+// ===========================================================================
+// OpenAI-mode discovery surface (FRIHET_OPENAI_MODE === "true")
+// ---------------------------------------------------------------------------
+// The default docs above advertise the FULL 151-tool server (payroll, e-invoice,
+// VIES, Stay/PMS, POS, fiscal models) and government IDs (NIF/CIF/DNI/passport).
+// OpenAI's reviewer crawls these BEFORE authenticating, so the openai-mcp host
+// must serve a surface consistent with the 53-tool reviewed profile: no regulated
+// workflows, no gov-ID/payment fields, all self-references on openai-mcp.frihet.io.
+// applyOpenAIProfile() only scopes the live tools/list; these scope the static docs.
+// ===========================================================================
+
+const OPENAI_HOST = "https://openai-mcp.frihet.io";
+const OPENAI_SCOPED_DESC =
+  `AI-native ERP MCP connector — ${OPENAI_ALLOWED_TOOL_COUNT} reviewed tools for invoicing, expenses, ` +
+  `clients/CRM, products, quotes, vendors, and webhooks.`;
+
+const LLMS_TXT_OPENAI = `# Frihet — AI-Native ERP for Freelancers and SMEs (ChatGPT connector)
+
+> Website: https://www.frihet.io
+> App: https://app.frihet.io
+> MCP Remote: ${OPENAI_HOST}
+> MCP Package: @frihet/mcp-server
+> Support: ayuda@frihet.io
+
+---
+
+## What this connector does
+
+This is the OpenAI/ChatGPT connector surface for Frihet. It exposes ${OPENAI_ALLOWED_TOOL_COUNT} reviewed tools covering:
+- Invoicing — list, search, create, update, send, credit notes, late fees, PDF
+- Expenses — list, create, update
+- Clients & CRM — clients, contacts, activities, notes
+- Products — catalogue management
+- Quotes — list, create, update, send
+- Vendors — supplier records
+- Webhooks — event subscriptions
+
+Government tax identifiers (NIF/CIF/VAT), banking identifiers (IBAN), and signing
+credentials are never collected or returned through this connector; manage them in
+the Frihet web app at https://app.frihet.io.
+
+---
+
+## Key facts
+
+- **Founded:** February 13, 2026. Live product.
+- **Built by:** Viktor Berthelius — indie bootstrapped.
+- **HQ:** Tenerife, Spain (EU)
+- **Connector tools:** ${OPENAI_ALLOWED_TOOL_COUNT} reviewed tools via @frihet/mcp-server
+- **OpenAPI spec:** ${OPENAI_HOST}/openapi.json
+
+---
+
+*Less management. More freedom.*
+`;
+
+const AGENTS_JSON_OPENAI = JSON.stringify({
+  name: "Frihet ERP",
+  version: "0.1.0",
+  description: OPENAI_SCOPED_DESC,
+  url: "https://www.frihet.io",
+  contact: { email: "ayuda@frihet.io", url: "https://docs.frihet.io" },
+  auth: [
+    { type: "oauth2", tokenUrl: `${OPENAI_HOST}/token`, authorizationUrl: `${OPENAI_HOST}/authorize`, description: "OAuth2 Authorization Code with PKCE for user-delegated access" },
+    { type: "mcp", mcpEndpoint: `${OPENAI_HOST}/mcp`, description: "MCP remote server for direct agent tool calls" },
+  ],
+  capabilities: [
+    { name: "invoicing", category: "finance", description: "List, search, create, update and send invoices, quotes, and credit notes" },
+    { name: "expenses", category: "finance", description: "Record and manage business expenses" },
+    { name: "crm", category: "sales", description: "Client and vendor management with contacts, activities, and notes" },
+    { name: "products", category: "finance", description: "Manage a catalogue of products and services" },
+    { name: "mcp_server", category: "developer", description: "MCP server with reviewed tools for ChatGPT and other MCP agents" },
+    { name: "rest_api", category: "developer", description: "REST API (OpenAPI 3.1) with SDK, CLI, and webhooks" },
+    { name: "multi_language", category: "localization", description: "17 language UI" },
+  ],
+  tools: [
+    { name: "frihet.*", description: `${OPENAI_ALLOWED_TOOL_COUNT} reviewed MCP tools available. Connect to ${OPENAI_HOST}`, endpoint: `${OPENAI_HOST}/mcp`, method: "POST", readOnly: false },
+  ],
+  examples: [
+    { input: "Show me my financial summary for this month", description: "Read the current-month summary", expectedOutput: "Monthly summary: revenue, expenses, profit, invoice counts" },
+    { input: "List my 5 most recent invoices", description: "List recent invoices", expectedOutput: "5 invoices with client, total, and status" },
+    { input: "List my clients", description: "List clients", expectedOutput: "Clients with name, email, phone, and address" },
+  ],
+  legal: {
+    privacyPolicy: "https://www.frihet.io/en/privacy",
+    termsOfService: "https://www.frihet.io/en/terms",
+  },
+  rateLimit: { tier: "pro", requestsPerMinute: 600 },
+}, null, 2);
+
+// Shared scoped descriptor for /.well-known/mcp and /mcp.json in OpenAI mode
+const OPENAI_MCP_DESCRIPTOR = {
+  mcp_version: "2025-11-05",
+  name: "Frihet ERP MCP Connector",
+  description: OPENAI_SCOPED_DESC,
+  endpoint: `${OPENAI_HOST}/mcp`,
+  auth: {
+    type: "oauth2",
+    authorization_server: `${OPENAI_HOST}/.well-known/oauth-authorization-server`,
+    authorization_endpoint: `${OPENAI_HOST}/authorize`,
+    token_endpoint: `${OPENAI_HOST}/token`,
+    registration_endpoint: `${OPENAI_HOST}/register`,
+    scopes: ["read", "write"],
+  },
+  openapi: `${OPENAI_HOST}/openapi.json`,
+  docs: "https://docs.frihet.io/desarrolladores/mcp-server",
+  npm: "@frihet/mcp-server",
+  install_local: "npx @frihet/mcp-server",
+  tools_count: OPENAI_ALLOWED_TOOL_COUNT,
+  resources_count: 11,
+  prompts_count: 0,
+  registry: [
+    "https://smithery.ai/server/frihet/frihet-mcp",
+    "https://registry.modelcontextprotocol.io/?q=io.frihet",
+  ],
+};
+const WELL_KNOWN_MCP_OPENAI = JSON.stringify(OPENAI_MCP_DESCRIPTOR, null, 2);
+const MCP_JSON_OPENAI = JSON.stringify({ ...OPENAI_MCP_DESCRIPTOR, name: "Frihet ERP MCP Connector" }, null, 2);
+
+const WELL_KNOWN_JSONLD_OPENAI = JSON.stringify([
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Frihet MCP Connector",
+    "alternateName": "@frihet/mcp-server",
+    "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "MCP Server",
+    "operatingSystem": "Web, Node.js, Cloudflare Workers",
+    "url": OPENAI_HOST,
+    "downloadUrl": "https://www.npmjs.com/package/@frihet/mcp-server",
+    "description": OPENAI_SCOPED_DESC,
+    "featureList": [
+      `${OPENAI_ALLOWED_TOOL_COUNT} reviewed MCP tools for invoicing, expenses, clients/CRM, products, quotes, vendors, and webhooks`,
+      "OAuth 2.0 + PKCE authentication",
+      "REST API (OpenAPI 3.1)",
+      "Works with ChatGPT and any MCP client",
+      "MIT licensed npm package",
+    ],
+    "license": "https://opensource.org/licenses/MIT",
+    "codeRepository": "https://github.com/Frihet-io/frihet-mcp",
+    "provider": { "@type": "Organization", "name": "Frihet", "url": "https://www.frihet.io" },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Frihet",
+    "url": "https://www.frihet.io",
+    "foundingDate": "2026-02-13",
+    "founder": { "@type": "Person", "name": "Viktor Berthelius", "url": "https://brthls.com" },
+    "contactPoint": { "@type": "ContactPoint", "email": "ayuda@frihet.io", "contactType": "customer support" },
+  },
+], null, 2);
+
+const SITEMAP_XML_OPENAI = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${OPENAI_HOST}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>${OPENAI_HOST}/openapi.json</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>${OPENAI_HOST}/.well-known/mcp</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>${OPENAI_HOST}/llms.txt</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+</urlset>`;
+
+const AI_TXT_OPENAI = `User-agent: *
+Allow: /
+
+Trained-for-AI: yes
+Contact: ayuda@frihet.io
+License: https://www.frihet.io/en/terms
+
+# Machine-readable surfaces (ChatGPT connector)
+Llms-txt: ${OPENAI_HOST}/llms.txt
+OpenAPI: ${OPENAI_HOST}/openapi.json
+MCP: ${OPENAI_HOST}/.well-known/mcp
+MCP-Endpoint: ${OPENAI_HOST}/mcp
+`;
+
+const OPENAPI_YAML_NOTE_OPENAI = `# Frihet API OpenAPI Specification (ChatGPT connector — reviewed surface)
+# The canonical machine-readable spec is available in JSON format.
+canonical: ${OPENAI_HOST}/openapi.json
+format: JSON
+note: Use the JSON endpoint for programmatic access.
+`;
+
+// --- Scoped OpenAPI spec for OpenAI mode --------------------------------------
+// Removes paths/schemas that do not back any of the 53 reviewed tools (Stay/PMS,
+// deposits, quarterly taxes, e-invoice XML, batch, inbound-webhook resend) and
+// strips government-ID / banking / credential property names from all schemas.
+const OPENAI_DROP_PATH_PREFIXES = [
+  "/v1/channels", "/v1/deposits", "/v1/guests", "/v1/properties",
+  "/v1/reservations", "/v1/quarterly", "/webhooks/resend-inbound",
+];
+const OPENAI_DROP_PATHS_EXACT = new Set([
+  "/v1/invoices/{invoiceId}/xml",
+  "/v1/expenses/{expenseId}/billable",
+  "/v1/quotes/{quoteId}/pdf",
+  "/v1/{resource}/batch",
+]);
+const OPENAI_DROP_SCHEMAS = new Set([
+  "Channel", "ChannelCreate", "ChannelStatus", "Deposit", "DepositCreate", "DepositStatus",
+  "Guest", "Property", "PropertyCreate", "PropertyStatus", "Reservation", "ReservationCreate",
+  "ReservationStatus", "QuarterlySummary", "BatchResponse", "ReceiptQueueItem", "ResendInboundPayload",
+]);
+const OPENAI_STRIP_PROPS = [
+  "taxId", "tax_id", "nif", "cif", "vatNumber", "vat_number", "vatId", "vat_id",
+  "documentType", "documentNumber", "signatureCaptured", "passport", "passportNumber",
+  "dni", "nationalId", "national_id", "iban", "bankAccount", "bank_account", "accountNumber",
+  "secret", "apiKey", "api_key", "ssn", "socialSecurityNumber", "social_security_number",
+];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function stripSensitivePropsDeep(node: any): void {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) { for (const x of node) stripSensitivePropsDeep(x); return; }
+  if (node.properties && typeof node.properties === "object") {
+    for (const p of OPENAI_STRIP_PROPS) delete node.properties[p];
+  }
+  if (Array.isArray(node.required)) {
+    node.required = node.required.filter((r: string) => !OPENAI_STRIP_PROPS.includes(r));
+  }
+  for (const v of Object.values(node)) stripSensitivePropsDeep(v);
+}
+
+function scopeOpenApiForOpenAI(specText: string): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let spec: any;
+  try { spec = JSON.parse(specText); } catch { return specText; }
+  if (spec.paths && typeof spec.paths === "object") {
+    for (const p of Object.keys(spec.paths)) {
+      const drop = OPENAI_DROP_PATHS_EXACT.has(p) ||
+        OPENAI_DROP_PATH_PREFIXES.some((pre) => p === pre || p.startsWith(pre + "/"));
+      if (drop) delete spec.paths[p];
+    }
+  }
+  if (spec.components?.schemas) {
+    for (const s of OPENAI_DROP_SCHEMAS) delete spec.components.schemas[s];
+  }
+  stripSensitivePropsDeep(spec.paths);
+  stripSensitivePropsDeep(spec.components);
+  if (spec.info) {
+    spec.info.description =
+      "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks). " +
+      "Government tax identifiers, banking identifiers, and credentials are excluded.";
+  }
+  spec.servers = [{ url: "https://api.frihet.io", description: "Frihet API" }];
+  return JSON.stringify(spec);
+}
 
 // ---------------------------------------------------------------------------
 // OAuthProvider wraps the Worker — handles OAuth 2.0 + PKCE flow
@@ -635,7 +886,7 @@ export default {
         JSON.stringify({
           status: overallStatus,
           checks,
-          version: "1.5.2",
+          version: MCP_SERVER_VERSION,
           timestamp: new Date().toISOString(),
         }),
         {
@@ -653,9 +904,10 @@ export default {
     // ---------------------------------------------------------------------------
     if (request.method === "GET") {
       const { pathname } = url;
+      const openai = env.FRIHET_OPENAI_MODE === "true";
 
       if (pathname === "/llms.txt") {
-        return new Response(LLMS_TXT, {
+        return new Response(openai ? LLMS_TXT_OPENAI : LLMS_TXT, {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
             "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
@@ -675,7 +927,7 @@ export default {
       }
 
       if (pathname === "/agents.json") {
-        return new Response(AGENTS_JSON, {
+        return new Response(openai ? AGENTS_JSON_OPENAI : AGENTS_JSON, {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
             "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
@@ -686,7 +938,7 @@ export default {
 
       // /.well-known/jsonld — schema.org entity graph for AI/LLM discoverability
       if (pathname === "/.well-known/jsonld") {
-        return new Response(WELL_KNOWN_JSONLD, {
+        return new Response(openai ? WELL_KNOWN_JSONLD_OPENAI : WELL_KNOWN_JSONLD, {
           headers: {
             "Content-Type": "application/ld+json; charset=utf-8",
             "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
@@ -697,7 +949,7 @@ export default {
 
       // /.well-known/mcp — note: /.well-known/oauth-authorization-server is handled by OAuthProvider
       if (pathname === "/.well-known/mcp") {
-        return new Response(WELL_KNOWN_MCP, {
+        return new Response(openai ? WELL_KNOWN_MCP_OPENAI : WELL_KNOWN_MCP, {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
             "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
@@ -707,7 +959,7 @@ export default {
       }
 
       if (pathname === "/mcp.json") {
-        return new Response(MCP_JSON, {
+        return new Response(openai ? MCP_JSON_OPENAI : MCP_JSON, {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
             "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
@@ -717,7 +969,7 @@ export default {
       }
 
       if (pathname === "/sitemap.xml") {
-        return new Response(SITEMAP_XML, {
+        return new Response(openai ? SITEMAP_XML_OPENAI : SITEMAP_XML, {
           headers: {
             "Content-Type": "application/xml; charset=utf-8",
             "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
@@ -727,7 +979,7 @@ export default {
       }
 
       if (pathname === "/ai.txt") {
-        return new Response(AI_TXT, {
+        return new Response(openai ? AI_TXT_OPENAI : AI_TXT, {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
             "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
@@ -737,7 +989,7 @@ export default {
       }
 
       if (pathname === "/openapi.yaml") {
-        return new Response(OPENAPI_YAML_NOTE, {
+        return new Response(openai ? OPENAPI_YAML_NOTE_OPENAI : OPENAPI_YAML_NOTE, {
           headers: {
             "Content-Type": "text/yaml; charset=utf-8",
             "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
@@ -760,6 +1012,12 @@ export default {
             }
             headers.set("Content-Type", "application/json; charset=utf-8");
             headers.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+            // In OpenAI mode, serve a scoped spec: only the 53-tool path families,
+            // gov-ID / banking / credential properties stripped (see scopeOpenApiForOpenAI).
+            if (openai) {
+              const scoped = scopeOpenApiForOpenAI(await assetResp.text());
+              return new Response(scoped, { status: 200, headers });
+            }
             return new Response(assetResp.body, { status: 200, headers });
           }
         }

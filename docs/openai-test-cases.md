@@ -1,11 +1,12 @@
 # OpenAI App Submission — Test Cases
 
 > Run ALL test cases on both **ChatGPT web** and **ChatGPT mobile** before submission.
-> Endpoint: `openai-mcp.frihet.io/mcp` (OpenAI-safe profile)
+> Endpoint: `https://openai-mcp.frihet.io/mcp` (OpenAI-safe profile)
 
 ## Prerequisites
 
 - Deploy `openai-mcp.frihet.io` with `FRIHET_OPENAI_MODE=true`
+- Verify OpenAI mode exposes exactly 53 tools and 0 prompts
 - Demo API key with sample data: invoices, expenses, clients, vendors, products, quotes
 - Demo account must NOT require MFA or additional signup
 
@@ -195,13 +196,19 @@
 
 ---
 
-## Test Case 14: Excluded Tools Verification
+## Test Case 14: Hidden Surface Verification
 
-**Expected ABSENT tools (must NOT appear in tool list):**
+**Expected ABSENT tools/prompts (must NOT appear in OpenAI mode):**
 - `get_quarterly_taxes` — excluded (tax filing data)
 - `get_invoice_einvoice` — excluded (e-invoice XML with NIFs)
+- `send_einvoice`, `validate_einvoice_xml`, `einvoice_export`
+- `frihet_tax_id_vies_lookup`
+- `create_reservation`
+- `payroll_export`
+- `invite_team_member`
+- All MCP prompts
 
-**Verification:** Use `list_tools` or check the MCP session — these tools must not be discoverable.
+**Verification:** Use `list_tools` / `list_prompts` or check the MCP session. OpenAI mode must expose exactly 53 tools and 0 prompts.
 
 ---
 
@@ -236,4 +243,4 @@
 | 14 | Excluded tools | Quarterly taxes + e-invoice absent |
 | 15 | Search | Pagination + text search |
 
-**Total: 53 tools available, 2 excluded, 0 government IDs in I/O, 0 credentials leaked.**
+**Total: 53 tools available, 0 prompts, full-server tools hidden by allowlist, 0 government IDs in I/O, 0 credentials leaked.**

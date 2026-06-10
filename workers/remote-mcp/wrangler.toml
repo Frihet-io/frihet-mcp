@@ -51,7 +51,10 @@ bindings = [
 binding = "OAUTH_KV"
 id = "9207b98598f849109139ad11f3b0ac51"
 
-# Assets binding must be re-declared per env (same as DO and KV — not inherited)
+# Assets binding must be re-declared per env (same as DO and KV — not inherited).
+# OpenAI mode ships a SCOPED asset bundle (public-openai/) so the openapi.json
+# served directly by Cloudflare Assets is already reviewed-surface-only.
+# Regenerate with: node scripts/scope-openai-openapi.mjs (run before deploy).
 [env.openai.assets]
-directory = "./public"
+directory = "./public-openai"
 binding = "ASSETS"

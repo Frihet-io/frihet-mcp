@@ -10,7 +10,7 @@
 | 2 | openWorldHint wrong | **DONE** | 4 tools corrected + justifications |
 | 3 | Test cases failing | **READY** | 15 test cases documented |
 | 4 | Privacy policy gaps | **DONE** | Section 10 added (11 sections, 17 langs) |
-| 5 | Sensitive data collection | **DONE** | taxId/secret stripped, 2 tools excluded |
+| 5 | Sensitive data collection | **DONE** | OpenAI allowlist enforced: 53 reviewed tools, prompts hidden, restricted fields redacted |
 
 ---
 
@@ -79,11 +79,14 @@ Justifications are embedded in tool descriptions as `[openWorldHint: true — ..
 
 **Fixed in:** `src/openai-profile.ts` — activated by `FRIHET_OPENAI_MODE=true`
 
-### Tools excluded (2)
-| Tool | Reason |
-|------|--------|
-| `get_quarterly_taxes` | Returns Modelo 303/130 tax filing data |
-| `get_invoice_einvoice` | EN16931 XML mandatorily contains NIF/CIF |
+### OpenAI-visible tool surface
+
+OpenAI mode now enforces an explicit allowlist of 53 reviewed tools. The full MCP server can keep growing for Claude, Cursor, Windsurf, Cline, Codex, and direct MCP clients without automatically broadening the ChatGPT submission surface.
+
+Hidden from OpenAI mode:
+- Payroll, HR, stay/PMS, POS, banking, e-invoicing XML, VIES lookup, VeriFactu/FACe/TicketBAI/KSeF submission, time tracking, recurring invoices, gestoria bulk-send, permissions, onboarding, and period-close tools.
+- All MCP prompts, because several prompt templates reference tools or fields that are intentionally hidden from OpenAI mode.
+- `get_quarterly_taxes` and `get_invoice_einvoice`, retained as explicit exclusions for defense in depth.
 
 ### Input fields removed (8 tools)
 | Field | Tools | Reason |
@@ -97,8 +100,19 @@ Justifications are embedded in tool descriptions as `[openWorldHint: true — ..
 |-------|---------------|
 | `taxId` | structuredContent + display text |
 | `secret` | structuredContent + display text |
+| `idDocument` / `passport` / `dni` / `nationalId` | structuredContent + display text |
+| `apiKey` / tokens / password-like fields | structuredContent + display text |
 
 Deep recursive redaction ensures nested objects and paginated arrays are clean.
+
+### Regression test
+
+`npm test` now includes `dist/__tests__/openai-profile.test.js`, which asserts:
+- OpenAI mode exposes exactly 53 tools.
+- OpenAI mode exposes 0 prompts.
+- Sensitive/newer full-server tools are not visible.
+- Only `send_invoice`, `send_quote`, `create_webhook`, and `update_webhook` have `openWorldHint: true`.
+- Restricted input/output fields are stripped/redacted.
 
 ---
 
@@ -172,13 +186,13 @@ curl -s https://www.frihet.io/en/privacy | grep -c "AI, API, and Developer"
 ```
 ┌─────────────────────────────────────────┐
 │         Frihet MCP Server               │
-│         (55 tools, MIT)                 │
+│         (149+ tools, MIT)               │
 │                                         │
 │  ┌──────────────┐  ┌────────────────┐   │
 │  │ mcp.frihet.io│  │openai-mcp.     │   │
 │  │ (full)       │  │frihet.io       │   │
 │  │              │  │(OpenAI-safe)   │   │
-│  │ 55 tools     │  │ 53 tools       │   │
+│  │ Full surface │  │ 53 tools       │   │
 │  │ All fields   │  │ No taxId       │   │
 │  │ All data     │  │ No secret      │   │
 │  │              │  │ No quarterly   │   │
@@ -192,5 +206,6 @@ curl -s https://www.frihet.io/en/privacy | grep -c "AI, API, and Developer"
 │                                         │
 │  Same codebase, same Worker, same DO    │
 │  Difference: FRIHET_OPENAI_MODE=true    │
+│  + explicit 53-tool allowlist           │
 └─────────────────────────────────────────┘
 ```

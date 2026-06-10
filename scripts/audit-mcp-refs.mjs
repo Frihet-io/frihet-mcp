@@ -126,6 +126,13 @@ const TOOL_NOUN_RE = TOOL_NOUNS.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$
 // e.g. "94 tools", "94 herramientas"
 const TOOL_COUNT_RE = new RegExp(`\\b(\\d{1,4})[\\s_-]+(${TOOL_NOUN_RE})\\b`, 'gi');
 
+// Files whose tool-count entries are entirely historical/narrative — skip count checks.
+// These files record past release totals as changelog entries (not current-state claims).
+// Version checks are still enforced. Extend when adding new changelog-style files.
+const HISTORY_FILES = new Set([
+  'CHANGELOG.md',
+]);
+
 // Lines containing any of these phrases are NOT checked for tool-count drift.
 // (different concept than MCP tool count)
 const SAFE_PATTERNS = [
@@ -208,9 +215,12 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
     }
     const lines = readFileSync(abs, 'utf8').split('\n');
 
+    // History files: skip tool-count checks entirely (entries are historical narrative).
+    const isHistoryFile = HISTORY_FILES.has(rel);
+
     lines.forEach((line, idx) => {
       // Skip safe-pattern lines for tool-count check
-      const safeLine = SAFE_PATTERNS.some((re) => re.test(line));
+      const safeLine = isHistoryFile || SAFE_PATTERNS.some((re) => re.test(line));
 
       if (!safeLine) {
         TOOL_COUNT_RE.lastIndex = 0;

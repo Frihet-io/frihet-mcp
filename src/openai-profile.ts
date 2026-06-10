@@ -15,7 +15,8 @@
  * The full MCP server (55 tools) remains available for Claude, Cursor,
  * Windsurf, Cline, Codex, and all other MCP clients.
  *
- * OpenAI-safe mode: 53 tools (2 excluded), 0 government IDs in I/O.
+ * OpenAI-safe mode: 53 reviewed tools, 0 prompts, 0 government IDs in I/O.
+ * The full MCP surface remains available outside FRIHET_OPENAI_MODE.
  *
  * @see https://developers.openai.com/apps-sdk/app-submission-guidelines
  */
@@ -27,8 +28,12 @@ import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 /* ------------------------------------------------------------------ */
 
 interface OpenAIProfile {
+  /** Tools allowed for OpenAI app submission; all others are hidden */
+  includeTools: Set<string>;
   /** Tools excluded entirely from registration */
   excludeTools: Set<string>;
+  /** Hide MCP prompt templates in OpenAI mode */
+  excludePrompts: boolean;
   /** Per-tool annotation overrides (merged with existing) */
   annotationOverrides: Record<string, Partial<ToolAnnotations>>;
   /** Per-tool description replacements */
@@ -40,12 +45,88 @@ interface OpenAIProfile {
 }
 
 const PROFILE: OpenAIProfile = {
+  // -- OpenAI-reviewed core surface ----------------------------------------
+  //
+  // Keep the ChatGPT app submission narrow and stable. The full MCP server
+  // has many more tools, including payroll, HR, e-invoicing, VIES, stay/PMS,
+  // POS, and other regulated workflows. Those are useful for direct MCP
+  // clients, but they broaden data collection and review risk for ChatGPT.
+  includeTools: new Set([
+    // Read-only tools
+    "get_business_context",
+    "get_monthly_summary",
+    "list_invoices",
+    "get_invoice",
+    "search_invoices",
+    "get_invoice_pdf",
+    "list_expenses",
+    "get_expense",
+    "list_clients",
+    "get_client",
+    "list_client_contacts",
+    "list_client_activities",
+    "list_client_notes",
+    "list_products",
+    "get_product",
+    "list_quotes",
+    "get_quote",
+    "list_vendors",
+    "get_vendor",
+    "list_webhooks",
+    "get_webhook",
+
+    // Create tools
+    "create_invoice",
+    "duplicate_invoice",
+    "create_credit_note",
+    "apply_late_fee",
+    "create_expense",
+    "create_client",
+    "create_client_contact",
+    "log_client_activity",
+    "create_client_note",
+    "create_product",
+    "create_quote",
+    "create_vendor",
+
+    // Update tools
+    "update_invoice",
+    "mark_invoice_paid",
+    "update_expense",
+    "update_client",
+    "update_product",
+    "update_quote",
+    "update_vendor",
+
+    // Delete tools
+    "delete_invoice",
+    "delete_expense",
+    "delete_client",
+    "delete_client_contact",
+    "delete_client_note",
+    "delete_product",
+    "delete_quote",
+    "delete_vendor",
+    "delete_webhook",
+
+    // Open-world tools with explicit justifications
+    "send_invoice",
+    "send_quote",
+    "create_webhook",
+    "update_webhook",
+  ]),
+
   // ── Tools excluded entirely ─────────────────────────────────────────
   // Return restricted data categories that cannot be adequately redacted.
   excludeTools: new Set([
     "get_quarterly_taxes",  // Modelo 303/130 tax filing data — sensitive fiscal PII
     "get_invoice_einvoice", // EN16931 XML mandatorily contains seller+buyer NIF/CIF
   ]),
+
+  // MCP prompts can reference tools/fields that are intentionally hidden from
+  // OpenAI mode (for example tax IDs and fiscal filing tools). ChatGPT Apps do
+  // not need them for the public app surface, so remove them from this profile.
+  excludePrompts: true,
 
   // ── Annotation corrections ──────────────────────────────────────────
   // openWorldHint MUST be true for tools that cause external side effects.
@@ -150,6 +231,13 @@ const PROFILE: OpenAIProfile = {
     "secret",                      // Webhook signing credential
     "iban", "bankAccount",         // Banking identifiers (if exposed via passthrough)
     "bank_account", "accountNumber",
+    "idDocument", "documentNumber", // Guest/customer government document fields
+    "passport", "passportNumber",
+    "dni", "nationalId", "national_id",
+    "ssn", "socialSecurityNumber", "social_security_number",
+    "apiKey", "api_key",
+    "accessToken", "access_token", "refreshToken", "refresh_token",
+    "password", "mfa", "otp",
   ],
 };
 
@@ -250,6 +338,9 @@ export function applyOpenAIProfile(server: any): void {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server.registerTool = (name: string, config: any, handler: any) => {
+    // 0. Keep the public ChatGPT app to the reviewed core tool surface
+    if (!PROFILE.includeTools.has(name)) return;
+
     // 1. Skip excluded tools entirely
     if (PROFILE.excludeTools.has(name)) return;
 
@@ -263,6 +354,25 @@ export function applyOpenAIProfile(server: any): void {
     const descOverride = PROFILE.descriptionOverrides[name];
     if (descOverride) {
       config.description = descOverride;
+    }
+
+    // 3b. Ensure EVERY reviewed tool states an explicit openWorldHint rationale.
+    // OpenAI review requires openWorldHint to be explicitly true/false (never null)
+    // with a clear justification per tool. The 4 open-world tools already embed a
+    // bespoke "[openWorldHint: true — …]" rationale via descriptionOverrides; this
+    // appends the closed-world rationale to the remaining reviewed tools so the
+    // justification is present for all of them at tools/list. Only mutates the
+    // OpenAI-mode description string — annotation booleans (already correct) and the
+    // base tool files (used by every other MCP client) are left untouched.
+    if (
+      typeof config.description === "string" &&
+      !config.description.includes("openWorldHint")
+    ) {
+      const ow = config.annotations?.openWorldHint;
+      config.description +=
+        ow === true
+          ? " [openWorldHint: true — contacts an entity outside Frihet (an email recipient or an external webhook URL).]"
+          : " [openWorldHint: false — operates only against the Frihet API (api.frihet.io); no third-party/external calls.]";
     }
 
     // 4. Strip sensitive input fields
@@ -338,10 +448,20 @@ export function applyOpenAIProfile(server: any): void {
 
     return originalRegisterResource(name, ...rest);
   };
+
+  /* ── Intercept registerPrompt ───────────────────────────────────── */
+
+  if (PROFILE.excludePrompts && typeof server.registerPrompt === "function") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    server.registerPrompt = (_name: string, ..._rest: any[]) => undefined;
+  }
 }
 
 /** Number of tools excluded in OpenAI mode (for logging). */
 export const OPENAI_EXCLUDED_COUNT = PROFILE.excludeTools.size;
+
+/** Number of tools explicitly allowed in OpenAI mode. */
+export const OPENAI_ALLOWED_TOOL_COUNT = PROFILE.includeTools.size;
 
 /** Number of resources excluded in OpenAI mode (for logging). */
 export const OPENAI_EXCLUDED_RESOURCE_COUNT = EXCLUDE_RESOURCES.size;
