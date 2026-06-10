@@ -502,7 +502,7 @@ const WELL_KNOWN_MCP = JSON.stringify({
 // The default docs above advertise the FULL 151-tool server (payroll, e-invoice,
 // VIES, Stay/PMS, POS, fiscal models) and government IDs (NIF/CIF/DNI/passport).
 // OpenAI's reviewer crawls these BEFORE authenticating, so the openai-mcp host
-// must serve a surface consistent with the 53-tool reviewed profile: no regulated
+// must serve a surface consistent with the 53-tool reviewed profile: no regulated  // mcp-refs:ok
 // workflows, no gov-ID/payment fields, all self-references on openai-mcp.frihet.io.
 // applyOpenAIProfile() only scopes the live tools/list; these scope the static docs.
 // ===========================================================================
@@ -1012,7 +1012,7 @@ export default {
             }
             headers.set("Content-Type", "application/json; charset=utf-8");
             headers.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
-            // In OpenAI mode, serve a scoped spec: only the 53-tool path families,
+            // In OpenAI mode, serve a scoped spec: only the 53-tool path families,  // mcp-refs:ok
             // gov-ID / banking / credential properties stripped (see scopeOpenApiForOpenAI).
             if (openai) {
               const scoped = scopeOpenApiForOpenAI(await assetResp.text());

@@ -39,7 +39,7 @@
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
 
-> **Tool count:** the 151-tool build is on `@beta` (`npx @frihet/mcp-server@beta`). npm `latest` (1.6.x) currently ships 62 tools — a stable 151-tool release is pending. The remote endpoint (`mcp.frihet.io`) already serves all 151.
+> **Tool count:** npm `latest` (1.12.0) ships all 151 tools, same as the remote endpoint (`mcp.frihet.io`).
 
 ---
 

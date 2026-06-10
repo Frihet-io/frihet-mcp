@@ -2,6 +2,13 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.12.0] — 2026-06-10
+
+### Changed
+
+- Stable release — promotes the beta build below to npm `latest`, shipping all 151 tools and matching the remote endpoint (`mcp.frihet.io`).
+- README distribution footnote updated (beta note removed); startup banner and server metadata report `1.12.0`.
+
 ## [1.12.0-beta.1] — 2026-05-16
 
 ### Added
