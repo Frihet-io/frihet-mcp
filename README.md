@@ -207,7 +207,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ---
 
-## Tools (152)
+## Tools (151)
 
 ### Invoices (12)
 
