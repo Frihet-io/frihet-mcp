@@ -2,6 +2,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 .env
+.dev.vars
+*.dev.vars
+LANGFUSE_SECRETS.local.md
 .DS_Store
 .mcpregistry_*
 mcp-registry-key.pem
