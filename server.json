@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.frihet/erp",
   "title": "Frihet ERP",
-  "description": "AI-native ERP — 151 tools: invoicing, CRM, tax, IGIC/AIEM, IS, GL audit, portal domain, VIES, banking rules, POS, rentals, time, team, gestoria, HR, payroll, onboarding, period close.",
+  "description": "AI-native ERP MCP server — 151 tools: invoicing, CRM, tax, banking, HR, payroll, period close.",
   "repository": {
     "url": "https://github.com/Frihet-io/frihet-mcp",
     "source": "github"
   },
-  "version": "1.12.0-beta.1",
+  "version": "1.12.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@frihet/mcp-server",
-      "version": "1.12.0-beta.1",
+      "version": "1.12.0",
       "transport": {
         "type": "stdio"
       }
