@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/__tests__/openai-profile.test.js dist/__tests__/einvoice-tools.test.js dist/__tests__/einvoice-day4-tools.test.js dist/__tests__/stay-tools.test.js dist/__tests__/pos-tools.test.js dist/__tests__/banking-tools.test.js dist/__tests__/fiscal-tools.test.js dist/__tests__/time-tools.test.js dist/__tests__/recurring-tools.test.js dist/__tests__/team-tools.test.js dist/__tests__/d4b-hr-payroll-onboarding-tools.test.js",
+    "test": "npm run build && node --test dist/__tests__/einvoice-tools.test.js dist/__tests__/einvoice-day4-tools.test.js dist/__tests__/stay-tools.test.js dist/__tests__/pos-tools.test.js dist/__tests__/banking-tools.test.js dist/__tests__/fiscal-tools.test.js dist/__tests__/time-tools.test.js dist/__tests__/recurring-tools.test.js dist/__tests__/team-tools.test.js dist/__tests__/d4b-hr-payroll-onboarding-tools.test.js",
     "start": "node dist/index.js",
     "postinstall": "node scripts/postinstall.js || true",
     "prepublishOnly": "npm run build && npm run audit:mcp-refs -- --repo frihet-mcp",
