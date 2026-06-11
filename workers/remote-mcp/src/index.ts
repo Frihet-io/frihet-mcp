@@ -34,7 +34,7 @@ import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
 import { authHandler } from "./auth-handler.js";
 
-const MCP_SERVER_VERSION = "1.12.0-beta.1";
+const MCP_SERVER_VERSION = "1.12.0";
 
 // ---------------------------------------------------------------------------
 // Auth props — stored in OAuth token, available via this.props in McpAgent
