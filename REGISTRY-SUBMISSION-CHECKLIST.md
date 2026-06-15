@@ -15,7 +15,7 @@ The steps below require Viktor's account/login — Claude Code cannot complete t
 1. Go to: https://glama.ai/mcp/servers/submit (or https://glama.ai/mcp/servers — look for "Submit server" button)
 2. Enter repo URL: `https://github.com/Frihet-io/frihet-mcp`
 3. Glama will auto-read `glama.json` from the root and populate the listing
-4. Verify the listing shows 152 tools and correct description
+4. Verify the listing shows 151 tools and correct description
 
 ---
 
@@ -47,7 +47,7 @@ The steps below require Viktor's account/login — Claude Code cannot complete t
 ## 4. MCP Registry (Anthropic) — already live, version sync needed
 
 The server is already live at `registry.modelcontextprotocol.io/?q=io.frihet`.
-`server.json` has been updated to v1.12.0-beta.1 with 152 tools.
+`server.json` has been updated to v1.12.0 with 151 tools.
 
 **Manual step to sync the registry entry:**
 1. If the registry auto-syncs from GitHub, merge this PR — done.
@@ -62,8 +62,8 @@ The server is already live at `registry.modelcontextprotocol.io/?q=io.frihet`.
 
 | File | Change |
 |------|--------|
-| `glama.json` | Full metadata (was stub with only `maintainers`) |
-| `server.json` | Tool count 127→152, version 1.10.0-beta.4→1.12.0-beta.1 |
-| `package.json` | Description 133→152 tools; added keywords for discoverability |
-| `README.md` | Badge 127→152; all tool sections complete (was missing 10 sections); Distribution table updated |
-| `src/tools/register-all.ts` | Stale comments 127/133→152 |
+| `glama.json` | Tool count corrected 152→151; description accurate |
+| `server.json` | Description updated to lead with fiscal compliance depth (v1.12.0) |
+| `package.json` | Description 151 tools; discoverability keywords maintained |
+| `README.md` | Resources corrected 8→11, Prompts corrected 7→10 |
+| `skill/SKILL.md` | Version corrected 1.9.0-beta.1→1.12.0 |
