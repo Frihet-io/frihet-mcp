@@ -18,6 +18,7 @@ import { registerAllTools } from "./tools/register-all.js";
 import { registerAllResources } from "./resources/register-all.js";
 import { registerAllPrompts } from "./prompts/register-all.js";
 import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT } from "./openai-profile.js";
+import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "./tool-exposure.js";
 import { log } from "./logger.js";
 import { registerShutdownHook } from "./metrics.js";
 import { setTraceContext } from "./observability.js";
@@ -93,6 +94,23 @@ function main(): void {
     log({
       level: "info",
       message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions, ${OPENAI_EXCLUDED_RESOURCE_COUNT} resources excluded, gov IDs + credentials redacted`,
+      operation: "startup",
+    });
+  }
+
+  // Apply grouped tool-exposure profile if enabled (progressive disclosure).
+  // FRIHET_TOOL_MODE=grouped collapses the 151 full tool descriptions into terse
+  // one-liners + adds list_tool_groups / search_tools / describe_tool meta-tools,
+  // so agents load depth on demand instead of a flat 151-tool wall of context.
+  // Default (unset / "full") is byte-identical to current behavior. Independent
+  // of OpenAI mode; if both are set, OpenAI's allowlist runs first, then this
+  // collapses whatever survived.
+  const toolMode = resolveToolMode();
+  if (toolMode === "grouped") {
+    applyToolExposureProfile(server);
+    log({
+      level: "info",
+      message: `Grouped tool-exposure active — 151 tools collapsed to terse summaries, ${GROUPED_META_TOOL_COUNT} discovery meta-tools added (list_tool_groups, search_tools, describe_tool); full depth served on demand`,
       operation: "startup",
     });
   }
