@@ -50,15 +50,22 @@ routes = [{ pattern = "openai-mcp.frihet.io/*", zone_name = "frihet.io" }]
 
 [env.openai.vars]
 FRIHET_OPENAI_MODE = "true"
-# Explicit "full" (not "grouped"). The OpenAI
-# profile (applyOpenAIProfile) and grouped profile (applyToolExposureProfile)
-# both intercept registerTool and do NOT compose: the OpenAI allow-list drops
-# the grouped meta-tools, leaving collapsed summaries that point at a
-# describe_tool() that no longer exists, and grouped's collapse strips the
-# per-tool openWorldHint rationale that OpenAI app review requires. Enabling
-# grouped on the ChatGPT surface needs a real composition fix + tests, not this
-# flag. Tracked as follow-up. mcp.frihet.io (non-openai) runs grouped fine.
-FRIHET_TOOL_MODE = "full"
+# "grouped" — the two profiles NOW COMPOSE (see src/index.ts init wiring +
+# src/__tests__/openai-grouped-compose.test.ts). applyToolExposureProfile runs
+# FIRST (allowlist = the 53 reviewed tools) so its 3 discovery meta-tools
+# (search_tools / describe_tool / list_tool_groups) register on the REAL server
+# and BYPASS the OpenAI allow-list gate; applyOpenAIProfile runs SECOND so each
+# business tool is redacted + openWorldHint-justified, THEN collapsed (the
+# collapse re-derives the openWorldHint rationale so it survives, and the OpenAI
+# handler-redaction wrapper is preserved). The grouped catalog is pinned to the
+# allow-list, so progressive disclosure can never surface a tool outside the 53.
+# Live surface = 53 reviewed business tools + 3 read-only closed-world meta-tools
+# (56 total). The advertised "53 reviewed tools" count (OPENAI_ALLOWED_TOOL_COUNT)
+# is unchanged — meta-tools are discovery plumbing, not business capability.
+# ⚠️ COMPLIANCE: 53→56 tools/list change on the ChatGPT surface. Requires
+# Viktor's prod flip + an OpenAI app re-review BEFORE going live (see
+# DECISION_SPEC.md). Rollback = set back to "full" + redeploy.
+FRIHET_TOOL_MODE = "grouped"
 
 # DO and KV are NOT inherited — must be redeclared
 [env.openai.durable_objects]

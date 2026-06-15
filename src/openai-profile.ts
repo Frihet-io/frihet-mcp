@@ -463,5 +463,23 @@ export const OPENAI_EXCLUDED_COUNT = PROFILE.excludeTools.size;
 /** Number of tools explicitly allowed in OpenAI mode. */
 export const OPENAI_ALLOWED_TOOL_COUNT = PROFILE.includeTools.size;
 
+/**
+ * The reviewed OpenAI tool allow-list (the 53 business tools), exposed read-only
+ * so the grouped tool-exposure profile can pin its catalog to EXACTLY this set
+ * when the two profiles are composed on openai-mcp.frihet.io. The progressive-
+ * disclosure meta-tools (search_tools / describe_tool / list_tool_groups) must
+ * never surface a tool outside this allow-list; passing it as the grouped
+ * `allowlist` enforces that statically. This is the SAME object used to gate
+ * registerTool, so the two can never drift apart.
+ *
+ * NOTE: this is the 53 BUSINESS tools only. It deliberately does NOT contain the
+ * 3 grouped meta-tools — those are registered directly on the real server
+ * (bypassing the OpenAI gate) by applyToolExposureProfile when it runs first, so
+ * OPENAI_ALLOWED_TOOL_COUNT (and every advertised "53 reviewed tools" doc) stays
+ * correct while the live tools/list still materialises 53 + 3 = 56 tools.
+ */
+export const OPENAI_REVIEWED_TOOL_ALLOWLIST: ReadonlySet<string> =
+  PROFILE.includeTools;
+
 /** Number of resources excluded in OpenAI mode (for logging). */
 export const OPENAI_EXCLUDED_RESOURCE_COUNT = EXCLUDE_RESOURCES.size;

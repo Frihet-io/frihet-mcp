@@ -7,7 +7,7 @@ See also: `SOUL.md` (symlink → `Frihet-ERP/SOUL.md`) for product voice, brandi
 MCP server that connects AI assistants (Claude Code, Cursor, Copilot, Codex, Windsurf, Gemini CLI, ChatGPT Desktop) to Frihet ERP. Natural language → invoices, expenses, clients, fiscal reports.
 
 **Live:**
-- npm: https://www.npmjs.com/package/@frihet/mcp-server (v1.13.0, 151 tools)
+- npm: https://www.npmjs.com/package/@frihet/mcp-server (v1.13.1, 151 tools)
 - MCP remote: https://mcp.frihet.io (Cloudflare Worker)
 - Smithery: https://smithery.ai/server/frihet/frihet-mcp
 - Anthropic registry: https://registry.modelcontextprotocol.io/?q=io.frihet
@@ -59,7 +59,7 @@ MCP server that connects AI assistants (Claude Code, Cursor, Copilot, Codex, Win
 
 ### Tool coverage targets (62 → 110+)
 
-Current (v1.13.0, 151 tools):
+Current (v1.13.1, 151 tools):
 
 | File | Tools | Coverage |
 |---|---|---|
