@@ -2,6 +2,16 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.14.0] — 2026-06-16
+
+### Added
+
+- **6 Kitchen KDS tools** (Wave 6, #36): `list_kitchen_tickets`, `get_kitchen_ticket`, `update_kitchen_ticket`, `list_kitchen_stations`, `kitchen_flow_summary` + station/menu-item surface over `/v1/kitchen/*`. Brings the catalog to **157 tools**.
+
+### Changed
+
+- **`update_kitchen_ticket` status is now a strict enum** (#37): `on_hold | queued | preparing | ready | served | voided` instead of `z.string()`. Rejects ambiguous status input at the schema boundary rather than forwarding a typo to the KDS backend.
+
 ## [1.13.1] — 2026-06-15
 
 ### Changed

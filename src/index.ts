@@ -79,10 +79,10 @@ function main(): void {
 
   const server = new McpServer({
     name: "frihet-erp",
-    version: "1.13.1",
+    version: "1.14.0",
     description:
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
-      "Provides 151 tools (including business context, monthly summaries, quarterly taxes, invoice duplication, CRM subcollections, and deposit management), " +
+      "Provides 157 tools (including business context, monthly summaries, quarterly taxes, invoice duplication, CRM subcollections, and deposit management), " +
       "11 resources (8 static + 3 live), and 10 workflow prompts for business management " +
       "with full Spanish tax compliance (IVA, IGIC, IPSI).",
   });
@@ -105,7 +105,7 @@ function main(): void {
   // Apply grouped tool-exposure profile if enabled (progressive disclosure).
   // FRIHET_TOOL_MODE=grouped collapses the full tool descriptions into terse
   // one-liners + adds list_tool_groups / search_tools / describe_tool meta-tools,
-  // so agents load depth on demand instead of a flat 151-tool wall of context.
+  // so agents load depth on demand instead of a flat 157-tool wall of context.
   // Default (unset / "full") is byte-identical to current behavior. When OpenAI
   // mode is also on, pass the reviewed allow-list so the catalog/meta-tools are
   // pinned to exactly the 53 reviewed tools.
@@ -146,12 +146,12 @@ function main(): void {
   // Connect via stdio transport
   const transport = new StdioServerTransport();
   server.connect(transport).then(() => {
-    console.error("[frihet-mcp] v1.13.1 | 151 tools | https://github.com/Frihet-io/frihet-mcp");
+    console.error("[frihet-mcp] v1.14.0 | 157 tools | https://github.com/Frihet-io/frihet-mcp");
     log({
       level: "info",
       message: "Frihet MCP server running on stdio",
       operation: "startup",
-      metadata: { version: "1.13.1", transport: "stdio" },
+      metadata: { version: "1.14.0", transport: "stdio" },
     });
   }).catch((error: unknown) => {
     log({
