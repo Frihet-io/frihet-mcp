@@ -50,9 +50,15 @@ routes = [{ pattern = "openai-mcp.frihet.io/*", zone_name = "frihet.io" }]
 
 [env.openai.vars]
 FRIHET_OPENAI_MODE = "true"
-# Agent-facing (ChatGPT) → grouped too. Top-level [vars] is NOT inherited here,
-# so it must be set explicitly. Same progressive-disclosure rationale as mcp.frihet.io.
-FRIHET_TOOL_MODE = "grouped"
+# Explicit "full" (not "grouped"). The OpenAI
+# profile (applyOpenAIProfile) and grouped profile (applyToolExposureProfile)
+# both intercept registerTool and do NOT compose: the OpenAI allow-list drops
+# the grouped meta-tools, leaving collapsed summaries that point at a
+# describe_tool() that no longer exists, and grouped's collapse strips the
+# per-tool openWorldHint rationale that OpenAI app review requires. Enabling
+# grouped on the ChatGPT surface needs a real composition fix + tests, not this
+# flag. Tracked as follow-up. mcp.frihet.io (non-openai) runs grouped fine.
+FRIHET_TOOL_MODE = "full"
 
 # DO and KV are NOT inherited — must be redeclared
 [env.openai.durable_objects]
