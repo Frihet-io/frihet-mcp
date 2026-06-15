@@ -166,6 +166,7 @@ export const FILE_TO_GROUP: Record<string, ToolGroupId> = {
   stay: "stay",
 
   pos: "pos",
+  kitchen: "pos",
 
   intelligence: "intelligence",
   gestoria: "intelligence",
@@ -219,6 +220,7 @@ export function groupForTool(name: string): ToolGroupId {
     return "hr";
   if (/(reservation|propert|channel)/.test(n)) return "stay";
   if (/(terminal|sale)/.test(n)) return "pos";
+  if (/(kitchen|menu_item)/.test(n)) return "pos";
   if (/(business_context|monthly_summary|gestoria)/.test(n)) return "intelligence";
   if (/(product)/.test(n)) return "catalog";
   if (/(webhook|portal_domain)/.test(n)) return "platform";

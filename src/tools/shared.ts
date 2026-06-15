@@ -522,6 +522,52 @@ export const propertyItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
+/* --- Kitchen item schemas -------------------------------------------------- */
+
+export const kitchenTicketItemOutput = z.object({
+  id: z.string(),
+  stationId: z.string().optional(),
+  status: z.string().optional().describe("queued | preparing | ready | served | cancelled"),
+  tableRef: z.string().optional(),
+  items: z.array(z.object({
+    id: z.string(),
+    menuItemId: z.string().optional(),
+    name: z.string().optional(),
+    quantity: z.number().optional(),
+    notes: z.string().optional(),
+    status: z.string().optional(),
+  })).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+export const kitchenStationItemOutput = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  isActive: z.boolean().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+export const kitchenMenuItemOutput = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  priceCents: z.number().int().nonnegative().optional(),
+  category: z.string().optional(),
+  isActive: z.boolean().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+export const kitchenFlowSummaryItemOutput = z.object({
+  stationId: z.string(),
+  stationName: z.string().optional(),
+  openTickets: z.number().int().nonnegative(),
+  oldestWaitSeconds: z.number().nonnegative().optional(),
+  isBottleneck: z.boolean(),
+});
+
 /* --- POS item schemas ------------------------------------------------------ */
 
 export const posTerminalItemOutput = z.object({

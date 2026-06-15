@@ -125,6 +125,13 @@ export interface IFrihetClient {
   listSales(params?: { terminalId?: string; status?: string; from?: string; to?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
   refundSale(id: string, data?: { amountCents?: number; reason?: string }): Promise<Record<string, unknown>>;
 
+  // Kitchen — kitchen display system endpoints (/v1/kitchen/*)
+  listKitchenTickets(params?: { status?: string; stationId?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  getKitchenTicket(id: string): Promise<Record<string, unknown>>;
+  updateKitchenTicket(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  listKitchenStations(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  listMenuItems(params?: { q?: string; isActive?: boolean; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+
   // Banking endpoints (/v1/banking/*)
   listBankAccounts(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
   getBankAccount(id: string): Promise<Record<string, unknown>>;

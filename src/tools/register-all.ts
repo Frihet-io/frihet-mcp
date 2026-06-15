@@ -25,6 +25,7 @@ import { registerDepositTools } from "./deposits.js";
 import { registerEInvoiceTools } from "./einvoice.js";
 import { registerStayTools } from "./stay.js";
 import { registerPosTools } from "./pos.js";
+import { registerKitchenTools } from "./kitchen.js";
 import { registerBankingTools } from "./banking.js";
 import { registerFiscalTools } from "./fiscal.js";
 import { registerTimeTools } from "./time.js";
@@ -101,6 +102,7 @@ export function registerAllTools(server: McpServer, client: IFrihetClient): void
   registerEInvoiceTools(server, client);
   registerStayTools(server, client);
   registerPosTools(server, client);
+  registerKitchenTools(server, client);
   registerBankingTools(server, client);
   registerFiscalTools(server, client);
   registerTimeTools(server, client);
