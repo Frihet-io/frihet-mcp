@@ -29,6 +29,7 @@ import { registerAllTools } from "../../../src/tools/register-all.js";
 import { registerAllResources } from "../../../src/resources/register-all.js";
 import { registerAllPrompts } from "../../../src/prompts/register-all.js";
 import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_CSP } from "../../../src/openai-profile.js";
+import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
 import { log } from "../../../src/logger.js";
 import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
@@ -104,6 +105,19 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
       log({
         level: "info",
         message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions`,
+        operation: "session_init",
+      });
+    }
+
+    // Apply grouped tool-exposure profile if this worker is deployed with
+    // FRIHET_TOOL_MODE=grouped (progressive disclosure). Reads the Worker env
+    // binding (not process.env). Default ("full") is byte-identical to before.
+    const toolMode = resolveToolMode({ FRIHET_TOOL_MODE: this.env.FRIHET_TOOL_MODE });
+    if (toolMode === "grouped") {
+      applyToolExposureProfile(server);
+      log({
+        level: "info",
+        message: `Grouped tool-exposure active — tools collapsed to terse summaries, ${GROUPED_META_TOOL_COUNT} discovery meta-tools added; full depth served on demand`,
         operation: "session_init",
       });
     }

@@ -623,6 +623,44 @@ Two transports:
 |----------|----------|---------|
 | `FRIHET_API_KEY` | Yes (stdio) | -- |
 | `FRIHET_API_URL` | No | `https://api.frihet.io/v1` |
+| `FRIHET_TOOL_MODE` | No | `full` |
+
+---
+
+## Tool exposure: depth served on demand
+
+Frihet's differentiator is **depth** — full ES/EU fiscal coverage plus native compliance (VeriFactu, TicketBAI, Facturae/FACe/KSeF), banking, CRM, HR/payroll, stay/PMS and POS. But a flat list of every tool, loaded into an agent's context up front, is the 2026 context-rot problem: it crowds out the task and degrades tool selection before any work begins.
+
+`FRIHET_TOOL_MODE` lets you choose how that depth is exposed.
+
+| Mode | Behavior |
+|------|----------|
+| `full` (default) | All tools are exposed with their full descriptions and schemas. **Unchanged from previous releases** — existing setups are unaffected. |
+| `grouped` | **Progressive disclosure.** Each tool's description collapses to a one-line `[group] summary — full schema via describe_tool('name')`, and three lightweight discovery tools are added. The agent loads depth only for the tools it actually needs. |
+
+In `grouped` mode the tools are unchanged — same names, same input schemas, same behavior. Only the *up-front context cost* changes. Discovery flows through three meta-tools:
+
+- **`list_tool_groups()`** — the domain map (invoicing, expenses, fiscal/compliance, banking, CRM, HR/payroll, stay/PMS, POS, intelligence, products, platform) with a one-line blurb and tool count for each.
+- **`search_tools(query)`** — free-text search across tool name, title, summary and group; returns matching tools with their group, summary, read-only flag and input fields. Optional `group` filter and `limit`.
+- **`describe_tool(name)`** — the full original description and input fields for one tool, on demand, before you call it.
+
+```jsonc
+// claude_desktop_config.json — opt in to grouped mode
+{
+  "mcpServers": {
+    "frihet": {
+      "command": "npx",
+      "args": ["@frihet/mcp-server"],
+      "env": {
+        "FRIHET_API_KEY": "fri_...",
+        "FRIHET_TOOL_MODE": "grouped"
+      }
+    }
+  }
+}
+```
+
+> This is an opt-in exposure layer only — it never changes a tool's logic, name or behavior, and `full` mode is byte-identical to before. The same interceptor pattern powers the OpenAI-safe profile (`FRIHET_OPENAI_MODE`).
 
 ---
 
