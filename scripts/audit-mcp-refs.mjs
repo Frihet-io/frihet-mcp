@@ -27,7 +27,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { resolve, join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -167,6 +167,36 @@ const SAFE_PATTERNS = [
 const VERSION_RE = /v?(\d+\.\d+\.\d+(?:-[a-z]+\.\d+)?)/g;
 const MCP_CONTEXT_RE = /(@frihet\/mcp-server|frihet-mcp|servidor\s+mcp|mcp\s+server|mcp\.frihet\.io)/i;
 
+// === server.json version gate (special case) ===
+// server.json carries the version as BARE JSON values (root `.version` and
+// `.packages[0].version`). The generic line-scan version check requires an MCP
+// marker on the SAME line (MCP_CONTEXT_RE), which never matches those bare
+// `"version": "x.y.z"` lines — so a desynced server.json passed silently and
+// caused the Registry 400 "duplicate version" in release 1.13.1.
+//
+// This handler parses server.json as JSON and asserts both version fields equal
+// the SoT VERSION (from package.json). Returns an array of drift findings in the
+// same { kind, found, expected, jsonPath } shape used by the rest of the audit;
+// empty array means in-sync. Pure (no I/O) so it's unit-testable in isolation.
+export function checkServerJsonVersion(serverJson, expectedVersion) {
+  const drifts = [];
+  const rootVer = serverJson?.version;
+  if (rootVer !== expectedVersion) {
+    drifts.push({ kind: 'version', jsonPath: '.version', found: rootVer, expected: expectedVersion });
+  }
+  const pkgVer = serverJson?.packages?.[0]?.version;
+  if (pkgVer !== expectedVersion) {
+    drifts.push({ kind: 'version', jsonPath: '.packages[0].version', found: pkgVer, expected: expectedVersion });
+  }
+  return drifts;
+}
+
+// Run the full audit only when invoked as a CLI. When imported (e.g. by tests)
+// the module exposes its pure helpers without executing the audit or exiting.
+const isMain = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (isMain) {
+
 // Validate --repo argument
 if (REPO_FILTER && !Object.keys(REPOS).includes(REPO_FILTER)) {
   console.error(`Unknown repo: ${REPO_FILTER}`);
@@ -217,6 +247,44 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
 
     // History files: skip tool-count checks entirely (entries are historical narrative).
     const isHistoryFile = HISTORY_FILES.has(rel);
+
+    // Special case: server.json carries version as bare JSON values that the
+    // generic MCP-context line scan can't see. Parse + assert both fields.
+    if (repoName === 'frihet-mcp' && rel === 'server.json') {
+      let serverJson;
+      try {
+        serverJson = JSON.parse(readFileSync(abs, 'utf8'));
+      } catch (err) {
+        findings.push({ repo: repoName, file: rel, severity: 'fail', kind: 'parse', msg: `invalid JSON: ${err.message}` });
+        serverJson = null;
+      }
+      if (serverJson) {
+        for (const drift of checkServerJsonVersion(serverJson, VERSION)) {
+          findings.push({
+            repo: repoName,
+            file: rel,
+            line: drift.jsonPath,
+            severity: 'fail',
+            kind: drift.kind,
+            found: drift.found,
+            expected: drift.expected,
+            snippet: `${drift.jsonPath} = ${JSON.stringify(drift.found)}`,
+          });
+        }
+        if (FIX) {
+          let mutated = false;
+          if (serverJson.version !== VERSION) { serverJson.version = VERSION; mutated = true; }
+          if (serverJson.packages?.[0] && serverJson.packages[0].version !== VERSION) {
+            serverJson.packages[0].version = VERSION;
+            mutated = true;
+          }
+          if (mutated) {
+            writeFileSync(abs, JSON.stringify(serverJson, null, 2) + '\n');
+            findings.push({ repo: repoName, file: rel, severity: 'fixed', msg: 'server.json version fields synced' });
+          }
+        }
+      }
+    }
 
     lines.forEach((line, idx) => {
       // Skip safe-pattern lines for tool-count check
@@ -329,3 +397,5 @@ if (JSON_OUT) {
 
 const exitFail = findings.some((f) => f.severity === 'fail');
 process.exit(exitFail && !FIX ? 1 : 0);
+
+} // end if (isMain)
