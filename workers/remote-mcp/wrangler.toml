@@ -5,6 +5,16 @@ compatibility_flags = ["nodejs_compat"]
 
 routes = [{ pattern = "mcp.frihet.io/*", zone_name = "frihet.io" }]
 
+# Agent-facing endpoint runs grouped tool-exposure (progressive disclosure):
+# tools/list returns terse summaries + 3 discovery meta-tools instead of the
+# flat 151-tool wall. Full depth served on demand via describe_tool/search_tools.
+# Read by resolveToolMode() in src/index.ts. npm package stays "full" (local
+# clients manage their own context). Rollback = remove this var + redeploy.
+# NOTE: top-level [vars] are NOT inherited by [env.openai] (it defines its own
+# [env.openai.vars]) — openai-mcp grouped must be set explicitly there.
+[vars]
+FRIHET_TOOL_MODE = "grouped"
+
 # Static assets for AI-discoverability surface (Wave 1)
 # Serves public/ directory via env.ASSETS Fetcher binding.
 # Covers: releases.json (pre-distributed from manifest emit)

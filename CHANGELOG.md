@@ -2,6 +2,13 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.13.1] — 2026-06-15
+
+### Changed
+
+- **Grouped tool-exposure now LIVE on the remote agent endpoint** (`mcp.frihet.io`). The Cloudflare Worker is deployed with `FRIHET_TOOL_MODE=grouped`, so agents connecting to the remote endpoint get progressive disclosure (terse summaries + 3 discovery meta-tools) instead of a flat 151-tool wall. The npm package stays `full` by default — local clients (Claude Code, Cursor) manage their own context. All tool names, schemas and handlers unchanged; every tool stays invocable by name.
+- **Typed `inputSchema` on the discovery meta-tools.** `search_tools` now advertises `{ query, group, limit }` and `describe_tool` advertises `{ name }` as real Zod schemas, so MCP clients receive typed argument hints in `tools/list` instead of an empty schema. `list_tool_groups` stays argument-free. No handler behaviour change (handlers already read args defensively).
+
 ## [1.13.0] — 2026-06-15
 
 ### Added

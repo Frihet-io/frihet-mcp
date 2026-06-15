@@ -42,6 +42,7 @@
  */
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod/v4";
 
 /* ------------------------------------------------------------------ */
 /*  Group taxonomy                                                     */
@@ -450,8 +451,23 @@ function registerMetaTools(
         "/ Busca herramientas por texto libre. Devuelve coincidencias con grupo, resumen y campos.",
       annotations: META_ANNOTATIONS,
       inputSchema: {
-        // Plain JSON-schema-ish shape; the SDK accepts a raw shape object here.
-        // Kept dependency-free (no zod import) so this layer stays minimal.
+        query: z
+          .string()
+          .optional()
+          .describe(
+            "Free-text query — matches tool name, title, summary and group. " +
+              "Omit to browse a whole group. / Texto libre; omitir para listar un grupo entero.",
+          ),
+        group: z
+          .enum(TOOL_GROUP_IDS as [ToolGroupId, ...ToolGroupId[]])
+          .optional()
+          .describe("Restrict results to one tool domain / Filtrar por dominio."),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Max results (default 25) / Máximo de resultados (por defecto 25)."),
       },
     },
     // The SDK passes parsed args; we read defensively to stay schema-light.
@@ -514,7 +530,14 @@ function registerMetaTools(
         "[openWorldHint: false — reads the in-process tool catalog only.] " +
         "/ Devuelve la descripción completa de una herramienta por su nombre exacto.",
       annotations: META_ANNOTATIONS,
-      inputSchema: {},
+      inputSchema: {
+        name: z
+          .string()
+          .describe(
+            "Exact tool name as returned by search_tools (e.g. 'create_invoice') / " +
+              "Nombre exacto de la herramienta devuelto por search_tools.",
+          ),
+      },
     },
     async (args: { name?: unknown } = {}) => {
       const name = typeof args.name === "string" ? args.name.trim() : "";

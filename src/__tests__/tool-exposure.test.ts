@@ -337,4 +337,36 @@ describe("tool-exposure: meta-tools", () => {
       assert.equal(ann?.openWorldHint, false, `${meta} must be closed-world`);
     }
   });
+
+  test("meta-tools expose typed inputSchema so agents get arg hints", () => {
+    const { server } = makeGroupedServer();
+
+    // list_tool_groups takes no args.
+    assert.deepEqual(
+      Object.keys(server.tools.get("list_tool_groups")!.config.inputSchema ?? {}),
+      [],
+      "list_tool_groups must take no args",
+    );
+
+    // search_tools advertises query/group/limit.
+    assert.deepEqual(
+      Object.keys(server.tools.get("search_tools")!.config.inputSchema ?? {}).sort(),
+      ["group", "limit", "query"],
+      "search_tools must advertise query/group/limit",
+    );
+
+    // describe_tool advertises a required `name`.
+    const describeSchema = server.tools.get("describe_tool")!.config.inputSchema ?? {};
+    assert.deepEqual(
+      Object.keys(describeSchema),
+      ["name"],
+      "describe_tool must advertise a `name` arg",
+    );
+    // The name field is a Zod schema (typed hint), not a bare placeholder.
+    assert.equal(
+      typeof (describeSchema as Record<string, { parse?: unknown }>).name?.parse,
+      "function",
+      "describe_tool.name must be a Zod schema",
+    );
+  });
 });
