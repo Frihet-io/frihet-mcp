@@ -370,17 +370,17 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
     "operatingSystem": "Web, Node.js, Cloudflare Workers",
     "url": "https://mcp.frihet.io",
     "downloadUrl": "https://www.npmjs.com/package/@frihet/mcp-server",
-    "description": "MCP server for Frihet ERP. 111 tools for invoicing, expenses, accounting, tax compliance (VeriFactu), banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
+    "description": "MCP server for Frihet ERP. 151 tools for invoicing, expenses, accounting, tax compliance (VeriFactu/TicketBAI/Facturae), banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, HR, payroll, and gestoria. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
     "featureList": [
-      "94 MCP tools for ERP operations",
+      "151 MCP tools for ERP operations",
       "OAuth 2.0 + PKCE authentication",
-      "VeriFactu Spanish e-invoicing compliance",
+      "Full ES/EU fiscal compliance: VeriFactu, TicketBAI, Facturae, FACe, PEPPOL",
       "REST API proxy (OpenAPI 3.1)",
       "Works with Claude, ChatGPT, Gemini, Cursor, Windsurf, Copilot",
       "MIT licensed npm package",
       "Cloudflare Worker remote endpoint"
     ],
-    "softwareVersion": "1.9.0-beta.1",
+    "softwareVersion": "1.12.0",
     "license": "https://opensource.org/licenses/MIT",
     "codeRepository": "https://github.com/Frihet-io/frihet-mcp",
     "offers": {

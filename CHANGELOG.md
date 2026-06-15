@@ -8,6 +8,14 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 - Stable release — promotes the beta build below to npm `latest`, shipping all 151 tools and matching the remote endpoint (`mcp.frihet.io`).
 - README distribution footnote updated (beta note removed); startup banner and server metadata report `1.12.0`.
+- README resources corrected from 8 to 11 (added Currencies, Countries, Plan Limits resources) and prompts corrected from 7 to 10 (added year-end-close, cash-flow-forecast, invoice-aging-review).
+- `glama.json` description corrected from 152 to 151 tools.
+- `skill/SKILL.md` metadata version corrected from 1.9.0-beta.1 to 1.12.0.
+- Worker `schema.org` metadata: `softwareVersion` corrected from 1.9.0-beta.1 to 1.12.0; feature list updated to reflect 151 tools + full compliance surface.
+- `workers/remote-mcp/public/releases.json`: added stable 1.12.0 entry; `mcp_server.version` corrected to 1.12.0.
+- `server.json` description updated to lead with fiscal compliance depth (VeriFactu/TicketBAI/Facturae) rather than brittle tool count.
+- Marketplace submissions (`cursor/SUBMISSION.md`, `anthropic/SUBMISSION.md`, `marketplace/README.md`) updated from 1.9.0-beta.1 to 1.12.0 with correct tool/resource/prompt counts.
+- Added `marketplace/anthropic/connector/` — DXT/MCPB manifest bundle scaffold for Anthropic Claude Connectors Directory submission (DO NOT SUBMIT — awaiting Viktor OK).
 
 ## [1.12.0-beta.1] — 2026-05-16
 

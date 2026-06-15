@@ -1,7 +1,7 @@
 {
   "integrationCount": 0,
   "languageCount": 17,
-  "lastEmit": "2026-06-09T12:00:00.000Z",
+  "lastEmit": "2026-06-15T00:00:00.000Z",
   "manifestChecksum": "659abd5b9923ef22c1f1a5f0c8d5af0dd0c957c3bd7c3227e02f15fff20c64f3",
   "mcpToolCount": 151,
   "products": {
@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.12.0-beta.1"
+      "version": "1.12.0"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -28,9 +28,16 @@
       "version": "0.1.0"
     }
   },
-  "releasedAt": "2026-05-16",
-  "version": "1.12.0-beta.1",
+  "releasedAt": "2026-06-10",
+  "version": "1.12.0",
   "releases": [
+    {
+      "version": "1.12.0",
+      "releasedAt": "2026-06-10",
+      "mcpToolCount": 151,
+      "delta": "Stable release",
+      "notes": "Promotes 1.12.0-beta.1 to npm latest. 151 tools / 11 resources / 10 prompts. Full ES/EU fiscal compliance: VeriFactu, TicketBAI, Facturae, FACe, PEPPOL, IGIC, Corporate Tax, GL Audit, HR, Payroll, Onboarding, Period Close, Gestoria."
+    },
     {
       "version": "1.12.0-beta.1",
       "releasedAt": "2026-05-16",

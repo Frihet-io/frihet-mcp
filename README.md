@@ -52,7 +52,7 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-151 tools. 8 resources. 7 prompts. Structured output on every tool. Zero boilerplate.
+151 tools. 11 resources. 10 prompts. Structured output on every tool. Zero boilerplate.
 
 <!-- v1.12.0-beta.1 — D4-B megasprint: HR (9), payroll (2), onboarding (2), permissions (2), period close (3), webhook test (1) = +19 = 151 tools total -->
 
@@ -549,7 +549,7 @@ All 151 tools return **structured output** via `outputSchema` -- typed JSON, not
 
 ---
 
-## Resources (8)
+## Resources (11)
 
 Context the AI can read to make smarter decisions.
 
@@ -562,6 +562,8 @@ Context the AI can read to make smarter decisions.
 | Tax Calendar | `frihet://tax/calendar` | Quarterly filing deadlines: Modelo 303, 130, 390, 420, VeriFactu timeline |
 | Expense Categories | `frihet://config/expense-categories` | 8 categories with deductibility rules, IVA treatment, amortization |
 | Invoice Statuses | `frihet://config/invoice-statuses` | Status flow (draft > sent > paid/overdue > cancelled), transition rules, webhook events |
+| Currencies | `frihet://config/currencies` | 40 supported currencies with ISO codes, symbols, decimal places, locale formatting |
+| Countries | `frihet://config/countries` | 61 supported countries with fiscal zones, default tax rates, currencies, invoice prefixes |
 
 **Dynamic** (live data from your account):
 
@@ -570,10 +572,11 @@ Context the AI can read to make smarter decisions.
 | Business Profile | `frihet://business-profile` | Your business info, plan, defaults, recent activity, top clients |
 | Monthly Snapshot | `frihet://monthly-snapshot` | Current month P&L, revenue, expenses, tax liability |
 | Overdue Invoices | `frihet://overdue-invoices` | All invoices past due date (up to 100) |
+| Plan Limits | `frihet://status/plan-limits` | Live plan tier, usage counters, invoices/month, API rate limits |
 
 ---
 
-## Prompts (7)
+## Prompts (10)
 
 Pre-built workflows the AI can execute as guided multi-step operations.
 
@@ -585,6 +588,9 @@ Pre-built workflows the AI can execute as guided multi-step operations.
 | `overdue-followup` | Find overdue invoices, draft follow-up messages, suggest payment reminders | -- |
 | `new-client-invoice` | Create a client + first invoice in one workflow with tax rate lookup | `clientName`, `country?` |
 | `expense-report` | Generate expense report grouped by category with deductible totals | `month?` (YYYY-MM) |
+| `year-end-close` | Full annual closing: quarterly review, pending invoices, uncategorized expenses, year-end checklist | `year` (YYYY) |
+| `cash-flow-forecast` | Project cash flow for coming months: recurring income, expenses, overdue receivables, tax deadlines | `months?` (default: 3) |
+| `invoice-aging-review` | AR aging analysis: group unpaid invoices by bucket (0-30/31-60/61-90/90+ days), top debtors, collection actions | -- |
 | `expense-batch` | Process expenses in bulk: categorize, apply tax rates, flag missing receipts | `fiscalZone?` |
 
 ---
@@ -724,7 +730,7 @@ npm run build   # must pass before submitting
 
 | Package | What it is |
 |---------|-----------|
-| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (151 tools, 8 resources, 7 prompts) |
+| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (151 tools, 11 resources, 10 prompts) |
 | [`@frihet/sdk`](https://github.com/Frihet-io/frihet-sdk) | TypeScript SDK (`frihet.invoices.create()`) |
 | [`frihet`](https://www.npmjs.com/package/frihet) | CLI (`frihet invoices list --status overdue`) |
 | [`n8n-nodes-frihet`](https://www.npmjs.com/package/n8n-nodes-frihet) | n8n community node for workflow automation |

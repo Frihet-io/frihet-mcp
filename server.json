@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.frihet/erp",
   "title": "Frihet ERP",
-  "description": "AI-native ERP MCP server — 151 tools: invoicing, CRM, tax, banking, HR, payroll, period close.",
+  "description": "AI-native ERP MCP server — full ES/EU fiscal compliance (VeriFactu/TicketBAI/Facturae) + invoicing, CRM, tax, banking, HR, payroll, period close.",
   "repository": {
     "url": "https://github.com/Frihet-io/frihet-mcp",
     "source": "github"
