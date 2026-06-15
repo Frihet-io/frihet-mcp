@@ -799,6 +799,51 @@ export class FrihetClient {
     return this.request("POST", `/pos/sales/${encodeURIComponent(id)}/refund`, data ?? {});
   }
 
+  // ---------------------------------------------------------------- Kitchen (KDS)
+  // ----------------------------------------------------------------
+  // NOTE: ERP backend endpoints /v1/kitchen/* target the live kitchen display system.
+
+  async listKitchenTickets(
+    params?: { status?: string; stationId?: string; limit?: number; offset?: number; after?: string },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/kitchen/tickets", undefined, {
+      status: params?.status,
+      stationId: params?.stationId,
+      limit: params?.limit,
+      offset: params?.offset,
+      after: params?.after,
+    });
+  }
+
+  async getKitchenTicket(id: string): Promise<Record<string, unknown>> {
+    return this.request("GET", `/kitchen/tickets/${encodeURIComponent(id)}`);
+  }
+
+  async updateKitchenTicket(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request("PATCH", `/kitchen/tickets/${encodeURIComponent(id)}`, data);
+  }
+
+  async listKitchenStations(
+    params?: { limit?: number; offset?: number },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/kitchen/stations", undefined, {
+      limit: params?.limit,
+      offset: params?.offset,
+    });
+  }
+
+  async listMenuItems(
+    params?: { q?: string; isActive?: boolean; limit?: number; offset?: number; after?: string },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/kitchen/menuItems", undefined, {
+      q: params?.q,
+      isActive: params?.isActive !== undefined ? (params.isActive ? 1 : 0) : undefined,
+      limit: params?.limit,
+      offset: params?.offset,
+      after: params?.after,
+    });
+  }
+
   // ---------------------------------------------------------------- Intelligence
   // ----------------------------------------------------------------
 
