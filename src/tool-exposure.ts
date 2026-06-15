@@ -307,16 +307,35 @@ export function resolveToolMode(
  * registration completes.
  *
  * @param server  The McpServer (typed loosely to match the openai-profile shim).
+ * @param options.allowlist  When provided, ONLY tools whose name is in this set
+ *   are catalogued + collapsed; any other tool is passed through untouched.
+ *   This is the OpenAI-composition path: it pins the grouped catalog (and the
+ *   tools search_tools / describe_tool / list_tool_groups surface) to EXACTLY
+ *   the reviewed allow-list, so progressive disclosure can never reveal or
+ *   describe a tool outside the 53-tool ChatGPT-reviewed surface. Omit (default)
+ *   for the open mcp.frihet.io surface, which catalogs every registered tool.
+ *
+ *   COMPOSITION ORDERING (openai-mcp): apply this profile FIRST so its
+ *   originalRegisterTool is the REAL server.registerTool — the three meta-tools
+ *   are then registered straight onto the real server and BYPASS the OpenAI
+ *   allow-list gate entirely (so they always materialise without polluting the
+ *   OpenAI includeTools set / its advertised 53-tool count). Apply
+ *   applyOpenAIProfile() SECOND (outermost) so a business-tool registration is
+ *   first redacted + annotated + openWorldHint-justified by OpenAI, and only
+ *   THEN collapsed here — making the terse line the final description while the
+ *   OpenAI redaction wrapper around the handler survives intact.
  * @returns a handle exposing the live catalog (useful for tests/logging).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function applyToolExposureProfile(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server: any,
+  options?: { allowlist?: ReadonlySet<string> },
 ): ToolExposureHandle {
   const catalog = new Map<string, CatalogEntry>();
   const groups = new Map<ToolGroupId, string[]>();
   const handle: ToolExposureHandle = { catalog, groups };
+  const allowlist = options?.allowlist;
 
   const originalRegisterTool = server.registerTool.bind(server);
 
@@ -325,6 +344,16 @@ export function applyToolExposureProfile(
     // Never re-process our own meta-tools (they are registered via the original
     // bound fn below, so they won't hit this interceptor — but guard anyway).
     if (META_TOOL_NAMES.has(name)) {
+      return originalRegisterTool(name, config, handler);
+    }
+
+    // Allow-list mode (OpenAI composition): only catalogue + collapse reviewed
+    // tools. Anything outside the allow-list is passed through untouched so it
+    // never enters the catalogue that search_tools / describe_tool expose. (In
+    // the openai-mcp wiring the OpenAI profile already dropped non-reviewed
+    // tools before they reach here; this is the defence-in-depth that GUARANTEES
+    // the catalog is allow-list-only even if the upstream gate ever changes.)
+    if (allowlist && !allowlist.has(name)) {
       return originalRegisterTool(name, config, handler);
     }
 
@@ -354,9 +383,28 @@ export function applyToolExposureProfile(
     // Collapse the registered description to a single terse pointer line. The
     // tool stays fully invocable with its original handler, schema, and
     // annotations — only the description string the agent loads is trimmed.
-    config.description =
+    //
+    // openWorldHint rationale MUST survive the collapse (OpenAI app review needs
+    // a per-tool open-world justification on EVERY reviewed tool). When composed
+    // with the OpenAI profile, that profile runs first (outermost) and has
+    // already set the correct annotations.openWorldHint (e.g. true for
+    // send_invoice / send_quote / create_webhook / update_webhook). We re-derive
+    // the one-line rationale here from the (now-correct) annotation so the terse
+    // collapsed description carries it — instead of letting the OpenAI-injected
+    // rationale be lost when we overwrite config.description. Only appended in
+    // allow-list (composition) mode; the open mcp.frihet.io surface keeps its
+    // pure terse line (no OpenAI review constraint there).
+    let collapsed =
       `[${group}] ${entry.summary} ` +
       `— full schema via describe_tool('${name}').`;
+    if (allowlist) {
+      const ow = config?.annotations?.openWorldHint;
+      collapsed +=
+        ow === true
+          ? " [openWorldHint: true — contacts an entity outside Frihet (an email recipient or an external webhook URL).]"
+          : " [openWorldHint: false — operates only against the Frihet API (api.frihet.io); no third-party/external calls.]";
+    }
+    config.description = collapsed;
 
     return originalRegisterTool(name, config, handler);
   };

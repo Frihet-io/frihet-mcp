@@ -28,7 +28,7 @@ import { McpAgent } from "agents/mcp";
 import { registerAllTools } from "../../../src/tools/register-all.js";
 import { registerAllResources } from "../../../src/resources/register-all.js";
 import { registerAllPrompts } from "../../../src/prompts/register-all.js";
-import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_CSP } from "../../../src/openai-profile.js";
+import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_CSP, OPENAI_REVIEWED_TOOL_ALLOWLIST } from "../../../src/openai-profile.js";
 import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
 import { log } from "../../../src/logger.js";
 import { initLangfuse, setTraceContext } from "../../../src/observability.js";
@@ -98,26 +98,45 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     // Structurally identical at runtime — this is safe.
     const server = this.server as unknown as Parameters<typeof registerAllTools>[0];
 
-    // Apply OpenAI-safe profile if this worker is deployed in OpenAI mode
     const openaiMode = this.env.FRIHET_OPENAI_MODE === "true";
+    const toolMode = resolveToolMode({ FRIHET_TOOL_MODE: this.env.FRIHET_TOOL_MODE });
+
+    // PROFILE COMPOSITION ORDER (both interceptors wrap registerTool):
+    //   1. applyToolExposureProfile FIRST (innermost) — registers the 3 discovery
+    //      meta-tools against the REAL server.registerTool so they BYPASS the
+    //      OpenAI allow-list gate and always materialise. In allow-list mode the
+    //      catalog (and search_tools / describe_tool / list_tool_groups) is pinned
+    //      to EXACTLY the reviewed tools.
+    //   2. applyOpenAIProfile SECOND (outermost) — gates/redacts/annotates and
+    //      injects the openWorldHint rationale FIRST, then the grouped interceptor
+    //      collapses the description (re-deriving the rationale so it survives) and
+    //      preserves OpenAI's handler redaction wrapper.
+    // Swap only matters when BOTH are on (openai-mcp grouped). openai-only
+    // (no grouped) and grouped-only (mcp.frihet.io) are unchanged by the order.
+
+    // Apply grouped tool-exposure profile if this worker is deployed with
+    // FRIHET_TOOL_MODE=grouped (progressive disclosure). Reads the Worker env
+    // binding (not process.env). Default ("full") is byte-identical to before.
+    // In OpenAI mode, pass the reviewed allow-list so progressive disclosure can
+    // never reveal or describe a tool outside the 53-tool ChatGPT-reviewed set.  // mcp-refs:ok
+    if (toolMode === "grouped") {
+      applyToolExposureProfile(
+        server,
+        openaiMode ? { allowlist: OPENAI_REVIEWED_TOOL_ALLOWLIST } : undefined,
+      );
+      log({
+        level: "info",
+        message: `Grouped tool-exposure active — tools collapsed to terse summaries, ${GROUPED_META_TOOL_COUNT} discovery meta-tools added; full depth served on demand`,
+        operation: "session_init",
+      });
+    }
+
+    // Apply OpenAI-safe profile if this worker is deployed in OpenAI mode
     if (openaiMode) {
       applyOpenAIProfile(server);
       log({
         level: "info",
         message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions`,
-        operation: "session_init",
-      });
-    }
-
-    // Apply grouped tool-exposure profile if this worker is deployed with
-    // FRIHET_TOOL_MODE=grouped (progressive disclosure). Reads the Worker env
-    // binding (not process.env). Default ("full") is byte-identical to before.
-    const toolMode = resolveToolMode({ FRIHET_TOOL_MODE: this.env.FRIHET_TOOL_MODE });
-    if (toolMode === "grouped") {
-      applyToolExposureProfile(server);
-      log({
-        level: "info",
-        message: `Grouped tool-exposure active — tools collapsed to terse summaries, ${GROUPED_META_TOOL_COUNT} discovery meta-tools added; full depth served on demand`,
         operation: "session_init",
       });
     }

@@ -17,7 +17,7 @@ import { FrihetClient } from "./client.js";
 import { registerAllTools } from "./tools/register-all.js";
 import { registerAllResources } from "./resources/register-all.js";
 import { registerAllPrompts } from "./prompts/register-all.js";
-import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT } from "./openai-profile.js";
+import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT, OPENAI_REVIEWED_TOOL_ALLOWLIST } from "./openai-profile.js";
 import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "./tool-exposure.js";
 import { log } from "./logger.js";
 import { registerShutdownHook } from "./metrics.js";
@@ -87,30 +87,46 @@ function main(): void {
       "with full Spanish tax compliance (IVA, IGIC, IPSI).",
   });
 
-  // Apply OpenAI-safe profile if enabled (strips sensitive fields, fixes annotations)
   const openaiMode = process.env.FRIHET_OPENAI_MODE === "true";
+  const toolMode = resolveToolMode();
+
+  // PROFILE COMPOSITION ORDER (both interceptors wrap registerTool):
+  //   1. applyToolExposureProfile FIRST (innermost) — so the 3 discovery
+  //      meta-tools register against the REAL server.registerTool and bypass the
+  //      OpenAI allow-list gate. In allow-list mode it catalogs ONLY the reviewed
+  //      tools, keeping the progressive-disclosure surface == the reviewed 53.
+  //   2. applyOpenAIProfile SECOND (outermost) — a business-tool registration is
+  //      first gated/redacted/annotated/openWorldHint-justified by OpenAI, THEN
+  //      collapsed by the grouped interceptor, so the terse collapsed line is the
+  //      final description and OpenAI's handler redaction survives.
+  // Order only matters when BOTH are active (openai-mcp grouped); openai-only and
+  // grouped-only are unaffected by the swap.
+
+  // Apply grouped tool-exposure profile if enabled (progressive disclosure).
+  // FRIHET_TOOL_MODE=grouped collapses the full tool descriptions into terse
+  // one-liners + adds list_tool_groups / search_tools / describe_tool meta-tools,
+  // so agents load depth on demand instead of a flat 151-tool wall of context.
+  // Default (unset / "full") is byte-identical to current behavior. When OpenAI
+  // mode is also on, pass the reviewed allow-list so the catalog/meta-tools are
+  // pinned to exactly the 53 reviewed tools.
+  if (toolMode === "grouped") {
+    applyToolExposureProfile(
+      server,
+      openaiMode ? { allowlist: OPENAI_REVIEWED_TOOL_ALLOWLIST } : undefined,
+    );
+    log({
+      level: "info",
+      message: `Grouped tool-exposure active — tools collapsed to terse summaries, ${GROUPED_META_TOOL_COUNT} discovery meta-tools added (list_tool_groups, search_tools, describe_tool); full depth served on demand`,
+      operation: "startup",
+    });
+  }
+
+  // Apply OpenAI-safe profile if enabled (strips sensitive fields, fixes annotations)
   if (openaiMode) {
     applyOpenAIProfile(server);
     log({
       level: "info",
       message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions, ${OPENAI_EXCLUDED_RESOURCE_COUNT} resources excluded, gov IDs + credentials redacted`,
-      operation: "startup",
-    });
-  }
-
-  // Apply grouped tool-exposure profile if enabled (progressive disclosure).
-  // FRIHET_TOOL_MODE=grouped collapses the 151 full tool descriptions into terse
-  // one-liners + adds list_tool_groups / search_tools / describe_tool meta-tools,
-  // so agents load depth on demand instead of a flat 151-tool wall of context.
-  // Default (unset / "full") is byte-identical to current behavior. Independent
-  // of OpenAI mode; if both are set, OpenAI's allowlist runs first, then this
-  // collapses whatever survived.
-  const toolMode = resolveToolMode();
-  if (toolMode === "grouped") {
-    applyToolExposureProfile(server);
-    log({
-      level: "info",
-      message: `Grouped tool-exposure active — 151 tools collapsed to terse summaries, ${GROUPED_META_TOOL_COUNT} discovery meta-tools added (list_tool_groups, search_tools, describe_tool); full depth served on demand`,
       operation: "startup",
     });
   }
