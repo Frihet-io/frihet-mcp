@@ -100,9 +100,195 @@
     {
       "name": "Channels",
       "description": "Frihet Stay: Manage channel connections (iCal feeds) for calendar sync with OTAs."
+    },
+    {
+      "name": "E-Invoicing",
+      "description": "EN16931-compliant e-invoicing export and B2G submission endpoints.\nSupports 8 formats (Facturae, XRechnung-CII/UBL, Factur-X, FatturaPA, PEPPOL-BIS-3, UBL, CII).\nFACe (Spain B2G portal) and TicketBAI (Bizkaia BATUZ) submission pipelines.\nTrust Area: COMPLIANCE. Requires owner role or API key with `einvoice:*` scope.\n"
     }
   ],
   "paths": {
+    "/v1/gestoria/aging": {
+      "post": {
+        "operationId": "gestoriaAgingConsolidated",
+        "summary": "Consolidated AR aging across client workspaces",
+        "description": "For an accountant/gestor, returns accounts-receivable aging consolidated across the given client workspaces. Each workspaceId is authorised per-workspace: the caller must be an active accountant or owner member of that workspace, otherwise it is silently rejected and listed in rejectedWorkspaceIds (no data returned for it).\n",
+        "tags": [
+          "Gestoria"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "workspaceIds"
+                ],
+                "properties": {
+                  "workspaceIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "description": "Client workspace UIDs the caller manages."
+                  },
+                  "asOf": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Reference date (YYYY-MM-DD). Defaults to today."
+                  },
+                  "bustCache": {
+                    "type": "boolean",
+                    "description": "Honoured only by the callable CF; REST always computes fresh."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Consolidated aging report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "workspaces": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "workspaceId": {
+                                "type": "string"
+                              },
+                              "ownerName": {
+                                "type": "string"
+                              },
+                              "buckets": {
+                                "type": "object",
+                                "properties": {
+                                  "current": {
+                                    "type": "number"
+                                  },
+                                  "days1_30": {
+                                    "type": "number"
+                                  },
+                                  "days31_60": {
+                                    "type": "number"
+                                  },
+                                  "days61_90": {
+                                    "type": "number"
+                                  },
+                                  "days90plus": {
+                                    "type": "number"
+                                  }
+                                }
+                              },
+                              "grandTotal": {
+                                "type": "number"
+                              },
+                              "totalOverdue": {
+                                "type": "number"
+                              },
+                              "asOf": {
+                                "type": "string"
+                              },
+                              "currency": {
+                                "type": "string"
+                              },
+                              "topDebtors": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "clientId": {
+                                      "type": "string"
+                                    },
+                                    "clientName": {
+                                      "type": "string"
+                                    },
+                                    "totalOutstanding": {
+                                      "type": "number"
+                                    },
+                                    "daysOldestInvoice": {
+                                      "type": "number"
+                                    },
+                                    "invoiceCount": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "rejectedWorkspaceIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Workspaces the caller is not an authorised member of."
+                        },
+                        "consolidatedBuckets": {
+                          "type": "object",
+                          "properties": {
+                            "current": {
+                              "type": "number"
+                            },
+                            "days1_30": {
+                              "type": "number"
+                            },
+                            "days31_60": {
+                              "type": "number"
+                            },
+                            "days61_90": {
+                              "type": "number"
+                            },
+                            "days90plus": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "consolidatedTotal": {
+                          "type": "number"
+                        },
+                        "consolidatedOverdue": {
+                          "type": "number"
+                        },
+                        "asOf": {
+                          "type": "string"
+                        },
+                        "generatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
     "/v1/invoices": {
       "get": {
         "operationId": "listInvoices",
@@ -994,7 +1180,7 @@
       "post": {
         "operationId": "createClient",
         "summary": "Create a client",
-        "description": "Add a new client to your database.",
+        "description": "Add a new client to your database.\n\nIf `taxId` is provided and another client in your workspace already has the\nsame taxId (normalized: case-insensitive, ignoring separators like dots and\nhyphens), the request is rejected with `409 CLIENT_TAXID_EXISTS` and the\nexisting client's id is returned in `existingClientId`.\n",
         "tags": [
           "Clients"
         ],
@@ -1024,6 +1210,34 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "A client with this taxId already exists in your workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "CLIENT_TAXID_EXISTS"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Client with this taxId already exists"
+                    },
+                    "existingClientId": {
+                      "type": "string",
+                      "description": "Document id of the existing client with the same taxId."
+                    },
+                    "taxId": {
+                      "type": "string",
+                      "description": "GDPR-masked form of the conflicting taxId (e.g. \"43******K\")."
+                    }
+                  }
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1078,7 +1292,7 @@
       "put": {
         "operationId": "updateClient",
         "summary": "Full update a client",
-        "description": "Replace all fields on an existing client.",
+        "description": "Replace all fields on an existing client. Returns `409 CLIENT_TAXID_EXISTS`\nif the new `taxId` is already in use by another client in your workspace.\n",
         "tags": [
           "Clients"
         ],
@@ -1116,6 +1330,29 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Another client with this taxId already exists in your workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "CLIENT_TAXID_EXISTS"
+                    },
+                    "existingClientId": {
+                      "type": "string"
+                    },
+                    "taxId": {
+                      "type": "string",
+                      "description": "GDPR-masked form of the conflicting taxId."
+                    }
+                  }
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1128,7 +1365,7 @@
       "patch": {
         "operationId": "patchClient",
         "summary": "Partial update a client",
-        "description": "Update only the provided fields on an existing client.",
+        "description": "Update only the provided fields on an existing client. Returns\n`409 CLIENT_TAXID_EXISTS` if the new `taxId` is already in use by\nanother client in your workspace.\n",
         "tags": [
           "Clients"
         ],
@@ -1166,6 +1403,28 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Another client with this taxId already exists in your workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "CLIENT_TAXID_EXISTS"
+                    },
+                    "existingClientId": {
+                      "type": "string"
+                    },
+                    "taxId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -4926,6 +5185,3880 @@
           }
         }
       }
+    },
+    "/v1/invoices/{invoiceId}/einvoice/export": {
+      "post": {
+        "operationId": "exportEInvoice",
+        "summary": "Export e-invoice XML",
+        "description": "Generate and return an e-invoice XML document for the invoice in one of 8 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, UBL 2.1, CII D16B.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
+        "tags": [
+          "E-Invoicing"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoiceId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "format"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "Facturae",
+                      "XRechnung-CII",
+                      "XRechnung-UBL",
+                      "Factur-X",
+                      "FatturaPA",
+                      "PEPPOL-BIS-3",
+                      "UBL",
+                      "CII"
+                    ],
+                    "description": "Target e-invoice format.\n- Facturae: Spanish B2G (Agencia Tributaria, FACe)\n- XRechnung-CII/UBL: German B2G (PEPPOL/ZRE/OZG-RE)\n- Factur-X: French standard (PDF/A-3 XML component)\n- FatturaPA: Italian SDI clearance\n- PEPPOL-BIS-3: Pan-European PEPPOL network\n- UBL/CII: Generic cross-border EU\n",
+                    "example": "Facturae"
+                  },
+                  "signed": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Sign the XML with XAdES-EPES. Only supported for `format: Facturae`.\nRequires a valid PKCS#12 certificate uploaded in Settings > Compliance.\n"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "E-invoice XML generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "xml": {
+                          "type": "string",
+                          "description": "E-invoice XML content (UTF-8)"
+                        },
+                        "contentType": {
+                          "type": "string",
+                          "example": "application/xml"
+                        },
+                        "filename": {
+                          "type": "string",
+                          "example": "F2026-001_Facturae.xml"
+                        },
+                        "signed": {
+                          "type": "boolean",
+                          "description": "Whether the XML was signed with XAdES-EPES"
+                        },
+                        "format": {
+                          "type": "string",
+                          "example": "Facturae"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid format, signing not supported for this format, or body validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "description": "XML generation failed or certificate not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/invoices/{invoiceId}/face/submit": {
+      "post": {
+        "operationId": "submitFaceInvoice",
+        "summary": "Submit invoice to FACe B2G portal",
+        "description": "Submit a signed Facturae XML to Spain's FACe B2G portal (face.gob.es).\n\nPipeline: load invoice → generate Facturae XML → sign with XAdES-EPES → submit to FACe.\nResult is persisted to `invoices/{id}/face/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted (registered), returns the prior result\nwith `idempotent: true` — does not resubmit.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\nRequires a PKCS#12 certificate for sandbox/production modes.\n",
+        "tags": [
+          "E-Invoicing"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoiceId"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "mock",
+                      "sandbox",
+                      "production"
+                    ],
+                    "description": "FACe submission mode. Defaults to `ES_FACE_MODE` env var (default `mock`)."
+                  },
+                  "correo": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Recipient notification email (required by FACe protocol). Defaults to fiscal billing email."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Invoice submitted to FACe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "example": "submitted"
+                        },
+                        "numeroRegistro": {
+                          "type": "string",
+                          "description": "FACe registration number (never fabricated)",
+                          "example": "REG/2026/000042"
+                        },
+                        "codigo": {
+                          "type": "string",
+                          "description": "FACe result code",
+                          "example": "0"
+                        },
+                        "descripcion": {
+                          "type": "string",
+                          "description": "FACe result description",
+                          "example": "Registrada"
+                        },
+                        "idempotent": {
+                          "type": "boolean",
+                          "description": "Present and true when returning a prior accepted submission"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "description": "FACe rejection, certificate missing, or XML generation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "codigo": {
+                            "type": "string"
+                          },
+                          "descripcion": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/invoices/{invoiceId}/face/status": {
+      "get": {
+        "operationId": "getFaceInvoiceStatus",
+        "summary": "Get FACe submission status",
+        "description": "Query the current tramitación status of a previously submitted FACe invoice.\nReads the saved `numeroRegistro` from Firestore and calls FACe `consultarFactura`.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
+        "tags": [
+          "E-Invoicing"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoiceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "FACe tramitación status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "numeroRegistro": {
+                          "type": "string",
+                          "description": "FACe registration number (read from Firestore, never fabricated)"
+                        },
+                        "estadoTramitacion": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "FACe tramitación code (e.g. '1200' = Registrada, '1300' = En tramitación)"
+                        },
+                        "codigo": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "descripcion": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "motivo": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No FACe submission found for this invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Certificate required or FACe transport error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/invoices/{invoiceId}/ticketbai/submit": {
+      "post": {
+        "operationId": "submitTicketBaiInvoice",
+        "summary": "Submit invoice to TicketBAI (Bizkaia BATUZ)",
+        "description": "Submit a signed TicketBAI XML to the Bizkaia BATUZ tax authority.\n\nPipeline: fetch BYOC cert → compute hash chain → build TicketBAI XML →\nsign with XAdES-BES → submit to BATUZ → generate QR code.\nResult persisted to `invoices/{id}/tbai/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted, returns the prior result\nwith `idempotent: true` — does not resubmit.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\nRequires a TicketBAI BYOC certificate uploaded in Settings > Integrations > TicketBAI.\n",
+        "tags": [
+          "E-Invoicing"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoiceId"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "sandbox": {
+                    "type": "boolean",
+                    "description": "Override to sandbox mode (default from user integration config)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "TicketBAI submission accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "accepted": {
+                          "type": "boolean",
+                          "example": true
+                        },
+                        "csv": {
+                          "type": "string",
+                          "description": "CSV de verificación (never fabricated)",
+                          "example": "TBAI-48-120226-000001-2H"
+                        },
+                        "tbaiIdentifier": {
+                          "type": "string",
+                          "description": "TicketBAI identifier string",
+                          "example": "TBAI-B-000001"
+                        },
+                        "qrUrl": {
+                          "type": "string",
+                          "description": "QR code URL for invoice printing"
+                        },
+                        "idempotent": {
+                          "type": "boolean",
+                          "description": "Present and true when returning a prior accepted submission"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "description": "TicketBAI rejection, certificate missing, or chain broken",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/invoices/{invoiceId}/ticketbai/status": {
+      "get": {
+        "operationId": "getTicketBaiInvoiceStatus",
+        "summary": "Get TicketBAI submission status",
+        "description": "Read the TicketBAI submission record for a previously submitted invoice.\nReturns accepted/rejected status, CSV, identifier, and QR URL from Firestore.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
+        "tags": [
+          "E-Invoicing"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoiceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TicketBAI submission status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "accepted": {
+                          "type": "boolean"
+                        },
+                        "csv": {
+                          "type": "string",
+                          "description": "CSV de verificación (read from Firestore, never fabricated)"
+                        },
+                        "tbaiIdentifier": {
+                          "type": "string"
+                        },
+                        "estado": {
+                          "type": "string",
+                          "description": "accepted | rejected"
+                        },
+                        "qrUrl": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "submittedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "errors": {
+                          "type": "array",
+                          "nullable": true,
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No TicketBAI submission found for this invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/kitchen/tickets": {
+      "get": {
+        "operationId": "listKitchenTickets",
+        "summary": "List tickets",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of tickets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createKitchenTickets",
+        "summary": "Create tickets",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tickets created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/kitchen/tickets/{id}": {
+      "get": {
+        "operationId": "getKitchenTickets",
+        "summary": "Get tickets by ID",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tickets details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateKitchenTickets",
+        "summary": "Update tickets",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tickets updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteKitchenTickets",
+        "summary": "Delete tickets",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tickets deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/kitchen/ticketItems": {
+      "get": {
+        "operationId": "listKitchenTicketItems",
+        "summary": "List ticketItems",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of ticketItems",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createKitchenTicketItems",
+        "summary": "Create ticketItems",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "TicketItems created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/kitchen/ticketItems/{id}": {
+      "get": {
+        "operationId": "getKitchenTicketItems",
+        "summary": "Get ticketItems by ID",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TicketItems details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateKitchenTicketItems",
+        "summary": "Update ticketItems",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "TicketItems updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteKitchenTicketItems",
+        "summary": "Delete ticketItems",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "TicketItems deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/kitchen/menuItems": {
+      "get": {
+        "operationId": "listKitchenMenuItems",
+        "summary": "List menuItems",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of menuItems",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createKitchenMenuItems",
+        "summary": "Create menuItems",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "MenuItems created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/kitchen/menuItems/{id}": {
+      "get": {
+        "operationId": "getKitchenMenuItems",
+        "summary": "Get menuItems by ID",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MenuItems details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateKitchenMenuItems",
+        "summary": "Update menuItems",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "MenuItems updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteKitchenMenuItems",
+        "summary": "Delete menuItems",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "MenuItems deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/kitchen/stations": {
+      "get": {
+        "operationId": "listKitchenStations",
+        "summary": "List stations",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of stations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createKitchenStations",
+        "summary": "Create stations",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stations created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/kitchen/stations/{id}": {
+      "get": {
+        "operationId": "getKitchenStations",
+        "summary": "Get stations by ID",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stations details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateKitchenStations",
+        "summary": "Update stations",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stations updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteKitchenStations",
+        "summary": "Delete stations",
+        "tags": [
+          "Kitchen"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Stations deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/pos/sales": {
+      "get": {
+        "operationId": "listPosSales",
+        "summary": "List sales",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of sales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPosSales",
+        "summary": "Create sales",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sales created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/pos/sales/{id}": {
+      "get": {
+        "operationId": "getPosSales",
+        "summary": "Get sales by ID",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sales details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updatePosSales",
+        "summary": "Update sales",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sales updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePosSales",
+        "summary": "Delete sales",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Sales deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/pos/products": {
+      "get": {
+        "operationId": "listPosProducts",
+        "summary": "List products",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of products",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPosProducts",
+        "summary": "Create products",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Products created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/pos/products/{id}": {
+      "get": {
+        "operationId": "getPosProducts",
+        "summary": "Get products by ID",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Products details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updatePosProducts",
+        "summary": "Update products",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Products updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePosProducts",
+        "summary": "Delete products",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Products deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/pos/terminals": {
+      "get": {
+        "operationId": "listPosTerminals",
+        "summary": "List terminals",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of terminals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPosTerminals",
+        "summary": "Create terminals",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Terminals created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/pos/terminals/{id}": {
+      "get": {
+        "operationId": "getPosTerminals",
+        "summary": "Get terminals by ID",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Terminals details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updatePosTerminals",
+        "summary": "Update terminals",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Terminals updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePosTerminals",
+        "summary": "Delete terminals",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Terminals deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/pos/cash_sessions": {
+      "get": {
+        "operationId": "listPosCashSessions",
+        "summary": "List cash sessions",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of cash sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPosCashSessions",
+        "summary": "Create cash sessions",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cash sessions created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/pos/cash_sessions/{id}": {
+      "get": {
+        "operationId": "getPosCashSessions",
+        "summary": "Get cash sessions by ID",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cash sessions details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updatePosCashSessions",
+        "summary": "Update cash sessions",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cash sessions updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePosCashSessions",
+        "summary": "Delete cash sessions",
+        "tags": [
+          "Pos"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Cash sessions deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/properties": {
+      "get": {
+        "operationId": "listStayProperties",
+        "summary": "List properties",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of properties",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createStayProperties",
+        "summary": "Create properties",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Properties created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/properties/{id}": {
+      "get": {
+        "operationId": "getStayProperties",
+        "summary": "Get properties by ID",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Properties details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateStayProperties",
+        "summary": "Update properties",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Properties updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteStayProperties",
+        "summary": "Delete properties",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Properties deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/reservations": {
+      "get": {
+        "operationId": "listStayReservations",
+        "summary": "List reservations",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of reservations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createStayReservations",
+        "summary": "Create reservations",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reservations created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/reservations/{id}": {
+      "get": {
+        "operationId": "getStayReservations",
+        "summary": "Get reservations by ID",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reservations details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateStayReservations",
+        "summary": "Update reservations",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reservations updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteStayReservations",
+        "summary": "Delete reservations",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Reservations deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/expenses": {
+      "get": {
+        "operationId": "listStayExpenses",
+        "summary": "List expenses",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of expenses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createStayExpenses",
+        "summary": "Create expenses",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Expenses created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/expenses/{id}": {
+      "get": {
+        "operationId": "getStayExpenses",
+        "summary": "Get expenses by ID",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Expenses details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateStayExpenses",
+        "summary": "Update expenses",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Expenses updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteStayExpenses",
+        "summary": "Delete expenses",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Expenses deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/cleaning_tasks": {
+      "get": {
+        "operationId": "listStayCleaningTasks",
+        "summary": "List cleaning tasks",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of cleaning tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createStayCleaningTasks",
+        "summary": "Create cleaning tasks",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cleaning tasks created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/cleaning_tasks/{id}": {
+      "get": {
+        "operationId": "getStayCleaningTasks",
+        "summary": "Get cleaning tasks by ID",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cleaning tasks details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateStayCleaningTasks",
+        "summary": "Update cleaning tasks",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cleaning tasks updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteStayCleaningTasks",
+        "summary": "Delete cleaning tasks",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Cleaning tasks deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/settlements": {
+      "get": {
+        "operationId": "listStaySettlements",
+        "summary": "List settlements",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of settlements",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createStaySettlements",
+        "summary": "Create settlements",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Settlements created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/settlements/{id}": {
+      "get": {
+        "operationId": "getStaySettlements",
+        "summary": "Get settlements by ID",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Settlements details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateStaySettlements",
+        "summary": "Update settlements",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Settlements updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteStaySettlements",
+        "summary": "Delete settlements",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Settlements deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/compliance": {
+      "get": {
+        "operationId": "listStayCompliance",
+        "summary": "List compliance",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of compliance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createStayCompliance",
+        "summary": "Create compliance",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Compliance created"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/stay/compliance/{id}": {
+      "get": {
+        "operationId": "getStayCompliance",
+        "summary": "Get compliance by ID",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compliance details"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateStayCompliance",
+        "summary": "Update compliance",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Compliance updated"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteStayCompliance",
+        "summary": "Delete compliance",
+        "tags": [
+          "Stay"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Compliance deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/team/members": {
+      "get": {
+        "operationId": "listTeamMembers",
+        "summary": "List team members",
+        "description": "Returns active team members and pending invitations for the workspace.",
+        "tags": [
+          "Team"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "owner",
+                "admin",
+                "viewer",
+                "editor",
+                "accountant"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "pending"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of team members and pending invitations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TeamMember"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/team/members/invite": {
+      "post": {
+        "operationId": "inviteTeamMember",
+        "summary": "Invite a team member",
+        "description": "Send an email invitation to join the workspace. Subject to plan seat limits (free/starter: 1, pro: 3, business: 10, enterprise: 999). Invitation expires in 7 days.",
+        "tags": [
+          "Team"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamInviteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invitation sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Conflict — user already a member, invite already pending, or seat limit reached"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/team/members/{memberId}": {
+      "delete": {
+        "operationId": "removeTeamMember",
+        "summary": "Remove team member or revoke pending invitation",
+        "description": "Removes an active team member or revokes a pending invitation by ID. The workspace owner cannot be removed. For pending invitations, pass the invitation document ID returned by POST /v1/team/members/invite.",
+        "tags": [
+          "Team"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "memberId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Active member ID or pending invitation ID"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Member removed or invitation revoked"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Cannot remove workspace owner"
+          },
+          "404": {
+            "description": "Member or invitation not found"
+          },
+          "409": {
+            "description": "Invitation is no longer pending"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/team/members/{memberId}/role": {
+      "patch": {
+        "operationId": "updateTeamMemberRole",
+        "summary": "Change a team member's role",
+        "description": "Update the role of an active team member. Cannot change the workspace owner's role.",
+        "tags": [
+          "Team"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "memberId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamRoleUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Role updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Cannot change workspace owner role"
+          },
+          "404": {
+            "description": "Team member not found"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/banking/accounts": {
+      "get": {
+        "operationId": "listBankAccounts",
+        "summary": "List bank accounts",
+        "description": "Returns the connected bank accounts (bank connections) for the workspace.",
+        "tags": [
+          "Banking"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "isActive",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of bank accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BankAccount"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/banking/accounts/{accountId}": {
+      "get": {
+        "operationId": "getBankAccount",
+        "summary": "Get bank account",
+        "description": "Returns a single bank account (connection) by ID.",
+        "tags": [
+          "Banking"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bank account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BankAccount"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/banking/transactions": {
+      "get": {
+        "operationId": "listBankTransactions",
+        "summary": "List bank transactions",
+        "description": "Returns bank transactions for the workspace. Filter by account, date range, status, or category.",
+        "tags": [
+          "Banking"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "description": "Filter by bank account (connection) ID.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Start date (ISO YYYY-MM-DD).",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "End date (ISO YYYY-MM-DD).",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "raw",
+                "recognized",
+                "matched",
+                "categorized",
+                "excluded"
+              ]
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reconciled",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of bank transactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BankTransaction"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createBankTransaction",
+        "summary": "Create a bank transaction (manual entry)",
+        "description": "Manually create a bank transaction. The transaction is attached to the\naccount identified by accountId (which must belong to your workspace).\nReconciliation state is force-initialised (reconciled=false, status=raw);\na caller cannot create an already-reconciled transaction.\n",
+        "tags": [
+          "Banking"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankTransactionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Transaction created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BankTransaction"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/banking/transactions/{transactionId}/categorize": {
+      "patch": {
+        "operationId": "categorizeBankTransaction",
+        "summary": "Categorize a bank transaction",
+        "description": "Set the category (and optional notes) on a bank transaction.",
+        "tags": [
+          "Banking"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankCategorize"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction categorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BankTransaction"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/banking/transactions/{transactionId}/match": {
+      "post": {
+        "operationId": "matchBankTransaction",
+        "summary": "Match a bank transaction to an invoice or expense",
+        "description": "Link a bank transaction to an invoice or expense in your workspace\n(status becomes 'matched'). This records the match WITHOUT posting ledger\n(GL) entries — full GL reconciliation is performed in the supervised app\nflow. Fails with 409 if the transaction is already matched/reconciled.\n",
+        "tags": [
+          "Banking"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankMatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction matched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BankTransaction"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Transaction already matched/reconciled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5217,6 +9350,259 @@
       }
     },
     "schemas": {
+      "BankAccount": {
+        "type": "object",
+        "description": "A connected bank account (backed by the bankConnections collection).",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "nullable": true,
+            "description": "saltedge | tink | truelayer | yodlee | revolut | manual"
+          },
+          "bankName": {
+            "type": "string",
+            "nullable": true
+          },
+          "accountName": {
+            "type": "string",
+            "nullable": true
+          },
+          "accountNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "Last 4 digits for display."
+          },
+          "iban": {
+            "type": "string",
+            "nullable": true,
+            "description": "Masked IBAN."
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "lastSyncAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "BankCategorize": {
+        "type": "object",
+        "required": [
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "BankMatch": {
+        "type": "object",
+        "required": [
+          "documentId",
+          "documentType"
+        ],
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "description": "ID of the invoice or expense to match. Must belong to your workspace."
+          },
+          "documentType": {
+            "type": "string",
+            "enum": [
+              "invoice",
+              "expense"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "BankTransaction": {
+        "type": "object",
+        "description": "A bank transaction. Positive amount = income, negative = expense.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "ID of the owning bank account (accountId)."
+          },
+          "transactionId": {
+            "type": "string",
+            "description": "Provider transaction ID (manual-* for API-created entries)."
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Positive for income, negative for expenses."
+          },
+          "currency": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "counterparty": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "accountNumber": {
+                "type": "string"
+              },
+              "iban": {
+                "type": "string"
+              }
+            }
+          },
+          "reconciled": {
+            "type": "boolean"
+          },
+          "reconciledWith": {
+            "type": "string",
+            "enum": [
+              "invoice",
+              "expense"
+            ],
+            "nullable": true
+          },
+          "reconciledId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reconciledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "raw",
+              "recognized",
+              "matched",
+              "categorized",
+              "excluded"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "BankTransactionCreate": {
+        "type": "object",
+        "required": [
+          "accountId",
+          "amount",
+          "date",
+          "description"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "ID of the bank account (connection) to attach the transaction to. Must belong to your workspace."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Non-zero. Positive for income, negative for expenses."
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "ISO date (YYYY-MM-DD)."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "ISO 4217 code. Defaults to the account currency or EUR."
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "counterparty": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "accountNumber": {
+                "type": "string"
+              },
+              "iban": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
       "ResendInboundPayload": {
         "type": "object",
         "description": "Payload sent by Resend for inbound email routing.",
@@ -5421,10 +9807,48 @@
           "items"
         ],
         "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "Client document ID. When provided, the API auto-snapshots\n`clientTaxId`, `clientAddress`, `clientLocation`, `clientName`,\nand `clientEmail` from the referenced client at create time\n(immutable post-create — VeriFactu RD 1007/2023). Caller-provided\nvalues for those fields override the snapshot.\n",
+            "example": "client_abc123"
+          },
           "clientName": {
             "type": "string",
-            "description": "Client name",
+            "description": "Client name (snapshot field — frozen at create)",
             "example": "Acme Corp"
+          },
+          "clientTaxId": {
+            "type": "string",
+            "description": "Client tax ID / NIF / VAT (snapshot field — frozen at create).\nAuto-populated from clientId reference if not provided.\n",
+            "example": "B12345678"
+          },
+          "clientAddress": {
+            "type": "string",
+            "description": "Client billing address — single-line or structured. Snapshot\nfield, frozen at create.\n",
+            "example": "Calle Mayor 12, 38001 Santa Cruz de Tenerife"
+          },
+          "clientLocation": {
+            "type": "string",
+            "enum": [
+              "peninsula",
+              "canarias",
+              "ceuta_melilla",
+              "eu",
+              "world"
+            ],
+            "description": "Fiscal zone — drives tax label rendering on PDF + tax math\n(IVA/IGIC/IPSI/Reverse charge/Exempt). Snapshot field, frozen\nat create. Auto-populated from clientId reference if absent.\n",
+            "example": "canarias"
+          },
+          "clientEmail": {
+            "type": "string",
+            "format": "email",
+            "description": "Client email (snapshot field — frozen at create)."
+          },
+          "documentNumber": {
+            "type": "string",
+            "maxLength": 50,
+            "description": "Optional caller-supplied invoice number (e.g. migration or\nimport flows carrying an externally-issued number). When\nprovided it is honored verbatim and the workspace auto-numbering\ncounter is NOT advanced. When omitted, a gapless sequential\nnumber is generated from your numbering settings (VeriFactu\nRD 1007/2023).\n",
+            "example": "FAC-2026-0042"
           },
           "items": {
             "type": "array",
@@ -5457,8 +9881,22 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100,
-            "description": "Tax rate percentage",
+            "description": "Tax rate percentage. Combined with `clientLocation` to produce\nthe label (IGIC for canarias, IPSI for ceuta_melilla, etc.).\n",
             "example": 21
+          },
+          "irpfRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "IRPF withholding rate percentage (Spain).",
+            "example": 15
+          },
+          "discountRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Invoice-level discount percentage.",
+            "example": 10
           },
           "recurring": {
             "$ref": "#/components/schemas/InvoiceRecurringConfig"
@@ -6225,6 +10663,11 @@
             "type": "string",
             "description": "Cursor for fetching the next page of results. Only present when there\nare more results available. Pass this value as the `cursor` query parameter\nin the next request. Base64url-encoded.\n",
             "example": "eyJpc3N1ZURhdGUiOiIyMDI2LTAzLTIwIiwiX19pZCI6ImFiYzEyMyJ9"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Only present (and `true`) when the underlying search query\nsaturated the internal 500-document cap. `total` therefore reports\nthe size of the first 500 matches, not the full match count.\nNarrow the search query (taxId / fiscal id, exact email) to ensure\nyou see every result.\n",
+            "example": true
           }
         }
       },
@@ -6440,7 +10883,7 @@
           },
           "secret": {
             "type": "string",
-            "description": "HMAC secret for verifying webhook signatures",
+            "description": "HMAC secret for verifying webhook signatures. Write-only: echoed once in the create response, never returned by read endpoints (see hasSecret).",
             "maxLength": 500
           },
           "events": {
@@ -6486,6 +10929,7 @@
           },
           "secret": {
             "type": "string",
+            "description": "HMAC secret for verifying webhook signatures. Write-only: never returned by read endpoints (see hasSecret).",
             "maxLength": 500
           },
           "events": {
@@ -6528,6 +10972,10 @@
               },
               "userId": {
                 "type": "string"
+              },
+              "hasSecret": {
+                "type": "boolean",
+                "description": "True if an HMAC secret is configured. The secret value itself is never returned by read endpoints."
               }
             }
           },
@@ -7457,6 +11905,104 @@
             "format": "date-time"
           }
         }
+      },
+      "TeamMember": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Member or invitation document ID"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "viewer",
+              "editor",
+              "accountant"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "pending"
+            ]
+          },
+          "joinedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Set for active members"
+          },
+          "invitedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Set for pending invitations"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Invite expiry (pending only)"
+          }
+        }
+      },
+      "TeamInviteRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "role"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 255
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "editor",
+              "accountant",
+              "viewer"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "TeamRoleUpdateRequest": {
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "editor",
+              "accountant",
+              "viewer"
+            ]
+          }
+        },
+        "additionalProperties": false
       }
     },
     "responses": {
