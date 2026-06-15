@@ -47,13 +47,13 @@ The steps below require Viktor's account/login — Claude Code cannot complete t
 ## 4. MCP Registry (Anthropic) — already live, version sync needed
 
 The server is already live at `registry.modelcontextprotocol.io/?q=io.frihet`.
-`server.json` has been updated to v1.12.0 with 151 tools.
+`server.json` has been updated to v1.13.0 with 151 tools.
 
 **Manual step to sync the registry entry:**
 1. If the registry auto-syncs from GitHub, merge this PR — done.
 2. If it requires a PR to https://github.com/modelcontextprotocol/registry:
    - Check if there's an existing entry at `servers/io.frihet-erp/`
-   - Update the entry to reference v1.12.0-beta.1 and point to updated `server.json`
+   - Update the entry to reference v1.13.0-beta.1 and point to updated `server.json`
    - Open a PR to that repo
 
 ---
@@ -63,7 +63,7 @@ The server is already live at `registry.modelcontextprotocol.io/?q=io.frihet`.
 | File | Change |
 |------|--------|
 | `glama.json` | Tool count corrected 152→151; description accurate |
-| `server.json` | Description updated to lead with fiscal compliance depth (v1.12.0) |
+| `server.json` | Description updated to lead with fiscal compliance depth (v1.13.0) |
 | `package.json` | Description 151 tools; discoverability keywords maintained |
 | `README.md` | Resources corrected 8→11, Prompts corrected 7→10 |
-| `skill/SKILL.md` | Version corrected 1.9.0-beta.1→1.12.0 |
+| `skill/SKILL.md` | Version corrected 1.9.0-beta.1→1.13.0 |

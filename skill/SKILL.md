@@ -13,7 +13,7 @@ description: >-
 license: MIT
 metadata:
   author: BRTHLS
-  version: 1.12.0
+  version: 1.13.0
   mcp-server: frihet-mcp
   category: business-management
   tags: [erp, invoicing, expenses, tax-compliance, ai-business, spain, mcp]

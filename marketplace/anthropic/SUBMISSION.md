@@ -28,7 +28,7 @@
 | Server identifier (MCP name) | — | `io.frihet/erp` |
 | Server URL (remote endpoint) | — | `https://mcp.frihet.io/mcp` |
 | npm package | — | `@frihet/mcp-server` |
-| Version | — | `1.12.0` |
+| Version | — | `1.13.0` |
 | License | — | `MIT` |
 | GitHub repository | — | `https://github.com/Frihet-io/frihet-mcp` |
 | Homepage / docs | — | `https://docs.frihet.io/desarrolladores/mcp-server` |

@@ -69,7 +69,7 @@ No binary files are stored in this repo — assets live in `Frihet-Saas-Website/
 |----------|--------|---------------|
 | Anthropic MCP Registry (`registry.modelcontextprotocol.io`) | LIVE — `io.frihet/erp` | Keep `server.json` updated on releases |
 | Smithery | LIVE — `smithery.ai/server/frihet/frihet-mcp` | Track install rate weekly |
-| npm | LIVE — `@frihet/mcp-server` v1.12.0 | Current stable |
+| npm | LIVE — `@frihet/mcp-server` v1.13.0 | Current stable |
 | Glama / mcpservers.org | Not verified | Submit separately (15min) |
 | PulseMCP | Not verified | Submit separately (15min) |
 | mcp.so | Not verified | Submit separately (15min) |

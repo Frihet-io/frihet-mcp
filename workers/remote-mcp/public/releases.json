@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.12.0"
+      "version": "1.13.0"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -28,9 +28,16 @@
       "version": "0.1.0"
     }
   },
-  "releasedAt": "2026-06-10",
-  "version": "1.12.0",
+  "releasedAt": "2026-06-15",
+  "version": "1.13.0",
   "releases": [
+    {
+      "version": "1.13.0",
+      "releasedAt": "2026-06-15",
+      "mcpToolCount": 151,
+      "delta": "Grouped tool-exposure mode + registry metadata refresh",
+      "notes": "Opt-in FRIHET_TOOL_MODE=grouped (progressive disclosure: list_tool_groups, search_tools, describe_tool) tames the 151-tool surface for agents; default unchanged. Registry/marketplace metadata corrected to 151 tools / 11 resources / 10 prompts. Anthropic DXT connector manifest added."
+    },
     {
       "version": "1.12.0",
       "releasedAt": "2026-06-10",

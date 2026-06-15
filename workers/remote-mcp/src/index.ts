@@ -35,7 +35,7 @@ import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
 import { authHandler } from "./auth-handler.js";
 
-const MCP_SERVER_VERSION = "1.12.0";
+const MCP_SERVER_VERSION = "1.13.0";
 
 // ---------------------------------------------------------------------------
 // Auth props — stored in OAuth token, available via this.props in McpAgent
@@ -394,7 +394,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
       "MIT licensed npm package",
       "Cloudflare Worker remote endpoint"
     ],
-    "softwareVersion": "1.12.0",
+    "softwareVersion": "1.13.0",
     "license": "https://opensource.org/licenses/MIT",
     "codeRepository": "https://github.com/Frihet-io/frihet-mcp",
     "offers": {

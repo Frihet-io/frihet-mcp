@@ -1,24 +1,24 @@
-# Release Notes — @frihet/mcp-server v1.12.0
+# Release Notes — @frihet/mcp-server v1.13.0
 
 > **Draft — do not publish until Viktor approves.**
-> Publishing a GitHub Release on `v1.12.0` re-triggers crawls from PulseMCP, mcp.so, and Glama.
-> Command: `gh release create v1.12.0 --title "v1.12.0 — 151 tools, full ES/EU fiscal compliance" --notes-file docs/RELEASE_NOTES_1.12.0.md`
+> Publishing a GitHub Release on `v1.13.0` re-triggers crawls from PulseMCP, mcp.so, and Glama.
+> Command: `gh release create v1.13.0 --title "v1.13.0 — 151 tools, full ES/EU fiscal compliance" --notes-file docs/RELEASE_NOTES_1.13.0.md`
 
 ---
 
-## What ships in v1.12.0
+## What ships in v1.13.0
 
-`@frihet/mcp-server` v1.12.0 is the stable promotion of the `1.12.0-beta.1` build.
+`@frihet/mcp-server` v1.13.0 is the stable promotion of the `1.13.0-beta.1` build.
 It is the largest single-version surface expansion in the project's history — 57 tools added over `1.9.0-beta.1`.
 
-### Surface at v1.12.0
+### Surface at v1.13.0
 
 | Capability | Count |
 |------------|-------|
 | MCP Tools | **151** |
 | MCP Resources | **11** |
 | MCP Prompts | **10** |
-| npm package | `@frihet/mcp-server@1.12.0` |
+| npm package | `@frihet/mcp-server@1.13.0` |
 | Remote endpoint | `https://mcp.frihet.io/mcp` |
 
 ### Tool families
