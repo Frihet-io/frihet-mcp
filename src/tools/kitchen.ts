@@ -43,11 +43,11 @@ export function registerKitchenTools(server: McpServer, client: IFrihetClient): 
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         status: z
-          .string()
+          .enum(["on_hold", "queued", "preparing", "ready", "served", "voided"])
           .optional()
           .describe(
-            "Filter by ticket status: queued, preparing, ready, served, cancelled. " +
-            "/ Filtrar por estado: queued, preparing, ready, served, cancelled.",
+            "Filter by ticket status: on_hold, queued, preparing, ready, served, voided. " +
+            "/ Filtrar por estado: on_hold, queued, preparing, ready, served, voided.",
           ),
         stationId: z
           .string()
@@ -114,11 +114,11 @@ export function registerKitchenTools(server: McpServer, client: IFrihetClient): 
       inputSchema: {
         id: z.string().describe("Ticket ID to update / ID del ticket a actualizar"),
         status: z
-          .string()
+          .enum(["on_hold", "queued", "preparing", "ready", "served", "voided"])
           .optional()
           .describe(
-            "New ticket status: queued, preparing, ready, served, cancelled. " +
-            "/ Nuevo estado: queued, preparing, ready, served, cancelled.",
+            "New ticket status: on_hold, queued, preparing, ready, served, voided. " +
+            "/ Nuevo estado: on_hold, queued, preparing, ready, served, voided.",
           ),
         stationId: z
           .string()
