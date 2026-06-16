@@ -864,7 +864,9 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Banking
-  // NOTE: /v1/banking/* endpoints are planned — 404 propagates until backend ships.
+  // /v1/banking/* endpoints are LIVE in Frihet-ERP (#848): accounts list/get,
+  // transactions list/categorize/match. Paths below match the shipped server
+  // actions verbatim. Client contract smoke: src/__tests__/banking-client-contract.test.ts.
 
   async listBankAccounts(
     params?: { limit?: number; offset?: number },
