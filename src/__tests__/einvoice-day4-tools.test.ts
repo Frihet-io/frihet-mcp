@@ -78,6 +78,28 @@ function make403Client(): import("../client-interface.js").IFrihetClient {
   } as unknown as import("../client-interface.js").IFrihetClient;
 }
 
+/**
+ * Simulates a 500 from a LIVE CF — e.g. a real FACe/TicketBAI signature or
+ * submission failure. COMPLIANCE: must rethrow (isError), NEVER masked as a
+ * success stub. This is the case the genuine-404-only fallback contract guards.
+ */
+function make500Client(): import("../client-interface.js").IFrihetClient {
+  const serverError = () => {
+    const err = Object.assign(new Error("Signature/submission failed"), {
+      statusCode: 500,
+      errorCode: "signature_failed",
+    });
+    return Promise.reject(err);
+  };
+  return {
+    exportEInvoice: serverError,
+    faceSubmit: serverError,
+    faceStatus: serverError,
+    ticketbaiSubmit: serverError,
+    ticketbaiStatus: serverError,
+  } as unknown as import("../client-interface.js").IFrihetClient;
+}
+
 /** Simulates CF endpoints live and returning real data. */
 function makeLiveClient(): import("../client-interface.js").IFrihetClient {
   return {
@@ -392,6 +414,86 @@ describe("ticketbai_status — live client", () => {
     assert.equal(sc["status"], "accepted");
     assert.equal(sc["_stub"], undefined);
   });
+});
+
+// ── Compliance smoke: live CF wiring + real-failure-never-masked-as-success ───
+//
+// These 5 tools have a LIVE Cloud Function server-side (Frihet-ERP publicApi.ts).
+// 1. On a live success the tool must return the REAL CF payload (no _stub flag),
+//    proving the client method (correct /invoices/:id/{...} path) was hit, not a stub.
+// 2. On a 500 (genuine FACe/TicketBAI signature/submission failure) the tool must
+//    surface an error (isError) and MUST NOT emit a success stub. A masked failure
+//    would tell the user agent the invoice was submitted/accepted when it was not.
+
+const LIVE_TOOLS: Array<{
+  name: string;
+  args: Record<string, unknown>;
+  /** A field whose value is unique to the live (non-stub) response. */
+  liveAssert: (sc: Record<string, unknown>) => void;
+}> = [
+  {
+    name: "einvoice_export",
+    args: { invoiceId: "inv_smoke", format: "facturae", signed: true },
+    liveAssert: (sc) => assert.ok((sc["xmlUrl"] as string).includes("live")),
+  },
+  {
+    name: "face_submit",
+    args: { invoiceId: "inv_smoke", mode: "production" },
+    liveAssert: (sc) => assert.equal(sc["registroFACe"], "RCF_LIVE_20260513_001"),
+  },
+  {
+    name: "face_status",
+    args: { invoiceId: "inv_smoke" },
+    liveAssert: (sc) => assert.equal(sc["statusCode"], "1400"),
+  },
+  {
+    name: "ticketbai_submit",
+    args: { invoiceId: "inv_smoke" },
+    liveAssert: (sc) => assert.equal(sc["tbaiId"], "TBAI-00001-20260513-LIVE"),
+  },
+  {
+    name: "ticketbai_status",
+    args: { invoiceId: "inv_smoke" },
+    liveAssert: (sc) => assert.equal(sc["tbaiId"], "TBAI-00001-20260513-LIVE"),
+  },
+];
+
+describe("Compliance smoke — 5 live einvoice tools hit the real CF", () => {
+  for (const { name, args, liveAssert } of LIVE_TOOLS) {
+    test(`${name}: live → real CF payload, no _stub`, async () => {
+      const server = await makeServer(makeLiveClient());
+      const tool = server.tools.get(name)!;
+      const result = await tool.handler(args);
+      const sc = result.structuredContent!;
+      assert.equal(sc["_stub"], undefined, `${name} returned a stub on a live CF response`);
+      assert.notEqual(
+        (result as Record<string, unknown>)["isError"],
+        true,
+        `${name} reported isError on a live success`,
+      );
+      liveAssert(sc);
+    });
+  }
+});
+
+describe("Compliance smoke — real CF failure (500) never masked as success", () => {
+  for (const { name, args } of LIVE_TOOLS) {
+    test(`${name}: 500 → isError, NOT a success stub`, async () => {
+      const server = await makeServer(make500Client());
+      const tool = server.tools.get(name)!;
+      const result = await tool.handler(args);
+      // A genuine signature/submission failure must surface as an error...
+      assert.equal(
+        (result as Record<string, unknown>)["isError"],
+        true,
+        `${name} did not surface 500 as an error`,
+      );
+      // ...and must NOT be dressed up as a successful stub.
+      const sc = (result.structuredContent ?? {}) as Record<string, unknown>;
+      assert.notEqual(sc["_stub"], true, `${name} masked a 500 failure as a success stub`);
+      assert.equal(sc["status"], undefined, `${name} emitted a success status on a 500 failure`);
+    });
+  }
 });
 
 // ── ksef_submit tests ─────────────────────────────────────────────────────────
