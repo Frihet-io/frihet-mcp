@@ -2,16 +2,24 @@
  * E-Invoicing tools for the Frihet MCP server.
  *
  * Wired to real CF endpoints at api.frihet.io/v1/invoices/:id/einvoice/*.
- * 404-fallback: if the CF endpoint is not yet deployed, returns a stub with
- * { _stub: true, _note: "CF endpoint pending deploy", _plannedEndpoint: "..." }
- * so the MCP server remains usable while the transport Wave ships.
+ *
+ * The 5 per-invoice endpoints below are LIVE server-side (Frihet-ERP publicApi.ts):
+ * einvoice/export, face/submit, face/status, ticketbai/submit, ticketbai/status.
+ * On a successful fetch the tools return the real CF response unchanged.
+ *
+ * COMPLIANCE-CRITICAL 404-fallback contract: the stub is dispatched ONLY when the
+ * CF returns a genuine 404 (jurisdiction without a deployed CF / endpoint not yet
+ * shipped). Any other failure — 4xx auth/validation, 5xx signature/submission
+ * error, network error — is RE-THROWN by isNotFoundError()=false and surfaced as a
+ * tool error. A real FACe/TicketBAI signature or submission failure MUST NEVER be
+ * masked as a successful (queued/accepted) stub.
  *
  * All 10 tools use the shared withToolLogging wrapper (Langfuse tracing applied
  * globally via patchServerWithTracing in register-all.ts).
  *
  * Trace names prefix: mcp.einvoice.*
  * Original 4 CF endpoints: https://api.frihet.io/v1/einvoice/{send,status,validate,export-datev}
- * Day 4 Wave 6 CF endpoints (PR #414 + FACe PR #411 + TicketBAI PR #356):
+ * Day 4 Wave 6 CF endpoints (PR #414 + FACe PR #411 + TicketBAI PR #356) — LIVE:
  *   POST /v1/invoices/:id/einvoice/export  — export XML in specific format (signed Facturae etc.)
  *   POST /v1/invoices/:id/face/submit      — Spain B2G FACe portal submission
  *   GET  /v1/invoices/:id/face/status      — FACe submission status
@@ -961,8 +969,18 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
 /* ------------------------------------------------------------------ */
 
 /**
- * Returns true if the error is a 404 Not Found, indicating the CF endpoint
- * is not yet deployed. Detects both FrihetApiError shape and generic HTTP errors.
+ * Returns true ONLY for a genuine 404 Not Found, indicating the CF endpoint is
+ * not deployed for this jurisdiction / not yet shipped. This is the single gate
+ * that authorises the stub fallback.
+ *
+ * COMPLIANCE INVARIANT: it MUST stay strict on 404. Any other status — 401/403
+ * (auth), 422 (validation), 5xx (signature/submission failure on the live FACe or
+ * TicketBAI CF), or a network/timeout error — returns false, so the caller
+ * re-throws and the failure surfaces as a tool error. Widening this predicate
+ * would let a real e-invoice signature/submission failure be masked as a
+ * successful stub (e.g. status="submitted"/"accepted"), which is non-compliant.
+ *
+ * Detects both FrihetApiError shape (statusCode) and generic HTTP errors (status).
  */
 function isNotFoundError(err: unknown): boolean {
   if (err && typeof err === "object") {
