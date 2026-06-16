@@ -10,8 +10,10 @@
  *
  * REST surface: /v1/banking/accounts, /v1/banking/transactions
  *
- * NOTE: ERP backend endpoints /v1/banking/* are planned. Tools are wired
- * and will surface 404 errors until the backend ships (documented: pending).
+ * NOTE: ERP backend endpoints /v1/banking/* are LIVE in Frihet-ERP (#848):
+ * accounts list/get, transactions list/categorize/match. Tools are wired and
+ * hit the shipped server actions. Client contract smoke:
+ * src/__tests__/banking-client-contract.test.ts.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
