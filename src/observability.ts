@@ -129,6 +129,57 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
+// ── Fabricated-success / stub detection ──────────────────────────────────────
+
+interface StubMarker {
+  plannedEndpoint?: string;
+  note?: string;
+}
+
+/**
+ * Inspect a resolved tool output for stub / not-implemented / unavailable
+ * markers and return them if present, else null.
+ *
+ * A tool that catches its own 404 (or is a forward-compat stub) RETURNS a
+ * fabricated body instead of throwing — so the try/catch in traceMCPTool never
+ * runs and the call looks successful. These markers are the structural signal
+ * that the "success" is fabricated:
+ *   - `_stub: true`            → 404 → fallback stub body
+ *   - `_notImplemented: true`  → forward-compat stub (endpoint not yet shipped)
+ *   - `_unavailable: true`     → honest "backend endpoint not yet available"
+ *   - `_plannedEndpoint`       → present on any of the above
+ *
+ * Checks both the top-level MCP tool result and its `structuredContent`, since
+ * tools place the markers inside `structuredContent`.
+ */
+export function inspectStubMarker(output: unknown): StubMarker | null {
+  if (!output || typeof output !== "object") return null;
+
+  const candidates: Record<string, unknown>[] = [];
+  const top = output as Record<string, unknown>;
+  candidates.push(top);
+  const sc = top["structuredContent"];
+  if (sc && typeof sc === "object") candidates.push(sc as Record<string, unknown>);
+
+  for (const obj of candidates) {
+    if (obj["_stub"] === true || obj["_notImplemented"] === true || obj["_unavailable"] === true) {
+      return {
+        plannedEndpoint: typeof obj["_plannedEndpoint"] === "string" ? (obj["_plannedEndpoint"] as string) : undefined,
+        note: typeof obj["_note"] === "string" ? (obj["_note"] as string) : undefined,
+      };
+    }
+    // A bare _plannedEndpoint (without an explicit flag) is also a stub signal.
+    if (typeof obj["_plannedEndpoint"] === "string") {
+      return {
+        plannedEndpoint: obj["_plannedEndpoint"] as string,
+        note: typeof obj["_note"] === "string" ? (obj["_note"] as string) : undefined,
+      };
+    }
+  }
+
+  return null;
+}
+
 // ── HTTP send ────────────────────────────────────────────────────────────────
 
 async function sendBatch(config: LangfuseConfig, batch: IngestionBatch): Promise<void> {
@@ -224,6 +275,25 @@ export async function traceMCPTool<T>(
   } finally {
     const endTime = new Date();
 
+    // ── Fabricated-success detection ──────────────────────────────────────────
+    // A tool that catches its own 404 and RETURNS a stub / unavailable body never
+    // throws, so `isError` stays false and the trace would otherwise be logged as
+    // a SUCCESSFUL call whose output is a fabricated payload. Inspect the resolved
+    // output for the markers the e-invoice tools (and any future stub branch) set
+    // — `_stub`, `_notImplemented`, `_unavailable`, `_plannedEndpoint` — and
+    // downgrade the trace so observability is NOT structurally blind to fabricated
+    // success. This is the central fix: it covers every stub branch regardless of
+    // which tool produced it, because the stub path never reaches the catch above.
+    const stub = isError ? null : inspectStubMarker(output);
+    const stubbed = stub !== null;
+    // success: false whenever the call threw OR returned a fabricated stub body.
+    const success = !isError && !stubbed;
+    const stubNote =
+      stub?.note ??
+      (stub?.plannedEndpoint
+        ? `Backend endpoint not yet available: ${stub.plannedEndpoint}`
+        : undefined);
+
     // Fire-and-forget — build and send async, never awaited
     void (async () => {
       try {
@@ -241,9 +311,17 @@ export async function traceMCPTool<T>(
             tool: toolName,
             clientName: _sessionContext.clientName,
             mcpVersion: _sessionContext.mcpVersion,
-            success: !isError,
+            // FALSE on a thrown error AND on a fabricated-stub fallback.
+            success,
+            ...(stubbed
+              ? {
+                  stub: true,
+                  ...(stub?.plannedEndpoint ? { plannedEndpoint: stub.plannedEndpoint } : {}),
+                  ...(stubNote ? { note: stubNote } : {}),
+                }
+              : {}),
           },
-          tags: [`mcp.tool.${toolName}`],
+          tags: [`mcp.tool.${toolName}`, ...(stubbed ? ["mcp.stub"] : [])],
           ...(userIdHashed ? { userId: userIdHashed } : {}),
         };
 
@@ -259,9 +337,17 @@ export async function traceMCPTool<T>(
             durationMs: endTime.getTime() - startTime.getTime(),
             clientName: _sessionContext.clientName,
             mcpVersion: _sessionContext.mcpVersion,
+            ...(stubbed ? { stub: true } : {}),
           },
-          level: isError ? "ERROR" : "DEFAULT",
-          ...(isError && errorMessage ? { statusMessage: errorMessage } : {}),
+          // ERROR on a thrown error; WARNING on a fabricated-stub fallback (the
+          // call "succeeded" mechanically but returned no real backend data);
+          // DEFAULT only on a genuine success.
+          level: isError ? "ERROR" : stubbed ? "WARNING" : "DEFAULT",
+          ...(isError && errorMessage
+            ? { statusMessage: errorMessage }
+            : stubbed && stubNote
+              ? { statusMessage: stubNote }
+              : {}),
         };
 
         const batch: IngestionBatch = {
