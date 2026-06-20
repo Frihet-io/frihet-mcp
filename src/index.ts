@@ -146,7 +146,7 @@ function main(): void {
   // Connect via stdio transport
   const transport = new StdioServerTransport();
   server.connect(transport).then(() => {
-    console.error("[frihet-mcp] v1.14.1 | 157 tools | https://github.com/Frihet-io/frihet-mcp");
+    console.error("[frihet-mcp] v1.14.2 | 157 tools | https://github.com/Frihet-io/frihet-mcp");
     log({
       level: "info",
       message: "Frihet MCP server running on stdio",
