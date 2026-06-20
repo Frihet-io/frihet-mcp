@@ -168,7 +168,7 @@ describe("E-Invoice Tools — registerAllTools includes new tools (127→133)", 
   });
 });
 
-describe("send_einvoice — stub response shape", () => {
+describe("send_einvoice — honest unavailable response (absent endpoint)", () => {
   let sendTool: RegisteredTool | undefined;
 
   beforeEach(async () => {
@@ -184,7 +184,7 @@ describe("send_einvoice — stub response shape", () => {
     assert.equal(sendTool!.config.title, "Send E-Invoice");
   });
 
-  test("happy path — valid input returns queued status", async () => {
+  test("absent endpoint → isError + _unavailable, NEVER a fabricated queued status", async () => {
     assert.ok(sendTool, "send_einvoice not registered");
     const result = await sendTool!.handler({
       invoiceId: "inv_test_123",
@@ -194,20 +194,24 @@ describe("send_einvoice — stub response shape", () => {
 
     assert.ok(result.structuredContent, "structuredContent missing");
     const sc = result.structuredContent!;
-    assert.equal(sc["status"], "queued", "status should be 'queued'");
-    assert.ok(typeof sc["workflowRunId"] === "string", "workflowRunId should be string");
-    assert.ok(typeof sc["estimatedCompletionSec"] === "number", "estimatedCompletionSec should be number");
-    assert.ok(sc["_stub"] === true, "_stub flag should be true");
+    // HONEST: no fabricated workflow/status, agent sees a failure.
+    assert.equal((result as { isError?: boolean }).isError, true, "must be isError:true");
+    assert.equal(sc["_unavailable"], true, "_unavailable flag should be true");
+    assert.equal(sc["_stub"], undefined, "must NOT carry a fake-success _stub flag");
+    assert.equal(sc["workflowRunId"], undefined, "must NOT fabricate a workflowRunId");
+    assert.equal(sc["status"], undefined, "must NOT fabricate a queued status");
+    assert.ok(typeof sc["_plannedEndpoint"] === "string", "_plannedEndpoint should be set");
   });
 
-  test("happy path — peppol-bis-3 format accepted", async () => {
+  test("peppol-bis-3 also returns honest unavailable", async () => {
     assert.ok(sendTool, "send_einvoice not registered");
     const result = await sendTool!.handler({
       invoiceId: "inv_peppol_456",
       format: "peppol-bis-3",
       dispatchMode: "peppol",
     });
-    assert.equal(result.structuredContent!["status"], "queued");
+    assert.equal((result as { isError?: boolean }).isError, true);
+    assert.equal(result.structuredContent!["_unavailable"], true);
   });
 
   test("content block has type text", async () => {
@@ -220,11 +224,11 @@ describe("send_einvoice — stub response shape", () => {
     assert.ok(Array.isArray(result.content), "content should be array");
     assert.ok(result.content.length > 0, "content should have at least 1 block");
     assert.equal(result.content[0]!.type, "text");
-    assert.ok(typeof result.content[0]!.text === "string");
+    assert.ok(/unavailable/i.test(result.content[0]!.text), "text should say unavailable");
   });
 });
 
-describe("get_einvoice_status — stub response shape", () => {
+describe("get_einvoice_status — honest unavailable response (absent endpoint)", () => {
   let statusTool: RegisteredTool | undefined;
 
   beforeEach(async () => {
@@ -235,26 +239,21 @@ describe("get_einvoice_status — stub response shape", () => {
     statusTool = server.tools.get("get_einvoice_status");
   });
 
-  test("happy path — returns status shape", async () => {
+  test("absent endpoint → isError + _unavailable, NEVER a fabricated 'succeeded'", async () => {
     assert.ok(statusTool, "get_einvoice_status not registered");
     const result = await statusTool!.handler({ workflowRunId: "wfr_stub_abc123" });
 
     const sc = result.structuredContent!;
-    assert.ok(["queued", "running", "succeeded", "failed", "cancelled"].includes(sc["status"] as string),
-      `status '${sc["status"]}' not in allowed values`);
-    assert.ok(typeof sc["step"] === "string", "step should be string");
-    assert.ok(sc["_stub"] === true, "_stub flag should be true");
-  });
-
-  test("ackId present in stub response", async () => {
-    assert.ok(statusTool, "get_einvoice_status not registered");
-    const result = await statusTool!.handler({ workflowRunId: "wfr_stub_deadbeef" });
-    const sc = result.structuredContent!;
-    assert.ok(typeof sc["ackId"] === "string", "ackId should be present as string");
+    assert.equal((result as { isError?: boolean }).isError, true, "must be isError:true");
+    assert.equal(sc["_unavailable"], true, "_unavailable flag should be true");
+    assert.equal(sc["status"], undefined, "must NOT fabricate a 'succeeded' status");
+    assert.equal(sc["ackId"], undefined, "must NOT fabricate an ackId");
+    assert.equal(sc["xmlUrl"], undefined, "must NOT fabricate an XML URL");
+    assert.equal(sc["_stub"], undefined, "must NOT carry a fake-success _stub flag");
   });
 });
 
-describe("validate_einvoice_xml — stub response shape", () => {
+describe("validate_einvoice_xml — honest unavailable response (absent endpoint)", () => {
   let validateTool: RegisteredTool | undefined;
 
   beforeEach(async () => {
@@ -265,7 +264,7 @@ describe("validate_einvoice_xml — stub response shape", () => {
     validateTool = server.tools.get("validate_einvoice_xml");
   });
 
-  test("happy path — returns valid=true with empty errors", async () => {
+  test("absent endpoint → isError + _unavailable, NEVER a fabricated valid=true", async () => {
     assert.ok(validateTool, "validate_einvoice_xml not registered");
     const result = await validateTool!.handler({
       xml: "<Invoice><ID>TEST-001</ID></Invoice>",
@@ -273,42 +272,17 @@ describe("validate_einvoice_xml — stub response shape", () => {
     });
 
     const sc = result.structuredContent!;
-    assert.equal(sc["valid"], true, "valid should be true (stub)");
-    assert.ok(Array.isArray(sc["errors"]), "errors should be array");
-    assert.equal((sc["errors"] as unknown[]).length, 0, "errors should be empty (stub)");
-    assert.equal(sc["validator"], "kosit", "xrechnung-cii should use kosit validator");
-    assert.ok(typeof sc["durationMs"] === "number", "durationMs should be number");
-  });
-
-  test("facturx-en16931 uses mustang validator", async () => {
-    assert.ok(validateTool, "validate_einvoice_xml not registered");
-    const result = await validateTool!.handler({
-      xml: "<rsm:CrossIndustryInvoice/>",
-      format: "facturx-en16931",
-    });
-    assert.equal(result.structuredContent!["validator"], "mustang");
-  });
-
-  test("fatturapa uses xsd validator", async () => {
-    assert.ok(validateTool, "validate_einvoice_xml not registered");
-    const result = await validateTool!.handler({
-      xml: "<FatturaElettronica/>",
-      format: "fatturapa",
-    });
-    assert.equal(result.structuredContent!["validator"], "xsd");
-  });
-
-  test("peppol-bis-3 uses schematron validator", async () => {
-    assert.ok(validateTool, "validate_einvoice_xml not registered");
-    const result = await validateTool!.handler({
-      xml: "<Invoice/>",
-      format: "peppol-bis-3",
-    });
-    assert.equal(result.structuredContent!["validator"], "schematron");
+    assert.equal((result as { isError?: boolean }).isError, true, "must be isError:true");
+    assert.equal(sc["_unavailable"], true, "_unavailable flag should be true");
+    // A fabricated valid=true is the most dangerous stub — must never appear.
+    assert.equal(sc["valid"], undefined, "must NOT fabricate valid=true");
+    assert.equal(sc["validator"], undefined, "must NOT fabricate a validator verdict");
+    assert.equal(sc["_stub"], undefined, "must NOT carry a fake-success _stub flag");
+    assert.ok(typeof sc["_plannedEndpoint"] === "string", "_plannedEndpoint should be set");
   });
 });
 
-describe("export_datev — stub response shape", () => {
+describe("export_datev — honest unavailable response (absent endpoint)", () => {
   let datevTool: RegisteredTool | undefined;
 
   beforeEach(async () => {
@@ -319,7 +293,7 @@ describe("export_datev — stub response shape", () => {
     datevTool = server.tools.get("export_datev");
   });
 
-  test("happy path — extf-buchungsstapel returns correct shape", async () => {
+  test("absent endpoint → isError + _unavailable, NEVER a fabricated fileUrl", async () => {
     assert.ok(datevTool, "export_datev not registered");
     const result = await datevTool!.handler({
       periodStart: "2026-01-01",
@@ -328,48 +302,12 @@ describe("export_datev — stub response shape", () => {
     });
 
     const sc = result.structuredContent!;
-    assert.ok(typeof sc["fileUrl"] === "string", "fileUrl should be string");
-    assert.ok(typeof sc["filename"] === "string", "filename should be string");
-    assert.ok(typeof sc["rowCount"] === "number", "rowCount should be number");
-    assert.ok(typeof sc["fiscalPeriod"] === "string", "fiscalPeriod should be string");
-    assert.equal(sc["encoding"], "cp1252", "encoding must always be cp1252");
-    assert.ok(sc["_stub"] === true, "_stub flag should be true");
-  });
-
-  test("filename contains EXTF_Buchungsstapel for buchungsstapel format", async () => {
-    assert.ok(datevTool, "export_datev not registered");
-    const result = await datevTool!.handler({
-      periodStart: "2026-01-01",
-      periodEnd: "2026-01-31",
-      format: "extf-buchungsstapel",
-    });
-    assert.ok(
-      (result.structuredContent!["filename"] as string).includes("EXTF_Buchungsstapel"),
-      "filename should include EXTF_Buchungsstapel",
-    );
-  });
-
-  test("filename contains EXTF_Debitoren for extf-debitoren", async () => {
-    assert.ok(datevTool, "export_datev not registered");
-    const result = await datevTool!.handler({
-      periodStart: "2026-03-01",
-      periodEnd: "2026-03-31",
-      format: "extf-debitoren",
-    });
-    assert.ok(
-      (result.structuredContent!["filename"] as string).includes("EXTF_Debitoren"),
-      "filename should include EXTF_Debitoren",
-    );
-  });
-
-  test("fiscalPeriod derives from periodStart YYYY-MM", async () => {
-    assert.ok(datevTool, "export_datev not registered");
-    const result = await datevTool!.handler({
-      periodStart: "2026-07-01",
-      periodEnd: "2026-07-31",
-      format: "extf-kreditoren",
-    });
-    assert.equal(result.structuredContent!["fiscalPeriod"], "2026-07");
+    assert.equal((result as { isError?: boolean }).isError, true, "must be isError:true");
+    assert.equal(sc["_unavailable"], true, "_unavailable flag should be true");
+    assert.equal(sc["fileUrl"], undefined, "must NOT fabricate a download fileUrl");
+    assert.equal(sc["filename"], undefined, "must NOT fabricate a filename");
+    assert.equal(sc["_stub"], undefined, "must NOT carry a fake-success _stub flag");
+    assert.ok(typeof sc["_plannedEndpoint"] === "string", "_plannedEndpoint should be set");
   });
 });
 
@@ -441,7 +379,7 @@ function getValidArgs(toolName: string): Record<string, unknown> {
 
 // ── 404-fallback tests ────────────────────────────────────────────────────────
 
-describe("404-fallback path — CF endpoint not yet deployed", () => {
+describe("absent-endpoint path — honest unavailable, NO fabricated success", () => {
   async function makeServer(client: import("../client-interface.js").IFrihetClient): Promise<StubMcpServer> {
     const server = new StubMcpServer();
     const { registerEInvoiceTools } = await import("../tools/einvoice.js");
@@ -449,50 +387,62 @@ describe("404-fallback path — CF endpoint not yet deployed", () => {
     return server;
   }
 
-  test("send_einvoice: 404 → stub with _stub=true, _plannedEndpoint set", async () => {
+  test("send_einvoice: 404 → isError + _unavailable + _plannedEndpoint, no fabricated data", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("send_einvoice")!;
     const result = await tool.handler({ invoiceId: "inv_test", format: "xrechnung-cii", dispatchMode: "email" });
     const sc = result.structuredContent!;
-    assert.equal(sc["_stub"], true, "_stub should be true on 404-fallback");
-    assert.equal(sc["_note"], "CF endpoint pending deploy");
+    assert.equal((result as { isError?: boolean }).isError, true, "must be isError:true");
+    assert.equal(sc["_unavailable"], true, "_unavailable should be true");
+    assert.equal(sc["_stub"], undefined, "must NOT be a fake-success stub");
     assert.ok(typeof sc["_plannedEndpoint"] === "string", "_plannedEndpoint should be set");
-    assert.equal(sc["status"], "queued", "fallback status should be queued");
-    assert.ok(typeof sc["workflowRunId"] === "string", "workflowRunId should be string");
+    assert.equal(sc["status"], undefined, "no fabricated queued status");
+    assert.equal(sc["workflowRunId"], undefined, "no fabricated workflowRunId");
   });
 
-  test("get_einvoice_status: 404 → stub with _stub=true, _plannedEndpoint set", async () => {
+  test("get_einvoice_status: 404 → isError + _unavailable + _plannedEndpoint", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("get_einvoice_status")!;
     const result = await tool.handler({ workflowRunId: "wfr_pending_123" });
     const sc = result.structuredContent!;
-    assert.equal(sc["_stub"], true, "_stub should be true on 404-fallback");
-    assert.equal(sc["_note"], "CF endpoint pending deploy");
+    assert.equal((result as { isError?: boolean }).isError, true, "must be isError:true");
+    assert.equal(sc["_unavailable"], true, "_unavailable should be true");
     assert.ok(typeof sc["_plannedEndpoint"] === "string", "_plannedEndpoint should be set");
-    assert.ok(sc["_plannedEndpoint"] as string, "/v1/einvoice/status/wfr_pending_123");
+    assert.equal(sc["status"], undefined, "no fabricated status");
   });
 
-  test("validate_einvoice_xml: 404 → stub with _stub=true, validator derived from format", async () => {
+  test("validate_einvoice_xml: 404 → isError + _unavailable, NEVER a fabricated valid verdict", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("validate_einvoice_xml")!;
     const result = await tool.handler({ xml: "<Invoice/>", format: "xrechnung-cii" });
     const sc = result.structuredContent!;
-    assert.equal(sc["_stub"], true, "_stub should be true on 404-fallback");
-    assert.equal(sc["_note"], "CF endpoint pending deploy");
-    assert.equal(sc["validator"], "kosit", "validator should derive from format even in fallback");
-    assert.equal(sc["valid"], true);
+    assert.equal((result as { isError?: boolean }).isError, true, "must be isError:true");
+    assert.equal(sc["_unavailable"], true, "_unavailable should be true");
+    assert.equal(sc["valid"], undefined, "must NOT fabricate a valid verdict");
+    assert.equal(sc["validator"], undefined, "must NOT fabricate a validator");
   });
 
-  test("export_datev: 404 → stub with _stub=true, filename derived from params", async () => {
+  test("export_datev: 404 → isError + _unavailable, no fabricated file", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("export_datev")!;
     const result = await tool.handler({ periodStart: "2026-03-01", periodEnd: "2026-03-31", format: "extf-buchungsstapel" });
     const sc = result.structuredContent!;
-    assert.equal(sc["_stub"], true, "_stub should be true on 404-fallback");
-    assert.equal(sc["_note"], "CF endpoint pending deploy");
-    assert.ok((sc["filename"] as string).includes("EXTF_Buchungsstapel"), "filename should include format prefix");
-    assert.equal(sc["fiscalPeriod"], "2026-03", "fiscalPeriod should derive from periodStart");
-    assert.equal(sc["encoding"], "cp1252");
+    assert.equal((result as { isError?: boolean }).isError, true, "must be isError:true");
+    assert.equal(sc["_unavailable"], true, "_unavailable should be true");
+    assert.equal(sc["fileUrl"], undefined, "must NOT fabricate a fileUrl");
+    assert.equal(sc["filename"], undefined, "must NOT fabricate a filename");
+  });
+
+  test("ksef_submit: forward-compat stub → isError + _unavailable + _notImplemented preserved", async () => {
+    const server = await makeServer(make404Client());
+    const tool = server.tools.get("ksef_submit")!;
+    const result = await tool.handler({ invoiceId: "inv_test", mode: "production" });
+    const sc = result.structuredContent!;
+    assert.equal((result as { isError?: boolean }).isError, true, "must be isError:true");
+    assert.equal(sc["_unavailable"], true, "_unavailable should be true");
+    assert.equal(sc["_notImplemented"], true, "_notImplemented marker preserved for forward-compat");
+    assert.ok(typeof sc["_plannedEndpoint"] === "string", "_plannedEndpoint should be set");
+    assert.equal(sc["mode"], "production", "echoes the requested mode");
   });
 });
 

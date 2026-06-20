@@ -40,6 +40,55 @@ import {
 } from "./shared.js";
 
 /* ------------------------------------------------------------------ */
+/*  Honest "backend endpoint not yet available" result                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Build an HONEST unavailable result for a tool whose backend endpoint is not
+ * yet deployed.
+ *
+ * NORTH #2: a tool that returns a fake-success stub on a backend 404 is a HOLE —
+ * an AI agent receives fabricated data (a queued workflow, a valid XML, a DATEV
+ * file URL) and reports success. SOUL §16: removing that drama is the whole
+ * point. So instead of fabricating a plausible-looking payload we return an
+ * explicit error result:
+ *   - `isError: true`            → the MCP client/agent treats it as a failure
+ *   - `_unavailable: true`       → machine-readable marker (also drives the
+ *                                  observability downgrade in observability.ts)
+ *   - `_plannedEndpoint`         → which REST endpoint will back this when live
+ *
+ * The agent gets the truth ("not available yet"), never fabricated business data.
+ */
+function unavailableResult(opts: {
+  tool: string;
+  plannedEndpoint: string;
+  what: string;
+  workaround?: string;
+}): {
+  content: Array<{ type: "text"; text: string }>;
+  structuredContent: Record<string, unknown>;
+  isError: true;
+} {
+  const note =
+    `${opts.what} is not yet available: the backend endpoint ` +
+    `${opts.plannedEndpoint} is not deployed. No data was produced — this is an ` +
+    `honest "unavailable" response, NOT a stub success. ` +
+    (opts.workaround ? opts.workaround + " " : "") +
+    `/ Esta operación aún no está disponible: el endpoint ${opts.plannedEndpoint} ` +
+    `no está desplegado. No se ha generado ningún dato.`;
+  return {
+    content: [{ type: "text" as const, text: `Unavailable — ${opts.what}.\n${note}` }],
+    structuredContent: {
+      _unavailable: true,
+      _note: note,
+      _plannedEndpoint: opts.plannedEndpoint,
+      tool: opts.tool,
+    },
+    isError: true,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Shared format union                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -75,6 +124,31 @@ export const eInvoiceFormatSchema = z.enum([
 ]);
 
 export type EInvoiceFormat = z.infer<typeof eInvoiceFormatSchema>;
+
+/**
+ * Map the MCP lowercase format value to the API-facing format name accepted by
+ * POST /v1/invoices/:id/einvoice/export (Frihet-ERP publicApi.ts
+ * EINVOICE_EXPORT_FORMATS). The CF rejects any other value with a 400 validation
+ * error, so this mapping is REQUIRED — passing the raw MCP value would fail.
+ *
+ * The CF accepts 8 formats: Facturae, XRechnung-CII, XRechnung-UBL, Factur-X,
+ * FatturaPA, PEPPOL-BIS-3, UBL, CII. The four Factur-X sub-profiles
+ * (en16931/extended/basic/minimum) all map to the CF's single "Factur-X" entry;
+ * the CF resolves the concrete profile internally.
+ */
+const EINVOICE_EXPORT_FORMAT_MAP: Record<EInvoiceFormat, string> = {
+  "facturae": "Facturae",
+  "xrechnung-cii": "XRechnung-CII",
+  "xrechnung-ubl": "XRechnung-UBL",
+  "facturx-en16931": "Factur-X",
+  "facturx-extended": "Factur-X",
+  "facturx-basic": "Factur-X",
+  "facturx-minimum": "Factur-X",
+  "fatturapa": "FatturaPA",
+  "peppol-bis-3": "PEPPOL-BIS-3",
+  "ubl": "UBL",
+  "cii": "CII",
+};
 
 /* ------------------------------------------------------------------ */
 /*  Output schemas                                                      */
@@ -115,43 +189,49 @@ export const exportDatevOutput = z.object({
   encoding: z.literal("cp1252").describe("File encoding — always CP1252 per DATEV EXTF spec"),
 }).passthrough();
 
-/* Day 4 Wave output schemas */
+/* Day 4 Wave output schemas — fields match the LIVE CF response
+ * (Frihet-ERP functions/src/publicApi.ts) exactly. No fabricated fields. */
 
 export const einvoiceExportOutput = z.object({
-  xmlUrl: z.string().describe("Signed URL to download the e-invoice XML (valid 24h)"),
-  filename: z.string().describe("Suggested filename (e.g. INV-2026-001-facturae.xml)"),
-  format: z.string().describe("E-invoice format used"),
-  signed: z.boolean().describe("Whether XAdES signature was applied (Facturae only)"),
+  xml: z.string().describe("Raw e-invoice XML content (the document itself, returned inline by the CF)"),
+  contentType: z.string().describe("MIME type of the XML payload (application/xml)"),
+  filename: z.string().describe("Suggested filename (e.g. INV-2026-001_Facturae.xml)"),
+  signed: z.boolean().describe("Whether XAdES signature was applied (Facturae + signed=true only)"),
+  format: z.string().describe("E-invoice format used (echoes the requested format)"),
 }).passthrough();
 
 export const faceSubmitOutput = z.object({
-  registroFACe: z.string().describe("FACe registration number (número de registro) returned by the portal"),
-  status: z.enum(["submitted", "error"]).describe("Submission outcome"),
-  submittedAt: z.string().describe("ISO 8601 timestamp of the submission"),
-  mode: z.string().describe("Mode used: mock | sandbox | production"),
+  status: z.literal("submitted").describe("Submission accepted by FACe (the CF returns an error otherwise)"),
+  numeroRegistro: z.string().describe("FACe registration number (número de registro) returned by the portal"),
+  codigo: z.string().describe("FACe result code returned by the portal (resultado.codigo)"),
+  descripcion: z.string().describe("Human-readable FACe result description (resultado.descripcion)"),
+  idempotent: z.boolean().optional().describe("True if this echoes a prior already-registered submission (no resubmission occurred)"),
 }).passthrough();
 
 export const faceStatusOutput = z.object({
-  registroFACe: z.string().describe("FACe registration number"),
-  statusCode: z.string().describe("FACe status code (e.g. '1200'=Registrada, '1400'=Contabilizada, '3100'=Rechazada)"),
-  statusDescription: z.string().describe("Human-readable FACe status description"),
-  rejectionReason: z.string().optional().describe("Rejection reason if statusCode=3100"),
+  numeroRegistro: z.string().describe("FACe registration number for this submission"),
+  estadoTramitacion: z.string().nullable().describe("FACe processing-state code (estado de tramitación)"),
+  codigo: z.string().nullable().describe("FACe status code (e.g. '1200'=Registrada, '1400'=Contabilizada, '3100'=Rechazada)"),
+  descripcion: z.string().nullable().describe("Human-readable FACe status description"),
+  motivo: z.string().nullable().describe("Reason/motive associated with the current status (e.g. rejection motive)"),
 }).passthrough();
 
 export const ticketbaiSubmitOutput = z.object({
-  tbaiId: z.string().describe("TicketBAI identifier (TBAI-XXXXX) returned by hacienda foral"),
-  territory: z.enum(["bizkaia", "gipuzkoa", "araba"]).describe("Basque territory auto-detected from workspace address"),
-  status: z.enum(["submitted", "accepted", "rejected", "error"]).describe("Submission status"),
-  sandbox: z.boolean().describe("Whether this was a sandbox (test) submission"),
-  qrUrl: z.string().optional().describe("QR code URL to print on the invoice (TBAI compliance)"),
+  accepted: z.boolean().describe("Whether the hacienda foral accepted the submission"),
+  csv: z.string().describe("CSV (Código Seguro de Verificación) returned by the hacienda foral"),
+  tbaiIdentifier: z.string().describe("TicketBAI identifier (TBAI-XXXXX) returned by the hacienda foral"),
+  qrUrl: z.string().describe("QR code URL to print on the invoice (TBAI compliance)"),
+  idempotent: z.boolean().optional().describe("True if this echoes a prior already-accepted submission (no resubmission occurred)"),
 }).passthrough();
 
 export const ticketbaiStatusOutput = z.object({
-  tbaiId: z.string().describe("TicketBAI identifier"),
-  territory: z.enum(["bizkaia", "gipuzkoa", "araba"]).describe("Basque territory"),
-  status: z.enum(["submitted", "accepted", "rejected", "error"]).describe("Current hacienda acknowledgement status"),
-  rejectionReason: z.string().optional().describe("Rejection reason from hacienda (if rejected)"),
-  error: z.string().optional().describe("Internal error message (if error)"),
+  accepted: z.boolean().describe("Whether the submission has been accepted by the hacienda foral"),
+  csv: z.string().describe("CSV (Código Seguro de Verificación) for the submission"),
+  tbaiIdentifier: z.string().describe("TicketBAI identifier"),
+  estado: z.string().describe("Current submission status stored server-side (e.g. 'accepted', 'rejected')"),
+  qrUrl: z.string().nullable().describe("QR code URL to print on the invoice (null if not yet available)"),
+  submittedAt: z.string().nullable().describe("ISO 8601 timestamp the submission was recorded (null if unknown)"),
+  errors: z.array(z.string()).nullable().describe("Hacienda error messages if rejected (null if none)"),
 }).passthrough();
 
 export const kSeFSubmitOutput = z.object({
@@ -237,29 +317,16 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           };
         } catch (err: unknown) {
           if (isNotFoundError(err)) {
-            const stubResult = {
-              workflowRunId: `wfr_stub_${Date.now()}`,
-              status: "queued" as const,
-              estimatedCompletionSec: 15,
-              _stub: true,
-              _note: "CF endpoint pending deploy",
-              _plannedEndpoint: plannedEndpoint,
-            };
-            return {
-              content: [
-                mutateContent(
-                  `E-invoice queued (stub — CF pending deploy):\n` +
-                  `  Invoice: ${invoiceId}\n` +
-                  `  Format: ${format}\n` +
-                  `  Dispatch: ${dispatchMode}\n` +
-                  `  WorkflowRunId: ${stubResult.workflowRunId}\n` +
-                  `  Status: queued\n` +
-                  `  Estimated: ~${stubResult.estimatedCompletionSec}s\n\n` +
-                  `Use get_einvoice_status with the workflowRunId to poll for completion.`,
-                ),
-              ],
-              structuredContent: stubResult as unknown as Record<string, unknown>,
-            };
+            // HONEST unavailable — the /v1/einvoice/send transport endpoint is
+            // genuinely absent (not deployed). Do NOT fabricate a queued workflow.
+            return unavailableResult({
+              tool: "send_einvoice",
+              plannedEndpoint,
+              what: "E-invoice dispatch",
+              workaround:
+                "Use einvoice_export to produce the XML, then face_submit (Spain B2G) " +
+                "or ticketbai_submit (Basque Country) — those endpoints are live.",
+            });
           }
           throw err;
         }
@@ -306,29 +373,13 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           };
         } catch (err: unknown) {
           if (isNotFoundError(err)) {
-            const stubResult = {
-              status: "succeeded" as const,
-              step: "dispatch_complete",
-              ackId: `ack_stub_${workflowRunId.slice(-8)}`,
-              pdfA3Url: undefined,
-              xmlUrl: `https://storage.frihet.io/stub/${workflowRunId}.xml`,
-              _stub: true,
-              _note: "CF endpoint pending deploy",
-              _plannedEndpoint: plannedEndpoint,
-            };
-            return {
-              content: [
-                getContent(
-                  `E-invoice status (stub — CF pending deploy):\n` +
-                  `  WorkflowRunId: ${workflowRunId}\n` +
-                  `  Status: ${stubResult.status}\n` +
-                  `  Step: ${stubResult.step}\n` +
-                  `  AckId: ${stubResult.ackId}\n` +
-                  `  XML URL: ${stubResult.xmlUrl}`,
-                ),
-              ],
-              structuredContent: stubResult as unknown as Record<string, unknown>,
-            };
+            // HONEST unavailable — the /v1/einvoice/status endpoint is genuinely
+            // absent. Do NOT fabricate a "succeeded" status + fake XML URL.
+            return unavailableResult({
+              tool: "get_einvoice_status",
+              plannedEndpoint,
+              what: "E-invoice dispatch status polling",
+            });
           }
           throw err;
         }
@@ -364,19 +415,6 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
     async ({ xml, format }) =>
       withToolLogging("validate_einvoice_xml", async () => {
         const plannedEndpoint = "/v1/einvoice/validate";
-        const validatorMap: Record<EInvoiceFormat, "kosit" | "mustang" | "xsd" | "schematron"> = {
-          "xrechnung-cii": "kosit",
-          "xrechnung-ubl": "kosit",
-          "facturx-en16931": "mustang",
-          "facturx-extended": "mustang",
-          "facturx-basic": "mustang",
-          "facturx-minimum": "mustang",
-          "fatturapa": "xsd",
-          "ubl": "schematron",
-          "cii": "schematron",
-          "peppol-bis-3": "schematron",
-          "facturae": "xsd",
-        };
         try {
           const result = await (_client as IFrihetClientWithEInvoice).validateEInvoiceXml({ xml, format });
           return {
@@ -394,28 +432,15 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           };
         } catch (err: unknown) {
           if (isNotFoundError(err)) {
-            const stubResult = {
-              valid: true,
-              errors: [] as Array<{ severity: string; location: string; message: string; rule: string }>,
-              validator: validatorMap[format],
-              durationMs: 42,
-              _stub: true,
-              _note: "CF endpoint pending deploy",
-              _plannedEndpoint: plannedEndpoint,
-            };
-            return {
-              content: [
-                getContent(
-                  `E-invoice validation result (stub — CF pending deploy):\n` +
-                  `  Format: ${format}\n` +
-                  `  Valid: ${stubResult.valid}\n` +
-                  `  Errors: ${stubResult.errors.length}\n` +
-                  `  Validator: ${stubResult.validator}\n` +
-                  `  Duration: ${stubResult.durationMs}ms`,
-                ),
-              ],
-              structuredContent: stubResult as unknown as Record<string, unknown>,
-            };
+            // HONEST unavailable — the /v1/einvoice/validate endpoint is
+            // genuinely absent. Do NOT fabricate valid=true (a fabricated
+            // "passes validation" is the most dangerous stub of all: an agent
+            // would dispatch an unvalidated invoice believing it is compliant).
+            return unavailableResult({
+              tool: "validate_einvoice_xml",
+              plannedEndpoint,
+              what: "E-invoice XML validation",
+            });
           }
           throw err;
         }
@@ -462,12 +487,6 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
     async ({ periodStart, periodEnd, format }) =>
       withToolLogging("export_datev", async () => {
         const plannedEndpoint = "/v1/einvoice/export-datev";
-        const formatFileMap: Record<string, string> = {
-          "extf-buchungsstapel": "EXTF_Buchungsstapel",
-          "extf-debitoren": "EXTF_Debitoren",
-          "extf-kreditoren": "EXTF_Kreditoren",
-        };
-        const periodLabel = periodStart.slice(0, 7); // YYYY-MM
         try {
           const result = await (_client as IFrihetClientWithEInvoice).exportDatev({ periodStart, periodEnd, format });
           return {
@@ -486,31 +505,15 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           };
         } catch (err: unknown) {
           if (isNotFoundError(err)) {
-            const filename = `${formatFileMap[format]}_${periodLabel}.csv`;
-            const stubResult = {
-              fileUrl: `https://storage.frihet.io/stub/datev/${filename}`,
-              filename,
-              rowCount: 0,
-              fiscalPeriod: periodLabel,
-              encoding: "cp1252" as const,
-              _stub: true,
-              _note: "CF endpoint pending deploy",
-              _plannedEndpoint: plannedEndpoint,
-            };
-            return {
-              content: [
-                getContent(
-                  `DATEV export ready (stub — CF pending deploy):\n` +
-                  `  Format: ${format}\n` +
-                  `  Period: ${periodStart} → ${periodEnd}\n` +
-                  `  Filename: ${stubResult.filename}\n` +
-                  `  Rows: ${stubResult.rowCount}\n` +
-                  `  Encoding: ${stubResult.encoding}\n` +
-                  `  Download URL: ${stubResult.fileUrl}`,
-                ),
-              ],
-              structuredContent: stubResult as unknown as Record<string, unknown>,
-            };
+            // HONEST unavailable — the /v1/einvoice/export-datev endpoint is
+            // genuinely absent. Do NOT fabricate a fileUrl pointing at a stub
+            // path with rowCount=0 (an agent would hand a broken/empty link to
+            // an accountant).
+            return unavailableResult({
+              tool: "export_datev",
+              plannedEndpoint,
+              what: "DATEV EXTF export",
+            });
           }
           throw err;
         }
@@ -930,36 +933,26 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
     },
     async ({ invoiceId, mode }) =>
       withToolLogging("ksef_submit", async () => {
-        // STUB: KSeF CF endpoint not yet deployed — PR #417 required.
-        // When PR #417 merges (api.frihet.io/v1/invoices/:id/ksef/submit live),
-        // replace this block with: await (_client as IFrihetClientWithDay4EInvoice).kSeFSubmit({ invoiceId, mode })
+        // HONEST unavailable: KSeF CF endpoint not yet deployed — PR #417 required.
+        // Returns isError:true + _unavailable so an AI agent treats this as a
+        // failure, NOT as a (successful) tool result it can act on. When PR #417
+        // merges (api.frihet.io/v1/invoices/:id/ksef/submit live), replace this
+        // block with: await (_client as IFrihetClientWithDay4EInvoice).kSeFSubmit({ invoiceId, mode })
         const resolvedMode = mode ?? "production";
-        const stubResult = {
-          _notImplemented: true,
-          _note:
-            "KSeF endpoint not yet deployed. " +
-            "Depends on api.frihet.io/v1/invoices/:id/ksef/submit which lands in Frihet-ERP PR #417. " +
-            "Call ksef_submit again after PR #417 merges to activate live KSeF submissions.",
-          _plannedEndpoint: `/v1/invoices/${invoiceId}/ksef/submit`,
-          invoiceId,
-          mode: resolvedMode,
-        };
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text:
-                `KSeF submission not yet available.\n` +
-                `  Invoice: ${invoiceId}\n` +
-                `  Mode: ${resolvedMode}\n\n` +
-                `The KSeF Cloud Function is pending deployment (Frihet-ERP PR #417). ` +
-                `This tool will activate automatically once PR #417 merges to main. ` +
-                `In the meantime, use einvoice_export with format='ubl' + manual KSeF portal upload ` +
-                `at ksef.mf.gov.pl as a workaround.`,
-            },
-          ],
-          structuredContent: stubResult as unknown as Record<string, unknown>,
-        };
+        const result = unavailableResult({
+          tool: "ksef_submit",
+          plannedEndpoint: `/v1/invoices/${invoiceId}/ksef/submit`,
+          what: "KSeF (Poland) submission",
+          workaround:
+            "It will activate automatically once Frihet-ERP PR #417 merges. " +
+            "In the meantime, use einvoice_export with format='ubl' + manual KSeF portal " +
+            "upload at ksef.mf.gov.pl.",
+        });
+        // Preserve the forward-compat marker + echo the request for callers/tests.
+        result.structuredContent._notImplemented = true;
+        result.structuredContent.invoiceId = invoiceId;
+        result.structuredContent.mode = resolvedMode;
+        return result;
       }),
   );
 }
