@@ -2,6 +2,19 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.14.2] — 2026-06-20
+
+### Fixed
+
+- **MCP↔CF contract integrity** (#42): `modeloCode` alignment, Firestore `Timestamp` serialize seam, pagination `offset`, and `/quarterly-draft` fix so MCP tool output matches what the Cloud Function actually returns.
+- **Honest stub accounting** (#43, compliance): tools no longer fabricate success when the backend returns 404. A missing/unwired endpoint now surfaces an explicit error instead of a fake-OK — critical for Trust Area (agents must not act on phantom confirmations).
+
+## [1.14.1] — 2026-06-15
+
+### Changed
+
+- **Banking tools un-staled** (#40, #41): banking surface wired to the live Cloud Function (#848) + E2E smoke. einvoice tools wired al CF vivo.
+
 ## [1.14.0] — 2026-06-16
 
 ### Added
