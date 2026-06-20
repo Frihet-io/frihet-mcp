@@ -28,7 +28,7 @@
 | Server identifier (MCP name) | — | `io.frihet/erp` |
 | Server URL (remote endpoint) | — | `https://mcp.frihet.io/mcp` |
 | npm package | — | `@frihet/mcp-server` |
-| Version | — | `1.13.0` |
+| Version | — | `1.14.2` (GA / stable) |
 | License | — | `MIT` |
 | GitHub repository | — | `https://github.com/Frihet-io/frihet-mcp` |
 | Homepage / docs | — | `https://docs.frihet.io/desarrolladores/mcp-server` |
@@ -38,7 +38,7 @@
 ```
 Frihet MCP Server connects your AI assistant to Frihet ERP — the AI-native business platform for freelancers and SMEs in Spain and the EU.
 
-151 tools across 20+ domains: invoices, expenses, clients, CRM, quotes, deposits, banking, fiscal (Modelo 303/130/390/180/347/415/425/418), e-invoicing (XRechnung, Factur-X, FatturaPA, PEPPOL, Facturae, FACe, TicketBAI, KSeF), VeriFactu, IGIC/AIEM, corporate tax, GL audit, vacation rentals, POS, time tracking, HR, payroll, onboarding, period close, gestoria.
+157 tools across 20+ domains: invoices, expenses, clients, CRM, quotes, deposits, banking, fiscal (Modelo 303/130/390/180/347/415/425/418), e-invoicing (XRechnung, Factur-X, FatturaPA, PEPPOL, Facturae, FACe, TicketBAI, KSeF), VeriFactu, IGIC/AIEM, corporate tax, GL audit, vacation rentals, POS, time tracking, HR, payroll, onboarding, period close, gestoria.
 
 11 resources and 10 pre-built prompts (monthly-close, quarterly-tax-prep, year-end-close, cash-flow-forecast, invoice-aging-review and more).
 
@@ -63,7 +63,7 @@ Zero install: connect via the remote endpoint at mcp.frihet.io with OAuth 2.0 + 
 
 ### Section 3 — Tools & Resources
 
-**Tool count:** 151 tools, 11 resources, 10 prompts
+**Tool count:** 157 tools, 11 resources, 10 prompts
 
 **Domains covered:**
 - Invoices (12), Expenses (5), Clients (5), CRM/Contacts (3), CRM/Activities (2), CRM/Notes (3)
@@ -144,19 +144,19 @@ Before submitting:
 
 - [ ] Server is publicly reachable: `curl -s https://mcp.frihet.io/mcp` returns valid MCP response
 - [ ] OAuth redirect URIs include both `https://claude.ai/api/mcp/auth_callback` AND `https://claude.com/api/mcp/auth_callback`
-- [ ] All 151 tools have `readOnlyHint` set correctly (verify in `src/tools/*.ts`)
+- [ ] All 157 tools have `readOnlyHint` set correctly (verify in `src/tools/*.ts`)
 - [ ] Privacy policy page is live at `https://www.frihet.io/en/privacy`
 - [ ] Documentation page is live and public at `https://docs.frihet.io/desarrolladores/mcp-server`
 - [ ] Test account created and credentials ready
 - [ ] Logo/icon assets prepared at required sizes (see Section 6)
 - [ ] Screenshots prepared (see Section 6)
 - [ ] `server.json` description is ≤ 100 chars (verified: 87 chars on branch `fix/server-json-desc-100chars`)
-- [ ] Version is stable (not `-beta`) before submitting to production directory, OR note beta status clearly
+- [x] Version is GA / stable (not `-beta`): `v1.14.2` published to npm — ready for the production directory
 
 ---
 
 ## Submission Order Recommendation
 
-Submit Anthropic **last** among the three marketplaces. Reason: 2-week review cycle + production-readiness requirement. Ship Cursor and OpenAI first (faster turnaround), then submit Anthropic once version is stable.
+Submit Anthropic **last** among the three marketplaces. Reason: 2-week review cycle + production-readiness requirement. Ship Cursor and OpenAI first (faster turnaround), then submit Anthropic. The server is now GA (`v1.14.2`, 157 tools) so the production-readiness bar is met.
 
 See `../README.md` for full submission sequencing.
