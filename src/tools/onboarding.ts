@@ -27,6 +27,7 @@ import {
   onboardingStatusOutput,
   onboardingPersonaResultOutput,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerOnboardingTools(server: McpServer, client: IFrihetClient): void {
   // -- onboarding_status --
@@ -44,13 +45,15 @@ export function registerOnboardingTools(server: McpServer, client: IFrihetClient
       inputSchema: {},
       outputSchema: onboardingStatusOutput,
     },
-    async () => withToolLogging("onboarding_status", async () => {
-      const result = await client.getOnboardingStatus();
-      return {
-        content: [getContent(formatRecord("Onboarding status", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async () => withToolLogging("onboarding_status", () =>
+      withBackendGuard("onboarding_status", "/v1/onboarding/status", async () => {
+        const result = await client.getOnboardingStatus();
+        return {
+          content: [getContent(formatRecord("Onboarding status", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- onboarding_persona_set --
@@ -77,12 +80,14 @@ export function registerOnboardingTools(server: McpServer, client: IFrihetClient
       },
       outputSchema: onboardingPersonaResultOutput,
     },
-    async ({ persona }) => withToolLogging("onboarding_persona_set", async () => {
-      const result = await client.setOnboardingPersona({ persona });
-      return {
-        content: [mutateContent(formatRecord("Persona set", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ persona }) => withToolLogging("onboarding_persona_set", () =>
+      withBackendGuard("onboarding_persona_set", "/v1/onboarding/persona", async () => {
+        const result = await client.setOnboardingPersona({ persona });
+        return {
+          content: [mutateContent(formatRecord("Persona set", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 }

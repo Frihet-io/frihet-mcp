@@ -40,6 +40,7 @@ import {
   gestoriaBulkSendResultOutput,
   gestoriaAgingConsolidatedOutput,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 const PARENT_TYPE = z
   .enum(["documentRequest", "filingItem", "obligation"])
@@ -98,13 +99,15 @@ export function registerGestoriaTools(server: McpServer, client: IFrihetClient):
       outputSchema: gestoriaMessageSendResultOutput,
     },
     async ({ workspaceId, parentType, parentId, body }) =>
-      withToolLogging("gestoria_message_send", async () => {
-        const result = await client.sendGestoriaMessage({ workspaceId, parentType, parentId, body });
-        return {
-          content: [mutateContent(formatRecord("Message sent", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+      withToolLogging("gestoria_message_send", () =>
+        withBackendGuard("gestoria_message_send", "/v1/gestoria/messages", async () => {
+          const result = await client.sendGestoriaMessage({ workspaceId, parentType, parentId, body });
+          return {
+            content: [mutateContent(formatRecord("Message sent", result))],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        }),
+      ),
   );
 
   // -- gestoria_messages_list -----------------------------------------------
@@ -142,25 +145,27 @@ export function registerGestoriaTools(server: McpServer, client: IFrihetClient):
       }),
     },
     async ({ workspaceId, parentType, parentId, limit, before }) =>
-      withToolLogging("gestoria_messages_list", async () => {
-        const result = await client.listGestoriaMessages({
-          workspaceId,
-          parentType,
-          parentId,
-          limit,
-          before,
-        });
-        const count = Array.isArray(result.messages) ? result.messages.length : 0;
-        return {
-          content: [
-            listContent(
-              `Loaded ${count} message${count === 1 ? "" : "s"} for ${parentType}:${parentId}` +
-                (result.hasMore ? " (more available — paginate with `before`)" : ""),
-            ),
-          ],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+      withToolLogging("gestoria_messages_list", () =>
+        withBackendGuard("gestoria_messages_list", "/v1/gestoria/messages", async () => {
+          const result = await client.listGestoriaMessages({
+            workspaceId,
+            parentType,
+            parentId,
+            limit,
+            before,
+          });
+          const count = Array.isArray(result.messages) ? result.messages.length : 0;
+          return {
+            content: [
+              listContent(
+                `Loaded ${count} message${count === 1 ? "" : "s"} for ${parentType}:${parentId}` +
+                  (result.hasMore ? " (more available — paginate with `before`)" : ""),
+              ),
+            ],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        }),
+      ),
   );
 
   // -- gestoria_template_create ---------------------------------------------
@@ -214,20 +219,22 @@ export function registerGestoriaTools(server: McpServer, client: IFrihetClient):
       outputSchema: gestoriaTemplateCreateResultOutput,
     },
     async ({ name, title, description, dueDateOffsetDays, attachmentRequired, variables }) =>
-      withToolLogging("gestoria_template_create", async () => {
-        const result = await client.createGestoriaTemplate({
-          name,
-          title,
-          description,
-          dueDateOffsetDays,
-          attachmentRequired,
-          variables,
-        });
-        return {
-          content: [mutateContent(formatRecord("Template created", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+      withToolLogging("gestoria_template_create", () =>
+        withBackendGuard("gestoria_template_create", "/v1/gestoria/templates", async () => {
+          const result = await client.createGestoriaTemplate({
+            name,
+            title,
+            description,
+            dueDateOffsetDays,
+            attachmentRequired,
+            variables,
+          });
+          return {
+            content: [mutateContent(formatRecord("Template created", result))],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        }),
+      ),
   );
 
   // -- gestoria_template_bulk_send ------------------------------------------
@@ -259,23 +266,25 @@ export function registerGestoriaTools(server: McpServer, client: IFrihetClient):
       outputSchema: gestoriaBulkSendResultOutput,
     },
     async ({ templateId, clientWorkspaceIds, periodOverrides }) =>
-      withToolLogging("gestoria_template_bulk_send", async () => {
-        const result = await client.bulkSendGestoriaTemplate({
-          templateId,
-          clientWorkspaceIds,
-          periodOverrides,
-        });
-        const success = typeof result.success === "number" ? result.success : 0;
-        const failed = Array.isArray(result.failed) ? result.failed.length : 0;
-        return {
-          content: [
-            mutateContent(
-              `Bulk send complete: ${success} succeeded, ${failed} failed of ${clientWorkspaceIds.length} targets.`,
-            ),
-          ],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+      withToolLogging("gestoria_template_bulk_send", () =>
+        withBackendGuard("gestoria_template_bulk_send", "/v1/gestoria/templates/bulk-send", async () => {
+          const result = await client.bulkSendGestoriaTemplate({
+            templateId,
+            clientWorkspaceIds,
+            periodOverrides,
+          });
+          const success = typeof result.success === "number" ? result.success : 0;
+          const failed = Array.isArray(result.failed) ? result.failed.length : 0;
+          return {
+            content: [
+              mutateContent(
+                `Bulk send complete: ${success} succeeded, ${failed} failed of ${clientWorkspaceIds.length} targets.`,
+              ),
+            ],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        }),
+      ),
   );
 
   // -- gestoria_aging_consolidated ------------------------------------------
@@ -305,12 +314,14 @@ export function registerGestoriaTools(server: McpServer, client: IFrihetClient):
       outputSchema: gestoriaAgingConsolidatedOutput,
     },
     async ({ ownerUid }) =>
-      withToolLogging("gestoria_aging_consolidated", async () => {
-        const result = await client.getGestoriaAgingConsolidated({ ownerUid });
-        return {
-          content: [getContent(formatRecord("Aging consolidated", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+      withToolLogging("gestoria_aging_consolidated", () =>
+        withBackendGuard("gestoria_aging_consolidated", "/v1/gestoria/aging/consolidated", async () => {
+          const result = await client.getGestoriaAgingConsolidated({ ownerUid });
+          return {
+            content: [getContent(formatRecord("Aging consolidated", result))],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        }),
+      ),
   );
 }

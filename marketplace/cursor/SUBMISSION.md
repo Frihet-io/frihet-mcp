@@ -54,7 +54,7 @@ Frihet MCP Server connects Cursor directly to your Frihet ERP account.
 
 Talk to your business in natural language from inside Cursor. Create invoices, log expenses, manage clients, check cash flow, prepare quarterly taxes — all without leaving the editor.
 
-151 tools across invoicing, CRM, products, quotes, expenses, deposits, banking, fiscal compliance (Modelo 303/130/390/180/347, VeriFactu, TicketBAI), e-invoicing (PEPPOL, XRechnung, FatturaPA, Facturae, FACe), vacation rental management, point-of-sale, time tracking, HR, payroll, onboarding, period close, and gestoria support.
+157 tools across invoicing, CRM, products, quotes, expenses, deposits, banking, fiscal compliance (Modelo 303/130/390/180/347, VeriFactu, TicketBAI), e-invoicing (PEPPOL, XRechnung, FatturaPA, Facturae, FACe), vacation rental management, point-of-sale, time tracking, HR, payroll, onboarding, period close, and gestoria support.
 
 10 pre-built prompts for monthly close, quarterly tax prep, year-end close, cash flow forecast, invoice aging review and more.
 
@@ -106,9 +106,9 @@ Works with the free Frihet plan. Get an API key at app.frihet.io.
 ```json
 {
   "name": "frihet-erp",
-  "version": "1.13.0",
+  "version": "1.14.2",
   "displayName": "Frihet ERP",
-  "description": "AI-native ERP — full ES/EU fiscal compliance (VeriFactu/TicketBAI/Facturae) + 151 tools for invoicing, CRM, tax & banking.",
+  "description": "AI-native ERP — full ES/EU fiscal compliance (VeriFactu/TicketBAI/Facturae) + 157 tools for invoicing, CRM, tax & banking.",
   "icon": "https://frihet.io/favicon.svg",
   "homepage": "https://frihet.io",
   "repository": "https://github.com/Frihet-io/frihet-mcp",

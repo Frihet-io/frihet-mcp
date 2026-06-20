@@ -211,7 +211,10 @@ describe("tool-exposure: group taxonomy", () => {
     for (const f of readdirSync(toolsDir)) {
       if (!f.endsWith(".ts")) continue;
       const base = f.replace(/\.ts$/, "");
-      if (base === "register-all" || base === "shared") continue;
+      // Skip helper modules that register ZERO tools (not tool-group files):
+      //   register-all = registration entrypoint, shared = cross-tool helpers,
+      //   backend-availability = the 404→structured-error guard helper.
+      if (base === "register-all" || base === "shared" || base === "backend-availability") continue;
       const fileGroup = FILE_TO_GROUP[base];
       assert.ok(fileGroup, `source file ${base}.ts must be mapped in FILE_TO_GROUP`);
       const txt = readFileSync(join(toolsDir, f), "utf8");

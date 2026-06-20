@@ -22,6 +22,7 @@ import {
   getContent,
   READ_ONLY_ANNOTATIONS,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerImpuestoSociedadesTools(server: McpServer, client: IFrihetClient): void {
   // -- frihet_modelo_200_summary -------------------------------------------
@@ -43,13 +44,15 @@ export function registerImpuestoSociedadesTools(server: McpServer, client: IFrih
         year: z.string().optional().describe("Fiscal year (e.g. '2025', defaults to last closed year) / Ejercicio fiscal (ej. '2025', por defecto ultimo ejercicio cerrado)"),
       },
     },
-    async ({ year }) => withToolLogging("frihet_modelo_200_summary", async () => {
-      const result = await client.getISSummary("200", { year });
-      return {
-        content: [getContent(formatRecord("Modelo 200 Summary (IS Anual)", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ year }) => withToolLogging("frihet_modelo_200_summary", () =>
+      withBackendGuard("frihet_modelo_200_summary", "/v1/is/200", async () => {
+        const result = await client.getISSummary("200", { year });
+        return {
+          content: [getContent(formatRecord("Modelo 200 Summary (IS Anual)", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_modelo_202_summary -------------------------------------------
@@ -71,15 +74,17 @@ export function registerImpuestoSociedadesTools(server: McpServer, client: IFrih
         installment: z.enum(["1P", "2P", "3P"]).optional().describe("Specific installment (1P=April, 2P=October, 3P=December) or omit for all three / Plazo especifico (1P=abril, 2P=octubre, 3P=diciembre) u omitir para los tres"),
       },
     },
-    async ({ year, installment }) => withToolLogging("frihet_modelo_202_summary", async () => {
-      const result = await client.getISSummary("202", { year, installment });
-      const label = installment
-        ? `Modelo 202 Summary (${installment} ${year ?? ""})`
-        : `Modelo 202 Summary (all installments ${year ?? ""})`;
-      return {
-        content: [getContent(formatRecord(label.trim(), result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ year, installment }) => withToolLogging("frihet_modelo_202_summary", () =>
+      withBackendGuard("frihet_modelo_202_summary", "/v1/is/202", async () => {
+        const result = await client.getISSummary("202", { year, installment });
+        const label = installment
+          ? `Modelo 202 Summary (${installment} ${year ?? ""})`
+          : `Modelo 202 Summary (all installments ${year ?? ""})`;
+        return {
+          content: [getContent(formatRecord(label.trim(), result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 }

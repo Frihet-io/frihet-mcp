@@ -24,6 +24,7 @@ import {
   permissionsMatrixOutput,
   permissionsMeOutput,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerPermissionsTools(server: McpServer, client: IFrihetClient): void {
   // -- permissions_matrix --
@@ -41,13 +42,15 @@ export function registerPermissionsTools(server: McpServer, client: IFrihetClien
       inputSchema: {},
       outputSchema: permissionsMatrixOutput,
     },
-    async () => withToolLogging("permissions_matrix", async () => {
-      const result = await client.getPermissionsMatrix();
-      return {
-        content: [getContent(formatRecord("Permissions matrix", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async () => withToolLogging("permissions_matrix", () =>
+      withBackendGuard("permissions_matrix", "/v1/permissions/matrix", async () => {
+        const result = await client.getPermissionsMatrix();
+        return {
+          content: [getContent(formatRecord("Permissions matrix", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- permissions_me --
@@ -64,12 +67,14 @@ export function registerPermissionsTools(server: McpServer, client: IFrihetClien
       inputSchema: {},
       outputSchema: permissionsMeOutput,
     },
-    async () => withToolLogging("permissions_me", async () => {
-      const result = await client.getMyPermissions();
-      return {
-        content: [getContent(formatRecord("My permissions", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async () => withToolLogging("permissions_me", () =>
+      withBackendGuard("permissions_me", "/v1/permissions/me", async () => {
+        const result = await client.getMyPermissions();
+        return {
+          content: [getContent(formatRecord("My permissions", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 }

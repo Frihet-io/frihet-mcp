@@ -26,6 +26,7 @@ import {
   payrollExportOutput,
   payrollChecklistOutput,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerPayrollTools(server: McpServer, client: IFrihetClient): void {
   // -- payroll_export --
@@ -55,13 +56,15 @@ export function registerPayrollTools(server: McpServer, client: IFrihetClient): 
       },
       outputSchema: payrollExportOutput,
     },
-    async ({ format, month }) => withToolLogging("payroll_export", async () => {
-      const result = await client.exportPayroll({ format, month });
-      return {
-        content: [getContent(formatRecord("Payroll export", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ format, month }) => withToolLogging("payroll_export", () =>
+      withBackendGuard("payroll_export", "/v1/payroll/prep/export", async () => {
+        const result = await client.exportPayroll({ format, month });
+        return {
+          content: [getContent(formatRecord("Payroll export", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- payroll_checklist --
@@ -85,12 +88,14 @@ export function registerPayrollTools(server: McpServer, client: IFrihetClient): 
       },
       outputSchema: payrollChecklistOutput,
     },
-    async ({ month }) => withToolLogging("payroll_checklist", async () => {
-      const result = await client.getPayrollChecklist({ month });
-      return {
-        content: [getContent(formatRecord("Payroll checklist", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ month }) => withToolLogging("payroll_checklist", () =>
+      withBackendGuard("payroll_checklist", "/v1/payroll/prep/employees", async () => {
+        const result = await client.getPayrollChecklist({ month });
+        return {
+          content: [getContent(formatRecord("Payroll checklist", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 }

@@ -31,6 +31,7 @@ import {
   CREATE_ANNOTATIONS,
   paginatedOutput,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 const bankRuleItemOutput = z.object({
   id: z.string(),
@@ -72,13 +73,15 @@ export function registerBankRulesTools(server: McpServer, client: IFrihetClient)
       },
       outputSchema: paginatedOutput(bankRuleItemOutput),
     },
-    async ({ isActive, limit, offset }) => withToolLogging("frihet_bank_rules_list", async () => {
-      const result = await client.listBankRules({ isActive, limit, offset });
-      return {
-        content: [listContent(formatPaginatedResponse("bank_rules", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ isActive, limit, offset }) => withToolLogging("frihet_bank_rules_list", () =>
+      withBackendGuard("frihet_bank_rules_list", "/v1/banking/rules", async () => {
+        const result = await client.listBankRules({ isActive, limit, offset });
+        return {
+          content: [listContent(formatPaginatedResponse("bank_rules", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_bank_rule_create ----------------------------------------------
@@ -114,16 +117,18 @@ export function registerBankRulesTools(server: McpServer, client: IFrihetClient)
         isActive: z.boolean().optional().describe("Whether the rule is active (default true) / Si la regla esta activa (por defecto true)"),
       },
     },
-    async ({ name, conditions, actions, isActive }) => withToolLogging("frihet_bank_rule_create", async () => {
-      const result = await client.createBankRule({ name, conditions, actions, isActive });
-      return {
-        content: [
-          mutateContent(
-            formatRecord(`Bank rule created: ${name}`, result),
-          ),
-        ],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ name, conditions, actions, isActive }) => withToolLogging("frihet_bank_rule_create", () =>
+      withBackendGuard("frihet_bank_rule_create", "/v1/banking/rules", async () => {
+        const result = await client.createBankRule({ name, conditions, actions, isActive });
+        return {
+          content: [
+            mutateContent(
+              formatRecord(`Bank rule created: ${name}`, result),
+            ),
+          ],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 }

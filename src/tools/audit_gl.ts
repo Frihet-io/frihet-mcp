@@ -25,6 +25,7 @@ import {
   READ_ONLY_ANNOTATIONS,
   UPDATE_ANNOTATIONS,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerAuditGLTools(server: McpServer, client: IFrihetClient): void {
   // -- frihet_gl_entry_approve -----------------------------------------------
@@ -46,17 +47,19 @@ export function registerAuditGLTools(server: McpServer, client: IFrihetClient): 
         notes: z.string().optional().describe("Optional approval notes / Notas de aprobacion opcionales"),
       },
     },
-    async ({ entryId, notes }) => withToolLogging("frihet_gl_entry_approve", async () => {
-      const result = await client.approveGLEntry(entryId, notes);
-      return {
-        content: [
-          mutateContent(
-            formatRecord(`GL Entry ${entryId} approved`, result),
-          ),
-        ],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ entryId, notes }) => withToolLogging("frihet_gl_entry_approve", () =>
+      withBackendGuard("frihet_gl_entry_approve", "/v1/gl/entries/approve", async () => {
+        const result = await client.approveGLEntry(entryId, notes);
+        return {
+          content: [
+            mutateContent(
+              formatRecord(`GL Entry ${entryId} approved`, result),
+            ),
+          ],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_gl_entry_reject ------------------------------------------------
@@ -78,17 +81,19 @@ export function registerAuditGLTools(server: McpServer, client: IFrihetClient): 
         reason: z.string().describe("Mandatory rejection reason (visible to submitter) / Razon del rechazo (obligatoria, visible al emisor)"),
       },
     },
-    async ({ entryId, reason }) => withToolLogging("frihet_gl_entry_reject", async () => {
-      const result = await client.rejectGLEntry(entryId, reason);
-      return {
-        content: [
-          mutateContent(
-            formatRecord(`GL Entry ${entryId} rejected`, result),
-          ),
-        ],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ entryId, reason }) => withToolLogging("frihet_gl_entry_reject", () =>
+      withBackendGuard("frihet_gl_entry_reject", "/v1/gl/entries/reject", async () => {
+        const result = await client.rejectGLEntry(entryId, reason);
+        return {
+          content: [
+            mutateContent(
+              formatRecord(`GL Entry ${entryId} rejected`, result),
+            ),
+          ],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_gl_entry_audit_log ---------------------------------------------
@@ -109,12 +114,14 @@ export function registerAuditGLTools(server: McpServer, client: IFrihetClient): 
         entryId: z.string().describe("GL entry ID / ID del asiento contable"),
       },
     },
-    async ({ entryId }) => withToolLogging("frihet_gl_entry_audit_log", async () => {
-      const result = await client.getGLEntryAuditLog(entryId);
-      return {
-        content: [getContent(formatRecord(`Audit Log for GL Entry ${entryId}`, result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ entryId }) => withToolLogging("frihet_gl_entry_audit_log", () =>
+      withBackendGuard("frihet_gl_entry_audit_log", "/v1/gl/entries/audit-log", async () => {
+        const result = await client.getGLEntryAuditLog(entryId);
+        return {
+          content: [getContent(formatRecord(`Audit Log for GL Entry ${entryId}`, result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 }

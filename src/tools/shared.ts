@@ -634,9 +634,79 @@ export const bankTransactionItemOutput = z.object({
 
 /* --- Fiscal item schemas --------------------------------------------------- */
 
+/**
+ * Modelo 303 (IVA trimestral) totals — the READ-ONLY self-assessment view the
+ * shipped CF returns under `modelo303`. All amounts in EUR.
+ */
+const modelo303TotalsSchema = z.object({
+  baseImponible: z.number().optional().describe("IVA devengado base (operaciones interiores sujetas)"),
+  cuotaRepercutida: z.number().optional().describe("Output VAT (cuota repercutida)"),
+  baseDeducible: z.number().optional().describe("Deductible base (input)"),
+  cuotaDeducible: z.number().optional().describe("Input VAT (cuota deducible)"),
+  resultado: z.number().optional().describe("cuotaRepercutida − cuotaDeducible (+ to pay, − to refund/compensate)"),
+  baseExenta: z.number().optional().describe("Base of exempt operations (zero cuota)"),
+  baseNoSujetaORC: z.number().optional().describe("Intra-community / export / reverse-charge base"),
+  outOfScope: z.record(z.string(), z.unknown()).optional().describe("IGIC/IPSI totals — outside the 303 self-assessment"),
+}).passthrough();
+
+/** Modelo 130 (IRPF pago fraccionado) totals returned under `modelo130`. */
+const modelo130TotalsSchema = z.object({
+  ingresos: z.number().optional(),
+  gastos: z.number().optional(),
+  rendimientoNeto: z.number().optional(),
+  pagoFraccionado: z.number().optional().describe("Pago fraccionado IRPF (20% del rendimiento neto)"),
+  retencionesSoportadas: z.number().optional().describe("IRPF withheld by clients on issued invoices"),
+}).passthrough();
+
+/** Modelo 390 (resumen anual IVA) totals returned under `modelo390`. */
+const modelo390TotalsSchema = z.object({
+  baseImponible: z.number().optional(),
+  cuotaRepercutida: z.number().optional(),
+  baseDeducible: z.number().optional(),
+  cuotaDeducible: z.number().optional(),
+  resultadoAnual: z.number().optional(),
+  baseExenta: z.number().optional(),
+  baseNoSujetaORC: z.number().optional(),
+  outOfScope: z.record(z.string(), z.unknown()).optional(),
+}).passthrough();
+
+/** Aggregate counts/totals the CF attaches under `summary`. */
+const fiscalSummaryCountsSchema = z.object({
+  totalRevenue: z.number().optional(),
+  totalExpenses: z.number().optional(),
+  invoiceCount: z.number().optional(),
+  expenseCount: z.number().optional(),
+  clientCount: z.number().optional(),
+}).passthrough();
+
+/**
+ * Output schema for the Modelo 303/130/390 READ-ONLY summary tools.
+ *
+ * Aligned with the SHIPPED Cloudflare Function response (publicApi.ts), which
+ * — after the client unwraps the `{ data, meta }` envelope — returns:
+ *   { model, period, months, modelo303|modelo130|modelo390, summary, readonly, note }
+ *
+ * `model` carries the modelo code ('303'|'130'|'390'). `modeloCode` is kept as
+ * an OPTIONAL alias so legacy callers/fixtures that surface `modeloCode`
+ * validate too (the CF itself emits `model`). The three `modelo*` totals
+ * objects are mutually exclusive per request — each is optional so any one
+ * model validates. `.passthrough()` lets the genuine totals surface even where
+ * a field isn't explicitly enumerated.
+ */
 export const fiscalModeloSummaryOutput = z.object({
-  modeloCode: z.string(),
-  period: z.string().optional(),
+  /** Modelo code as the CF emits it ('303' | '130' | '390'). */
+  model: z.string().optional(),
+  /** Legacy alias for `model`; optional so the CF's `model`-only shape passes. */
+  modeloCode: z.string().optional(),
+  period: z.string().optional().describe("YYYY-QN (303/130) or YYYY (390)"),
+  months: z.array(z.string()).optional().describe("Months covered by the period (YYYY-MM)"),
+  modelo303: modelo303TotalsSchema.optional(),
+  modelo130: modelo130TotalsSchema.optional(),
+  modelo390: modelo390TotalsSchema.optional(),
+  summary: fiscalSummaryCountsSchema.optional(),
+  readonly: z.literal(true).optional().describe("Marks the payload as an informational summary, never filed to AEAT"),
+  note: z.string().optional(),
+  // --- Legacy/back-compat fields (older summary shape) ---------------------
   totalsByRate: z.record(z.string(), z.number()).optional(),
   totalDeductible: z.number().optional(),
   totalDue: z.number().optional(),

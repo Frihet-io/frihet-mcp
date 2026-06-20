@@ -7,12 +7,12 @@
     "url": "https://github.com/Frihet-io/frihet-mcp",
     "source": "github"
   },
-  "version": "1.14.1",
+  "version": "1.14.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@frihet/mcp-server",
-      "version": "1.14.1",
+      "version": "1.14.2",
       "transport": {
         "type": "stdio"
       }
