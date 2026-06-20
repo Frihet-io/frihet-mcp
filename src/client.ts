@@ -170,6 +170,49 @@ export class FrihetClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /**
+   * Wrapper for SINGLE-OBJECT endpoints whose backend wraps the item in a
+   * `{ data, meta }` envelope (e.g. the shipped `/v1/fiscal/modelo/:code` CF).
+   *
+   * The Cloudflare Function returns `res.json({ data: <item>, meta: {...} })`
+   * for single-object reads, so the raw HTTP body is the envelope — NOT the
+   * item. Passing that envelope straight into a tool's `structuredContent`
+   * surfaces `{ data, meta }` instead of the modelo summary, breaking the
+   * tool's output schema. This unwraps to `body.data`.
+   *
+   * Only unwraps when the body is an object carrying a `data` property that is
+   * itself a (non-array) object — i.e. a genuine single-object envelope. It is
+   * deliberately distinct from {@link requestPaginated}, which keeps the
+   * `{ data: [...] , meta }` shape intact for list endpoints. If the body is
+   * not an envelope (legacy endpoints that return the item directly), it is
+   * returned unchanged so existing callers keep working.
+   */
+  private async requestUnwrapped<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    query?: Record<string, string | number | undefined>,
+  ): Promise<T> {
+    const raw = await this.request<unknown>(method, path, body, query);
+
+    if (
+      raw !== null &&
+      typeof raw === "object" &&
+      !Array.isArray(raw) &&
+      "data" in raw
+    ) {
+      const inner = (raw as { data: unknown }).data;
+      // Single-object envelope only. An array `data` belongs to a paginated
+      // response — never reachable here (those go through requestPaginated),
+      // but guard anyway so we never silently strip a list.
+      if (inner !== null && typeof inner === "object" && !Array.isArray(inner)) {
+        return inner as T;
+      }
+    }
+
+    return raw as T;
+  }
+
   /** Wrapper for paginated endpoints — validates response shape has `data` array. */
   private async requestPaginated<T>(
     method: string,
@@ -911,13 +954,20 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Fiscal
-  // NOTE: /v1/fiscal/* endpoints are planned — 404 propagates until backend ships.
+  // RESOLVED (was: "planned — 404 propagates until backend ships"). The
+  // /v1/fiscal/modelo/:code summary backend (Modelo 303/130/390 READ-ONLY)
+  // has SHIPPED in Frihet-ERP (publicApi.ts). The CF wraps the single-object
+  // summary in a `{ data, meta }` envelope, so this read MUST unwrap to
+  // `body.data` — otherwise the tool's structuredContent is the envelope, not
+  // the modelo summary. See requestUnwrapped().
+  // NOTE: /v1/fiscal/verifactu/* + /ticketbai/* below remain pending and 404
+  // until those backends ship (they keep the raw `request` path for now).
 
   async getFiscalModeloSummary(
     modeloCode: string,
     period?: string,
   ): Promise<Record<string, unknown>> {
-    return this.request("GET", `/fiscal/modelo/${encodeURIComponent(modeloCode)}`, undefined, {
+    return this.requestUnwrapped("GET", `/fiscal/modelo/${encodeURIComponent(modeloCode)}`, undefined, {
       period,
     });
   }
