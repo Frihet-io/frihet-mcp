@@ -26,6 +26,7 @@ import {
   READ_ONLY_ANNOTATIONS,
   periodStatusOutput,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerAccountingCloseTools(server: McpServer, client: IFrihetClient): void {
   // -- period_close_status --
@@ -44,13 +45,15 @@ export function registerAccountingCloseTools(server: McpServer, client: IFrihetC
       },
       outputSchema: periodStatusOutput,
     },
-    async ({ periodId }) => withToolLogging("period_close_status", async () => {
-      const result = await client.getCurrentPeriod({ periodId });
-      return {
-        content: [getContent(formatRecord("Period status", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ periodId }) => withToolLogging("period_close_status", () =>
+      withBackendGuard("period_close_status", "/v1/periods/current", async () => {
+        const result = await client.getCurrentPeriod({ periodId });
+        return {
+          content: [getContent(formatRecord("Period status", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- period_close --
@@ -92,11 +95,13 @@ export function registerAccountingCloseTools(server: McpServer, client: IFrihetC
           isError: true,
         };
       }
-      const result = await client.closePeriod({ type });
-      return {
-        content: [mutateContent(formatRecord("Period closed", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
+      return withBackendGuard("period_close", "/v1/periods/close", async () => {
+        const result = await client.closePeriod({ type });
+        return {
+          content: [mutateContent(formatRecord("Period closed", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      });
     }),
   );
 
@@ -139,11 +144,13 @@ export function registerAccountingCloseTools(server: McpServer, client: IFrihetC
           isError: true,
         };
       }
-      const result = await client.reopenPeriod({ periodId, reason });
-      return {
-        content: [mutateContent(formatRecord("Period reopened", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
+      return withBackendGuard("period_reopen", "/v1/periods/reopen", async () => {
+        const result = await client.reopenPeriod({ periodId, reason });
+        return {
+          content: [mutateContent(formatRecord("Period reopened", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      });
     }),
   );
 }

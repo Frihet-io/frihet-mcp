@@ -28,6 +28,7 @@ import {
   READ_ONLY_ANNOTATIONS,
   CREATE_ANNOTATIONS,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerOnboardViesTools(server: McpServer, client: IFrihetClient): void {
   // -- frihet_portal_onboard_link_generate ----------------------------------
@@ -54,19 +55,21 @@ export function registerOnboardViesTools(server: McpServer, client: IFrihetClien
         workspaceId: z.string().optional().describe("Target gestor workspace ID / ID del workspace del gestor"),
       },
     },
-    async ({ email, name, expiresInHours, workspaceId }) => withToolLogging("frihet_portal_onboard_link_generate", async () => {
-      const result = await client.generatePortalOnboardLink({ email, name, expiresInHours, workspaceId });
-      return {
-        content: [
-          mutateContent(
-            formatRecord(`Self-onboard link generated for ${email}`, result) +
-            "\n\nSend this link to the client via email or chat. It is single-use and time-limited." +
-            "\nEnvia este enlace al cliente por email o chat. Es de uso único y tiene caducidad.",
-          ),
-        ],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ email, name, expiresInHours, workspaceId }) => withToolLogging("frihet_portal_onboard_link_generate", () =>
+      withBackendGuard("frihet_portal_onboard_link_generate", "/v1/portal/onboard/link", async () => {
+        const result = await client.generatePortalOnboardLink({ email, name, expiresInHours, workspaceId });
+        return {
+          content: [
+            mutateContent(
+              formatRecord(`Self-onboard link generated for ${email}`, result) +
+              "\n\nSend this link to the client via email or chat. It is single-use and time-limited." +
+              "\nEnvia este enlace al cliente por email o chat. Es de uso único y tiene caducidad.",
+            ),
+          ],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_tax_id_vies_lookup --------------------------------------------
@@ -88,12 +91,14 @@ export function registerOnboardViesTools(server: McpServer, client: IFrihetClien
         countryCode: z.string().length(2).describe("ISO 3166-1 alpha-2 country code (e.g. 'ES', 'DE', 'FR') / Codigo de pais ISO (ej. 'ES', 'DE', 'FR')"),
       },
     },
-    async ({ vatNumber, countryCode }) => withToolLogging("frihet_tax_id_vies_lookup", async () => {
-      const result = await client.lookupTaxIdViaVIES({ vatNumber, countryCode });
-      return {
-        content: [getContent(formatRecord(`VIES lookup: ${countryCode}${vatNumber}`, result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ vatNumber, countryCode }) => withToolLogging("frihet_tax_id_vies_lookup", () =>
+      withBackendGuard("frihet_tax_id_vies_lookup", "/v1/portal/onboard/vies", async () => {
+        const result = await client.lookupTaxIdViaVIES({ vatNumber, countryCode });
+        return {
+          content: [getContent(formatRecord(`VIES lookup: ${countryCode}${vatNumber}`, result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 }

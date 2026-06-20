@@ -30,6 +30,7 @@ import {
   fiscalModeloSummaryOutput,
   verifactuStatusOutput,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerFiscalTools(server: McpServer, client: IFrihetClient): void {
   // -- get_modelo_303_summary --
@@ -53,13 +54,15 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_303_summary", async () => {
-      const result = await client.getFiscalModeloSummary("303", period);
-      return {
-        content: [getContent(formatRecord("Modelo 303 Summary", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ period }) => withToolLogging("get_modelo_303_summary", () =>
+      withBackendGuard("get_modelo_303_summary", "/v1/fiscal/303", async () => {
+        const result = await client.getFiscalModeloSummary("303", period);
+        return {
+          content: [getContent(formatRecord("Modelo 303 Summary", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- get_modelo_130_summary --
@@ -83,13 +86,15 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_130_summary", async () => {
-      const result = await client.getFiscalModeloSummary("130", period);
-      return {
-        content: [getContent(formatRecord("Modelo 130 Summary", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ period }) => withToolLogging("get_modelo_130_summary", () =>
+      withBackendGuard("get_modelo_130_summary", "/v1/fiscal/130", async () => {
+        const result = await client.getFiscalModeloSummary("130", period);
+        return {
+          content: [getContent(formatRecord("Modelo 130 Summary", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- get_modelo_390_summary --
@@ -113,13 +118,15 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_390_summary", async () => {
-      const result = await client.getFiscalModeloSummary("390", period);
-      return {
-        content: [getContent(formatRecord("Modelo 390 Summary", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ period }) => withToolLogging("get_modelo_390_summary", () =>
+      withBackendGuard("get_modelo_390_summary", "/v1/fiscal/390", async () => {
+        const result = await client.getFiscalModeloSummary("390", period);
+        return {
+          content: [getContent(formatRecord("Modelo 390 Summary", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- get_modelo_180_summary --
@@ -143,13 +150,15 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_180_summary", async () => {
-      const result = await client.getFiscalModeloSummary("180", period);
-      return {
-        content: [getContent(formatRecord("Modelo 180 Summary", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ period }) => withToolLogging("get_modelo_180_summary", () =>
+      withBackendGuard("get_modelo_180_summary", "/v1/fiscal/180", async () => {
+        const result = await client.getFiscalModeloSummary("180", period);
+        return {
+          content: [getContent(formatRecord("Modelo 180 Summary", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- get_modelo_347_summary --
@@ -173,13 +182,15 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_347_summary", async () => {
-      const result = await client.getFiscalModeloSummary("347", period);
-      return {
-        content: [getContent(formatRecord("Modelo 347 Summary", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ period }) => withToolLogging("get_modelo_347_summary", () =>
+      withBackendGuard("get_modelo_347_summary", "/v1/fiscal/347", async () => {
+        const result = await client.getFiscalModeloSummary("347", period);
+        return {
+          content: [getContent(formatRecord("Modelo 347 Summary", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- verifactu_status --
@@ -199,13 +210,15 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
       },
       outputSchema: verifactuStatusOutput,
     },
-    async ({ invoiceId }) => withToolLogging("verifactu_status", async () => {
-      const result = await client.getVerifactuStatus(invoiceId);
-      return {
-        content: [getContent(formatRecord("VeriFactu Status", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ invoiceId }) => withToolLogging("verifactu_status", () =>
+      withBackendGuard("verifactu_status", "/v1/fiscal/verifactu/status", async () => {
+        const result = await client.getVerifactuStatus(invoiceId);
+        return {
+          content: [getContent(formatRecord("VeriFactu Status", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- verifactu_resubmit --
@@ -246,11 +259,13 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
           isError: true,
         };
       }
-      const result = await client.resubmitVerifactu(invoiceId);
-      return {
-        content: [mutateContent(formatRecord("VeriFactu Resubmitted", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
+      return withBackendGuard("verifactu_resubmit", "/v1/fiscal/verifactu/resubmit", async () => {
+        const result = await client.resubmitVerifactu(invoiceId);
+        return {
+          content: [mutateContent(formatRecord("VeriFactu Resubmitted", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      });
     }),
   );
 

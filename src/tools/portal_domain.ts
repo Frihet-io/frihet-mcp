@@ -26,6 +26,7 @@ import {
   CREATE_ANNOTATIONS,
   DELETE_ANNOTATIONS,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerPortalDomainTools(server: McpServer, client: IFrihetClient): void {
   // -- frihet_portal_domain_add ---------------------------------------------
@@ -46,19 +47,21 @@ export function registerPortalDomainTools(server: McpServer, client: IFrihetClie
         workspaceId: z.string().optional().describe("Target workspace ID (defaults to caller's workspace) / ID del workspace destino"),
       },
     },
-    async ({ domain, workspaceId }) => withToolLogging("frihet_portal_domain_add", async () => {
-      const result = await client.addCustomPortalDomain({ domain, workspaceId });
-      return {
-        content: [
-          mutateContent(
-            formatRecord(`Custom portal domain added: ${domain}`, result) +
-            "\n\nNext step: Configure the returned CNAME record at your DNS registrar, then call frihet_portal_domain_verify." +
-            "\nSiguiente paso: Configura el registro CNAME en tu registrador DNS, luego llama a frihet_portal_domain_verify.",
-          ),
-        ],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ domain, workspaceId }) => withToolLogging("frihet_portal_domain_add", () =>
+      withBackendGuard("frihet_portal_domain_add", "/v1/portal/domain/add", async () => {
+        const result = await client.addCustomPortalDomain({ domain, workspaceId });
+        return {
+          content: [
+            mutateContent(
+              formatRecord(`Custom portal domain added: ${domain}`, result) +
+              "\n\nNext step: Configure the returned CNAME record at your DNS registrar, then call frihet_portal_domain_verify." +
+              "\nSiguiente paso: Configura el registro CNAME en tu registrador DNS, luego llama a frihet_portal_domain_verify.",
+            ),
+          ],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_portal_domain_verify ------------------------------------------
@@ -79,13 +82,15 @@ export function registerPortalDomainTools(server: McpServer, client: IFrihetClie
         domain: z.string().describe("Custom domain to verify / Dominio personalizado a verificar"),
       },
     },
-    async ({ domain }) => withToolLogging("frihet_portal_domain_verify", async () => {
-      const result = await client.verifyCustomPortalDomain({ domain });
-      return {
-        content: [getContent(formatRecord(`Domain verification status: ${domain}`, result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ domain }) => withToolLogging("frihet_portal_domain_verify", () =>
+      withBackendGuard("frihet_portal_domain_verify", "/v1/portal/domain/verify", async () => {
+        const result = await client.verifyCustomPortalDomain({ domain });
+        return {
+          content: [getContent(formatRecord(`Domain verification status: ${domain}`, result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_portal_domain_remove ------------------------------------------
@@ -105,16 +110,18 @@ export function registerPortalDomainTools(server: McpServer, client: IFrihetClie
         domain: z.string().describe("Custom domain to remove / Dominio personalizado a eliminar"),
       },
     },
-    async ({ domain }) => withToolLogging("frihet_portal_domain_remove", async () => {
-      const result = await client.removeCustomPortalDomain({ domain });
-      return {
-        content: [
-          mutateContent(
-            formatRecord(`Custom portal domain removed: ${domain}`, result),
-          ),
-        ],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ domain }) => withToolLogging("frihet_portal_domain_remove", () =>
+      withBackendGuard("frihet_portal_domain_remove", "/v1/portal/domain/remove", async () => {
+        const result = await client.removeCustomPortalDomain({ domain });
+        return {
+          content: [
+            mutateContent(
+              formatRecord(`Custom portal domain removed: ${domain}`, result),
+            ),
+          ],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 }

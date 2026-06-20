@@ -23,6 +23,7 @@ import {
   getContent,
   READ_ONLY_ANNOTATIONS,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerIgicTools(server: McpServer, client: IFrihetClient): void {
   // -- frihet_modelo_415_summary -------------------------------------------
@@ -43,13 +44,15 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
         year: z.string().optional().describe("Tax year (e.g. '2025', defaults to previous year) / Ejercicio fiscal (ej. '2025', por defecto ejercicio anterior)"),
       },
     },
-    async ({ year }) => withToolLogging("frihet_modelo_415_summary", async () => {
-      const result = await client.getIgicModeloSummary("415", { year });
-      return {
-        content: [getContent(formatRecord("Modelo 415 Summary (IGIC)", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ year }) => withToolLogging("frihet_modelo_415_summary", () =>
+      withBackendGuard("frihet_modelo_415_summary", "/v1/igic/415", async () => {
+        const result = await client.getIgicModeloSummary("415", { year });
+        return {
+          content: [getContent(formatRecord("Modelo 415 Summary (IGIC)", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_modelo_425_summary -------------------------------------------
@@ -69,13 +72,15 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
         year: z.string().optional().describe("Tax year (e.g. '2025', defaults to previous year) / Ejercicio fiscal (ej. '2025', por defecto ejercicio anterior)"),
       },
     },
-    async ({ year }) => withToolLogging("frihet_modelo_425_summary", async () => {
-      const result = await client.getIgicModeloSummary("425", { year });
-      return {
-        content: [getContent(formatRecord("Modelo 425 Summary (IGIC)", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ year }) => withToolLogging("frihet_modelo_425_summary", () =>
+      withBackendGuard("frihet_modelo_425_summary", "/v1/igic/425", async () => {
+        const result = await client.getIgicModeloSummary("425", { year });
+        return {
+          content: [getContent(formatRecord("Modelo 425 Summary (IGIC)", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_modelo_418_summary -------------------------------------------
@@ -96,13 +101,15 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
         period: z.string().optional().describe("Period in YYYY-MM format (defaults to last month) / Periodo YYYY-MM (por defecto mes anterior)"),
       },
     },
-    async ({ period }) => withToolLogging("frihet_modelo_418_summary", async () => {
-      const result = await client.getIgicModeloSummary("418", { period });
-      return {
-        content: [getContent(formatRecord("Modelo 418 Summary (IGIC Monthly)", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ period }) => withToolLogging("frihet_modelo_418_summary", () =>
+      withBackendGuard("frihet_modelo_418_summary", "/v1/igic/418", async () => {
+        const result = await client.getIgicModeloSummary("418", { period });
+        return {
+          content: [getContent(formatRecord("Modelo 418 Summary (IGIC Monthly)", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- frihet_aiem_calculate ------------------------------------------------
@@ -126,12 +133,14 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
         description: z.string().optional().describe("Product description for audit reference / Descripcion del producto (referencia auditoria)"),
       },
     },
-    async ({ ncCode, amount, description }) => withToolLogging("frihet_aiem_calculate", async () => {
-      const result = await client.calculateAiem({ ncCode, amount, description });
-      return {
-        content: [getContent(formatRecord(`AIEM Calculation (NC: ${ncCode})`, result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ ncCode, amount, description }) => withToolLogging("frihet_aiem_calculate", () =>
+      withBackendGuard("frihet_aiem_calculate", "/v1/igic/aiem", async () => {
+        const result = await client.calculateAiem({ ncCode, amount, description });
+        return {
+          content: [getContent(formatRecord(`AIEM Calculation (NC: ${ncCode})`, result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 }

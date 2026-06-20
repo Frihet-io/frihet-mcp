@@ -38,6 +38,7 @@ import {
   overtimeReportOutput,
   anomalyItemOutput,
 } from "./shared.js";
+import { withBackendGuard } from "./backend-availability.js";
 
 export function registerHrTools(server: McpServer, client: IFrihetClient): void {
   // -- leave_request_create --
@@ -61,13 +62,15 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       },
       outputSchema: leaveRequestItemOutput,
     },
-    async (input) => withToolLogging("leave_request_create", async () => {
-      const result = await client.createLeaveRequest(input);
-      return {
-        content: [mutateContent(formatRecord("Leave request created", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async (input) => withToolLogging("leave_request_create", () =>
+      withBackendGuard("leave_request_create", "/v1/leaves", async () => {
+        const result = await client.createLeaveRequest(input);
+        return {
+          content: [mutateContent(formatRecord("Leave request created", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- leave_approve --
@@ -87,13 +90,15 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       },
       outputSchema: leaveRequestItemOutput,
     },
-    async ({ leaveId, reason }) => withToolLogging("leave_approve", async () => {
-      const result = await client.approveLeave(leaveId, { reason });
-      return {
-        content: [mutateContent(formatRecord("Leave approved", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ leaveId, reason }) => withToolLogging("leave_approve", () =>
+      withBackendGuard("leave_approve", "/v1/leaves/approve", async () => {
+        const result = await client.approveLeave(leaveId, { reason });
+        return {
+          content: [mutateContent(formatRecord("Leave approved", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- leave_reject --
@@ -113,13 +118,15 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       },
       outputSchema: leaveRequestItemOutput,
     },
-    async ({ leaveId, reason }) => withToolLogging("leave_reject", async () => {
-      const result = await client.rejectLeave(leaveId, { reason });
-      return {
-        content: [mutateContent(formatRecord("Leave rejected", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ leaveId, reason }) => withToolLogging("leave_reject", () =>
+      withBackendGuard("leave_reject", "/v1/leaves/reject", async () => {
+        const result = await client.rejectLeave(leaveId, { reason });
+        return {
+          content: [mutateContent(formatRecord("Leave rejected", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- leave_cancel --
@@ -138,13 +145,15 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       },
       outputSchema: leaveRequestItemOutput,
     },
-    async ({ leaveId }) => withToolLogging("leave_cancel", async () => {
-      const result = await client.cancelLeave(leaveId);
-      return {
-        content: [mutateContent(formatRecord("Leave cancelled", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ leaveId }) => withToolLogging("leave_cancel", () =>
+      withBackendGuard("leave_cancel", "/v1/leaves/cancel", async () => {
+        const result = await client.cancelLeave(leaveId);
+        return {
+          content: [mutateContent(formatRecord("Leave cancelled", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- leave_list --
@@ -174,13 +183,15 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       outputSchema: paginatedOutput(leaveRequestItemOutput),
     },
     async ({ employeeId, status, from, to, limit, offset, after }) =>
-      withToolLogging("leave_list", async () => {
-        const result = await client.listLeaves({ employeeId, status, from, to, limit, offset, after });
-        return {
-          content: [listContent(formatPaginatedResponse("leaves", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+      withToolLogging("leave_list", () =>
+        withBackendGuard("leave_list", "/v1/leaves", async () => {
+          const result = await client.listLeaves({ employeeId, status, from, to, limit, offset, after });
+          return {
+            content: [listContent(formatPaginatedResponse("leaves", result))],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        }),
+      ),
   );
 
   // -- attendance_clock_in --
@@ -202,13 +213,15 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       },
       outputSchema: attendanceEntryItemOutput,
     },
-    async (input) => withToolLogging("attendance_clock_in", async () => {
-      const result = await client.attendanceClockIn(input);
-      return {
-        content: [mutateContent(formatRecord("Clocked in", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async (input) => withToolLogging("attendance_clock_in", () =>
+      withBackendGuard("attendance_clock_in", "/v1/time-entries/clock-in", async () => {
+        const result = await client.attendanceClockIn(input);
+        return {
+          content: [mutateContent(formatRecord("Clocked in", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- attendance_clock_out --
@@ -227,13 +240,15 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       },
       outputSchema: attendanceEntryItemOutput,
     },
-    async ({ entryId }) => withToolLogging("attendance_clock_out", async () => {
-      const result = await client.attendanceClockOut(entryId);
-      return {
-        content: [mutateContent(formatRecord("Clocked out", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ entryId }) => withToolLogging("attendance_clock_out", () =>
+      withBackendGuard("attendance_clock_out", "/v1/time-entries/clock-out", async () => {
+        const result = await client.attendanceClockOut(entryId);
+        return {
+          content: [mutateContent(formatRecord("Clocked out", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- overtime_report --
@@ -254,13 +269,15 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       },
       outputSchema: overtimeReportOutput,
     },
-    async ({ period, employeeId }) => withToolLogging("overtime_report", async () => {
-      const result = await client.getOvertimeReport({ period, employeeId });
-      return {
-        content: [getContent(formatRecord("Overtime report", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
-    }),
+    async ({ period, employeeId }) => withToolLogging("overtime_report", () =>
+      withBackendGuard("overtime_report", "/v1/time-entries/overtime", async () => {
+        const result = await client.getOvertimeReport({ period, employeeId });
+        return {
+          content: [getContent(formatRecord("Overtime report", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }),
+    ),
   );
 
   // -- anomaly_list --
@@ -290,12 +307,14 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       outputSchema: paginatedOutput(anomalyItemOutput),
     },
     async ({ type, severity, from, to, limit, offset }) =>
-      withToolLogging("anomaly_list", async () => {
-        const result = await client.listAnomalies({ type, severity, from, to, limit, offset });
-        return {
-          content: [listContent(formatPaginatedResponse("anomalies", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+      withToolLogging("anomaly_list", () =>
+        withBackendGuard("anomaly_list", "/v1/anomalies", async () => {
+          const result = await client.listAnomalies({ type, severity, from, to, limit, offset });
+          return {
+            content: [listContent(formatPaginatedResponse("anomalies", result))],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        }),
+      ),
   );
 }
