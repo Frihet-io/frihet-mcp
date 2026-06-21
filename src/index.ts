@@ -10,10 +10,27 @@
  * Transport: stdio (designed for CLI tools like Claude Code, Cursor, Windsurf).
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { FrihetClient } from "./client.js";
+
+// Single source of truth for the server version: package.json (read at runtime
+// from dist/../package.json). Hardcoding it here caused repeated version drift
+// (server.json/index.ts/console out of sync → audit:mcp-refs gate failure).
+// Reading it once means a `npm version` bump is the ONLY place version lives.
+const PKG_VERSION: string = (() => {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+    return JSON.parse(readFileSync(pkgPath, "utf8")).version as string;
+  } catch {
+    return "0.0.0";
+  }
+})();
 import { registerAllTools } from "./tools/register-all.js";
 import { registerAllResources } from "./resources/register-all.js";
 import { registerAllPrompts } from "./prompts/register-all.js";
@@ -79,7 +96,7 @@ function main(): void {
 
   const server = new McpServer({
     name: "frihet-erp",
-    version: "1.14.1",
+    version: PKG_VERSION,
     description:
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
       "Provides 157 tools (including business context, monthly summaries, quarterly taxes, invoice duplication, CRM subcollections, and deposit management), " +
@@ -146,12 +163,12 @@ function main(): void {
   // Connect via stdio transport
   const transport = new StdioServerTransport();
   server.connect(transport).then(() => {
-    console.error("[frihet-mcp] v1.14.2 | 157 tools | https://github.com/Frihet-io/frihet-mcp");
+    console.error(`[frihet-mcp] v${PKG_VERSION} | 157 tools | https://github.com/Frihet-io/frihet-mcp`);
     log({
       level: "info",
       message: "Frihet MCP server running on stdio",
       operation: "startup",
-      metadata: { version: "1.14.1", transport: "stdio" },
+      metadata: { version: PKG_VERSION, transport: "stdio" },
     });
   }).catch((error: unknown) => {
     log({

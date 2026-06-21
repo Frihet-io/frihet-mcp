@@ -196,26 +196,17 @@ describe("Day 4 E-Invoice Tools — Registration", () => {
 
 // ── einvoice_export tests ─────────────────────────────────────────────────────
 
-describe("einvoice_export — 404-fallback stub", () => {
-  test("404 → stub with _stub=true, xmlUrl and filename set", async () => {
+describe("einvoice_export — 404 returns honest unavailable (no fabrication)", () => {
+  test("404 → isError + _unavailable, NO _stub, NO fabricated xmlUrl", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("einvoice_export")!;
     const result = await tool.handler({ invoiceId: "inv_001", format: "facturae", signed: true });
+    assert.equal((result as Record<string, unknown>)["isError"], true);
     const sc = result.structuredContent!;
-    assert.equal(sc["_stub"], true);
-    assert.equal(sc["_note"], "CF endpoint pending deploy");
-    assert.ok(typeof sc["xmlUrl"] === "string");
-    assert.ok(typeof sc["filename"] === "string");
-    assert.equal(sc["format"], "facturae");
-    assert.equal(sc["signed"], true);
-  });
-
-  test("signed defaults to false when omitted", async () => {
-    const server = await makeServer(make404Client());
-    const tool = server.tools.get("einvoice_export")!;
-    const result = await tool.handler({ invoiceId: "inv_002", format: "xrechnung-cii" });
-    const sc = result.structuredContent!;
-    assert.equal(sc["signed"], false);
+    assert.equal(sc["_unavailable"], true);
+    assert.equal(sc["_stub"], undefined);
+    assert.equal(sc["xmlUrl"], undefined, "must not fabricate a download URL");
+    assert.equal(sc["tool"], "einvoice_export");
   });
 
   test("403 error returns isError response (not stub)", async () => {
@@ -243,34 +234,17 @@ describe("einvoice_export — live client", () => {
 
 // ── face_submit tests ─────────────────────────────────────────────────────────
 
-describe("face_submit — 404-fallback stub", () => {
-  test("404 → stub with _stub=true, registroFACe and status set", async () => {
+describe("face_submit — 404 returns honest unavailable (no fabrication)", () => {
+  test("404 → isError + _unavailable, NO _stub, NO fabricated registroFACe", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("face_submit")!;
     const result = await tool.handler({ invoiceId: "inv_face_001", mode: "production" });
+    assert.equal((result as Record<string, unknown>)["isError"], true);
     const sc = result.structuredContent!;
-    assert.equal(sc["_stub"], true);
-    assert.equal(sc["_note"], "CF endpoint pending deploy");
-    assert.ok(typeof sc["registroFACe"] === "string");
-    assert.equal(sc["status"], "submitted");
-    assert.ok(typeof sc["submittedAt"] === "string");
-    assert.equal(sc["mode"], "production");
-  });
-
-  test("mode defaults to production when omitted", async () => {
-    const server = await makeServer(make404Client());
-    const tool = server.tools.get("face_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_face_002" });
-    const sc = result.structuredContent!;
-    assert.equal(sc["mode"], "production");
-  });
-
-  test("sandbox mode accepted", async () => {
-    const server = await makeServer(make404Client());
-    const tool = server.tools.get("face_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_face_003", mode: "sandbox" });
-    const sc = result.structuredContent!;
-    assert.equal(sc["mode"], "sandbox");
+    assert.equal(sc["_unavailable"], true);
+    assert.equal(sc["_stub"], undefined);
+    assert.equal(sc["registroFACe"], undefined, "must not fabricate a FACe registro");
+    assert.equal(sc["status"], undefined);
   });
 
   test("403 error returns isError response (not stub)", async () => {
@@ -295,16 +269,16 @@ describe("face_submit — live client", () => {
 
 // ── face_status tests ─────────────────────────────────────────────────────────
 
-describe("face_status — 404-fallback stub", () => {
-  test("404 → stub with statusCode '1200' (Registrada)", async () => {
+describe("face_status — 404 returns honest unavailable (no fabrication)", () => {
+  test("404 → isError + _unavailable, NO fabricated 1200/Registrada", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("face_status")!;
     const result = await tool.handler({ invoiceId: "inv_face_001" });
+    assert.equal((result as Record<string, unknown>)["isError"], true);
     const sc = result.structuredContent!;
-    assert.equal(sc["_stub"], true);
-    assert.equal(sc["statusCode"], "1200");
-    assert.equal(sc["statusDescription"], "Registrada");
-    assert.ok(typeof sc["registroFACe"] === "string");
+    assert.equal(sc["_unavailable"], true);
+    assert.equal(sc["statusCode"], undefined, "must not fabricate a FACe status code");
+    assert.equal(sc["registroFACe"], undefined);
   });
 
   test("403 error returns isError response (not stub)", async () => {
@@ -329,34 +303,17 @@ describe("face_status — live client", () => {
 
 // ── ticketbai_submit tests ────────────────────────────────────────────────────
 
-describe("ticketbai_submit — 404-fallback stub", () => {
-  test("404 → stub with tbaiId, territory=bizkaia, status=submitted", async () => {
+describe("ticketbai_submit — 404 returns honest unavailable (no fabrication)", () => {
+  test("404 → isError + _unavailable, NO fabricated tbaiId / qrUrl", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("ticketbai_submit")!;
     const result = await tool.handler({ invoiceId: "inv_tbai_001" });
+    assert.equal((result as Record<string, unknown>)["isError"], true);
     const sc = result.structuredContent!;
-    assert.equal(sc["_stub"], true);
-    assert.ok(typeof sc["tbaiId"] === "string");
-    assert.equal(sc["territory"], "bizkaia");
-    assert.equal(sc["status"], "submitted");
-    assert.equal(sc["sandbox"], false);
-    assert.ok(typeof sc["qrUrl"] === "string");
-  });
-
-  test("sandbox=true is reflected in stub", async () => {
-    const server = await makeServer(make404Client());
-    const tool = server.tools.get("ticketbai_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_tbai_002", sandbox: true });
-    const sc = result.structuredContent!;
-    assert.equal(sc["sandbox"], true);
-  });
-
-  test("sandbox defaults to false when omitted", async () => {
-    const server = await makeServer(make404Client());
-    const tool = server.tools.get("ticketbai_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_tbai_003" });
-    const sc = result.structuredContent!;
-    assert.equal(sc["sandbox"], false);
+    assert.equal(sc["_unavailable"], true);
+    assert.equal(sc["tbaiId"], undefined, "must not fabricate a TBAI identifier");
+    assert.equal(sc["qrUrl"], undefined, "must not fabricate a QR url");
+    assert.equal(sc["status"], undefined);
   });
 
   test("403 error returns isError response (not stub)", async () => {
@@ -382,18 +339,16 @@ describe("ticketbai_submit — live client", () => {
 
 // ── ticketbai_status tests ────────────────────────────────────────────────────
 
-describe("ticketbai_status — 404-fallback stub", () => {
-  test("404 → stub with tbaiId, territory, status=accepted", async () => {
+describe("ticketbai_status — 404 returns honest unavailable (no fabrication)", () => {
+  test("404 → isError + _unavailable, NO fabricated accepted status", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("ticketbai_status")!;
     const result = await tool.handler({ invoiceId: "inv_tbai_001" });
+    assert.equal((result as Record<string, unknown>)["isError"], true);
     const sc = result.structuredContent!;
-    assert.equal(sc["_stub"], true);
-    assert.ok(typeof sc["tbaiId"] === "string");
-    assert.equal(sc["territory"], "bizkaia");
-    assert.equal(sc["status"], "accepted");
-    assert.equal(sc["rejectionReason"], undefined);
-    assert.equal(sc["error"], undefined);
+    assert.equal(sc["_unavailable"], true);
+    assert.equal(sc["status"], undefined, "must not fabricate an accepted status");
+    assert.equal(sc["tbaiId"], undefined);
   });
 
   test("403 error returns isError response (not stub)", async () => {

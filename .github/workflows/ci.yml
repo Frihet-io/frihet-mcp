@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-audit:
+    name: Build · Test · Drift audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      # Version/tool-count drift gate. Scoped to this repo: sister repos
+      # (Frihet-ERP/Saas/docs) aren't checked out in CI, so we only assert the
+      # package's OWN refs (server.json, README, index.ts, CHANGELOG) match the
+      # package.json SoT. Cross-repo drift is caught by the local pre-publish run.
+      - name: Drift audit (self)
+        run: npm run audit:mcp-refs -- --repo frihet-mcp
