@@ -277,7 +277,7 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
         "  • peppol — transmit via PEPPOL access point (peppol-bis-3 only)\n" +
         "  • download — generate and return a signed download URL only\n" +
         "\n" +
-        "NOTE: Stub response — real CF endpoint https://api.frihet.io/v1/einvoice/send wired in transport Wave. " +
+        "If the dispatch backend is not deployed for this workspace, returns an honest 'unavailable' response — never fabricated workflow data. " +
         "/ Envia una factura electronica al destinatario mediante el canal de transporte seleccionado. " +
         "Devuelve de forma asincrona — consultar get_einvoice_status para seguimiento.",
       annotations: CREATE_ANNOTATIONS,
@@ -344,7 +344,7 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
         "Returns current step, ack ID (network confirmation), and download URLs once complete. " +
         "Poll every 5–10 seconds until status is 'succeeded', 'failed', or 'cancelled'. " +
         "\n\n" +
-        "NOTE: Stub response — real CF endpoint https://api.frihet.io/v1/einvoice/status wired in transport Wave. " +
+        "If the status backend is not deployed for this workspace, returns an honest 'unavailable' response — never a fabricated status. " +
         "/ Consulta el estado de un flujo de envio de factura electronica.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
@@ -400,7 +400,7 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
         "Use before dispatch to catch errors early without incurring network transmission costs. " +
         "A valid=true response means the document passes all schema + business rule checks. " +
         "\n\n" +
-        "NOTE: Stub response — real CF endpoint https://api.frihet.io/v1/einvoice/validate wired in transport Wave. " +
+        "If the validation backend is not deployed for this workspace, returns an honest 'unavailable' response — never a fabricated valid=true. " +
         "/ Valida un documento XML de factura electronica contra el esquema y reglas schematron del formato especificado.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
@@ -465,7 +465,7 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
         "Output encoding is always CP1252 per DATEV EXTF specification. " +
         "Date range: both periodStart and periodEnd must be ISO 8601 dates (YYYY-MM-DD). " +
         "\n\n" +
-        "NOTE: Stub response — real CF endpoint https://api.frihet.io/v1/datev/export wired in transport Wave. " +
+        "If the DATEV export backend is not deployed for this workspace, returns an honest 'unavailable' response — never a fabricated file URL. " +
         "/ Exporta datos contables en formato DATEV EXTF para importacion en DATEV o sistemas compatibles.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
@@ -570,28 +570,13 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           };
         } catch (err: unknown) {
           if (isNotFoundError(err)) {
-            const stubResult = {
-              xmlUrl: `https://storage.frihet.io/stub/einvoice/${invoiceId}-${format}.xml`,
-              filename: `${invoiceId}-${format}.xml`,
-              format,
-              signed: signed ?? false,
-              _stub: true,
-              _note: "CF endpoint pending deploy",
-              _plannedEndpoint: plannedEndpoint,
-            };
-            return {
-              content: [
-                getContent(
-                  `E-invoice export ready (stub — CF pending deploy):\n` +
-                  `  Invoice: ${invoiceId}\n` +
-                  `  Format: ${format}\n` +
-                  `  Signed: ${stubResult.signed}\n` +
-                  `  Filename: ${stubResult.filename}\n` +
-                  `  Download URL: ${stubResult.xmlUrl}`,
-                ),
-              ],
-              structuredContent: stubResult as unknown as Record<string, unknown>,
-            };
+            // HONEST unavailable — the export CF is genuinely absent. Do NOT
+            // fabricate a download URL pointing at a non-existent stub file.
+            return unavailableResult({
+              tool: "einvoice_export",
+              plannedEndpoint,
+              what: "E-invoice XML export",
+            });
           }
           throw err;
         }
@@ -648,28 +633,15 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           };
         } catch (err: unknown) {
           if (isNotFoundError(err)) {
-            const stubResult = {
-              registroFACe: `RCF_stub_${Date.now()}`,
-              status: "submitted" as const,
-              submittedAt: new Date().toISOString(),
-              mode: resolvedMode,
-              _stub: true,
-              _note: "CF endpoint pending deploy",
-              _plannedEndpoint: plannedEndpoint,
-            };
-            return {
-              content: [
-                mutateContent(
-                  `FACe submission queued (stub — CF pending deploy):\n` +
-                  `  Invoice: ${invoiceId}\n` +
-                  `  Mode: ${resolvedMode}\n` +
-                  `  Registro: ${stubResult.registroFACe}\n` +
-                  `  Status: ${stubResult.status}\n\n` +
-                  `Use face_status with invoiceId to poll the portal for confirmation.`,
-                ),
-              ],
-              structuredContent: stubResult as unknown as Record<string, unknown>,
-            };
+            // HONEST unavailable — the FACe submit CF is genuinely absent. Do
+            // NOT fabricate a registro: a fake "submitted" B2G reference would
+            // make an agent report a filing that never happened.
+            return unavailableResult({
+              tool: "face_submit",
+              plannedEndpoint,
+              what: "FACe (Spain B2G) submission",
+              workaround: "No registro was created — do not treat this as an accepted submission.",
+            });
           }
           throw err;
         }
@@ -720,27 +692,13 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           };
         } catch (err: unknown) {
           if (isNotFoundError(err)) {
-            const stubResult = {
-              registroFACe: `RCF_stub_${invoiceId.slice(-8)}`,
-              statusCode: "1200",
-              statusDescription: "Registrada",
-              rejectionReason: undefined,
-              _stub: true,
-              _note: "CF endpoint pending deploy",
-              _plannedEndpoint: plannedEndpoint,
-            };
-            return {
-              content: [
-                getContent(
-                  `FACe status (stub — CF pending deploy):\n` +
-                  `  Invoice: ${invoiceId}\n` +
-                  `  Registro: ${stubResult.registroFACe}\n` +
-                  `  Status code: ${stubResult.statusCode}\n` +
-                  `  Description: ${stubResult.statusDescription}`,
-                ),
-              ],
-              structuredContent: stubResult as unknown as Record<string, unknown>,
-            };
+            // HONEST unavailable — do NOT fabricate a "Registrada" (1200) state
+            // for a submission that was never made.
+            return unavailableResult({
+              tool: "face_status",
+              plannedEndpoint,
+              what: "FACe submission status",
+            });
           }
           throw err;
         }
@@ -796,30 +754,14 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           };
         } catch (err: unknown) {
           if (isNotFoundError(err)) {
-            const stubResult = {
-              tbaiId: `TBAI-stub-${Date.now()}`,
-              territory: "bizkaia" as const,
-              status: "submitted" as const,
-              sandbox: isSandbox,
-              qrUrl: `https://batuz.eus/QRTBAI/?id=TBAI-stub`,
-              _stub: true,
-              _note: "CF endpoint pending deploy",
-              _plannedEndpoint: plannedEndpoint,
-            };
-            return {
-              content: [
-                mutateContent(
-                  `TicketBAI submitted (stub — CF pending deploy):\n` +
-                  `  Invoice: ${invoiceId}\n` +
-                  `  Territory: ${stubResult.territory}\n` +
-                  `  TBAI ID: ${stubResult.tbaiId}\n` +
-                  `  Sandbox: ${isSandbox}\n` +
-                  `  QR URL: ${stubResult.qrUrl}\n\n` +
-                  `Use ticketbai_status with invoiceId to poll for hacienda acknowledgement.`,
-                ),
-              ],
-              structuredContent: stubResult as unknown as Record<string, unknown>,
-            };
+            // HONEST unavailable — do NOT fabricate a TBAI identifier + QR URL.
+            // A fake TicketBAI id printed on an invoice is a fiscal forgery.
+            return unavailableResult({
+              tool: "ticketbai_submit",
+              plannedEndpoint,
+              what: "TicketBAI (Basque Country) submission",
+              workaround: "No TBAI identifier was issued — do not print a QR or treat this as filed.",
+            });
           }
           throw err;
         }
@@ -871,28 +813,13 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           };
         } catch (err: unknown) {
           if (isNotFoundError(err)) {
-            const stubResult = {
-              tbaiId: `TBAI-stub-${invoiceId.slice(-8)}`,
-              territory: "bizkaia" as const,
-              status: "accepted" as const,
-              rejectionReason: undefined,
-              error: undefined,
-              _stub: true,
-              _note: "CF endpoint pending deploy",
-              _plannedEndpoint: plannedEndpoint,
-            };
-            return {
-              content: [
-                getContent(
-                  `TicketBAI status (stub — CF pending deploy):\n` +
-                  `  Invoice: ${invoiceId}\n` +
-                  `  TBAI ID: ${stubResult.tbaiId}\n` +
-                  `  Territory: ${stubResult.territory}\n` +
-                  `  Status: ${stubResult.status}`,
-                ),
-              ],
-              structuredContent: stubResult as unknown as Record<string, unknown>,
-            };
+            // HONEST unavailable — do NOT fabricate an "accepted" hacienda
+            // acknowledgement for a TicketBAI that was never submitted.
+            return unavailableResult({
+              tool: "ticketbai_status",
+              plannedEndpoint,
+              what: "TicketBAI submission status",
+            });
           }
           throw err;
         }
