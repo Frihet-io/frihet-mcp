@@ -2,6 +2,13 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.14.3] — 2026-06-21
+
+### Fixed
+
+- **Killed 5 fabricated-compliance-identifier stubs** (#45, compliance/Trust Area): the einvoice tools no longer mint fake registration identifiers (`RCF_stub*`, `TBAI-stub*`, fabricated `qrUrl`, fake `"accepted"`/`"submitted"` status) when the backend transport is unavailable. They now return an honest `unavailable` result so an agent never reports a phantom AEAT/TicketBAI confirmation it can act on. 4 tool descriptions corrected to stop advertising stub behaviour as live.
+- **Version drift killed structurally**: the server version now reads from `package.json` at runtime (`PKG_VERSION` in `src/index.ts`) instead of three hardcoded literals that repeatedly desynced (`server.json` / `index.ts` / startup console). `npm version` is now the single place the version lives. `audit:mcp-refs` (run in `prepublishOnly`) stays as the cross-repo backstop.
+
 ## [1.14.2] — 2026-06-20
 
 ### Fixed
