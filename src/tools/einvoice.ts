@@ -125,31 +125,6 @@ export const eInvoiceFormatSchema = z.enum([
 
 export type EInvoiceFormat = z.infer<typeof eInvoiceFormatSchema>;
 
-/**
- * Map the MCP lowercase format value to the API-facing format name accepted by
- * POST /v1/invoices/:id/einvoice/export (Frihet-ERP publicApi.ts
- * EINVOICE_EXPORT_FORMATS). The CF rejects any other value with a 400 validation
- * error, so this mapping is REQUIRED — passing the raw MCP value would fail.
- *
- * The CF accepts 8 formats: Facturae, XRechnung-CII, XRechnung-UBL, Factur-X,
- * FatturaPA, PEPPOL-BIS-3, UBL, CII. The four Factur-X sub-profiles
- * (en16931/extended/basic/minimum) all map to the CF's single "Factur-X" entry;
- * the CF resolves the concrete profile internally.
- */
-const EINVOICE_EXPORT_FORMAT_MAP: Record<EInvoiceFormat, string> = {
-  "facturae": "Facturae",
-  "xrechnung-cii": "XRechnung-CII",
-  "xrechnung-ubl": "XRechnung-UBL",
-  "facturx-en16931": "Factur-X",
-  "facturx-extended": "Factur-X",
-  "facturx-basic": "Factur-X",
-  "facturx-minimum": "Factur-X",
-  "fatturapa": "FatturaPA",
-  "peppol-bis-3": "PEPPOL-BIS-3",
-  "ubl": "UBL",
-  "cii": "CII",
-};
-
 /* ------------------------------------------------------------------ */
 /*  Output schemas                                                      */
 /* ------------------------------------------------------------------ */
