@@ -22,6 +22,7 @@
  */
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
 
 /* ------------------------------------------------------------------ */
 /*  Profile definition                                                 */
@@ -41,7 +42,7 @@ interface OpenAIProfile {
   /** Per-tool input fields to remove from schema */
   stripInputFields: Record<string, string[]>;
   /** Field names to redact from ALL tool outputs */
-  redactOutputFields: string[];
+  redactOutputFields: readonly string[];
 }
 
 const PROFILE: OpenAIProfile = {
@@ -223,62 +224,17 @@ const PROFILE: OpenAIProfile = {
 
   // ── Output fields redacted ─────────────────────────────────────────
   // Stripped from structuredContent and text in ALL tool responses.
-  // Includes synonyms that the Frihet API may return via .passthrough() schemas.
-  redactOutputFields: [
-    "taxId", "tax_id",             // Primary field name + snake_case variant
-    "nif", "cif", "vatNumber",     // Spanish/EU synonyms for government tax ID
-    "vat_number", "vatId", "vat_id",
-    "secret",                      // Webhook signing credential
-    "iban", "bankAccount",         // Banking identifiers (if exposed via passthrough)
-    "bank_account", "accountNumber",
-    "idDocument", "documentNumber", // Guest/customer government document fields
-    "passport", "passportNumber",
-    "dni", "nationalId", "national_id",
-    "ssn", "socialSecurityNumber", "social_security_number",
-    "apiKey", "api_key",
-    "accessToken", "access_token", "refreshToken", "refresh_token",
-    "password", "mfa", "otp",
-  ],
+  // Single source of truth lives in redaction.ts (shared with observability.ts
+  // so Langfuse traces redact the EXACT same field set).
+  redactOutputFields: SENSITIVE_FIELD_NAMES,
 };
 
 /* ------------------------------------------------------------------ */
-/*  Deep field redaction                                                */
+/*  Deep field redaction — shared policy in redaction.ts               */
 /* ------------------------------------------------------------------ */
-
-/** Recursively removes named fields from an object/array tree. */
-function deepRedact(obj: unknown, fields: string[]): void {
-  if (obj === null || typeof obj !== "object") return;
-
-  if (Array.isArray(obj)) {
-    for (const item of obj) deepRedact(item, fields);
-    return;
-  }
-
-  const record = obj as Record<string, unknown>;
-  for (const field of fields) {
-    if (field in record) delete record[field];
-  }
-  for (const value of Object.values(record)) {
-    deepRedact(value, fields);
-  }
-}
-
-/** Best-effort redaction of JSON field patterns from display text. */
-function redactText(text: string, fields: string[]): string {
-  let result = text;
-  for (const field of fields) {
-    // Remove "field": "value", or "field": value patterns
-    result = result.replace(
-      new RegExp(
-        `\\s*"${field}"\\s*:\\s*(?:"[^"]*"|null|true|false|\\d+(?:\\.\\d+)?)\\s*,?`,
-        "g",
-      ),
-      "",
-    );
-  }
-  // Clean up trailing commas before } or ] left by removals
-  return result.replace(/,(\s*[}\]])/g, "$1");
-}
+//
+// deepRedact (in-place DELETE) + redactText (regex) now live in ./redaction.ts
+// so observability.ts redacts the SAME field set before tracing to Langfuse.
 
 /* ------------------------------------------------------------------ */
 /*  Resources excluded / redacted in OpenAI mode                       */
