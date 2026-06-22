@@ -68,6 +68,7 @@ const REPOS = {
       'skill/SKILL.md',
       'src/index.ts',
       'workers/remote-mcp/src/index.ts',
+      'workers/remote-mcp/src/auth-handler.ts',
       'workers/remote-mcp/public/releases.json',
     ],
   },

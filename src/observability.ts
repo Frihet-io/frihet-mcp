@@ -19,6 +19,8 @@
  * Docs: https://langfuse.com/docs/api/reference/overview
  */
 
+import { redactClone, redactText } from "./redaction.js";
+
 // Declared to avoid TS errors in Workers environment where `process` is not typed
 declare const process: { env?: Record<string, string | undefined> } | undefined;
 
@@ -232,6 +234,115 @@ export function setTraceContext(ctx: TraceContext): void {
   _sessionContext = { ..._sessionContext, ...ctx };
 }
 
+// ── Trace payload builder (pure, redacted) ───────────────────────────────────
+
+interface TracePayloadParams {
+  toolName: string;
+  /** Raw tool input args (redacted before serialization). */
+  input: unknown;
+  /** Raw tool output (redacted before serialization); ignored when isError. */
+  output: unknown;
+  isError: boolean;
+  errorMessage?: string;
+  startTime: Date;
+  endTime: Date;
+  traceId: string;
+  spanId: string;
+  /** Already-hashed user id, or undefined. */
+  userIdHashed?: string;
+  clientName?: string;
+  mcpVersion?: string;
+  /** Fabricated-stub marker, or null on a genuine result. */
+  stub: StubMarker | null;
+}
+
+/**
+ * Builds the Langfuse trace+span ingestion batch for a single tool call.
+ *
+ * CRITICAL (Trust): `input` and `output` are passed through {@link redactClone}
+ * before they enter the payload, so government IDs (taxId/NIF/CIF), banking
+ * identifiers (IBAN), webhook signing secrets, and auth tokens NEVER reach the
+ * external Langfuse service — in ANY profile mode. The tool-call output handed
+ * to the user is redacted later (OpenAI mode only); this redacts the trace copy
+ * unconditionally. Exported so a test can assert no sensitive value survives.
+ */
+export function buildTracePayload(p: TracePayloadParams): IngestionBatch {
+  const {
+    toolName, input, output, isError, errorMessage,
+    startTime, endTime, traceId, spanId, userIdHashed, clientName, mcpVersion, stub,
+  } = p;
+
+  const stubbed = stub !== null;
+  // success: false whenever the call threw OR returned a fabricated stub body.
+  const success = !isError && !stubbed;
+  const stubNote =
+    stub?.note ??
+    (stub?.plannedEndpoint
+      ? `Backend endpoint not yet available: ${stub.plannedEndpoint}`
+      : undefined);
+
+  // ── Redact BEFORE the payload is built (never mutates the live response) ──
+  const safeArgs = redactClone(input);
+  const safeError = errorMessage ? redactText(errorMessage) : errorMessage;
+  const safeOutput = isError ? { error: safeError } : redactClone(output);
+
+  const traceBody: LangfuseTraceBody = {
+    id: traceId,
+    name: "mcp_request",
+    timestamp: startTime.toISOString(),
+    input: { tool: toolName, args: safeArgs },
+    output: safeOutput,
+    metadata: {
+      tool: toolName,
+      clientName,
+      mcpVersion,
+      // FALSE on a thrown error AND on a fabricated-stub fallback.
+      success,
+      ...(stubbed
+        ? {
+            stub: true,
+            ...(stub?.plannedEndpoint ? { plannedEndpoint: stub.plannedEndpoint } : {}),
+            ...(stubNote ? { note: stubNote } : {}),
+          }
+        : {}),
+    },
+    tags: [`mcp.tool.${toolName}`, ...(stubbed ? ["mcp.stub"] : [])],
+    ...(userIdHashed ? { userId: userIdHashed } : {}),
+  };
+
+  const spanBody: LangfuseSpanBody = {
+    id: spanId,
+    traceId,
+    name: `tool.${toolName}`,
+    startTime: startTime.toISOString(),
+    endTime: endTime.toISOString(),
+    input: safeArgs,
+    output: safeOutput,
+    metadata: {
+      durationMs: endTime.getTime() - startTime.getTime(),
+      clientName,
+      mcpVersion,
+      ...(stubbed ? { stub: true } : {}),
+    },
+    // ERROR on a thrown error; WARNING on a fabricated-stub fallback (the call
+    // "succeeded" mechanically but returned no real backend data); DEFAULT only
+    // on a genuine success.
+    level: isError ? "ERROR" : stubbed ? "WARNING" : "DEFAULT",
+    ...(isError && safeError
+      ? { statusMessage: safeError }
+      : stubbed && stubNote
+        ? { statusMessage: stubNote }
+        : {}),
+  };
+
+  return {
+    batch: [
+      { type: "trace-create", id: newId(), timestamp: startTime.toISOString(), body: traceBody },
+      { type: "span-create", id: newId(), timestamp: startTime.toISOString(), body: spanBody },
+    ],
+  };
+}
+
 /**
  * Wraps a tool handler fn and sends a Langfuse trace+span for the call.
  *
@@ -285,14 +396,6 @@ export async function traceMCPTool<T>(
     // success. This is the central fix: it covers every stub branch regardless of
     // which tool produced it, because the stub path never reaches the catch above.
     const stub = isError ? null : inspectStubMarker(output);
-    const stubbed = stub !== null;
-    // success: false whenever the call threw OR returned a fabricated stub body.
-    const success = !isError && !stubbed;
-    const stubNote =
-      stub?.note ??
-      (stub?.plannedEndpoint
-        ? `Backend endpoint not yet available: ${stub.plannedEndpoint}`
-        : undefined);
 
     // Fire-and-forget — build and send async, never awaited
     void (async () => {
@@ -301,71 +404,23 @@ export async function traceMCPTool<T>(
         const userIdRaw = _sessionContext.userId;
         const userIdHashed = userIdRaw ? await hashPii(userIdRaw) : undefined;
 
-        const traceBody: LangfuseTraceBody = {
-          id: traceId,
-          name: "mcp_request",
-          timestamp: startTime.toISOString(),
-          input: { tool: toolName, args: input },
-          output: isError ? { error: errorMessage } : output,
-          metadata: {
-            tool: toolName,
-            clientName: _sessionContext.clientName,
-            mcpVersion: _sessionContext.mcpVersion,
-            // FALSE on a thrown error AND on a fabricated-stub fallback.
-            success,
-            ...(stubbed
-              ? {
-                  stub: true,
-                  ...(stub?.plannedEndpoint ? { plannedEndpoint: stub.plannedEndpoint } : {}),
-                  ...(stubNote ? { note: stubNote } : {}),
-                }
-              : {}),
-          },
-          tags: [`mcp.tool.${toolName}`, ...(stubbed ? ["mcp.stub"] : [])],
-          ...(userIdHashed ? { userId: userIdHashed } : {}),
-        };
-
-        const spanBody: LangfuseSpanBody = {
-          id: spanId,
-          traceId,
-          name: `tool.${toolName}`,
-          startTime: startTime.toISOString(),
-          endTime: endTime.toISOString(),
+        // buildTracePayload redacts input/output (taxId/secret/IBAN/tokens) so
+        // the external Langfuse service never stores cleartext PII or credentials.
+        const batch = buildTracePayload({
+          toolName,
           input,
-          output: isError ? { error: errorMessage } : output,
-          metadata: {
-            durationMs: endTime.getTime() - startTime.getTime(),
-            clientName: _sessionContext.clientName,
-            mcpVersion: _sessionContext.mcpVersion,
-            ...(stubbed ? { stub: true } : {}),
-          },
-          // ERROR on a thrown error; WARNING on a fabricated-stub fallback (the
-          // call "succeeded" mechanically but returned no real backend data);
-          // DEFAULT only on a genuine success.
-          level: isError ? "ERROR" : stubbed ? "WARNING" : "DEFAULT",
-          ...(isError && errorMessage
-            ? { statusMessage: errorMessage }
-            : stubbed && stubNote
-              ? { statusMessage: stubNote }
-              : {}),
-        };
-
-        const batch: IngestionBatch = {
-          batch: [
-            {
-              type: "trace-create",
-              id: newId(),
-              timestamp: startTime.toISOString(),
-              body: traceBody,
-            },
-            {
-              type: "span-create",
-              id: newId(),
-              timestamp: startTime.toISOString(),
-              body: spanBody,
-            },
-          ],
-        };
+          output,
+          isError,
+          errorMessage,
+          startTime,
+          endTime,
+          traceId,
+          spanId,
+          userIdHashed,
+          clientName: _sessionContext.clientName,
+          mcpVersion: _sessionContext.mcpVersion,
+          stub,
+        });
 
         await sendBatch(config, batch);
       } catch (langfuseErr) {

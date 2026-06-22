@@ -12,10 +12,33 @@ import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provid
 import { Hono } from "hono";
 import { getLoginPage } from "./login-page.js";
 import { log } from "../../../src/logger.js";
+import { MCP_SERVER_VERSION, FULL_TOOL_COUNT } from "./server-meta.js";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 
 const app = new Hono<{ Bindings: AuthEnv }>();
+
+/**
+ * One-way SHA-256 fingerprint (first 12 hex) of a PII value for LOG lines only.
+ *
+ * The submission claims "No PII logged" — so uid/email must never appear in
+ * cleartext in logs. The raw values still flow where the protocol needs them
+ * (API-key provisioning body, OAuth session props); this only guards log output.
+ * Returns "none" for an absent value and "hash-error" if WebCrypto is missing.
+ */
+async function fingerprintPii(value: string | undefined): Promise<string> {
+  if (!value) return "none";
+  try {
+    const data = new TextEncoder().encode(value);
+    const buf = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+      .slice(0, 12);
+  } catch {
+    return "hash-error";
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Public endpoints
@@ -24,7 +47,7 @@ const app = new Hono<{ Bindings: AuthEnv }>();
 app.get("/", (c) => {
   return c.json({
     name: "Frihet MCP Server",
-    version: "1.5.2",
+    version: MCP_SERVER_VERSION,
     description:
       "AI-native business management — invoices, expenses, clients, products, quotes",
     docs: "https://docs.frihet.io/desarrolladores/mcp-server",
@@ -36,7 +59,7 @@ app.get("/", (c) => {
       authorization_server:
         "https://mcp.frihet.io/.well-known/oauth-authorization-server",
     },
-    tools: 52,
+    tools: FULL_TOOL_COUNT,
     resources: 11,
     prompts: 10,
   });
@@ -164,7 +187,7 @@ app.post("/callback", async (c) => {
   if (!apiKeyResponse.ok) {
     log({
       level: "error",
-      message: `OAuth callback: failed to provision API key for ${decoded.uid}`,
+      message: `OAuth callback: failed to provision API key for uid:${await fingerprintPii(decoded.uid)}`,
       operation: "oauth_callback",
       error: { message: `API key provisioning returned ${apiKeyResponse.status}`, statusCode: apiKeyResponse.status },
     });
@@ -192,9 +215,12 @@ app.post("/callback", async (c) => {
 
   log({
     level: "info",
-    message: `OAuth callback: success for ${decoded.email ?? decoded.uid}`,
+    message: `OAuth callback: success for uid:${await fingerprintPii(decoded.uid)}`,
     operation: "oauth_callback",
-    metadata: { userId: decoded.uid, email: decoded.email },
+    metadata: {
+      userId: await fingerprintPii(decoded.uid),
+      email: await fingerprintPii(decoded.email),
+    },
   });
 
   return c.json({ redirectTo });

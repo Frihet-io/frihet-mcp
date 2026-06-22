@@ -22,6 +22,8 @@
  */
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
+import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
 
 /* ------------------------------------------------------------------ */
 /*  Profile definition                                                 */
@@ -41,7 +43,7 @@ interface OpenAIProfile {
   /** Per-tool input fields to remove from schema */
   stripInputFields: Record<string, string[]>;
   /** Field names to redact from ALL tool outputs */
-  redactOutputFields: string[];
+  redactOutputFields: readonly string[];
 }
 
 const PROFILE: OpenAIProfile = {
@@ -223,61 +225,86 @@ const PROFILE: OpenAIProfile = {
 
   // ── Output fields redacted ─────────────────────────────────────────
   // Stripped from structuredContent and text in ALL tool responses.
-  // Includes synonyms that the Frihet API may return via .passthrough() schemas.
-  redactOutputFields: [
-    "taxId", "tax_id",             // Primary field name + snake_case variant
-    "nif", "cif", "vatNumber",     // Spanish/EU synonyms for government tax ID
-    "vat_number", "vatId", "vat_id",
-    "secret",                      // Webhook signing credential
-    "iban", "bankAccount",         // Banking identifiers (if exposed via passthrough)
-    "bank_account", "accountNumber",
-    "idDocument", "documentNumber", // Guest/customer government document fields
-    "passport", "passportNumber",
-    "dni", "nationalId", "national_id",
-    "ssn", "socialSecurityNumber", "social_security_number",
-    "apiKey", "api_key",
-    "accessToken", "access_token", "refreshToken", "refresh_token",
-    "password", "mfa", "otp",
-  ],
+  // Single source of truth lives in redaction.ts (shared with observability.ts
+  // so Langfuse traces redact the EXACT same field set).
+  redactOutputFields: SENSITIVE_FIELD_NAMES,
 };
 
 /* ------------------------------------------------------------------ */
-/*  Deep field redaction                                                */
+/*  Deep field redaction — shared policy in redaction.ts               */
+/* ------------------------------------------------------------------ */
+//
+// deepRedact (in-place DELETE) + redactText (regex) now live in ./redaction.ts
+// so observability.ts redacts the SAME field set before tracing to Langfuse.
+
+/* ------------------------------------------------------------------ */
+/*  Output SCHEMA stripping (descriptor-level)                          */
 /* ------------------------------------------------------------------ */
 
-/** Recursively removes named fields from an object/array tree. */
-function deepRedact(obj: unknown, fields: string[]): void {
-  if (obj === null || typeof obj !== "object") return;
+/**
+ * Returns a Zod output schema with sensitive fields removed at EVERY depth.
+ *
+ * Runtime output redaction (deepRedact in the handler wrapper) hides the
+ * VALUES, but the advertised `outputSchema` descriptor still DECLARES taxId /
+ * secret etc. at tools/list — which OpenAI's submission review auto-detects as
+ * exposed government IDs / credentials. This strips them from the descriptor too.
+ *
+ * Surgical: only the object/array nodes on the path to a sensitive field are
+ * rebuilt; untouched branches are returned BY REFERENCE so their `.describe()`
+ * metadata and `.passthrough()` behavior are preserved. A schema with no
+ * sensitive field anywhere is returned unchanged (identity).
+ */
+function stripSensitiveOutputSchema(
+  schema: unknown,
+  fields: readonly string[],
+): unknown {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const def = (schema as any)?._def;
+  const typeName: string | undefined = def?.typeName;
 
-  if (Array.isArray(obj)) {
-    for (const item of obj) deepRedact(item, fields);
-    return;
+  if (typeName === "ZodObject") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shape = (schema as any).shape as Record<string, unknown>;
+    const newShape: Record<string, unknown> = {};
+    let changed = false;
+    for (const [key, value] of Object.entries(shape)) {
+      if (fields.includes(key)) {
+        changed = true;
+        continue; // drop the sensitive field entirely from the descriptor
+      }
+      const stripped = stripSensitiveOutputSchema(value, fields);
+      if (stripped !== value) changed = true;
+      newShape[key] = stripped;
+    }
+    if (!changed) return schema;
+    let rebuilt: z.ZodTypeAny = z.object(newShape as z.ZodRawShape);
+    if (typeof def.description === "string") rebuilt = rebuilt.describe(def.description);
+    return rebuilt;
   }
 
-  const record = obj as Record<string, unknown>;
-  for (const field of fields) {
-    if (field in record) delete record[field];
+  if (typeName === "ZodArray") {
+    const inner = def.type;
+    const stripped = stripSensitiveOutputSchema(inner, fields);
+    if (stripped === inner) return schema;
+    let rebuilt: z.ZodTypeAny = z.array(stripped as z.ZodTypeAny);
+    if (typeof def.description === "string") rebuilt = rebuilt.describe(def.description);
+    return rebuilt;
   }
-  for (const value of Object.values(record)) {
-    deepRedact(value, fields);
-  }
-}
 
-/** Best-effort redaction of JSON field patterns from display text. */
-function redactText(text: string, fields: string[]): string {
-  let result = text;
-  for (const field of fields) {
-    // Remove "field": "value", or "field": value patterns
-    result = result.replace(
-      new RegExp(
-        `\\s*"${field}"\\s*:\\s*(?:"[^"]*"|null|true|false|\\d+(?:\\.\\d+)?)\\s*,?`,
-        "g",
-      ),
-      "",
-    );
+  if (typeName === "ZodOptional") {
+    const inner = def.innerType;
+    const stripped = stripSensitiveOutputSchema(inner, fields);
+    return stripped === inner ? schema : z.optional(stripped as z.ZodTypeAny);
   }
-  // Clean up trailing commas before } or ] left by removals
-  return result.replace(/,(\s*[}\]])/g, "$1");
+
+  if (typeName === "ZodNullable") {
+    const inner = def.innerType;
+    const stripped = stripSensitiveOutputSchema(inner, fields);
+    return stripped === inner ? schema : z.nullable(stripped as z.ZodTypeAny);
+  }
+
+  // Primitives, unions, records, and anything else: leave untouched.
+  return schema;
 }
 
 /* ------------------------------------------------------------------ */
@@ -381,6 +408,14 @@ export function applyOpenAIProfile(server: any): void {
       for (const field of inputStrip) {
         delete config.inputSchema[field];
       }
+    }
+
+    // 4b. Strip sensitive fields from the OUTPUT schema descriptor too.
+    // The handler wrapper (step 5) redacts VALUES at runtime; this removes the
+    // field DECLARATIONS (taxId/secret/iban/…) from the outputSchema advertised
+    // at tools/list, so OpenAI review never sees a gov-ID/credential field.
+    if (config.outputSchema) {
+      config.outputSchema = stripSensitiveOutputSchema(config.outputSchema, fieldsToRedact);
     }
 
     // 5. Wrap handler to redact sensitive output fields
