@@ -12,6 +12,7 @@ import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provid
 import { Hono } from "hono";
 import { getLoginPage } from "./login-page.js";
 import { log } from "../../../src/logger.js";
+import { MCP_SERVER_VERSION, FULL_TOOL_COUNT } from "./server-meta.js";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 
@@ -46,7 +47,7 @@ async function fingerprintPii(value: string | undefined): Promise<string> {
 app.get("/", (c) => {
   return c.json({
     name: "Frihet MCP Server",
-    version: "1.5.2",
+    version: MCP_SERVER_VERSION,
     description:
       "AI-native business management — invoices, expenses, clients, products, quotes",
     docs: "https://docs.frihet.io/desarrolladores/mcp-server",
@@ -58,7 +59,7 @@ app.get("/", (c) => {
       authorization_server:
         "https://mcp.frihet.io/.well-known/oauth-authorization-server",
     },
-    tools: 52,
+    tools: FULL_TOOL_COUNT,
     resources: 11,
     prompts: 10,
   });

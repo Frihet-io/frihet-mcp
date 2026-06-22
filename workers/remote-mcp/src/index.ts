@@ -34,8 +34,7 @@ import { log } from "../../../src/logger.js";
 import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
 import { authHandler } from "./auth-handler.js";
-
-const MCP_SERVER_VERSION = "1.13.0";
+import { MCP_SERVER_VERSION, FULL_TOOL_COUNT } from "./server-meta.js";
 
 // ---------------------------------------------------------------------------
 // Auth props — stored in OAuth token, available via this.props in McpAgent
@@ -413,7 +412,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
       "MIT licensed npm package",
       "Cloudflare Worker remote endpoint"
     ],
-    "softwareVersion": "1.13.0",
+    "softwareVersion": MCP_SERVER_VERSION,
     "license": "https://opensource.org/licenses/MIT",
     "codeRepository": "https://github.com/Frihet-io/frihet-mcp",
     "offers": {
@@ -481,7 +480,7 @@ const MCP_JSON = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 151,
+  tools_count: FULL_TOOL_COUNT,
   resources_count: 11,
   prompts_count: 10,
   registry: [
@@ -520,7 +519,7 @@ const WELL_KNOWN_MCP = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 151,
+  tools_count: FULL_TOOL_COUNT,
   resources_count: 11,
   prompts_count: 10,
   registry: [
