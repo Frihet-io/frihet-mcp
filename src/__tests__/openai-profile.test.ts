@@ -11,6 +11,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
 import { applyOpenAIProfile } from "../openai-profile.js";
+import { SENSITIVE_FIELD_NAMES } from "../redaction.js";
 import { registerAllTools } from "../tools/register-all.js";
 import { registerAllPrompts } from "../prompts/register-all.js";
 import type { IFrihetClient } from "../client-interface.js";
@@ -184,5 +185,41 @@ describe("OpenAI profile", () => {
     assert.equal(serialized.includes("B12345678"), false);
     assert.equal(serialized.includes("secret"), false);
     assert.equal(serialized.includes("should-not-leak"), false);
+  });
+
+  test("no reviewed tool DECLARES a sensitive field in its outputSchema", () => {
+    const server = makeOpenAIServer();
+
+    // Recursively collect every object key declared by a Zod output schema.
+    const collectKeys = (schema: unknown, acc: Set<string>): Set<string> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const def = (schema as any)?._def;
+      const typeName: string | undefined = def?.typeName;
+      if (typeName === "ZodObject") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const [key, value] of Object.entries((schema as any).shape as Record<string, unknown>)) {
+          acc.add(key);
+          collectKeys(value, acc);
+        }
+      } else if (typeName === "ZodArray") {
+        collectKeys(def.type, acc);
+      } else if (typeName === "ZodOptional" || typeName === "ZodNullable") {
+        collectKeys(def.innerType, acc);
+      }
+      return acc;
+    };
+
+    for (const tool of server.tools.values()) {
+      const out = tool.config.outputSchema;
+      if (!out) continue;
+      const keys = collectKeys(out, new Set<string>());
+      for (const field of SENSITIVE_FIELD_NAMES) {
+        assert.equal(
+          keys.has(field),
+          false,
+          `${tool.name} outputSchema must not declare sensitive field "${field}"`,
+        );
+      }
+    }
   });
 });

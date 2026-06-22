@@ -22,6 +22,7 @@
  */
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
 
 /* ------------------------------------------------------------------ */
@@ -237,6 +238,76 @@ const PROFILE: OpenAIProfile = {
 // so observability.ts redacts the SAME field set before tracing to Langfuse.
 
 /* ------------------------------------------------------------------ */
+/*  Output SCHEMA stripping (descriptor-level)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Returns a Zod output schema with sensitive fields removed at EVERY depth.
+ *
+ * Runtime output redaction (deepRedact in the handler wrapper) hides the
+ * VALUES, but the advertised `outputSchema` descriptor still DECLARES taxId /
+ * secret etc. at tools/list — which OpenAI's submission review auto-detects as
+ * exposed government IDs / credentials. This strips them from the descriptor too.
+ *
+ * Surgical: only the object/array nodes on the path to a sensitive field are
+ * rebuilt; untouched branches are returned BY REFERENCE so their `.describe()`
+ * metadata and `.passthrough()` behavior are preserved. A schema with no
+ * sensitive field anywhere is returned unchanged (identity).
+ */
+function stripSensitiveOutputSchema(
+  schema: unknown,
+  fields: readonly string[],
+): unknown {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const def = (schema as any)?._def;
+  const typeName: string | undefined = def?.typeName;
+
+  if (typeName === "ZodObject") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shape = (schema as any).shape as Record<string, unknown>;
+    const newShape: Record<string, unknown> = {};
+    let changed = false;
+    for (const [key, value] of Object.entries(shape)) {
+      if (fields.includes(key)) {
+        changed = true;
+        continue; // drop the sensitive field entirely from the descriptor
+      }
+      const stripped = stripSensitiveOutputSchema(value, fields);
+      if (stripped !== value) changed = true;
+      newShape[key] = stripped;
+    }
+    if (!changed) return schema;
+    let rebuilt: z.ZodTypeAny = z.object(newShape as z.ZodRawShape);
+    if (typeof def.description === "string") rebuilt = rebuilt.describe(def.description);
+    return rebuilt;
+  }
+
+  if (typeName === "ZodArray") {
+    const inner = def.type;
+    const stripped = stripSensitiveOutputSchema(inner, fields);
+    if (stripped === inner) return schema;
+    let rebuilt: z.ZodTypeAny = z.array(stripped as z.ZodTypeAny);
+    if (typeof def.description === "string") rebuilt = rebuilt.describe(def.description);
+    return rebuilt;
+  }
+
+  if (typeName === "ZodOptional") {
+    const inner = def.innerType;
+    const stripped = stripSensitiveOutputSchema(inner, fields);
+    return stripped === inner ? schema : z.optional(stripped as z.ZodTypeAny);
+  }
+
+  if (typeName === "ZodNullable") {
+    const inner = def.innerType;
+    const stripped = stripSensitiveOutputSchema(inner, fields);
+    return stripped === inner ? schema : z.nullable(stripped as z.ZodTypeAny);
+  }
+
+  // Primitives, unions, records, and anything else: leave untouched.
+  return schema;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Resources excluded / redacted in OpenAI mode                       */
 /* ------------------------------------------------------------------ */
 
@@ -337,6 +408,14 @@ export function applyOpenAIProfile(server: any): void {
       for (const field of inputStrip) {
         delete config.inputSchema[field];
       }
+    }
+
+    // 4b. Strip sensitive fields from the OUTPUT schema descriptor too.
+    // The handler wrapper (step 5) redacts VALUES at runtime; this removes the
+    // field DECLARATIONS (taxId/secret/iban/…) from the outputSchema advertised
+    // at tools/list, so OpenAI review never sees a gov-ID/credential field.
+    if (config.outputSchema) {
+      config.outputSchema = stripSensitiveOutputSchema(config.outputSchema, fieldsToRedact);
     }
 
     // 5. Wrap handler to redact sensitive output fields
