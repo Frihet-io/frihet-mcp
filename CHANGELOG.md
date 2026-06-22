@@ -2,6 +2,19 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.14.4] — 2026-06-22
+
+### Fixed
+
+- **`duplicate_invoice` no longer 400s on paid/sent invoices** (#47): it fetched the full raw stored invoice and spread it into the strict create schema, which rejects unknown keys (`payments`, `verifactu`, `operationType`, `poNumber`, …). Now it allowlist-picks only writable fields. Every paid/sent/cancelled/e-invoiced invoice was affected; a fresh draft duplicated fine.
+
+### Security (Trust)
+
+- **Langfuse traces no longer leak PII/credentials** (#46): the tracer captured raw tool output before the OpenAI redaction wrapper ran, so `taxId`/NIF/CIF, IBAN, webhook secrets, and auth tokens reached the external Langfuse service in every profile mode. Redaction now happens inside observability (shared `src/redaction.ts`) before the trace is built.
+- **OpenAI `outputSchema` no longer declares `taxId`/`secret`** (#46): the descriptor advertised government IDs/credentials even though runtime redacted the values; now stripped at every depth.
+- **OAuth callback fingerprints uid/email in logs** (#46), honoring "No PII logged".
+- **Worker version + tool count single-sourced** from `package.json` (#46) so root/health/metadata surfaces can no longer drift apart; `audit:mcp-refs` now scans `auth-handler.ts`.
+
 ## [1.14.3] — 2026-06-21
 
 ### Fixed
