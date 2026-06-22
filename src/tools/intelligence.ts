@@ -140,27 +140,45 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
       },
     },
     async ({ id, newIssueDate, newDueDate }) => withToolLogging("duplicate_invoice", async () => {
-      // 1. Fetch the original invoice
+      // 1. Fetch the original invoice (returns the FULL raw stored document —
+      //    payments, verifactu, eInvoice, operationType, createdBy, etc.)
       const original = await client.getInvoice(id);
 
-      // 2. Strip fields that shouldn't be copied
-      const {
-        id: _id,
-        documentNumber: _docNum,
-        status: _status,
-        createdAt: _createdAt,
-        updatedAt: _updatedAt,
-        total: _total,
-        ...copyData
-      } = original;
+      // 2. Allowlist-PICK only the fields the create endpoint actually accepts.
+      //    The create POST validates against a Zod `.strict()` schema that
+      //    REJECTS unknown keys (HTTP 400). Spreading the raw GET doc and only
+      //    blacklisting a handful of fields left stored-only fields (payments,
+      //    amountPaid, verifactu, eInvoice, operationType, poNumber, createdBy,
+      //    sentTo/sentAt, cancelled*, attachments, …) in the body, so any paid /
+      //    sent / cancelled / e-invoiced invoice failed to duplicate. Picking
+      //    the writable subset mirrors the create schema and never 400s.
+      //    Deliberately NOT copied: documentNumber (fresh gapless number),
+      //    status (forced draft), recurring (a copy is a one-off), and every
+      //    lifecycle/computed field (total, payments, verifactu, …).
+      const COPYABLE_INVOICE_FIELDS = [
+        "clientName",
+        "clientId",
+        "clientAddress",
+        "clientTaxId",
+        "items",
+        "dueDate",
+        "notes",
+        "taxRate",
+        "irpfRate",
+        "equivalenceSurchargeRate",
+        "clientLocation",
+        "prepayment",
+        "seriesId",
+      ] as const;
 
-      // 3. Set new values
+      // 3. Build the duplicate from the writable subset + new values.
       const today = new Date().toISOString().split("T")[0];
-      const invoiceData: Record<string, unknown> = {
-        ...copyData,
-        status: "draft",
-        issueDate: newIssueDate || today,
-      };
+      const invoiceData: Record<string, unknown> = {};
+      for (const field of COPYABLE_INVOICE_FIELDS) {
+        if (original[field] !== undefined) invoiceData[field] = original[field];
+      }
+      invoiceData.status = "draft";
+      invoiceData.issueDate = newIssueDate || today;
 
       if (newDueDate) {
         invoiceData.dueDate = newDueDate;
