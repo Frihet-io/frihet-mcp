@@ -1,6 +1,6 @@
 {
   "name": "@frihet/mcp-server",
-  "version": "1.14.3",
+  "version": "1.14.4",
   "description": "AI-native MCP server for business management — invoices, expenses, deposits, clients, products, quotes, webhooks, CRM, e-invoicing (Facturae/XRechnung/Factur-X/FatturaPA/PEPPOL + FACe Spain B2G + TicketBAI Basque Country + KSeF Poland), vacation rentals, POS, banking, fiscal (Modelo 303/130/390/180/347/415/425/418, VeriFactu, TicketBAI, IS M200/M202), IGIC, AIEM, GL audit approval, white-label portal domain, VIES EU VAT lookup, bank rules, time tracking, recurring invoices, team management, gestoria. 157 tools. Remote endpoint at mcp.frihet.io (zero install). Works with Claude, Cursor, Windsurf, Cline.",
   "type": "module",
   "main": "./dist/index.js",
