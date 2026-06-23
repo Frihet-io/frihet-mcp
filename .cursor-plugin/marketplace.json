@@ -1,0 +1,18 @@
+{
+  "name": "frihet",
+  "owner": {
+    "name": "Frihet",
+    "email": "support@frihet.io"
+  },
+  "metadata": {
+    "description": "AI-native ERP for Spain & the EU — invoicing, CRM, banking and fiscal compliance through natural language.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "frihet-erp",
+      "source": "./plugins/frihet-erp",
+      "description": "Connect Cursor to your Frihet ERP — 157 tools for invoicing, expenses, CRM, banking and Spanish/EU fiscal compliance (VeriFactu, TicketBAI, Facturae)."
+    }
+  ]
+}
