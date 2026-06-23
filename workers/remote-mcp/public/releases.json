@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.14.3"
+      "version": "1.14.5"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -29,10 +29,10 @@
     }
   },
   "releasedAt": "2026-06-22",
-  "version": "1.14.3",
+  "version": "1.14.5",
   "releases": [
     {
-      "version": "1.14.3",
+      "version": "1.14.5",
       "releasedAt": "2026-06-22",
       "mcpToolCount": 157,
       "delta": "Trust hardening: Langfuse PII redaction + OpenAI output-schema strip + metadata single-source",
