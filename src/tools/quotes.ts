@@ -13,6 +13,53 @@ const quoteItemSchema = z.object({
   unitPrice: z.number().describe("Unit price in EUR / Precio unitario en EUR"),
 });
 
+// Optional client-identity + ES fiscal fields the Frihet API accepts on quote
+// create+update (mirrors the invoice subset the backend supports for quotes).
+const quoteOptionalFields = {
+  clientId: z
+    .string()
+    .optional()
+    .describe("Existing client ID — server back-fills taxId/address / ID de cliente existente"),
+  clientTaxId: z
+    .string()
+    .optional()
+    .describe("Client tax ID (NIF/CIF/VAT) / NIF/CIF del cliente"),
+  clientAddress: z
+    .string()
+    .optional()
+    .describe("Client billing address / Direccion fiscal del cliente"),
+  issueDate: z
+    .string()
+    .optional()
+    .describe("Issue date in ISO 8601 (YYYY-MM-DD), defaults to today / Fecha de emision"),
+  dueDate: z
+    .string()
+    .optional()
+    .describe("Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento"),
+  taxRate: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe("Tax rate % (e.g. 21 IVA, 7 IGIC) / Porcentaje de impuesto"),
+  irpfRate: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe("IRPF withholding % (retencion autonomo ES) / Retencion IRPF %"),
+  equivalenceSurchargeRate: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe("Recargo de equivalencia % / Recargo de equivalencia %"),
+  clientLocation: z
+    .enum(["peninsula", "canarias", "ceuta_melilla", "eu", "world"])
+    .optional()
+    .describe("Fiscal zone driving IVA vs IGIC vs exempt / Zona fiscal"),
+};
+
 export function registerQuoteTools(server: McpServer, client: IFrihetClient): void {
   // -- list_quotes --
 
@@ -110,6 +157,7 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
         clientName: z.string().describe("Client name / Nombre del cliente"),
+        ...quoteOptionalFields,
         items: z
           .array(quoteItemSchema)
           .min(1)
@@ -150,6 +198,7 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
       inputSchema: {
         id: z.string().describe("Quote ID / ID del presupuesto"),
         clientName: z.string().optional().describe("Client name / Nombre del cliente"),
+        ...quoteOptionalFields,
         items: z.array(quoteItemSchema).min(1).optional().describe("Line items / Conceptos"),
         validUntil: z.string().optional().describe("Expiry date (YYYY-MM-DD) / Fecha de validez"),
         notes: z.string().optional().describe("Notes / Notas"),

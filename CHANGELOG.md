@@ -2,6 +2,13 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.14.5] — 2026-06-23
+
+### Added
+
+- **`create_invoice` / `update_invoice` expose the full ES fiscal field set the API already accepts.** The schemas previously only allowed `clientName/items/issueDate/dueDate/status/notes/taxRate`, so agents could not set `irpfRate` (retención IRPF — critical for Spanish autónomos), `equivalenceSurchargeRate`, `clientId`, `clientTaxId`, `clientAddress`, `clientLocation`, `prepayment`, `discountRate`, `seriesId`, `documentNumber`, `poNumber`, or `operationType`. The backend accepted all of these — the MCP Zod was just too narrow. No client/transport change (the HTTP client already passes fields through).
+- **`create_quote` / `update_quote` gain `clientId`, `clientTaxId`, `clientAddress`, `issueDate`, `dueDate`, `taxRate`, `irpfRate`, `equivalenceSurchargeRate`, `clientLocation`** for parity with the invoice subset the API supports on quotes.
+
 ## [1.14.4] — 2026-06-22
 
 ### Fixed

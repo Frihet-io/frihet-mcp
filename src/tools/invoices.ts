@@ -13,6 +13,74 @@ const invoiceItemSchema = z.object({
   unitPrice: z.number().describe("Unit price in EUR / Precio unitario en EUR"),
 });
 
+// Optional client-identity fields the Frihet API accepts on invoice/quote
+// create+update. When clientId is supplied the server back-fills taxId/address
+// from the stored client; clientTaxId/clientAddress override per-document.
+const clientIdentityFields = {
+  clientId: z
+    .string()
+    .optional()
+    .describe("Existing client ID — server back-fills taxId/address / ID de cliente existente"),
+  clientTaxId: z
+    .string()
+    .optional()
+    .describe("Client tax ID (NIF/CIF/VAT) shown on the invoice / NIF/CIF del cliente"),
+  clientAddress: z
+    .string()
+    .optional()
+    .describe("Client billing address shown on the invoice / Direccion fiscal del cliente"),
+};
+
+// Optional Spanish fiscal fields the Frihet API accepts on invoice create+update.
+// irpfRate is the freelancer withholding (retencion IRPF) — critical for ES
+// autonomos; equivalenceSurchargeRate is recargo de equivalencia.
+const invoiceFiscalFields = {
+  irpfRate: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe("IRPF withholding % (retencion autonomo ES, e.g. 15 or 7) / Retencion IRPF %"),
+  equivalenceSurchargeRate: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe("Recargo de equivalencia % (ES retail regime) / Recargo de equivalencia %"),
+  clientLocation: z
+    .enum(["peninsula", "canarias", "ceuta_melilla", "eu", "world"])
+    .optional()
+    .describe("Fiscal zone driving IVA vs IGIC vs exempt / Zona fiscal (IVA/IGIC/exento)"),
+  prepayment: z
+    .number()
+    .min(0)
+    .optional()
+    .describe("Prepaid/advance amount already collected in EUR / Anticipo cobrado en EUR"),
+  discountRate: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe("Global discount % applied to the invoice / Descuento global %"),
+  seriesId: z
+    .string()
+    .optional()
+    .describe("Invoice numbering series ID / ID de serie de numeracion"),
+  documentNumber: z
+    .string()
+    .max(50)
+    .optional()
+    .describe("Externally-issued number for import (honored verbatim) / Numero externo para importacion"),
+  poNumber: z
+    .string()
+    .optional()
+    .describe("Client purchase-order reference / Numero de pedido del cliente"),
+  operationType: z
+    .enum(["service", "goods"])
+    .optional()
+    .describe("Operation type (service or goods) / Tipo de operacion"),
+};
+
 export function registerInvoiceTools(server: McpServer, client: IFrihetClient): void {
   // -- list_invoices --
 
@@ -116,12 +184,14 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       description:
         "Create a new invoice. Requires client name and at least one line item. " +
         "The invoice number is auto-generated. Defaults to draft status and today's date. " +
-        "Example: clientName='Acme Corp', items=[{description:'Consulting', quantity:10, unitPrice:150}], taxRate=21 " +
+        "Example: clientName='Acme Corp', items=[{description:'Consulting', quantity:10, unitPrice:150}], taxRate=21, irpfRate=15 " +
         "/ Crea una nueva factura. Requiere nombre del cliente y al menos un concepto. " +
-        "El numero se genera automaticamente. Por defecto estado borrador y fecha de hoy.",
+        "El numero se genera automaticamente. Por defecto estado borrador y fecha de hoy. " +
+        "Soporta retencion IRPF (autonomos ES), recargo de equivalencia, serie, anticipo y descuento global.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
         clientName: z.string().describe("Client/customer name / Nombre del cliente"),
+        ...clientIdentityFields,
         items: z
           .array(invoiceItemSchema)
           .min(1)
@@ -148,6 +218,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           .max(100)
           .optional()
           .describe("Tax rate percentage (e.g. 21 for 21% IVA, 7 for IGIC) / Porcentaje de impuesto"),
+        ...invoiceFiscalFields,
       },
       outputSchema: invoiceItemOutput,
     },
@@ -175,6 +246,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       inputSchema: {
         id: z.string().describe("Invoice ID / ID de la factura"),
         clientName: z.string().optional().describe("Client name / Nombre del cliente"),
+        ...clientIdentityFields,
         items: z
           .array(invoiceItemSchema)
           .min(1)
@@ -188,6 +260,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           .describe("Invoice status / Estado"),
         notes: z.string().optional().describe("Notes / Notas"),
         taxRate: z.number().min(0).max(100).optional().describe("Tax rate % / IVA %"),
+        ...invoiceFiscalFields,
       },
       outputSchema: invoiceItemOutput,
     },
