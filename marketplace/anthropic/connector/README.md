@@ -17,7 +17,7 @@ A `.mcpb` is a ZIP archive renamed to `.mcpb`. The archive must contain at minim
 cd ~/Documents/frihet-mcp/marketplace/anthropic/connector
 
 # Pack: zip then rename extension
-zip -r frihet-erp-1.14.2.mcpb manifest.json
+zip -r frihet-erp-1.14.5.mcpb manifest.json
 
 # Verify well-formed JSON before packing
 node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json OK')"
@@ -28,10 +28,10 @@ node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console
 1. Verify `https://mcp.frihet.io/mcp` is reachable with a valid MCP JSON-RPC response.
 2. Verify OAuth redirect URI `https://claude.ai/api/mcp/auth_callback` AND `https://claude.com/api/mcp/auth_callback` are in the Frihet OAuth allowlist.
 3. Create a test account at `https://app.frihet.io` with sample clients/invoices/expenses.
-4. Pack the bundle: `zip -r frihet-erp-1.14.2.mcpb manifest.json`
+4. Pack the bundle: `zip -r frihet-erp-1.14.5.mcpb manifest.json`
 5. Go to `https://claude.ai/settings/connectors` → "Submit your connector"
 6. Fill in the form using `SUBMISSION.md` (parent directory) as the copy-paste reference.
-7. Upload `frihet-erp-1.14.2.mcpb` where the form requests a bundle.
+7. Upload `frihet-erp-1.14.5.mcpb` where the form requests a bundle.
 8. Expect ~2 week review cycle (per Anthropic FAQ).
 
 ## Alternatively: submit as a remote MCP connector without bundle

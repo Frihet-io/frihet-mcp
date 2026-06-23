@@ -28,10 +28,10 @@
 | Server identifier (MCP name) | — | `io.frihet/erp` |
 | Server URL (remote endpoint) | — | `https://mcp.frihet.io/mcp` |
 | npm package | — | `@frihet/mcp-server` |
-| Version | — | `1.14.2` (GA / stable) |
+| Version | — | `1.14.5` (GA / stable) |
 | License | — | `MIT` |
 | GitHub repository | — | `https://github.com/Frihet-io/frihet-mcp` |
-| Homepage / docs | — | `https://docs.frihet.io/desarrolladores/mcp-server` |
+| Homepage / docs | — | `https://frihet.io/?utm_source=anthropic&utm_medium=mcp_directory&utm_campaign=mcp_landgrab` |
 
 **Long description (copy-paste ready, 701 chars):**
 
@@ -151,12 +151,12 @@ Before submitting:
 - [ ] Logo/icon assets prepared at required sizes (see Section 6)
 - [ ] Screenshots prepared (see Section 6)
 - [ ] `server.json` description is ≤ 100 chars (verified: 87 chars on branch `fix/server-json-desc-100chars`)
-- [x] Version is GA / stable (not `-beta`): `v1.14.2` published to npm — ready for the production directory
+- [x] Version is GA / stable (not `-beta`): `v1.14.5` published to npm — ready for the production directory
 
 ---
 
 ## Submission Order Recommendation
 
-Submit Anthropic **last** among the three marketplaces. Reason: 2-week review cycle + production-readiness requirement. Ship Cursor and OpenAI first (faster turnaround), then submit Anthropic. The server is now GA (`v1.14.2`, 157 tools) so the production-readiness bar is met.
+Submit Anthropic **last** among the three marketplaces. Reason: 2-week review cycle + production-readiness requirement. Ship Cursor and OpenAI first (faster turnaround), then submit Anthropic. The server is now GA (`v1.14.5`, 157 tools) so the production-readiness bar is met.
 
 See `../README.md` for full submission sequencing.

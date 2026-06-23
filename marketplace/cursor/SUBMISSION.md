@@ -106,11 +106,11 @@ Works with the free Frihet plan. Get an API key at app.frihet.io.
 ```json
 {
   "name": "frihet-erp",
-  "version": "1.14.2",
+  "version": "1.14.5",
   "displayName": "Frihet ERP",
   "description": "AI-native ERP — full ES/EU fiscal compliance (VeriFactu/TicketBAI/Facturae) + 157 tools for invoicing, CRM, tax & banking.",
   "icon": "https://frihet.io/favicon.svg",
-  "homepage": "https://frihet.io",
+  "homepage": "https://frihet.io/?utm_source=cursor&utm_medium=mcp_directory&utm_campaign=mcp_landgrab",
   "repository": "https://github.com/Frihet-io/frihet-mcp",
   "license": "MIT",
   "categories": ["Finance & Accounting", "Business Tools"],
