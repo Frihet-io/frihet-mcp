@@ -314,8 +314,6 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ### E-Invoicing (10)
 
-> **Status: beta.** Tools call `api.frihet.io/v1/einvoice/*` directly. If an endpoint is not yet deployed (404), the tool falls back to `{ _stub: true, _note: "CF endpoint pending deploy", _plannedEndpoint: "..." }` so the server remains usable while transport ships.
-
 | Tool | What it does |
 |------|-------------|
 | `send_einvoice` | Dispatch an invoice in 11 formats (XRechnung, Factur-X, FatturaPA, PEPPOL, Facturae, UBL, CII) via email / Chorus Pro / SDI / PEPPOL / download |
@@ -327,11 +325,9 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `face_status` | Poll submission status from FACe for a submitted invoice |
 | `ticketbai_submit` | Submit TicketBAI fiscal record to Basque Country tax authority (Hacienda) |
 | `ticketbai_status` | Poll TicketBAI submission status from the Basque tax authority |
-| `ksef_submit` | Submit invoice to KSeF (Poland national e-invoicing system — stub) |
+| `ksef_submit` | Submit invoice to KSeF (Poland national e-invoicing system) |
 
 ### Time Tracking (6)
-
-> **Status: stub** — `/v1/time/*` endpoints planned. Tools surface 404 until backend ships.
 
 | Tool | What it does |
 |------|-------------|
@@ -343,8 +339,6 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_time_summary` | Aggregate total/billable/non-billable hours for a period, with optional groupBy (user/project/day) |
 
 ### Recurring Invoices (8)
-
-> **Status: stub** — `/v1/recurring/*` endpoints planned. Tools surface 404 until backend ships.
 
 | Tool | What it does |
 |------|-------------|
@@ -359,8 +353,6 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ### Team Management (4)
 
-> **Status: stub** — `/v1/team/*` endpoints planned. Tools surface 404 until backend ships.
-
 | Tool | What it does |
 |------|-------------|
 | `list_team_members` | List all workspace members with role and invite status |
@@ -369,8 +361,6 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `remove_team_member` | Remove a member from the workspace (confirm=true required) |
 
 ### Gestoria — Accountants (5)
-
-> **Status: stub** — `/v1/gestoria/*` REST surface lands with Wave Fase 1 closure (PRs #383 bulk send, #384 aging, #385 messaging). Tools surface 404 until the backend ships.
 
 | Tool | What it does |
 |------|-------------|
@@ -382,8 +372,6 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ### Audit GL (3)
 
-> **Status: stub** — `/v1/gl/*` proxies callables `approveGLEntry`, `rejectGLEntry`, `getGLEntryAuditLog` (PR #395). Tools surface 404 until backend ships.
-
 | Tool | What it does |
 |------|-------------|
 | `frihet_gl_entry_approve` | Approve a GL journal entry (gestor/admin only — TRUST AREA) |
@@ -391,8 +379,6 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `frihet_gl_entry_audit_log` | Retrieve full audit trail for a GL entry |
 
 ### White-label Portal Domain (3)
-
-> **Status: stub** — `/v1/portal/domain/*` proxies callables `addCustomPortalDomain`, `verifyCustomPortalDomain`, `removeCustomPortalDomain` (PR #397).
 
 | Tool | What it does |
 |------|-------------|
@@ -402,16 +388,12 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ### Self-onboard & VIES (2)
 
-> **Status: stub** — `/v1/portal/onboard/*` proxies callables `generatePortalOnboardLink`, `lookupTaxIdViaVIES` (PR #398). Public portal flows excluded from MCP.
-
 | Tool | What it does |
 |------|-------------|
 | `frihet_portal_onboard_link_generate` | Generate a time-limited self-onboard link for a prospective client |
 | `frihet_tax_id_vies_lookup` | Validate an EU VAT number (CIF intracomunitario) via VIES |
 
 ### IGIC — Canary Islands Indirect Tax (4)
-
-> **Status: stub** — `/v1/igic/*` service-layer reads (PR #390). ATC SOAP excluded (internal infra).
 
 | Tool | What it does |
 |------|-------------|
@@ -422,16 +404,12 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ### Impuesto sobre Sociedades — Corporate Tax (2)
 
-> **Status: stub** — `/v1/is/*` service-layer reads for Spanish SLs/SAs (PR #392).
-
 | Tool | What it does |
 |------|-------------|
 | `frihet_modelo_200_summary` | Modelo 200 annual IS return (taxable base, deductions, net payable) |
 | `frihet_modelo_202_summary` | Modelo 202 installment payments (1P April, 2P October, 3P December) |
 
 ### Bank Categorization Rules (2)
-
-> **Status: stub** — `/v1/banking/rules` Q3-flagged (PR #394). Webhook handlers excluded.
 
 | Tool | What it does |
 |------|-------------|
@@ -758,8 +736,8 @@ npm run build   # must pass before submitting
 
 ## Current limitations
 
-- **No OCR or file upload** -- the MCP works with structured data, not images or PDFs. Planned for a future release.
-- **Single company** -- one API key maps to one Frihet workspace. Multi-company support is not yet available.
+- **No OCR or file upload** -- the MCP works with structured data, not images or PDFs.
+- **Single company** -- one API key maps to one Frihet workspace.
 - **Frihet account required** -- you need an active account at [app.frihet.io](https://app.frihet.io) and an API key (starts with `fri_`).
 
 ---
