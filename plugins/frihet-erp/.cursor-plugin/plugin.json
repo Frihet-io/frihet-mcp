@@ -1,0 +1,25 @@
+{
+  "name": "frihet-erp",
+  "displayName": "Frihet ERP",
+  "version": "1.0.0",
+  "description": "AI-native ERP for Spain & the EU. Talk to your business from Cursor: create invoices, log expenses, manage clients, check cash flow and prepare quarterly taxes — 157 tools over the Frihet MCP server, with native VeriFactu / TicketBAI / Facturae compliance.",
+  "author": {
+    "name": "Frihet",
+    "email": "support@frihet.io"
+  },
+  "license": "MIT",
+  "keywords": [
+    "erp",
+    "invoicing",
+    "accounting",
+    "spain",
+    "fiscal",
+    "verifactu",
+    "ticketbai",
+    "facturae",
+    "mcp",
+    "finance",
+    "tax"
+  ],
+  "logo": "assets/logo.svg"
+}

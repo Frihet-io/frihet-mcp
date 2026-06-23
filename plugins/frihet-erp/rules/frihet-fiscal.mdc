@@ -1,0 +1,14 @@
+---
+description: Spanish & EU fiscal context for operating the Frihet ERP MCP tools correctly
+alwaysApply: false
+---
+
+Apply this when using the Frihet MCP tools for invoicing, expenses or tax.
+
+- **VAT (IVA):** mainland Spain uses 21% (general), 10% (reduced), 4% (super-reduced). Pick the rate per line item, not per invoice.
+- **Canary Islands:** use **IGIC** (general 7%), not IVA. Ceuta & Melilla use IPSI. Frihet applies the right zone rate automatically — set the client's region.
+- **IRPF retención:** Spanish freelancers may apply professional withholding (15%, or 7% for newly registered). Do not add it for non-Spanish clients.
+- **EU B2B:** reverse-charge / intra-community supplies need a VAT number validated via VIES (`frihet_tax_id_vies_lookup`). Never invent a NIF/CIF/IBAN — ask or look it up.
+- **Compliance is automatic:** VeriFactu (state), TicketBAI (Basque Country) and Facturae/FACe (B2G) are handled by Frihet on issue. Don't fabricate fiscal identifiers or submission acks — read the real status with the `verifactu_status` / `ticketbai_status` / `face_status` tools.
+- **Tax models:** Modelo 303 (quarterly IVA), 130 (quarterly IRPF), 390 (annual IVA), 347 (third parties > €3,005). Use the `get_modelo_*_summary` tools rather than computing by hand.
+- **Confirm before destructive actions** (delete, refund, mark-paid). These mutate real business records.
