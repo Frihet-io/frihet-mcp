@@ -35,7 +35,7 @@ Wave Mature 3 — prepared May 2026.
 **3. Anthropic Claude Directory (submit last)**
 - ~2 week review cycle
 - Strictest requirements: production-ready, full OAuth, tool annotations, privacy policy live
-- GA / stable version published (no `-beta` tag) — currently `v1.14.2`
+- GA / stable version published (no `-beta` tag) — currently `v1.14.5`
 - URL: https://claude.ai/settings/connectors
 - Submission form: https://claude.com/docs/connectors/building/submission
 
@@ -69,7 +69,7 @@ No binary files are stored in this repo — assets live in `Frihet-Saas-Website/
 |----------|--------|---------------|
 | Anthropic MCP Registry (`registry.modelcontextprotocol.io`) | LIVE — `io.frihet/erp` | Keep `server.json` updated on releases |
 | Smithery | LIVE — `smithery.ai/server/frihet/frihet-mcp` | Track install rate weekly |
-| npm | LIVE — `@frihet/mcp-server` v1.14.2 | Current stable (GA, 157 tools) |
+| npm | LIVE — `@frihet/mcp-server` v1.14.5 | Current stable (GA, 157 tools) |
 | Glama / mcpservers.org | Not verified | Submit separately (15min) |
 | PulseMCP | Not verified | Submit separately (15min) |
 | mcp.so | Not verified | Submit separately (15min) |

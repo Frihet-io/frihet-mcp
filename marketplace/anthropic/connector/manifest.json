@@ -3,7 +3,7 @@
   "name": "io.frihet/erp",
   "title": "Frihet ERP",
   "description": "AI-native ERP MCP server — full ES/EU fiscal compliance (VeriFactu/TicketBAI/Facturae) + invoicing, CRM, tax, banking, HR, payroll, period close.",
-  "version": "1.14.2",
+  "version": "1.14.5",
   "license": "MIT",
   "repository": {
     "url": "https://github.com/Frihet-io/frihet-mcp",
@@ -33,7 +33,7 @@
     {
       "registryType": "npm",
       "identifier": "@frihet/mcp-server",
-      "version": "1.14.2",
+      "version": "1.14.5",
       "transport": {
         "type": "stdio"
       },

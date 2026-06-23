@@ -28,7 +28,7 @@
 | Long description | 2,000 chars | See below |
 | Category | — | `Finance & Accounting` |
 | App icon URL | — | `https://frihet.io/favicon.svg` |
-| Homepage | — | `https://frihet.io` |
+| Homepage | — | `https://frihet.io/?utm_source=openai&utm_medium=mcp_directory&utm_campaign=mcp_landgrab` |
 | Developer name | — | `BRTHLS / Viktor` |
 | Developer email | — | `hola@frihet.io` |
 | Privacy policy URL | — | `https://www.frihet.io/en/privacy` |

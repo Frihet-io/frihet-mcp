@@ -45,7 +45,7 @@
 
 ## What is this
 
-An MCP server that connects your AI assistant to [Frihet](https://frihet.io). Create invoices by talking. Query expenses in natural language. Manage your entire business from your IDE.
+An MCP server that connects your AI assistant to [Frihet](https://frihet.io/?utm_source=github_readme&utm_medium=mcp_readme&utm_campaign=mcp_landgrab). Create invoices by talking. Query expenses in natural language. Manage your entire business from your IDE.
 
 ```
 You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/hour, due March 1st"
@@ -794,4 +794,4 @@ npm run build   # must pass before submitting
 
 MIT. See [LICENSE](./LICENSE).
 
-Built by [Frihet](https://frihet.io).
+Built by [Frihet](https://frihet.io/?utm_source=github_readme&utm_medium=mcp_readme&utm_campaign=mcp_landgrab).
