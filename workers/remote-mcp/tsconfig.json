@@ -24,5 +24,5 @@
     "../../src/logger.ts",
     "../../src/metrics.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "src/__tests__/**"]
 }

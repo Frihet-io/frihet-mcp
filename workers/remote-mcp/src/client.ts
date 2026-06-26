@@ -21,25 +21,14 @@ import {
   FrihetClient as BaseFrihetClient,
   FrihetApiError,
 } from "../../../src/client.js";
+import { resolveApiBaseUrl } from "./api-url.js";
 
 export { FrihetApiError };
+export { resolveApiBaseUrl, resolveOAuthApiKeyUrl } from "./api-url.js";
 export type { PaginatedResponse, ApiError } from "../../../src/types.js";
 
 /** Workers have a ~30s wall-clock limit — keep requests under it. */
 const WORKER_REQUEST_TIMEOUT_MS = 25000;
-
-/**
- * Normalize FRIHET_API_BASE into the /v1 base URL the client expects.
- * Accepts both the origin form ("https://api.frihet.io") and the full
- * form ("https://api.frihet.io/v1"); trailing slashes are stripped.
- * Returns undefined for empty/missing input so the root default applies.
- */
-export function resolveApiBaseUrl(apiBase?: string): string | undefined {
-  if (!apiBase) return undefined;
-  const trimmed = apiBase.replace(/\/+$/, "");
-  if (trimmed === "") return undefined;
-  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
-}
 
 export class FrihetClient extends BaseFrihetClient {
   constructor(apiKey: string, baseUrl?: string) {

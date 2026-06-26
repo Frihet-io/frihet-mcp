@@ -10,6 +10,7 @@
 
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
+import { resolveOAuthApiKeyUrl } from "./api-url.js";
 import { getLoginPage } from "./login-page.js";
 import { log } from "../../../src/logger.js";
 import { MCP_SERVER_VERSION, FULL_TOOL_COUNT } from "./server-meta.js";
@@ -171,9 +172,13 @@ app.post("/callback", async (c) => {
     return c.json({ error: "Invalid Firebase token" }, 401);
   }
 
-  // Provision an API key for this user via the Frihet Cloud Function
+  // Provision an API key for this user via the Frihet Cloud Function.
+  // The provisioning endpoint lives at the API ORIGIN ROOT, never under /v1 —
+  // resolveOAuthApiKeyUrl strips a trailing /v1 so a FRIHET_API_BASE configured
+  // in either form (origin or /v1) resolves correctly. Passing the raw env var
+  // with a /v1 suffix produced /v1/oauth/api-key → 401 → 500 for every OAuth grant.
   const apiKeyResponse = await fetch(
-    `${c.env.FRIHET_API_BASE}/oauth/api-key`,
+    resolveOAuthApiKeyUrl(c.env.FRIHET_API_BASE),
     {
       method: "POST",
       headers: {
