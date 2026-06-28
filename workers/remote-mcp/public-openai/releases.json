@@ -1,32 +1,25 @@
 {
-  "integrationCount": 0,
-  "languageCount": 17,
-  "lastEmit": "2026-06-01T00:10:38.257Z",
-  "manifestChecksum": "a227aaf46c65a3c3db81a3eeea7e9d07c484b33ddc4864bca8336c349192435c",
-  "mcpToolCount": 0,
+  "version": "1.14.5",
+  "releasedAt": "2026-06-22",
+  "surface": "openai-chatgpt",
+  "mcpToolCount": 56,
+  "reviewedBusinessToolCount": 53,
+  "discoveryMetaToolCount": 3,
+  "promptsCount": 0,
+  "notes": "ChatGPT connector metadata is scoped to reviewed invoices, expenses, clients/CRM, products, quotes, vendors, webhooks, and monthly summaries. Hidden product modules, regulated identifiers, credentials, and diagnostic metadata are excluded.",
   "products": {
-    "app": {
-      "status": "live",
-      "version": "0.1.0"
-    },
-    "cli": {
-      "install": "npm install -g @frihet/cli",
-      "npm": "@frihet/cli",
-      "status": "live",
-      "version": "0.1.0"
-    },
     "mcp_server": {
-      "install": "npm install @frihet/mcp-server",
-      "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.0.0"
-    },
-    "sdk": {
-      "install": "npm install @frihet/sdk",
-      "npm": "@frihet/sdk",
-      "status": "live",
-      "version": "0.1.0"
+      "version": "1.14.5"
     }
   },
-  "version": "0.1.0"
+  "releases": [
+    {
+      "version": "1.14.5",
+      "releasedAt": "2026-06-22",
+      "mcpToolCount": 56,
+      "delta": "OpenAI ChatGPT scoped connector surface",
+      "notes": "OpenAI mode exposes 53 reviewed business tools plus 3 read-only discovery meta-tools. Prompts and hidden full-server modules are not part of this surface."
+    }
+  ]
 }

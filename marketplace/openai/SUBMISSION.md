@@ -42,7 +42,9 @@ Frihet connects ChatGPT directly to your business workspace.
 
 Create invoices by describing what you sold. Log expenses in plain language. Look up clients, products, vendors, quotes, and monthly business summaries. Keep routine admin moving from inside ChatGPT without switching tabs.
 
-The ChatGPT app exposes a reviewed 53-tool OpenAI-safe surface: invoices, expenses, clients, CRM contacts/activities/notes, products, quotes, vendors, monthly summaries, and webhook management. Government IDs, webhook secrets, recipient override emails, payroll, HR, stay/PMS, e-invoicing XML, VIES lookup, and quarterly filing tools are not exposed in this OpenAI profile.
+The ChatGPT app exposes a reviewed OpenAI-safe surface for invoices, expenses, clients, CRM contacts/activities/notes, products, quotes, vendors, monthly summaries, and webhook management. It includes 53 reviewed business tools plus 3 read-only discovery tools (`list_tool_groups`, `search_tools`, `describe_tool`) that help ChatGPT select the right capability without exposing hidden product modules.
+
+Regulated identifiers, banking identifiers, webhook signing secrets, recipient override emails, payroll/HR, lodging/POS, banking, and regulated filing/export workflows are outside the ChatGPT surface.
 
 Connect via OAuth 2.0 in seconds. No API key required.
 
@@ -160,7 +162,7 @@ Before submitting:
 
 - [ ] `https://openai-mcp.frihet.io/mcp` is reachable with valid MCP response
 - [ ] OAuth metadata at `https://openai-mcp.frihet.io/.well-known/oauth-authorization-server` includes `code_challenge_methods_supported: ["S256"]`
-- [ ] `FRIHET_OPENAI_MODE=true` is active and exposes exactly 53 tools
+- [ ] `FRIHET_OPENAI_MODE=true` is active and exposes 53 reviewed business tools + 3 read-only discovery meta-tools
 - [ ] MCP prompts are hidden in OpenAI mode
 - [ ] `/.well-known/openai-apps-challenge` route added to Worker (deploy BEFORE submitting)
 - [ ] OpenAI redirect URI added to OAuth allowlist (exact URI provided by OpenAI during submission)

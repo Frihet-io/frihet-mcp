@@ -1,6 +1,6 @@
 # OpenAI Tool Justifications — Copy-Paste Reference
 
-53 tools, 3 justifications each. Copy the text for each tool.
+53 reviewed business tools, 3 justifications each. The live ChatGPT surface also includes 3 read-only discovery meta-tools (`list_tool_groups`, `search_tools`, `describe_tool`) whose catalog is pinned to these 53 tools.
 
 ---
 
@@ -92,9 +92,9 @@ All these share the same justifications:
 
 ## EXCLUDED / HIDDEN TOOLS
 
-OpenAI mode uses an explicit allowlist of the 53 tools above. Everything else in the full MCP server is hidden from the ChatGPT app submission surface, including payroll, HR, stay/PMS, POS, banking, e-invoicing XML, VIES lookup, VeriFactu/FACe/TicketBAI/KSeF submission, time tracking, recurring invoices, gestoria bulk-send, permissions, onboarding, period-close tools, and all MCP prompts.
+OpenAI mode uses an explicit allowlist of the 53 business tools above. Everything else in the full MCP server is hidden from the ChatGPT app submission surface, including payroll, HR, lodging/POS, banking, e-invoicing, regulated filing/export workflows, time tracking, recurring invoices, gestoría bulk-send, permissions, onboarding, period-close tools, and all MCP prompts.
 
 Explicit defense-in-depth exclusions:
 
 - `get_quarterly_taxes` — returns tax filing data with government identifiers
-- `get_invoice_einvoice` — returns e-invoice XML with NIF/CIF
+- `get_invoice_einvoice` — returns e-invoice XML with regulated identifiers

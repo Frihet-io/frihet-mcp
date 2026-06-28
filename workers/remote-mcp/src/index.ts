@@ -565,9 +565,9 @@ This is the OpenAI/ChatGPT connector surface for Frihet. It exposes ${OPENAI_ALL
 - Vendors — supplier records
 - Webhooks — event subscriptions
 
-Government tax identifiers (NIF/CIF/VAT), banking identifiers (IBAN), and signing
-credentials are never collected or returned through this connector; manage them in
-the Frihet web app at https://app.frihet.io.
+Regulated identifiers, banking identifiers, and signing credentials are never
+collected or returned through this connector; manage them in the Frihet web app
+at https://app.frihet.io.
 
 ---
 
@@ -724,22 +724,76 @@ const OPENAI_DROP_PATHS_EXACT = new Set([
   "/v1/quotes/{quoteId}/pdf",
   "/v1/{resource}/batch",
 ]);
+const OPENAI_KEEP_PATHS_EXACT = new Set([
+  "/v1/invoices",
+  "/v1/invoices/{invoiceId}",
+  "/v1/invoices/{invoiceId}/pdf",
+  "/v1/invoices/{invoiceId}/send",
+  "/v1/invoices/{invoiceId}/paid",
+  "/v1/expenses",
+  "/v1/expenses/{expenseId}",
+  "/v1/clients",
+  "/v1/clients/{clientId}",
+  "/v1/clients/{clientId}/contacts",
+  "/v1/clients/{clientId}/contacts/{contactId}",
+  "/v1/clients/{clientId}/activities",
+  "/v1/clients/{clientId}/activities/{activityId}",
+  "/v1/clients/{clientId}/notes",
+  "/v1/clients/{clientId}/notes/{noteId}",
+  "/v1/products",
+  "/v1/products/{productId}",
+  "/v1/quotes",
+  "/v1/quotes/{quoteId}",
+  "/v1/quotes/{quoteId}/send",
+  "/v1/summary",
+  "/v1/vendors",
+  "/v1/vendors/{vendorId}",
+  "/v1/context",
+  "/v1/monthly",
+  "/v1/webhooks",
+  "/v1/webhooks/{webhookId}",
+  "/v1/invoices/{invoiceId}/credit-note",
+  "/v1/invoices/{invoiceId}/late-fee",
+]);
 const OPENAI_DROP_SCHEMAS = new Set([
   "Channel", "ChannelCreate", "ChannelStatus", "Deposit", "DepositCreate", "DepositStatus",
   "Guest", "Property", "PropertyCreate", "PropertyStatus", "Reservation", "ReservationCreate",
   "ReservationStatus", "QuarterlySummary", "BatchResponse", "ReceiptQueueItem", "ResendInboundPayload",
 ]);
+const OPENAI_ALLOWED_TAGS = new Set([
+  "Invoices", "Expenses", "Clients", "Products", "Quotes", "Vendors",
+  "Summary", "Intelligence", "Webhooks", "Contacts", "Activities", "Notes",
+]);
+const OPENAI_TAG_DESCRIPTIONS: Record<string, string> = {
+  Invoices: "Create, read, update, send, and manage invoice records.",
+  Expenses: "Record and manage business expenses.",
+  Clients: "Manage client records with contact details and addresses.",
+  Products: "Manage product and service catalogue records with pricing.",
+  Quotes: "Create, read, update, send, and manage quotes.",
+  Vendors: "Manage vendor records with contact details and addresses.",
+  Summary: "Financial dashboard data including revenue, expenses, and profit aggregations.",
+  Intelligence: "Business context and monthly financial summaries.",
+  Webhooks: "Manage webhook subscriptions for Frihet business events.",
+  Contacts: "Manage contact persons associated with a client.",
+  Activities: "Manage client activity timeline entries.",
+  Notes: "Manage notes attached to a client.",
+};
 const OPENAI_STRIP_PROPS = [
   "taxId", "tax_id", "nif", "cif", "vatNumber", "vat_number", "vatId", "vat_id",
   "documentType", "documentNumber", "signatureCaptured", "passport", "passportNumber",
   "dni", "nationalId", "national_id", "iban", "bankAccount", "bank_account", "accountNumber",
   "secret", "apiKey", "api_key", "ssn", "socialSecurityNumber", "social_security_number",
+  "requestId", "request_id", "traceId", "trace_id", "sessionId", "session_id",
+  "userId", "user_id", "verifactuHash", "verifactu_hash", "meta", "security",
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function stripSensitivePropsDeep(node: any): void {
   if (!node || typeof node !== "object") return;
   if (Array.isArray(node)) { for (const x of node) stripSensitivePropsDeep(x); return; }
+  for (const p of OPENAI_STRIP_PROPS) {
+    if (p in node) delete node[p];
+  }
   if (node.properties && typeof node.properties === "object") {
     for (const p of OPENAI_STRIP_PROPS) delete node.properties[p];
   }
@@ -749,13 +803,95 @@ function stripSensitivePropsDeep(node: any): void {
   for (const v of Object.values(node)) stripSensitivePropsDeep(v);
 }
 
+function sanitizeOpenAIReviewText(text: string): string {
+  return text
+    .replace(/clientTaxId/gi, "client identifier")
+    .replace(/NIF\/CIF\/VAT/gi, "regulated identifiers")
+    .replace(/\bNIF\b|\bCIF\b/gi, "regulated identifier")
+    .replace(/\bVAT\b/gi, "tax")
+    .replace(/\bIBAN\b/gi, "banking identifier")
+    .replace(/VeriFactu[^.\n]*/gi, "internal compliance metadata")
+    .replace(/Facturae[^.\n]*/gi, "credit-note metadata")
+    .replace(/TicketBAI[^.\n]*/gi, "regional e-invoicing metadata")
+    .replace(/KSeF[^.\n]*/gi, "e-invoicing metadata")
+    .replace(/VIES[^.\n]*/gi, "external tax validation")
+    .replace(/Modelo 303/gi, "estimated tax total")
+    .replace(/taxId/gi, "regulated identifier")
+    .replace(/quarterly tax figures?/gi, "business figures")
+    .replace(/tax IDs?/gi, "regulated identifiers")
+    .replace(/SHA-256 hash chain integrity[^,.\n]*/gi, "audit history")
+    .replace(/Spanish tax compliance/gi, "internal compliance");
+}
+
+function addOpenAIComponentRef(
+  refs: Map<string, { section: string; name: string }>,
+  queue: Array<{ section: string; name: string }>,
+  ref: string,
+): void {
+  const match = ref.match(/^#\/components\/([^/]+)\/([^/]+)$/);
+  if (!match) return;
+  const [, section, encodedName] = match;
+  const name = decodeURIComponent(encodedName);
+  const key = `${section}/${name}`;
+  if (!refs.has(key)) {
+    refs.set(key, { section, name });
+    queue.push({ section, name });
+  }
+}
+
+function collectOpenAIComponentRefs(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  node: any,
+  refs: Map<string, { section: string; name: string }>,
+  queue: Array<{ section: string; name: string }>,
+): void {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectOpenAIComponentRefs(item, refs, queue);
+    return;
+  }
+  if (typeof node.$ref === "string") addOpenAIComponentRef(refs, queue, node.$ref);
+  for (const value of Object.values(node)) collectOpenAIComponentRefs(value, refs, queue);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pruneUnusedOpenAIComponents(spec: any): void {
+  const refs = new Map<string, { section: string; name: string }>();
+  const queue: Array<{ section: string; name: string }> = [];
+  collectOpenAIComponentRefs(spec.paths, refs, queue);
+  for (let i = 0; i < queue.length; i += 1) {
+    const { section, name } = queue[i];
+    collectOpenAIComponentRefs(spec.components?.[section]?.[name], refs, queue);
+  }
+  for (const [section, entries] of Object.entries(spec.components ?? {})) {
+    if (!entries || typeof entries !== "object" || Array.isArray(entries)) continue;
+    for (const name of Object.keys(entries as Record<string, unknown>)) {
+      if (!refs.has(`${section}/${name}`)) delete (entries as Record<string, unknown>)[name];
+    }
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sanitizeOpenAIDescriptionsDeep(node: any): void {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) { for (const x of node) sanitizeOpenAIDescriptionsDeep(x); return; }
+  for (const [key, value] of Object.entries(node)) {
+    if (typeof value === "string") {
+      node[key] = sanitizeOpenAIReviewText(value);
+      continue;
+    }
+    sanitizeOpenAIDescriptionsDeep(value);
+  }
+}
+
 function scopeOpenApiForOpenAI(specText: string): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let spec: any;
   try { spec = JSON.parse(specText); } catch { return specText; }
   if (spec.paths && typeof spec.paths === "object") {
     for (const p of Object.keys(spec.paths)) {
-      const drop = OPENAI_DROP_PATHS_EXACT.has(p) ||
+      const drop = !OPENAI_KEEP_PATHS_EXACT.has(p) ||
+        OPENAI_DROP_PATHS_EXACT.has(p) ||
         OPENAI_DROP_PATH_PREFIXES.some((pre) => p === pre || p.startsWith(pre + "/"));
       if (drop) delete spec.paths[p];
     }
@@ -763,14 +899,29 @@ function scopeOpenApiForOpenAI(specText: string): string {
   if (spec.components?.schemas) {
     for (const s of OPENAI_DROP_SCHEMAS) delete spec.components.schemas[s];
   }
+  if (Array.isArray(spec.tags)) {
+    spec.tags = spec.tags
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((tag: any) => OPENAI_ALLOWED_TAGS.has(tag.name))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((tag: any) => ({
+        ...tag,
+        description: OPENAI_TAG_DESCRIPTIONS[tag.name] ??
+          sanitizeOpenAIReviewText(tag.description ?? ""),
+      }));
+  }
+  delete spec.security;
+  if (spec.components?.securitySchemes) delete spec.components.securitySchemes;
   stripSensitivePropsDeep(spec.paths);
   stripSensitivePropsDeep(spec.components);
+  pruneUnusedOpenAIComponents(spec);
   if (spec.info) {
     spec.info.description =
       "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks). " +
-      "Government tax identifiers, banking identifiers, and credentials are excluded.";
+      "Regulated identifiers, banking identifiers, credentials, diagnostic metadata, and hidden product modules are excluded.";
   }
   spec.servers = [{ url: "https://api.frihet.io", description: "Frihet API" }];
+  sanitizeOpenAIDescriptionsDeep(spec);
   return JSON.stringify(spec);
 }
 

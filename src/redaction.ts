@@ -3,7 +3,8 @@
  *
  * Single source of truth for the set of field names that must never leave the
  * process in cleartext — government IDs (NIF/CIF/VAT), banking identifiers,
- * identity documents, webhook signing secrets, and auth tokens.
+ * identity documents, internal trace/user identifiers, webhook signing secrets,
+ * and auth tokens.
  *
  * Two consumers:
  *   - openai-profile.ts — strips these from tool I/O in OpenAI-safe mode
@@ -37,6 +38,9 @@ export const SENSITIVE_FIELD_NAMES: readonly string[] = [
   "apiKey", "api_key",
   "accessToken", "access_token", "refreshToken", "refresh_token",
   "password", "mfa", "otp",
+  "requestId", "request_id", "traceId", "trace_id",
+  "sessionId", "session_id", "userId", "user_id",
+  "verifactuHash", "verifactu_hash",
 ];
 
 /** Recursively removes named fields from an object/array tree, IN PLACE. */
