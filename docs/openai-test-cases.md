@@ -6,7 +6,7 @@
 ## Prerequisites
 
 - Deploy `openai-mcp.frihet.io` with `FRIHET_OPENAI_MODE=true`
-- Verify OpenAI mode exposes 53 reviewed business tools + 3 read-only discovery meta-tools and 0 prompts
+- Verify OpenAI mode exposes 53 reviewed business tools + 3 read-only discovery meta-tools, 0 prompts, and 0 resources
 - Demo API key with sample data: invoices, expenses, clients, vendors, products, quotes
 - Demo account must NOT require MFA or additional signup
 
@@ -206,11 +206,11 @@
 - `create_reservation`
 - `payroll_export`
 - `invite_team_member`
-- All MCP prompts
+- All MCP prompts and resources
 
 **Expected PRESENT discovery tools:** `list_tool_groups`, `search_tools`, `describe_tool`.
 
-**Verification:** Use `list_tools` / `list_prompts` or check the MCP session. OpenAI mode must expose 56 total tools: 53 reviewed business tools + the 3 read-only discovery meta-tools above, and 0 prompts.
+**Verification:** Use `list_tools` / `list_prompts` / `list_resources` or check the MCP session. OpenAI mode must expose 56 total tools: 53 reviewed business tools + the 3 read-only discovery meta-tools above, 0 prompts, and 0 resources.
 
 ---
 
@@ -245,4 +245,4 @@
 | 14 | Excluded tools | Quarterly taxes + e-invoice absent |
 | 15 | Search | Pagination + text search |
 
-**Total: 56 tools available (53 reviewed business tools + 3 read-only discovery meta-tools), 0 prompts, full-server tools hidden by allowlist, 0 government IDs in I/O, 0 credentials leaked.**
+**Total: 56 tools available (53 reviewed business tools + 3 read-only discovery meta-tools), 0 prompts, 0 resources, full-server tools hidden by allowlist, 0 government IDs in I/O, 0 credentials leaked.**

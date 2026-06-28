@@ -220,6 +220,7 @@ if (existsSync(join(SRC, "releases.json"))) {
     reviewedBusinessToolCount: 53,
     discoveryMetaToolCount: 3,
     promptsCount: 0,
+    resourcesCount: 0,
     notes:
       "ChatGPT connector metadata is scoped to reviewed invoices, expenses, clients/CRM, products, quotes, vendors, webhooks, and monthly summaries. Hidden product modules, regulated identifiers, credentials, and diagnostic metadata are excluded.",
     products: {
@@ -233,6 +234,8 @@ if (existsSync(join(SRC, "releases.json"))) {
         version: sourceReleases.version,
         releasedAt: sourceReleases.releasedAt,
         mcpToolCount: 56,
+        resourcesCount: 0,
+        promptsCount: 0,
         delta: "OpenAI ChatGPT scoped connector surface",
         notes:
           "OpenAI mode exposes 53 reviewed business tools plus 3 read-only discovery meta-tools. Prompts and hidden full-server modules are not part of this surface.",

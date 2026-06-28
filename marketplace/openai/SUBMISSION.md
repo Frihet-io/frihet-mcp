@@ -163,7 +163,7 @@ Before submitting:
 - [ ] `https://openai-mcp.frihet.io/mcp` is reachable with valid MCP response
 - [ ] OAuth metadata at `https://openai-mcp.frihet.io/.well-known/oauth-authorization-server` includes `code_challenge_methods_supported: ["S256"]`
 - [ ] `FRIHET_OPENAI_MODE=true` is active and exposes 53 reviewed business tools + 3 read-only discovery meta-tools
-- [ ] MCP prompts are hidden in OpenAI mode
+- [ ] MCP prompts and resources are hidden in OpenAI mode
 - [ ] `/.well-known/openai-apps-challenge` route added to Worker (deploy BEFORE submitting)
 - [ ] OpenAI redirect URI added to OAuth allowlist (exact URI provided by OpenAI during submission)
 - [ ] OAuth state parameter handler accepts strings of 400+ chars (no truncation)

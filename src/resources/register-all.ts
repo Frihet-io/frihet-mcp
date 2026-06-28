@@ -12,6 +12,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { IFrihetClient } from "../client-interface.js";
 
+export const MCP_STATIC_RESOURCE_COUNT = 7;
+export const MCP_DYNAMIC_RESOURCE_COUNT = 4;
+export const MCP_RESOURCE_COUNT = MCP_STATIC_RESOURCE_COUNT + MCP_DYNAMIC_RESOURCE_COUNT;
+
 /* ------------------------------------------------------------------ */
 /*  Static data                                                        */
 /* ------------------------------------------------------------------ */

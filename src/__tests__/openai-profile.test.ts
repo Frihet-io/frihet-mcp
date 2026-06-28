@@ -14,6 +14,7 @@ import { applyOpenAIProfile } from "../openai-profile.js";
 import { SENSITIVE_FIELD_NAMES } from "../redaction.js";
 import { registerAllTools } from "../tools/register-all.js";
 import { registerAllPrompts } from "../prompts/register-all.js";
+import { registerAllResources } from "../resources/register-all.js";
 import type { IFrihetClient } from "../client-interface.js";
 
 interface ToolConfig {
@@ -84,6 +85,7 @@ function makeOpenAIServer(): StubMcpServer {
     server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
     makeClient(),
   );
+  registerAllResources(server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer);
   registerAllPrompts(server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer);
   return server;
 }
@@ -94,6 +96,7 @@ describe("OpenAI profile", () => {
 
     assert.equal(server.tools.size, 53);
     assert.equal(server.prompts.length, 0);
+    assert.equal(server.resources.length, 0);
 
     for (const hiddenTool of [
       "get_quarterly_taxes",

@@ -34,6 +34,7 @@ import {
 import { applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "../tool-exposure.js";
 import { registerAllTools } from "../tools/register-all.js";
 import { registerAllPrompts } from "../prompts/register-all.js";
+import { registerAllResources } from "../resources/register-all.js";
 import type { IFrihetClient } from "../client-interface.js";
 
 interface ToolConfig {
@@ -110,6 +111,7 @@ function makeComposedServer(): StubMcpServer {
   // 2. OpenAI SECOND (outermost) — gate/redact/annotate, then collapse.
   applyOpenAIProfile(asMcp(server));
   registerAllTools(asMcp(server), makeClient());
+  registerAllResources(asMcp(server));
   registerAllPrompts(asMcp(server));
   return server;
 }
@@ -143,6 +145,9 @@ describe("openai × grouped composition: invariant (1) — meta-tools present, 5
 
     // Prompts still hidden in OpenAI mode.
     assert.equal(server.prompts.length, 0);
+    // Resources are hidden too: full-server static fiscal/compliance resources
+    // are outside the reviewed ChatGPT app surface.
+    assert.equal(server.resources.length, 0);
   });
 
   test("all 3 discovery meta-tools materialise by name despite the OpenAI allow-list", () => {
