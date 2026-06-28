@@ -84,10 +84,10 @@ const TAG_DESCRIPTIONS = {
   Notes: "Manage notes attached to a client.",
 };
 const STRIP_PROPS = [
-  "taxId", "tax_id", "nif", "cif", "vatNumber", "vat_number", "vatId", "vat_id",
+  "taxId", "tax_id", "clientTaxId", "client_tax_id", "nif", "cif", "vatNumber", "vat_number", "vatId", "vat_id",
   "documentType", "documentNumber", "signatureCaptured", "passport", "passportNumber",
   "dni", "nationalId", "national_id", "iban", "bankAccount", "bank_account", "accountNumber",
-  "secret", "apiKey", "api_key", "ssn", "socialSecurityNumber", "social_security_number",
+  "secret", "hasSecret", "has_secret", "apiKey", "api_key", "ssn", "socialSecurityNumber", "social_security_number",
   "requestId", "request_id", "traceId", "trace_id", "sessionId", "session_id",
   "userId", "user_id", "verifactuHash", "verifactu_hash", "meta", "security",
 ];
@@ -203,6 +203,7 @@ if (spec.info) {
     "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, " +
     "products, quotes, vendors, webhooks, and monthly summaries). Regulated identifiers, " +
     "banking identifiers, credentials, diagnostic metadata, and hidden product modules are excluded.";
+  spec.info["x-frihet-openai-profile"] = "chatgpt-reviewed-v2";
 }
 spec.servers = [{ url: "https://api.frihet.io", description: "Frihet API" }];
 sanitizeDescriptionsDeep(spec);
@@ -248,7 +249,7 @@ if (existsSync(join(SRC, "releases.json"))) {
 
 const blob = JSON.stringify(spec) + extraAssetText;
 const sensitive = [
-  "\"taxId\"", "requestId", "traceId", "sessionId", "\"userId\"", "ApiKeyAuth", "\"apiKey\"",
+  "\"taxId\"", "\"clientTaxId\"", "\"hasSecret\"", "HMAC secret", "requestId", "traceId", "sessionId", "\"userId\"", "ApiKeyAuth", "\"apiKey\"",
   "verifactuHash", "documentType", "signatureCaptured", "passport", "\"dni\"", "\"iban\"",
   "\"secret\"", "/guests", "/reservations", "/quarterly", "/properties", "Reservations",
   "Guests", "Channels", "VeriFactu", "Facturae", "TicketBAI", "KSeF",

@@ -782,10 +782,10 @@ const OPENAI_TAG_DESCRIPTIONS: Record<string, string> = {
   Notes: "Manage notes attached to a client.",
 };
 const OPENAI_STRIP_PROPS = [
-  "taxId", "tax_id", "nif", "cif", "vatNumber", "vat_number", "vatId", "vat_id",
+  "taxId", "tax_id", "clientTaxId", "client_tax_id", "nif", "cif", "vatNumber", "vat_number", "vatId", "vat_id",
   "documentType", "documentNumber", "signatureCaptured", "passport", "passportNumber",
   "dni", "nationalId", "national_id", "iban", "bankAccount", "bank_account", "accountNumber",
-  "secret", "apiKey", "api_key", "ssn", "socialSecurityNumber", "social_security_number",
+  "secret", "hasSecret", "has_secret", "apiKey", "api_key", "ssn", "socialSecurityNumber", "social_security_number",
   "requestId", "request_id", "traceId", "trace_id", "sessionId", "session_id",
   "userId", "user_id", "verifactuHash", "verifactu_hash", "meta", "security",
 ];
@@ -920,8 +920,9 @@ function scopeOpenApiForOpenAI(specText: string): string {
   pruneUnusedOpenAIComponents(spec);
   if (spec.info) {
     spec.info.description =
-      "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks). " +
+      "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks, and monthly summaries). " +
       "Regulated identifiers, banking identifiers, credentials, diagnostic metadata, and hidden product modules are excluded.";
+    spec.info["x-frihet-openai-profile"] = "chatgpt-reviewed-v2";
   }
   spec.servers = [{ url: "https://api.frihet.io", description: "Frihet API" }];
   sanitizeOpenAIDescriptionsDeep(spec);
