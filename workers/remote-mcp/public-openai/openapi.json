@@ -3,7 +3,7 @@
   "info": {
     "title": "Frihet API",
     "version": "2026-03-18",
-    "description": "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks). Government tax identifiers, banking identifiers, and credentials are excluded.",
+    "description": "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks, and monthly summaries). Regulated identifiers, banking identifiers, credentials, diagnostic metadata, and hidden product modules are excluded.",
     "contact": {
       "name": "Frihet API Support",
       "url": "https://docs.frihet.io/desarrolladores/api-rest",
@@ -23,35 +23,30 @@
       "description": "Frihet API"
     }
   ],
-  "security": [
-    {
-      "ApiKeyAuth": []
-    }
-  ],
   "tags": [
     {
       "name": "Invoices",
-      "description": "Create, read, update, and delete invoices. Includes PDF generation, email sending, and payment tracking."
+      "description": "Create, read, update, send, and manage invoice records."
     },
     {
       "name": "Expenses",
-      "description": "Manage business expenses with categories, tax deductions, and receipt attachments."
+      "description": "Record and manage business expenses."
     },
     {
       "name": "Clients",
-      "description": "Manage your client database with contact details, tax IDs, and addresses."
+      "description": "Manage client records with contact details and addresses."
     },
     {
       "name": "Products",
-      "description": "Product and service catalog with pricing, tax rates, and SKUs."
+      "description": "Manage product and service catalogue records with pricing."
     },
     {
       "name": "Quotes",
-      "description": "Create and manage quotes with PDF generation and email delivery. Convert accepted quotes to invoices."
+      "description": "Create, read, update, send, and manage quotes."
     },
     {
       "name": "Vendors",
-      "description": "Manage your vendor database with contact details, tax IDs, and addresses."
+      "description": "Manage vendor records with contact details and addresses."
     },
     {
       "name": "Summary",
@@ -59,47 +54,23 @@
     },
     {
       "name": "Intelligence",
-      "description": "AI-optimized endpoints providing business context, monthly P&L, and quarterly tax figures in a single call."
+      "description": "Business context and monthly financial summaries."
     },
     {
       "name": "Webhooks",
-      "description": "CRUD endpoints for managing webhook subscriptions that receive real-time event notifications."
+      "description": "Manage webhook subscriptions for Frihet business events."
     },
     {
       "name": "Contacts",
-      "description": "Contact persons associated with a client. Manage multiple contacts per client for CRM."
+      "description": "Manage contact persons associated with a client."
     },
     {
       "name": "Activities",
-      "description": "Immutable activity timeline for a client. System activities are auto-generated; manual activities can be created via API."
+      "description": "Manage client activity timeline entries."
     },
     {
       "name": "Notes",
-      "description": "Free-form notes attached to a client."
-    },
-    {
-      "name": "Deposits",
-      "description": "Manage client deposits and prepayments. Apply deposits against invoices or process refunds."
-    },
-    {
-      "name": "Batch",
-      "description": "Batch creation of resources (up to 50 items per request)."
-    },
-    {
-      "name": "Reservations",
-      "description": "Frihet Stay: Manage vacation rental reservations with guest info, dates, and compliance tracking."
-    },
-    {
-      "name": "Properties",
-      "description": "Frihet Stay: Manage rental properties with owner info, capacity, and licensing."
-    },
-    {
-      "name": "Guests",
-      "description": "Frihet Stay: Read compliance records for guest check-in (document verification, police reports)."
-    },
-    {
-      "name": "Channels",
-      "description": "Frihet Stay: Manage channel connections (iCal feeds) for calendar sync with OTAs."
+      "description": "Manage notes attached to a client."
     }
   ],
   "paths": {
@@ -375,7 +346,7 @@
       "delete": {
         "operationId": "deleteInvoice",
         "summary": "Delete an invoice",
-        "description": "Delete an invoice. Draft invoices are permanently deleted (204).\nNon-draft invoices are soft-deleted (cancelled) to preserve VeriFactu\nSHA-256 hash chain integrity (RD 1007/2023 compliance), returning 200\nwith the cancelled document body.\n",
+        "description": "Delete an invoice. Draft invoices are permanently deleted (204).\nNon-draft invoices are soft-deleted (cancelled) to preserve internal compliance metadata\naudit history, returning 200\nwith the cancelled document body.\n",
         "tags": [
           "Invoices"
         ],
@@ -405,18 +376,6 @@
                         "cancelledVia": {
                           "type": "string",
                           "example": "api"
-                        }
-                      }
-                    },
-                    "meta": {
-                      "type": "object",
-                      "properties": {
-                        "requestId": {
-                          "type": "string"
-                        },
-                        "timestamp": {
-                          "type": "string",
-                          "format": "date-time"
                         }
                       }
                     }
@@ -994,7 +953,7 @@
       "post": {
         "operationId": "createClient",
         "summary": "Create a client",
-        "description": "Add a new client to your database.",
+        "description": "Add a new client to your database.\n\nIf `regulated identifier` is provided and another client in your workspace already has the\nsame regulated identifier (normalized: case-insensitive, ignoring separators like dots and\nhyphens), the request is rejected with `409 CLIENT_regulated identifier_EXISTS` and the\nexisting client's id is returned in `existingClientId`.\n",
         "tags": [
           "Clients"
         ],
@@ -1024,6 +983,30 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "A client with this regulated identifier already exists in your workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "CLIENT_regulated identifier_EXISTS"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Client with this regulated identifier already exists"
+                    },
+                    "existingClientId": {
+                      "type": "string",
+                      "description": "Document id of the existing client with the same regulated identifier."
+                    }
+                  }
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1078,7 +1061,7 @@
       "put": {
         "operationId": "updateClient",
         "summary": "Full update a client",
-        "description": "Replace all fields on an existing client.",
+        "description": "Replace all fields on an existing client. Returns `409 CLIENT_regulated identifier_EXISTS`\nif the new `regulated identifier` is already in use by another client in your workspace.\n",
         "tags": [
           "Clients"
         ],
@@ -1116,6 +1099,25 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Another client with this regulated identifier already exists in your workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "CLIENT_regulated identifier_EXISTS"
+                    },
+                    "existingClientId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1128,7 +1130,7 @@
       "patch": {
         "operationId": "patchClient",
         "summary": "Partial update a client",
-        "description": "Update only the provided fields on an existing client.",
+        "description": "Update only the provided fields on an existing client. Returns\n`409 CLIENT_regulated identifier_EXISTS` if the new `regulated identifier` is already in use by\nanother client in your workspace.\n",
         "tags": [
           "Clients"
         ],
@@ -1166,6 +1168,25 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Another client with this regulated identifier already exists in your workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "CLIENT_regulated identifier_EXISTS"
+                    },
+                    "existingClientId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -2356,7 +2377,7 @@
       "delete": {
         "operationId": "deleteQuote",
         "summary": "Delete a quote",
-        "description": "Delete a quote. Draft quotes are permanently deleted (204).\nNon-draft quotes are soft-deleted (cancelled) to preserve VeriFactu\nhash chain integrity, returning 200 with the cancelled document body.\n",
+        "description": "Delete a quote. Draft quotes are permanently deleted (204).\nNon-draft quotes are soft-deleted (cancelled) to preserve internal compliance metadata\nhash chain integrity, returning 200 with the cancelled document body.\n",
         "tags": [
           "Quotes"
         ],
@@ -2386,18 +2407,6 @@
                         "cancelledVia": {
                           "type": "string",
                           "example": "api"
-                        }
-                      }
-                    },
-                    "meta": {
-                      "type": "object",
-                      "properties": {
-                        "requestId": {
-                          "type": "string"
-                        },
-                        "timestamp": {
-                          "type": "string",
-                          "format": "date-time"
                         }
                       }
                     }
@@ -2859,7 +2868,7 @@
       "get": {
         "operationId": "getMonthlySummary",
         "summary": "Monthly P&L",
-        "description": "Monthly financial summary with revenue breakdown (tax base, tax, IRPF),\nexpense breakdown (deductible, tax), profit (gross/net), invoice status\ncounts, top clients, expenses by category, and estimated tax liability\n(Modelo 303).\n",
+        "description": "Monthly financial summary with revenue breakdown (tax base, tax, IRPF),\nexpense breakdown (deductible, tax), profit (gross/net), invoice status\ncounts, top clients, expenses by category, and estimated tax liability\n(estimated tax total).\n",
         "tags": [
           "Intelligence"
         ],
@@ -3178,7 +3187,7 @@
       "post": {
         "operationId": "createCreditNote",
         "summary": "Create a credit note",
-        "description": "Create a rectificative invoice (credit note) for an existing invoice.\nThe original invoice must not be in `draft` or `cancelled` status.\nThe credit note is created with `sent` status and negative line item amounts.\nThe `rectificativa` field is populated according to Spanish Facturae R-type codes.\n",
+        "description": "Create a rectificative invoice (credit note) for an existing invoice.\nThe original invoice must not be in `draft` or `cancelled` status.\nThe credit note is created with `sent` status and negative line item amounts.\nThe `rectificativa` field is populated according to Spanish credit-note metadata.\n",
         "tags": [
           "Invoices"
         ],
@@ -3373,14 +3382,6 @@
     }
   },
   "components": {
-    "securitySchemes": {
-      "ApiKeyAuth": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "X-API-Key",
-        "description": "API key for authentication. Keys start with `fri_` prefix.\nGenerate keys from Settings > API Keys in the Frihet app.\n"
-      }
-    },
     "parameters": {
       "Limit": {
         "name": "limit",
@@ -3514,15 +3515,6 @@
           "type": "string"
         }
       },
-      "DepositId": {
-        "name": "depositId",
-        "in": "path",
-        "required": true,
-        "description": "Deposit unique identifier",
-        "schema": {
-          "type": "string"
-        }
-      },
       "Search": {
         "name": "q",
         "in": "query",
@@ -3608,58 +3600,9 @@
           ],
           "example": "active"
         }
-      },
-      "IdempotencyKey": {
-        "name": "Idempotency-Key",
-        "in": "header",
-        "required": false,
-        "description": "Unique key to prevent duplicate resource creation from network retries.\nIf the same key is sent within 24 hours, the original response is returned\nwith an X-Idempotent-Replayed: true header. Max 64 characters. UUID v4 recommended.\n",
-        "schema": {
-          "type": "string",
-          "maxLength": 64,
-          "example": "550e8400-e29b-41d4-a716-446655440000"
-        }
       }
     },
-    "headers": {
-      "X-RateLimit-Limit": {
-        "description": "Maximum number of requests allowed per window",
-        "schema": {
-          "type": "integer",
-          "example": 100
-        }
-      },
-      "X-RateLimit-Remaining": {
-        "description": "Number of requests remaining in the current window",
-        "schema": {
-          "type": "integer",
-          "example": 87
-        }
-      },
-      "X-RateLimit-Reset": {
-        "description": "Unix timestamp (seconds) when the rate limit window resets",
-        "schema": {
-          "type": "integer",
-          "example": 1742310060
-        }
-      },
-      "X-API-Version": {
-        "description": "Current API version date. Monitor for breaking changes.",
-        "schema": {
-          "type": "string",
-          "example": "2026-03-18"
-        }
-      },
-      "X-Idempotent-Replayed": {
-        "description": "Present and set to \"true\" when returning a cached idempotent response",
-        "schema": {
-          "type": "string",
-          "enum": [
-            "true"
-          ]
-        }
-      }
-    },
+    "headers": {},
     "schemas": {
       "InvoiceStatus": {
         "type": "string",
@@ -3752,10 +3695,42 @@
           "items"
         ],
         "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "Client document ID. When provided, the API auto-snapshots\n`client identifier`, `clientAddress`, `clientLocation`, `clientName`,\nand `clientEmail` from the referenced client at create time\n(immutable post-create — internal compliance metadata. Caller-provided\nvalues for those fields override the snapshot.\n",
+            "example": "client_abc123"
+          },
           "clientName": {
             "type": "string",
-            "description": "Client name",
+            "description": "Client name (snapshot field — frozen at create)",
             "example": "Acme Corp"
+          },
+          "clientTaxId": {
+            "type": "string",
+            "description": "Client regulated identifiers / regulated identifier / tax (snapshot field — frozen at create).\nAuto-populated from clientId reference if not provided.\n",
+            "example": "B12345678"
+          },
+          "clientAddress": {
+            "type": "string",
+            "description": "Client billing address — single-line or structured. Snapshot\nfield, frozen at create.\n",
+            "example": "Calle Mayor 12, 38001 Santa Cruz de Tenerife"
+          },
+          "clientLocation": {
+            "type": "string",
+            "enum": [
+              "peninsula",
+              "canarias",
+              "ceuta_melilla",
+              "eu",
+              "world"
+            ],
+            "description": "Fiscal zone — drives tax label rendering on PDF + tax math\n(IVA/IGIC/IPSI/Reverse charge/Exempt). Snapshot field, frozen\nat create. Auto-populated from clientId reference if absent.\n",
+            "example": "canarias"
+          },
+          "clientEmail": {
+            "type": "string",
+            "format": "email",
+            "description": "Client email (snapshot field — frozen at create)."
           },
           "items": {
             "type": "array",
@@ -3788,8 +3763,22 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100,
-            "description": "Tax rate percentage",
+            "description": "Tax rate percentage. Combined with `clientLocation` to produce\nthe label (IGIC for canarias, IPSI for ceuta_melilla, etc.).\n",
             "example": 21
+          },
+          "irpfRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "IRPF withholding rate percentage (Spain).",
+            "example": 15
+          },
+          "discountRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Invoice-level discount percentage.",
+            "example": 10
           },
           "recurring": {
             "$ref": "#/components/schemas/InvoiceRecurringConfig"
@@ -3843,10 +3832,6 @@
                 "type": "string",
                 "description": "Currency code",
                 "example": "EUR"
-              },
-              "verifactuHash": {
-                "type": "string",
-                "description": "VeriFactu SHA-256 hash (Spanish tax compliance)"
               }
             }
           }
@@ -4541,6 +4526,11 @@
             "type": "string",
             "description": "Cursor for fetching the next page of results. Only present when there\nare more results available. Pass this value as the `cursor` query parameter\nin the next request. Base64url-encoded.\n",
             "example": "eyJpc3N1ZURhdGUiOiIyMDI2LTAzLTIwIiwiX19pZCI6ImFiYzEyMyJ9"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Only present (and `true`) when the underlying search query\nsaturated the internal 500-document cap. `total` therefore reports\nthe size of the first 500 matches, not the full match count.\nNarrow the search query (regulated identifier / fiscal id, exact email) to ensure\nyou see every result.\n",
+            "example": true
           }
         }
       },
@@ -4695,8 +4685,9 @@
                 "type": "string",
                 "format": "date-time"
               },
-              "userId": {
-                "type": "string"
+              "hasSecret": {
+                "type": "boolean",
+                "description": "True if an HMAC secret is configured. The secret value itself is never returned by read endpoints."
               }
             }
           },
@@ -4893,18 +4884,6 @@
                 }
               }
             }
-          },
-          "meta": {
-            "type": "object",
-            "properties": {
-              "requestId": {
-                "type": "string"
-              },
-              "timestamp": {
-                "type": "string",
-                "format": "date-time"
-              }
-            }
           }
         }
       },
@@ -5006,7 +4985,7 @@
                 "properties": {
                   "vatPayable": {
                     "type": "number",
-                    "description": "Net VAT payable (output - input)"
+                    "description": "Net tax payable (output - input)"
                   },
                   "irpfRetained": {
                     "type": "number"
@@ -5015,18 +4994,6 @@
                     "type": "number"
                   }
                 }
-              }
-            }
-          },
-          "meta": {
-            "type": "object",
-            "properties": {
-              "requestId": {
-                "type": "string"
-              },
-              "timestamp": {
-                "type": "string",
-                "format": "date-time"
               }
             }
           }
@@ -5062,15 +5029,6 @@
                 }
               }
             }
-          },
-          "meta": {
-            "type": "object",
-            "properties": {
-              "requestId": {
-                "type": "string",
-                "description": "Unique request identifier for tracing"
-              }
-            }
           }
         }
       }
@@ -5093,10 +5051,7 @@
                     "clientName"
                   ]
                 }
-              ],
-              "meta": {
-                "requestId": "550e8400-e29b-41d4-a716-446655440000"
-              }
+              ]
             }
           }
         }
@@ -5109,26 +5064,7 @@
               "$ref": "#/components/schemas/Error"
             },
             "example": {
-              "error": "Invalid or expired API key",
-              "meta": {
-                "requestId": "550e8400-e29b-41d4-a716-446655440000"
-              }
-            }
-          }
-        }
-      },
-      "Forbidden": {
-        "description": "Insufficient permissions",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Error"
-            },
-            "example": {
-              "error": "Insufficient permissions",
-              "meta": {
-                "requestId": "550e8400-e29b-41d4-a716-446655440000"
-              }
+              "error": "Invalid or expired API key"
             }
           }
         }
@@ -5141,10 +5077,7 @@
               "$ref": "#/components/schemas/Error"
             },
             "example": {
-              "error": "Resource not found",
-              "meta": {
-                "requestId": "550e8400-e29b-41d4-a716-446655440000"
-              }
+              "error": "Resource not found"
             }
           }
         }
@@ -5168,14 +5101,6 @@
                   "type": "integer",
                   "description": "Seconds until rate limit resets",
                   "example": 60
-                },
-                "meta": {
-                  "type": "object",
-                  "properties": {
-                    "requestId": {
-                      "type": "string"
-                    }
-                  }
                 }
               }
             }
@@ -5190,10 +5115,7 @@
               "$ref": "#/components/schemas/Error"
             },
             "example": {
-              "error": "Internal server error",
-              "meta": {
-                "requestId": "550e8400-e29b-41d4-a716-446655440000"
-              }
+              "error": "Internal server error"
             }
           }
         }

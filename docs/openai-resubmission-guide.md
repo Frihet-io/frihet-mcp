@@ -10,7 +10,7 @@
 | 2 | openWorldHint wrong | **DONE** | 4 tools corrected + justifications |
 | 3 | Test cases failing | **READY** | 15 test cases documented |
 | 4 | Privacy policy gaps | **DONE** | Section 10 added (11 sections, 17 langs) |
-| 5 | Sensitive data collection | **DONE** | OpenAI allowlist enforced: 53 reviewed tools, prompts hidden, restricted fields redacted |
+| 5 | Sensitive data collection | **DONE** | OpenAI allowlist enforced: 53 reviewed business tools + 3 read-only discovery meta-tools, prompts hidden, restricted fields redacted |
 
 ---
 
@@ -81,7 +81,7 @@ Justifications are embedded in tool descriptions as `[openWorldHint: true — ..
 
 ### OpenAI-visible tool surface
 
-OpenAI mode now enforces an explicit allowlist of 53 reviewed tools. The full MCP server can keep growing for Claude, Cursor, Windsurf, Cline, Codex, and direct MCP clients without automatically broadening the ChatGPT submission surface.
+OpenAI mode now enforces an explicit allowlist of 53 reviewed business tools. The live grouped ChatGPT surface also includes 3 read-only discovery meta-tools (`list_tool_groups`, `search_tools`, `describe_tool`) whose catalog is pinned to that same 53-tool allowlist. The full MCP server can keep growing for Claude, Cursor, Windsurf, Cline, Codex, and direct MCP clients without automatically broadening the ChatGPT submission surface.
 
 Hidden from OpenAI mode:
 - Payroll, HR, stay/PMS, POS, banking, e-invoicing XML, VIES lookup, VeriFactu/FACe/TicketBAI/KSeF submission, time tracking, recurring invoices, gestoria bulk-send, permissions, onboarding, and period-close tools.
@@ -102,13 +102,14 @@ Hidden from OpenAI mode:
 | `secret` | structuredContent + display text |
 | `idDocument` / `passport` / `dni` / `nationalId` | structuredContent + display text |
 | `apiKey` / tokens / password-like fields | structuredContent + display text |
+| `requestId` / `traceId` / `sessionId` / `userId` / `verifactuHash` | structuredContent + display text |
 
 Deep recursive redaction ensures nested objects and paginated arrays are clean.
 
 ### Regression test
 
 `npm test` now includes `dist/__tests__/openai-profile.test.js`, which asserts:
-- OpenAI mode exposes exactly 53 tools.
+- OpenAI mode exposes 56 total tools: 53 reviewed business tools + 3 read-only discovery meta-tools.
 - OpenAI mode exposes 0 prompts.
 - Sensitive/newer full-server tools are not visible.
 - Only `send_invoice`, `send_quote`, `create_webhook`, and `update_webhook` have `openWorldHint: true`.
@@ -192,7 +193,8 @@ curl -s https://www.frihet.io/en/privacy | grep -c "AI, API, and Developer"
 │  │ mcp.frihet.io│  │openai-mcp.     │   │
 │  │ (full)       │  │frihet.io       │   │
 │  │              │  │(OpenAI-safe)   │   │
-│  │ Full surface │  │ 53 tools       │   │
+│  │ Full surface │  │ 53 business    │   │
+│  │              │  │ + 3 discovery  │   │
 │  │ All fields   │  │ No taxId       │   │
 │  │ All data     │  │ No secret      │   │
 │  │              │  │ No quarterly   │   │
@@ -206,6 +208,6 @@ curl -s https://www.frihet.io/en/privacy | grep -c "AI, API, and Developer"
 │                                         │
 │  Same codebase, same Worker, same DO    │
 │  Difference: FRIHET_OPENAI_MODE=true    │
-│  + explicit 53-tool allowlist           │
+│  + explicit 53-tool business allowlist  │
 └─────────────────────────────────────────┘
 ```
