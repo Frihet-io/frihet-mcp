@@ -540,6 +540,7 @@ const WELL_KNOWN_MCP = JSON.stringify({
 // ===========================================================================
 
 const OPENAI_HOST = "https://openai-mcp.frihet.io";
+const OPENAI_LIVE_TOOL_COUNT = OPENAI_ALLOWED_TOOL_COUNT + GROUPED_META_TOOL_COUNT;
 const OPENAI_SCOPED_DESC =
   `AI-native ERP MCP connector — ${OPENAI_ALLOWED_TOOL_COUNT} reviewed tools for invoicing, expenses, ` +
   `clients/CRM, products, quotes, vendors, and webhooks.`;
@@ -576,7 +577,7 @@ at https://app.frihet.io.
 - **Founded:** February 13, 2026. Live product.
 - **Built by:** Viktor Berthelius — indie bootstrapped.
 - **HQ:** Tenerife, Spain (EU)
-- **Connector tools:** ${OPENAI_ALLOWED_TOOL_COUNT} reviewed tools via @frihet/mcp-server
+- **Connector tools:** ${OPENAI_ALLOWED_TOOL_COUNT} reviewed business tools + ${GROUPED_META_TOOL_COUNT} read-only discovery tools via @frihet/mcp-server
 - **OpenAPI spec:** ${OPENAI_HOST}/openapi.json
 
 ---
@@ -636,8 +637,10 @@ const OPENAI_MCP_DESCRIPTOR = {
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: OPENAI_ALLOWED_TOOL_COUNT,
-  resources_count: 11,
+  tools_count: OPENAI_LIVE_TOOL_COUNT,
+  reviewed_business_tools_count: OPENAI_ALLOWED_TOOL_COUNT,
+  discovery_meta_tools_count: GROUPED_META_TOOL_COUNT,
+  resources_count: 0,
   prompts_count: 0,
   registry: [
     "https://smithery.ai/server/frihet/frihet-mcp",

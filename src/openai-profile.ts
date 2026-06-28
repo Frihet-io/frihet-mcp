@@ -12,10 +12,10 @@
  * 4. Redacts sensitive fields from all tool outputs
  * 5. Updates descriptions to reflect modified behavior + openWorldHint justifications
  *
- * The full MCP server (55 tools) remains available for Claude, Cursor,
+ * The full MCP server (157 business tools + MCP extras) remains available for Claude, Cursor,
  * Windsurf, Cline, Codex, and all other MCP clients.
  *
- * OpenAI-safe mode: 53 reviewed tools, 0 prompts, 0 government IDs in I/O.
+ * OpenAI-safe mode: 53 reviewed business tools, 0 prompts, 0 resources, 0 government IDs in I/O.
  * The full MCP surface remains available outside FRIHET_OPENAI_MODE.
  *
  * @see https://developers.openai.com/apps-sdk/app-submission-guidelines
@@ -23,6 +23,7 @@
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { MCP_RESOURCE_COUNT } from "./resources/register-all.js";
 import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
 
 /* ------------------------------------------------------------------ */
@@ -36,6 +37,8 @@ interface OpenAIProfile {
   excludeTools: Set<string>;
   /** Hide MCP prompt templates in OpenAI mode */
   excludePrompts: boolean;
+  /** Hide MCP resources in OpenAI mode */
+  excludeResources: boolean;
   /** Per-tool annotation overrides (merged with existing) */
   annotationOverrides: Record<string, Partial<ToolAnnotations>>;
   /** Per-tool description replacements */
@@ -125,10 +128,12 @@ const PROFILE: OpenAIProfile = {
     "get_invoice_einvoice", // EN16931 XML mandatorily contains seller+buyer NIF/CIF
   ]),
 
-  // MCP prompts can reference tools/fields that are intentionally hidden from
-  // OpenAI mode (for example tax IDs and fiscal filing tools). ChatGPT Apps do
+  // MCP prompts/resources can reference tools/fields/modules that are
+  // intentionally hidden from OpenAI mode (for example tax IDs, fiscal filing
+  // tools, and broad Spanish compliance reference material). ChatGPT Apps do
   // not need them for the public app surface, so remove them from this profile.
   excludePrompts: true,
+  excludeResources: true,
 
   // ── Annotation corrections ──────────────────────────────────────────
   // openWorldHint MUST be true for tools that cause external side effects.
@@ -450,6 +455,11 @@ export function applyOpenAIProfile(server: any): void {
   // registerResource(name, uri, config, handler) — 4 args
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server.registerResource = (name: string, ...rest: any[]) => {
+    // Public ChatGPT Apps do not need MCP resources. Several full-server
+    // resources contain broad fiscal/compliance reference material or raw
+    // workspace lists that are outside the reviewed 53-tool business surface.
+    if (PROFILE.excludeResources) return;
+
     // Skip resources that expose too much raw PII
     if (EXCLUDE_RESOURCES.has(name)) return;
 
@@ -517,4 +527,6 @@ export const OPENAI_REVIEWED_TOOL_ALLOWLIST: ReadonlySet<string> =
   PROFILE.includeTools;
 
 /** Number of resources excluded in OpenAI mode (for logging). */
-export const OPENAI_EXCLUDED_RESOURCE_COUNT = EXCLUDE_RESOURCES.size;
+export const OPENAI_EXCLUDED_RESOURCE_COUNT = PROFILE.excludeResources
+  ? MCP_RESOURCE_COUNT
+  : EXCLUDE_RESOURCES.size;

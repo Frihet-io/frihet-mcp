@@ -10,7 +10,7 @@
 | 2 | openWorldHint wrong | **DONE** | 4 tools corrected + justifications |
 | 3 | Test cases failing | **READY** | 15 test cases documented |
 | 4 | Privacy policy gaps | **DONE** | Section 10 added (11 sections, 17 langs) |
-| 5 | Sensitive data collection | **DONE** | OpenAI allowlist enforced: 53 reviewed business tools + 3 read-only discovery meta-tools, prompts hidden, restricted fields redacted |
+| 5 | Sensitive data collection | **DONE** | OpenAI allowlist enforced: 53 reviewed business tools + 3 read-only discovery meta-tools, prompts/resources hidden, restricted fields redacted |
 
 ---
 
@@ -85,7 +85,7 @@ OpenAI mode now enforces an explicit allowlist of 53 reviewed business tools. Th
 
 Hidden from OpenAI mode:
 - Payroll, HR, stay/PMS, POS, banking, e-invoicing XML, VIES lookup, VeriFactu/FACe/TicketBAI/KSeF submission, time tracking, recurring invoices, gestoria bulk-send, permissions, onboarding, and period-close tools.
-- All MCP prompts, because several prompt templates reference tools or fields that are intentionally hidden from OpenAI mode.
+- All MCP prompts and resources, because several prompt/resource templates reference tools, fields, or modules that are intentionally hidden from OpenAI mode.
 - `get_quarterly_taxes` and `get_invoice_einvoice`, retained as explicit exclusions for defense in depth.
 
 ### Input fields removed (8 tools)
@@ -110,7 +110,7 @@ Deep recursive redaction ensures nested objects and paginated arrays are clean.
 
 `npm test` now includes `dist/__tests__/openai-profile.test.js`, which asserts:
 - OpenAI mode exposes 56 total tools: 53 reviewed business tools + 3 read-only discovery meta-tools.
-- OpenAI mode exposes 0 prompts.
+- OpenAI mode exposes 0 prompts and 0 resources.
 - Sensitive/newer full-server tools are not visible.
 - Only `send_invoice`, `send_quote`, `create_webhook`, and `update_webhook` have `openWorldHint: true`.
 - Restricted input/output fields are stripped/redacted.
