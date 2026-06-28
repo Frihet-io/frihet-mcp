@@ -15,7 +15,8 @@
     },
     "x-logo": {
       "url": "https://frihet.io/logos/frihet-logo.svg"
-    }
+    },
+    "x-frihet-openai-profile": "chatgpt-reviewed-v2"
   },
   "servers": [
     {
@@ -3705,11 +3706,6 @@
             "description": "Client name (snapshot field — frozen at create)",
             "example": "Acme Corp"
           },
-          "clientTaxId": {
-            "type": "string",
-            "description": "Client regulated identifiers / regulated identifier / tax (snapshot field — frozen at create).\nAuto-populated from clientId reference if not provided.\n",
-            "example": "B12345678"
-          },
           "clientAddress": {
             "type": "string",
             "description": "Client billing address — single-line or structured. Snapshot\nfield, frozen at create.\n",
@@ -4684,10 +4680,6 @@
               "updatedAt": {
                 "type": "string",
                 "format": "date-time"
-              },
-              "hasSecret": {
-                "type": "boolean",
-                "description": "True if an HMAC secret is configured. The secret value itself is never returned by read endpoints."
               }
             }
           },
