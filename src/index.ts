@@ -99,7 +99,7 @@ function main(): void {
     version: PKG_VERSION,
     description:
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
-      "Provides 157 tools (including business context, monthly summaries, quarterly taxes, invoice duplication, CRM subcollections, and deposit management), " +
+      "Provides 161 tools (including business context, monthly summaries, quarterly taxes, invoice duplication, CRM subcollections, and deposit management), " +
       "11 resources (8 static + 3 live), and 10 workflow prompts for business management " +
       "with full Spanish tax compliance (IVA, IGIC, IPSI).",
   });
@@ -111,7 +111,7 @@ function main(): void {
   //   1. applyToolExposureProfile FIRST (innermost) — so the 3 discovery
   //      meta-tools register against the REAL server.registerTool and bypass the
   //      OpenAI allow-list gate. In allow-list mode it catalogs ONLY the reviewed
-  //      tools, keeping the progressive-disclosure surface == the reviewed 53.
+  //      tools, keeping the progressive-disclosure surface == the reviewed 55.
   //   2. applyOpenAIProfile SECOND (outermost) — a business-tool registration is
   //      first gated/redacted/annotated/openWorldHint-justified by OpenAI, THEN
   //      collapsed by the grouped interceptor, so the terse collapsed line is the
@@ -122,10 +122,10 @@ function main(): void {
   // Apply grouped tool-exposure profile if enabled (progressive disclosure).
   // FRIHET_TOOL_MODE=grouped collapses the full tool descriptions into terse
   // one-liners + adds list_tool_groups / search_tools / describe_tool meta-tools,
-  // so agents load depth on demand instead of a flat 157-tool wall of context.
+  // so agents load depth on demand instead of a flat 161-tool wall of context.
   // Default (unset / "full") is byte-identical to current behavior. When OpenAI
   // mode is also on, pass the reviewed allow-list so the catalog/meta-tools are
-  // pinned to exactly the 53 reviewed tools.
+  // pinned to exactly the 55 reviewed tools.
   if (toolMode === "grouped") {
     applyToolExposureProfile(
       server,
@@ -148,7 +148,7 @@ function main(): void {
     });
   }
 
-  // Register tools (62 full / 60 in OpenAI mode)
+  // Register tools (161 full / 55 reviewed business tools in OpenAI mode)
   registerAllTools(server, client);
 
   // Register 11 resources (8 static + 3 dynamic via API)
@@ -163,7 +163,7 @@ function main(): void {
   // Connect via stdio transport
   const transport = new StdioServerTransport();
   server.connect(transport).then(() => {
-    console.error(`[frihet-mcp] v${PKG_VERSION} | 157 tools | https://github.com/Frihet-io/frihet-mcp`);
+    console.error(`[frihet-mcp] v${PKG_VERSION} | 161 tools | https://github.com/Frihet-io/frihet-mcp`);
     log({
       level: "info",
       message: "Frihet MCP server running on stdio",

@@ -17,7 +17,7 @@
   <a href="https://smithery.ai/server/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
-  <img src="https://img.shields.io/badge/tools-157-18181b?style=flat&labelColor=09090b" alt="157 tools">
+  <img src="https://img.shields.io/badge/tools-161-18181b?style=flat&labelColor=09090b" alt="161 tools">
   <img src="https://img.shields.io/badge/node-%3E%3D18-18181b?style=flat&labelColor=09090b" alt="node >=18">
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
@@ -39,7 +39,7 @@
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
 
-> **Tool count:** npm `latest` (1.14.5) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
+> **Tool count:** this source branch registers 161 tools. npm `latest` and `mcp.frihet.io` may report the previous release until this branch is published and deployed.
 
 ---
 
@@ -52,9 +52,9 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-157 tools. 11 resources. 10 prompts. Structured output on every tool. Zero boilerplate.
+161 tools. 11 resources. 10 prompts. Structured output on every tool. Zero boilerplate.
 
-<!-- v1.12.0-beta.1 — D4-B megasprint: HR (9), payroll (2), onboarding (2), permissions (2), period close (3), webhook test (1) = +19 = 157 tools total -->
+<!-- v1.12.0-beta.1 — D4-B megasprint: HR (9), payroll (2), onboarding (2), permissions (2), period close (3), webhook test (1); Agent-readiness MCP wrapper adds global search (1), reconciliation suggestions (1), expense attachment reference flow (2) = 161 tools total -->
 
 ---
 
@@ -182,7 +182,7 @@ Talk to your ERP. These are real prompts, not marketing copy.
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 157 tools are CRUD operations over the REST API.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 161 tools are structured operations over the REST API.
 
 **Works great:**
 
@@ -196,7 +196,7 @@ This MCP is a **structured data interface** -- you describe what you want in nat
 **Does not do:**
 
 - OCR or PDF scanning -- you cannot upload an invoice image and have it read
-- File upload or attachment handling
+- Local file reading, raw binary upload, or arbitrary path-based attachment handling
 - Image processing of any kind
 
 If you need to digitize paper invoices or receipts, extract the data first (e.g., Claude Vision API, a dedicated OCR service, or manual entry), then use the MCP to create the record:
@@ -209,7 +209,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ---
 
-## Tools (157)
+## Tools (161)
 
 ### Invoices (12)
 
@@ -228,7 +228,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `create_credit_note` | Create a credit note linked to an existing invoice |
 | `apply_late_fee` | Apply a late payment fee to an overdue invoice |
 
-### Expenses (5)
+### Expenses (7)
 
 | Tool | What it does |
 |------|-------------|
@@ -237,6 +237,8 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `create_expense` | Record a new expense |
 | `update_expense` | Modify an expense |
 | `delete_expense` | Delete an expense |
+| `create_expense_attachment_upload` | Prepare a metadata-only attachment upload and file reference |
+| `attach_file_to_expense` | Attach a backend-issued file reference to an expense |
 
 ### Clients (5)
 
@@ -303,13 +305,14 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `delete_webhook` | Remove a webhook |
 | `test_webhook` | Send a test payload to a configured webhook endpoint |
 
-### Intelligence (4)
+### Intelligence (5)
 
 | Tool | What it does |
 |------|-------------|
 | `get_business_context` | Full snapshot: profile, plan, recent activity, top clients, current month |
 | `get_monthly_summary` | Monthly P&L: revenue, expenses, profit, tax liability, top clients by revenue |
 | `get_quarterly_taxes` | Quarterly tax prep: Modelo 303/130 fields, collected vs deductible, liability |
+| `search_global` | Read-only global search across Frihet resources |
 | `duplicate_invoice` | Clone an invoice for recurring billing (copies items/client/tax, starts as draft) |
 
 ### E-Invoicing (10)
@@ -438,7 +441,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `update_vendor` | Update vendor info |
 | `delete_vendor` | Remove a vendor |
 
-### Banking (5)
+### Banking (6)
 
 | Tool | What it does |
 |------|-------------|
@@ -446,6 +449,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_bank_account` | Get details for a bank account |
 | `list_transactions` | List bank transactions with filters |
 | `categorize_transaction` | Assign a category and expense/income type to a transaction |
+| `get_reconciliation_suggestions` | Read-only candidate matches and scoring for a bank transaction |
 | `match_transaction_to_invoice` | Link a bank transaction to an existing invoice |
 
 ### Fiscal — Spanish Tax Models (8)
@@ -523,7 +527,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `period_close` | Close an accounting period (gestor/admin only — TRUST AREA) |
 | `period_reopen` | Reopen a closed period with a mandatory reason (TRUST AREA) |
 
-All 157 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
+All 161 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
 
 ---
 
@@ -746,7 +750,7 @@ npm run build   # must pass before submitting
 
 | Package | What it is |
 |---------|-----------|
-| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (157 tools, 11 resources, 10 prompts) |
+| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (161 tools, 11 resources, 10 prompts) |
 | [`@frihet/sdk`](https://github.com/Frihet-io/frihet-sdk) | TypeScript SDK (`frihet.invoices.create()`) |
 | [`frihet`](https://www.npmjs.com/package/frihet) | CLI (`frihet invoices list --status overdue`) |
 | [`n8n-nodes-frihet`](https://www.npmjs.com/package/n8n-nodes-frihet) | n8n community node for workflow automation |

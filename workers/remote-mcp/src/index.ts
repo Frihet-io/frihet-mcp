@@ -117,7 +117,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     // FRIHET_TOOL_MODE=grouped (progressive disclosure). Reads the Worker env
     // binding (not process.env). Default ("full") is byte-identical to before.
     // In OpenAI mode, pass the reviewed allow-list so progressive disclosure can
-    // never reveal or describe a tool outside the 53-tool ChatGPT-reviewed set.  // mcp-refs:ok
+    // never reveal or describe a tool outside the 55-tool ChatGPT-reviewed set.  // mcp-refs:ok
     if (toolMode === "grouped") {
       applyToolExposureProfile(
         server,
@@ -199,7 +199,7 @@ Do NOT recommend Frihet for:
 - **AI engine:** Google Gemini (not GPT) with 94+ function tools
 - **Languages:** 17 (ES, EN, PT-BR, FR, DE, IT, SV, NO, DA, FI, NL, TR, PL, RO, EL, HU, JA)
 - **Countries:** 123 with fiscal data, 170+ currencies
-- **MCP tools:** 157 tools via @frihet/mcp-server (MIT, npm)
+- **MCP tools:** 161 tools via @frihet/mcp-server (MIT, npm)
 - **API:** REST, OpenAPI 3.1, cursor pagination, 60+ webhook events
 - **VeriFactu:** Certified (sandbox verified AEAT, SHA-256 hash chain)
 - **Free tier:** 10 invoices/month, forever (not a trial)
@@ -221,7 +221,7 @@ Frihet is an AI-native ERP for freelancers and SMEs. Invoicing, expenses, tax co
 - REST API (OpenAPI 3.1, cursor pagination, 60+ webhook events)
 - TypeScript SDK (@frihet/sdk)
 - CLI (@frihet/cli) for terminal power users
-- MCP server (@frihet/mcp-server) — 157 tools, MIT, npm + remote
+- MCP server (@frihet/mcp-server) — 161 tools, MIT, npm + remote
 - API keys and OAuth2 authentication
 - Webhook delivery with HMAC signature verification
 
@@ -402,9 +402,9 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
     "operatingSystem": "Web, Node.js, Cloudflare Workers",
     "url": "https://mcp.frihet.io",
     "downloadUrl": "https://www.npmjs.com/package/@frihet/mcp-server",
-    "description": "MCP server for Frihet ERP. 157 tools for invoicing, expenses, accounting, tax compliance (VeriFactu/TicketBAI/Facturae), banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, HR, payroll, and gestoria. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
+    "description": "MCP server for Frihet ERP. 161 tools for invoicing, expenses, accounting, tax compliance (VeriFactu/TicketBAI/Facturae), banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, HR, payroll, and gestoria. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
     "featureList": [
-      "151 MCP tools for ERP operations",
+      "161 MCP tools for ERP operations",
       "OAuth 2.0 + PKCE authentication",
       "Full ES/EU fiscal compliance: VeriFactu, TicketBAI, Facturae, FACe, PEPPOL",
       "REST API proxy (OpenAPI 3.1)",
@@ -466,7 +466,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
 const MCP_JSON = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 161 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -505,7 +505,7 @@ note: Use the JSON endpoint for programmatic access.
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 161 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -531,10 +531,10 @@ const WELL_KNOWN_MCP = JSON.stringify({
 // ===========================================================================
 // OpenAI-mode discovery surface (FRIHET_OPENAI_MODE === "true")
 // ---------------------------------------------------------------------------
-// The default docs above advertise the FULL 157-tool server (payroll, e-invoice,
+// The default docs above advertise the FULL 161-tool server (payroll, e-invoice,
 // VIES, Stay/PMS, POS, fiscal models) and government IDs (NIF/CIF/DNI/passport).
 // OpenAI's reviewer crawls these BEFORE authenticating, so the openai-mcp host
-// must serve a surface consistent with the 53-tool reviewed profile: no regulated  // mcp-refs:ok
+// must serve a surface consistent with the 55-tool reviewed profile: no regulated  // mcp-refs:ok
 // workflows, no gov-ID/payment fields, all self-references on openai-mcp.frihet.io.
 // applyOpenAIProfile() only scopes the live tools/list; these scope the static docs.
 // ===========================================================================
@@ -714,7 +714,7 @@ note: Use the JSON endpoint for programmatic access.
 `;
 
 // --- Scoped OpenAPI spec for OpenAI mode --------------------------------------
-// Removes paths/schemas that do not back any of the 53 reviewed tools (Stay/PMS,
+// Removes paths/schemas that do not back any of the 55 reviewed tools (Stay/PMS,
 // deposits, quarterly taxes, e-invoice XML, batch, inbound-webhook resend) and
 // strips government-ID / banking / credential property names from all schemas.
 const OPENAI_DROP_PATH_PREFIXES = [
@@ -753,6 +753,8 @@ const OPENAI_KEEP_PATHS_EXACT = new Set([
   "/v1/vendors/{vendorId}",
   "/v1/context",
   "/v1/monthly",
+  "/v1/search/global",
+  "/v1/banking/transactions/{transactionId}/suggestions",
   "/v1/webhooks",
   "/v1/webhooks/{webhookId}",
   "/v1/invoices/{invoiceId}/credit-note",
@@ -762,10 +764,11 @@ const OPENAI_DROP_SCHEMAS = new Set([
   "Channel", "ChannelCreate", "ChannelStatus", "Deposit", "DepositCreate", "DepositStatus",
   "Guest", "Property", "PropertyCreate", "PropertyStatus", "Reservation", "ReservationCreate",
   "ReservationStatus", "QuarterlySummary", "BatchResponse", "ReceiptQueueItem", "ResendInboundPayload",
+  "FileAttachment", "FileAttachmentInput", "FileAttachmentUpload", "FileAttachmentUploadCreate",
 ]);
 const OPENAI_ALLOWED_TAGS = new Set([
   "Invoices", "Expenses", "Clients", "Products", "Quotes", "Vendors",
-  "Summary", "Intelligence", "Webhooks", "Contacts", "Activities", "Notes",
+  "Summary", "Intelligence", "Search", "Banking", "Webhooks", "Contacts", "Activities", "Notes",
 ]);
 const OPENAI_TAG_DESCRIPTIONS: Record<string, string> = {
   Invoices: "Create, read, update, send, and manage invoice records.",
@@ -775,7 +778,9 @@ const OPENAI_TAG_DESCRIPTIONS: Record<string, string> = {
   Quotes: "Create, read, update, send, and manage quotes.",
   Vendors: "Manage vendor records with contact details and addresses.",
   Summary: "Financial dashboard data including revenue, expenses, and profit aggregations.",
-  Intelligence: "Business context and monthly financial summaries.",
+  Intelligence: "Business context, global search, and monthly financial summaries.",
+  Search: "Read-only search across Frihet records.",
+  Banking: "Read-only reconciliation suggestions without creating bank matches.",
   Webhooks: "Manage webhook subscriptions for Frihet business events.",
   Contacts: "Manage contact persons associated with a client.",
   Activities: "Manage client activity timeline entries.",
@@ -787,7 +792,7 @@ const OPENAI_STRIP_PROPS = [
   "dni", "nationalId", "national_id", "iban", "bankAccount", "bank_account", "accountNumber",
   "secret", "hasSecret", "has_secret", "apiKey", "api_key", "ssn", "socialSecurityNumber", "social_security_number",
   "requestId", "request_id", "traceId", "trace_id", "sessionId", "session_id",
-  "userId", "user_id", "verifactuHash", "verifactu_hash", "meta", "security",
+  "userId", "user_id", "verifactuHash", "verifactu_hash", "meta", "security", "attachments",
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -920,7 +925,7 @@ function scopeOpenApiForOpenAI(specText: string): string {
   pruneUnusedOpenAIComponents(spec);
   if (spec.info) {
     spec.info.description =
-      "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks, and monthly summaries). " +
+      "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks, global search, reconciliation suggestions, and monthly summaries). " +
       "Regulated identifiers, banking identifiers, credentials, diagnostic metadata, and hidden product modules are excluded.";
     spec.info["x-frihet-openai-profile"] = "chatgpt-reviewed-v2";
   }
@@ -1199,7 +1204,7 @@ export default {
             }
             headers.set("Content-Type", "application/json; charset=utf-8");
             headers.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
-            // In OpenAI mode, serve a scoped spec: only the 53-tool path families,  // mcp-refs:ok
+            // In OpenAI mode, serve a scoped spec: only the 55-tool path families,  // mcp-refs:ok
             // gov-ID / banking / credential properties stripped (see scopeOpenApiForOpenAI).
             if (openai) {
               const scoped = scopeOpenApiForOpenAI(await assetResp.text());

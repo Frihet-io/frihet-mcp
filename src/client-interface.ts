@@ -23,6 +23,8 @@ export interface IFrihetClient {
   createExpense(data: Record<string, unknown>): Promise<Record<string, unknown>>;
   updateExpense(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
   deleteExpense(id: string): Promise<void>;
+  createExpenseAttachmentUpload(data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  attachFileToExpense(expenseId: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
 
   // Clients
   listClients(params?: { limit?: number; offset?: number; after?: string; fields?: string; q?: string; stage?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
@@ -97,6 +99,7 @@ export interface IFrihetClient {
   getBusinessContext(): Promise<Record<string, unknown>>;
   getMonthlySummary(month?: string): Promise<Record<string, unknown>>;
   getQuarterlyTaxes(quarter?: string): Promise<Record<string, unknown>>;
+  searchGlobal(params: { query: string; types?: string[] | string; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
 
   // E-Invoicing endpoints (CF rolling out 2026-04-21 to 2026-04-28; 404 → stub fallback)
   sendEInvoice(params: { invoiceId: string; format: string; dispatchMode: string }): Promise<{ workflowRunId: string; status: "queued"; estimatedCompletionSec: number }>;
@@ -137,6 +140,7 @@ export interface IFrihetClient {
   getBankAccount(id: string): Promise<Record<string, unknown>>;
   listTransactions(params?: { accountId?: string; from?: string; to?: string; status?: string; category?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
   categorizeTransaction(id: string, data: { category: string; notes?: string }): Promise<Record<string, unknown>>;
+  getReconciliationSuggestions(transactionId: string, params?: { limit?: number }): Promise<Record<string, unknown>>;
   matchTransactionToDocument(transactionId: string, data: { documentId: string; documentType: "invoice" | "expense"; notes?: string }): Promise<Record<string, unknown>>;
 
   // Fiscal endpoints (/v1/fiscal/*)

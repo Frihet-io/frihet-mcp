@@ -2,10 +2,10 @@
  * Tests for the grouped tool-exposure profile (progressive disclosure).
  *
  * The default ("full") mode must stay BYTE-IDENTICAL to the un-profiled server
- * so existing users are unaffected. The opt-in "grouped" mode collapses the 151
+ * so existing users are unaffected. The opt-in "grouped" mode collapses the 161
  * full tool descriptions into terse one-liners and adds three discovery
  * meta-tools (list_tool_groups, search_tools, describe_tool) so agents load
- * depth on demand instead of a flat 151-tool wall of context.
+ * depth on demand instead of a flat 161-tool wall of context.
  */
 
 import { describe, test } from "node:test";
@@ -114,9 +114,9 @@ describe("tool-exposure: mode resolution", () => {
 });
 
 describe("tool-exposure: full mode is byte-identical", () => {
-  test("registers exactly 157 tools, no meta-tools, descriptions untouched", () => {
+  test("registers exactly 161 tools, no meta-tools, descriptions untouched", () => {
     const full = makeFullServer();
-    assert.equal(full.tools.size, 157);
+    assert.equal(full.tools.size, 161);
     for (const meta of META_TOOLS) {
       assert.equal(full.tools.has(meta), false, `${meta} must NOT exist in full mode`);
     }
@@ -134,15 +134,15 @@ describe("tool-exposure: full mode is byte-identical", () => {
 });
 
 describe("tool-exposure: grouped mode", () => {
-  test("registers 157 tools + 3 meta-tools and a complete catalog", () => {
+  test("registers 161 tools + 3 meta-tools and a complete catalog", () => {
     const { server, handle } = makeGroupedServer();
-    assert.equal(server.tools.size, 157 + GROUPED_META_TOOL_COUNT);
+    assert.equal(server.tools.size, 161 + GROUPED_META_TOOL_COUNT);
     assert.equal(GROUPED_META_TOOL_COUNT, 3);
     for (const meta of META_TOOLS) {
       assert.equal(server.tools.has(meta), true, `${meta} must exist in grouped mode`);
     }
     // Catalog holds every real tool (meta-tools excluded).
-    assert.equal(handle.catalog.size, 157);
+    assert.equal(handle.catalog.size, 161);
     for (const meta of META_TOOLS) {
       assert.equal(handle.catalog.has(meta), false);
     }
@@ -203,7 +203,7 @@ describe("tool-exposure: grouped mode", () => {
 });
 
 describe("tool-exposure: group taxonomy", () => {
-  test("groupForTool reproduces the source-file grouping for all 157 tools", () => {
+  test("groupForTool reproduces the source-file grouping for all 161 tools", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const toolsDir = join(here, "..", "..", "src", "tools");
     let checked = 0;
@@ -225,7 +225,7 @@ describe("tool-exposure: group taxonomy", () => {
         if (ng !== fileGroup) mismatches.push(`${name}: name=${ng} file=${fileGroup}`);
       }
     }
-    assert.equal(checked, 157, "should have scanned all 157 registration sites");
+    assert.equal(checked, 161, "should have scanned all 161 registration sites");
     assert.deepEqual(mismatches, [], "groupForTool must match the source-file group");
   });
 
@@ -254,16 +254,16 @@ describe("tool-exposure: group taxonomy", () => {
 });
 
 describe("tool-exposure: meta-tools", () => {
-  test("list_tool_groups returns non-empty groups with counts summing to 157", async () => {
+  test("list_tool_groups returns non-empty groups with counts summing to 161", async () => {
     const { server } = makeGroupedServer();
     const res = await server.tools.get("list_tool_groups")!.handler({});
     const payload = JSON.parse(res.content[0].text) as {
       groups: Array<{ group: string; toolCount: number }>;
       totalTools: number;
     };
-    assert.equal(payload.totalTools, 157);
+    assert.equal(payload.totalTools, 161);
     const sum = payload.groups.reduce((acc, g) => acc + g.toolCount, 0);
-    assert.equal(sum, 157);
+    assert.equal(sum, 161);
     // No empty groups are listed.
     assert.ok(payload.groups.every((g) => g.toolCount > 0));
     // Fiscal is a headline group (compliance depth).

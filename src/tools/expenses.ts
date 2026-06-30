@@ -5,7 +5,37 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, expenseItemOutput } from "./shared.js";
+import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, expenseItemOutput, expenseAttachmentUploadOutput, expenseAttachmentOutput } from "./shared.js";
+
+const expenseMulticurrencyFields = {
+  currency: z
+    .string()
+    .length(3)
+    .optional()
+    .describe("Expense currency ISO 4217 code. Defaults to EUR when omitted / Moneda ISO 4217; por defecto EUR"),
+  exchangeRate: z
+    .number()
+    .positive()
+    .optional()
+    .describe("Rate from expense currency to functional currency / Tipo de cambio a moneda funcional"),
+  exchangeRateSource: z
+    .string()
+    .optional()
+    .describe("Exchange-rate source (e.g. ECB, manual) / Fuente del tipo de cambio"),
+  exchangeRateDate: z
+    .string()
+    .optional()
+    .describe("Exchange-rate date in ISO 8601 (YYYY-MM-DD) / Fecha del tipo de cambio"),
+  functionalCurrency: z
+    .string()
+    .length(3)
+    .optional()
+    .describe("Functional currency ISO 4217 code, normally EUR / Moneda funcional ISO 4217"),
+  functionalAmount: z
+    .number()
+    .optional()
+    .describe("Amount converted to the functional currency / Importe convertido a moneda funcional"),
+};
 
 export function registerExpenseTools(server: McpServer, client: IFrihetClient): void {
   // -- list_expenses --
@@ -113,6 +143,7 @@ export function registerExpenseTools(server: McpServer, client: IFrihetClient): 
           .boolean()
           .optional()
           .describe("Whether the expense is tax deductible / Si el gasto es deducible fiscalmente"),
+        ...expenseMulticurrencyFields,
       },
       outputSchema: expenseItemOutput,
     },
@@ -145,6 +176,7 @@ export function registerExpenseTools(server: McpServer, client: IFrihetClient): 
         date: z.string().optional().describe("Date (YYYY-MM-DD) / Fecha"),
         vendor: z.string().optional().describe("Vendor / Proveedor"),
         taxDeductible: z.boolean().optional().describe("Tax deductible / Deducible"),
+        ...expenseMulticurrencyFields,
       },
       outputSchema: expenseItemOutput,
     },
@@ -178,6 +210,66 @@ export function registerExpenseTools(server: McpServer, client: IFrihetClient): 
       return {
         content: [mutateContent(`Expense ${id} deleted successfully. / Gasto ${id} eliminado correctamente.`)],
         structuredContent: { success: true, id, ...hints } as unknown as Record<string, unknown>,
+      };
+    }),
+  );
+
+  // -- create_expense_attachment_upload --
+
+  server.registerTool(
+    "create_expense_attachment_upload",
+    {
+      title: "Create Expense Attachment Upload",
+      description:
+        "Prepare a safe upload slot for an expense attachment using file metadata only. " +
+        "This tool never reads local file paths and never accepts raw binary content. " +
+        "Use the returned file reference/upload metadata with the external uploader, then call attach_file_to_expense. " +
+        "/ Prepara una subida segura para adjunto de gasto usando solo metadatos del archivo.",
+      annotations: CREATE_ANNOTATIONS,
+      inputSchema: {
+        fileName: z.string().min(1).describe("Original file name only, not a local path / Nombre del archivo, no ruta local"),
+        contentType: z.string().min(1).describe("MIME type, e.g. application/pdf or image/jpeg / Tipo MIME"),
+        sizeBytes: z.number().int().positive().describe("File size in bytes / Tamano del archivo en bytes"),
+        expenseId: z.string().optional().describe("Optional expense ID to scope the upload / ID de gasto opcional"),
+        checksumSha256: z.string().optional().describe("Optional SHA-256 checksum of the file content / Checksum SHA-256 opcional"),
+      },
+      outputSchema: expenseAttachmentUploadOutput,
+    },
+    async (input) => withToolLogging("create_expense_attachment_upload", async () => {
+      const result = await client.createExpenseAttachmentUpload(input);
+      return {
+        content: [mutateContent(formatRecord("Expense attachment upload prepared", result))],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    }),
+  );
+
+  // -- attach_file_to_expense --
+
+  server.registerTool(
+    "attach_file_to_expense",
+    {
+      title: "Attach File to Expense",
+      description:
+        "Attach an already-uploaded file reference to an expense. " +
+        "Requires a backend-issued fileReferenceId; local paths and raw file bytes are not accepted. " +
+        "/ Adjunta a un gasto una referencia de archivo ya subida.",
+      annotations: CREATE_ANNOTATIONS,
+      inputSchema: {
+        expenseId: z.string().describe("Expense ID / ID del gasto"),
+        fileReferenceId: z.string().describe("Backend-issued file reference ID / Referencia de archivo emitida por backend"),
+        fileName: z.string().min(1).describe("Display file name / Nombre visible del archivo"),
+        contentType: z.string().min(1).describe("MIME type / Tipo MIME"),
+        sizeBytes: z.number().int().positive().describe("File size in bytes / Tamano en bytes"),
+        notes: z.string().optional().describe("Optional attachment notes / Notas opcionales"),
+      },
+      outputSchema: expenseAttachmentOutput,
+    },
+    async ({ expenseId, ...data }) => withToolLogging("attach_file_to_expense", async () => {
+      const result = await client.attachFileToExpense(expenseId, data);
+      return {
+        content: [mutateContent(formatRecord("Expense attachment linked", result))],
+        structuredContent: result as unknown as Record<string, unknown>,
       };
     }),
   );

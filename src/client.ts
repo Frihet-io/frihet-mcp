@@ -327,6 +327,17 @@ export class FrihetClient {
     return this.request("DELETE", `/expenses/${encodeURIComponent(id)}`);
   }
 
+  async createExpenseAttachmentUpload(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request("POST", "/expenses/attachments/uploads", data);
+  }
+
+  async attachFileToExpense(
+    expenseId: string,
+    data: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", `/expenses/${encodeURIComponent(expenseId)}/attachments`, data);
+  }
+
   // ---------------------------------------------------------------- Clients
   // ----------------------------------------------------------------
 
@@ -906,6 +917,18 @@ export class FrihetClient {
     });
   }
 
+  async searchGlobal(
+    params: { query: string; types?: string[] | string; limit?: number; offset?: number },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    const types = Array.isArray(params.types) ? params.types.join(",") : params.types;
+    return this.requestPaginated("GET", "/search/global", undefined, {
+      q: params.query,
+      types,
+      limit: params.limit,
+      offset: params.offset,
+    });
+  }
+
   // ---------------------------------------------------------------- Banking
   // /v1/banking/* endpoints are LIVE in Frihet-ERP (#848): accounts list/get,
   // transactions list/categorize/match. Paths below match the shipped server
@@ -944,6 +967,15 @@ export class FrihetClient {
     data: { category: string; notes?: string },
   ): Promise<Record<string, unknown>> {
     return this.request("PATCH", `/banking/transactions/${encodeURIComponent(id)}/categorize`, data);
+  }
+
+  async getReconciliationSuggestions(
+    transactionId: string,
+    params?: { limit?: number },
+  ): Promise<Record<string, unknown>> {
+    return this.request("GET", `/banking/transactions/${encodeURIComponent(transactionId)}/suggestions`, undefined, {
+      limit: params?.limit,
+    });
   }
 
   async matchTransactionToDocument(

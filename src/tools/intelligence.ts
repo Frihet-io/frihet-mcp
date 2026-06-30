@@ -18,8 +18,12 @@ import {
   formatRecord,
   getContent,
   mutateContent,
+  listContent,
+  formatPaginatedResponse,
   READ_ONLY_ANNOTATIONS,
   CREATE_ANNOTATIONS,
+  paginatedOutput,
+  globalSearchResultOutput,
 } from "./shared.js";
 
 export function registerIntelligenceTools(server: McpServer, client: IFrihetClient): void {
@@ -108,6 +112,37 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
       const label = quarter ? `Quarterly Taxes (${quarter})` : "Quarterly Taxes (current quarter)";
       return {
         content: [getContent(formatRecord(label, result))],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    }),
+  );
+
+  // -- search_global --
+
+  server.registerTool(
+    "search_global",
+    {
+      title: "Search Global",
+      description:
+        "Read-only global search across Frihet resources. " +
+        "Returns typed matches with resource/type, id, title/snippet, score, and URL metadata when the API provides it. " +
+        "/ Busqueda global de solo lectura en recursos de Frihet.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: {
+        query: z.string().min(1).describe("Search query / Texto de busqueda"),
+        types: z
+          .array(z.enum(["invoices", "expenses", "vendors", "clients", "products"]))
+          .optional()
+          .describe("Optional resource types to search / Tipos de recurso opcionales"),
+        limit: z.number().int().min(1).max(50).optional().describe("Max results (1-50) / Resultados maximos"),
+        offset: z.number().int().min(0).optional().describe("Offset / Desplazamiento"),
+      },
+      outputSchema: paginatedOutput(globalSearchResultOutput),
+    },
+    async ({ query, types, limit, offset }) => withToolLogging("search_global", async () => {
+      const result = await client.searchGlobal({ query, types, limit, offset });
+      return {
+        content: [listContent(formatPaginatedResponse("global_search_results", result))],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }),

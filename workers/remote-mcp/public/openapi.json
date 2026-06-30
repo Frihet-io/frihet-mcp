@@ -62,6 +62,14 @@
       "description": "AI-optimized endpoints providing business context, monthly P&L, and quarterly tax figures in a single call."
     },
     {
+      "name": "Search",
+      "description": "Read-only global search across Frihet business records."
+    },
+    {
+      "name": "Banking",
+      "description": "Bank accounts, transactions, categorization, and read-only reconciliation helpers."
+    },
+    {
       "name": "Webhooks",
       "description": "CRUD endpoints for managing webhook subscriptions that receive real-time event notifications."
     },
@@ -103,10 +111,103 @@
     },
     {
       "name": "E-Invoicing",
-      "description": "EN16931-compliant e-invoicing export and B2G submission endpoints.\nSupports 8 formats (Facturae, XRechnung-CII/UBL, Factur-X, FatturaPA, PEPPOL-BIS-3, UBL, CII).\nFACe (Spain B2G portal) and TicketBAI (Bizkaia BATUZ) submission pipelines.\nTrust Area: COMPLIANCE. Requires owner role or API key with `einvoice:*` scope.\n"
+      "description": "EN16931-compliant e-invoicing export and B2G submission endpoints.\nSupports 9 formats (Facturae, XRechnung-CII/UBL, Factur-X, FatturaPA, PEPPOL-BIS-3, FA-2-KSeF, UBL, CII).\nFACe (Spain B2G portal) and TicketBAI (Bizkaia BATUZ) submission pipelines.\nTrust Area: COMPLIANCE. Requires owner role or API key with `einvoice:*` scope.\n"
     }
   ],
   "paths": {
+    "/v1/search/global": {
+      "get": {
+        "operationId": "globalSearch",
+        "summary": "Global search",
+        "description": "Read-only bounded search across invoices, expenses, vendors, clients, and products. Uses existing workspace-scoped search paths and does not mutate data.",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Search query, maximum 200 characters.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "description": "Optional comma-separated resource types to search.",
+            "schema": {
+              "type": "string",
+              "example": "invoices,expenses,clients"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Typed global search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GlobalSearchResult"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "types": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/v1/gestoria/aging": {
       "post": {
         "operationId": "gestoriaAgingConsolidated",
@@ -931,6 +1032,58 @@
         }
       }
     },
+    "/v1/expenses/attachments/uploads": {
+      "post": {
+        "operationId": "createExpenseAttachmentUpload",
+        "summary": "Prepare an expense attachment upload reference",
+        "description": "Prepare a metadata-only attachment reference for an expense receipt.\nThis endpoint does not accept raw bytes, local file paths, signed URLs,\nor secrets. It returns an opaque fileReferenceId plus limits that a full\nMCP/API client can use before linking the uploaded file to an expense.\n",
+        "tags": [
+          "Expenses"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileAttachmentUploadCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attachment upload reference prepared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FileAttachmentUpload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/v1/expenses/{expenseId}": {
       "get": {
         "operationId": "getExpense",
@@ -1087,6 +1240,71 @@
         "responses": {
           "204": {
             "description": "Expense deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/expenses/{expenseId}/attachments": {
+      "post": {
+        "operationId": "attachExpenseFileReference",
+        "summary": "Attach a file reference to an expense",
+        "description": "Appends an existing safe file reference to an expense. The request\naccepts metadata only: no raw bytes, local paths, signed URLs, or\nsecrets. MIME type and size are validated server-side.\n",
+        "tags": [
+          "Expenses"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ExpenseId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileAttachmentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attachment reference appended",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "expenseId": {
+                          "type": "string"
+                        },
+                        "attachment": {
+                          "$ref": "#/components/schemas/FileAttachment"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -5190,7 +5408,7 @@
       "post": {
         "operationId": "exportEInvoice",
         "summary": "Export e-invoice XML",
-        "description": "Generate and return an e-invoice XML document for the invoice in one of 8 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, UBL 2.1, CII D16B.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
+        "description": "Generate and return an e-invoice XML document for the invoice in one of 9 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, FA-2-KSeF (Polish KSeF FA(3)), UBL 2.1, CII D16B.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -5219,10 +5437,11 @@
                       "Factur-X",
                       "FatturaPA",
                       "PEPPOL-BIS-3",
+                      "FA-2-KSeF",
                       "UBL",
                       "CII"
                     ],
-                    "description": "Target e-invoice format.\n- Facturae: Spanish B2G (Agencia Tributaria, FACe)\n- XRechnung-CII/UBL: German B2G (PEPPOL/ZRE/OZG-RE)\n- Factur-X: French standard (PDF/A-3 XML component)\n- FatturaPA: Italian SDI clearance\n- PEPPOL-BIS-3: Pan-European PEPPOL network\n- UBL/CII: Generic cross-border EU\n",
+                    "description": "Target e-invoice format.\n- Facturae: Spanish B2G (Agencia Tributaria, FACe)\n- XRechnung-CII/UBL: German B2G (PEPPOL/ZRE/OZG-RE)\n- Factur-X: French standard (PDF/A-3 XML component)\n- FatturaPA: Italian SDI clearance\n- PEPPOL-BIS-3: Pan-European PEPPOL network\n- FA-2-KSeF: Polish KSeF FA(3) XML\n- UBL/CII: Generic cross-border EU\n",
                     "example": "Facturae"
                   },
                   "signed": {
@@ -8922,6 +9141,84 @@
         }
       }
     },
+    "/v1/banking/transactions/{transactionId}/suggestions": {
+      "get": {
+        "operationId": "getBankTransactionSuggestions",
+        "summary": "Get reconciliation suggestions",
+        "description": "Read-only ranked reconciliation candidates for a bank transaction.\nThis endpoint does not mutate the transaction, invoices, expenses,\nledger entries, or reconciled fields.\n",
+        "tags": [
+          "Banking"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read-only reconciliation suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "transactionId": {
+                          "type": "string"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "suggestions": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ReconciliationSuggestion"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
     "/v1/banking/transactions/{transactionId}/categorize": {
       "patch": {
         "operationId": "categorizeBankTransaction",
@@ -9603,6 +9900,111 @@
           }
         }
       },
+      "ReconciliationSuggestion": {
+        "type": "object",
+        "properties": {
+          "documentType": {
+            "type": "string",
+            "enum": [
+              "invoice",
+              "expense"
+            ]
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "confidence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "suggested": {
+            "type": "boolean"
+          },
+          "amountDiff": {
+            "type": "number"
+          },
+          "dateDiff": {
+            "type": "number"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "breakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "signal": {
+                  "type": "string",
+                  "enum": [
+                    "amount",
+                    "date",
+                    "reference",
+                    "counterparty"
+                  ]
+                },
+                "points": {
+                  "type": "integer"
+                },
+                "similarity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "GlobalSearchResult": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "invoices",
+              "expenses",
+              "vendors",
+              "clients",
+              "products"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "secondary": {
+            "type": "string",
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "ResendInboundPayload": {
         "type": "object",
         "description": "Payload sent by Resend for inbound email routing.",
@@ -9964,6 +10366,213 @@
           }
         ]
       },
+      "FileAttachmentUploadCreate": {
+        "type": "object",
+        "required": [
+          "fileName",
+          "contentType",
+          "sizeBytes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Filename only; local paths are rejected.",
+            "example": "receipt.pdf"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/jpg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+              "image/tiff"
+            ]
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "expenseId": {
+            "type": "string",
+            "description": "Optional expense ID to scope the upload reference to."
+          },
+          "checksumSha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        }
+      },
+      "FileAttachmentUpload": {
+        "type": "object",
+        "properties": {
+          "uploadId": {
+            "type": "string"
+          },
+          "fileReferenceId": {
+            "type": "string",
+            "description": "Opaque backend-issued file reference to pass to attachExpenseFileReference."
+          },
+          "fileId": {
+            "type": "string",
+            "description": "Backward-compatible alias for fileReferenceId."
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "maxSizeBytes": {
+            "type": "integer"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "example": "prepared"
+          },
+          "attach": {
+            "type": "object",
+            "properties": {
+              "expenseId": {
+                "type": "string",
+                "nullable": true
+              },
+              "endpoint": {
+                "type": "string"
+              },
+              "body": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "FileAttachmentInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque uploaded file reference. Not a path or URL."
+          },
+          "fileReferenceId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque uploaded file reference. Not a path or URL."
+          },
+          "originalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Filename only; local paths are rejected."
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Filename only; local paths are rejected."
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/jpg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+              "image/tiff"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "checksumSha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        }
+      },
+      "FileAttachment": {
+        "type": "object",
+        "required": [
+          "fileId",
+          "originalName",
+          "contentType",
+          "size"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque uploaded file reference. Not a path or URL."
+          },
+          "originalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Filename only; local paths are rejected."
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/jpg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+              "image/tiff"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "checksumSha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        }
+      },
       "ExpenseCreate": {
         "type": "object",
         "required": [
@@ -10001,6 +10610,48 @@
             "type": "boolean",
             "description": "Whether the expense is tax deductible",
             "example": true
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "ISO 4217 transaction currency. Defaults to EUR.",
+            "example": "EUR",
+            "default": "EUR"
+          },
+          "exchangeRate": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Exchange rate used to convert amount into functionalCurrency."
+          },
+          "exchangeRateSource": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Source/provider of the exchange rate snapshot."
+          },
+          "exchangeRateDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Exchange rate date (YYYY-MM-DD)."
+          },
+          "functionalCurrency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "Workspace/reporting currency. Defaults to EUR.",
+            "example": "EUR",
+            "default": "EUR"
+          },
+          "functionalAmount": {
+            "type": "number",
+            "description": "Amount converted into functionalCurrency."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileAttachment"
+            },
+            "readOnly": true
           },
           "recurring": {
             "$ref": "#/components/schemas/ExpenseRecurringConfig"
