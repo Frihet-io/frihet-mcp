@@ -75,5 +75,3 @@ No binary files are stored in this repo — assets live in `Frihet-Saas-Website/
 | mcp.so | Not verified | Submit separately (15min) |
 | LobeHub MCP | Not verified | Submit separately (15min) |
 | Docker MCP Catalog | Not submitted | Wave 4 (requires Dockerfile) |
-
-Full distribution roadmap: `../DISTRIBUTION-ROADMAP.md`

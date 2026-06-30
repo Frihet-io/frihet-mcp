@@ -14,7 +14,8 @@
     "postinstall": "node scripts/postinstall.js || true",
     "prepublishOnly": "npm run build && npm run audit:mcp-refs -- --repo frihet-mcp",
     "audit:mcp-refs": "node scripts/audit-mcp-refs.mjs",
-    "audit:mcp-refs:fix": "node scripts/audit-mcp-refs.mjs --fix"
+    "audit:mcp-refs:fix": "node scripts/audit-mcp-refs.mjs --fix",
+    "gate:no-leak": "bash scripts/no-public-leak.sh"
   },
   "keywords": [
     "accounting",
