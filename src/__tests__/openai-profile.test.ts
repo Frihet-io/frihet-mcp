@@ -91,10 +91,10 @@ function makeOpenAIServer(): StubMcpServer {
 }
 
 describe("OpenAI profile", () => {
-  test("exposes exactly the reviewed 53-tool surface", () => {
+  test("exposes exactly the reviewed 55-tool surface", () => {
     const server = makeOpenAIServer();
 
-    assert.equal(server.tools.size, 53);
+    assert.equal(server.tools.size, 55);
     assert.equal(server.prompts.length, 0);
     assert.equal(server.resources.length, 0);
 
@@ -107,8 +107,25 @@ describe("OpenAI profile", () => {
       "create_reservation",
       "payroll_export",
       "invite_team_member",
+      "create_expense_attachment_upload",
+      "attach_file_to_expense",
     ]) {
       assert.equal(server.tools.has(hiddenTool), false, `${hiddenTool} must not be exposed in OpenAI mode`);
+    }
+  });
+
+  test("exposes new read-only agent-readiness tools but excludes attachment writes", () => {
+    const server = makeOpenAIServer();
+
+    for (const name of ["search_global", "get_reconciliation_suggestions"]) {
+      const tool = server.tools.get(name);
+      assert.ok(tool, `${name} should be visible`);
+      assert.equal(tool.config.annotations?.["readOnlyHint"], true);
+      assert.equal(tool.config.annotations?.["openWorldHint"], false);
+    }
+
+    for (const name of ["create_expense_attachment_upload", "attach_file_to_expense"]) {
+      assert.equal(server.tools.has(name), false, `${name} must remain hidden from OpenAI mode`);
     }
   });
 

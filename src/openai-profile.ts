@@ -12,10 +12,10 @@
  * 4. Redacts sensitive fields from all tool outputs
  * 5. Updates descriptions to reflect modified behavior + openWorldHint justifications
  *
- * The full MCP server (157 business tools + MCP extras) remains available for Claude, Cursor,
+ * The full MCP server (161 business tools + MCP extras) remains available for Claude, Cursor,
  * Windsurf, Cline, Codex, and all other MCP clients.
  *
- * OpenAI-safe mode: 53 reviewed business tools, 0 prompts, 0 resources, 0 government IDs in I/O.
+ * OpenAI-safe mode: 55 reviewed business tools, 0 prompts, 0 resources, 0 government IDs in I/O.
  * The full MCP surface remains available outside FRIHET_OPENAI_MODE.
  *
  * @see https://developers.openai.com/apps-sdk/app-submission-guidelines
@@ -60,6 +60,7 @@ const PROFILE: OpenAIProfile = {
     // Read-only tools
     "get_business_context",
     "get_monthly_summary",
+    "search_global",
     "list_invoices",
     "get_invoice",
     "search_invoices",
@@ -79,6 +80,7 @@ const PROFILE: OpenAIProfile = {
     "get_vendor",
     "list_webhooks",
     "get_webhook",
+    "get_reconciliation_suggestions",
 
     // Create tools
     "create_invoice",
@@ -457,7 +459,7 @@ export function applyOpenAIProfile(server: any): void {
   server.registerResource = (name: string, ...rest: any[]) => {
     // Public ChatGPT Apps do not need MCP resources. Several full-server
     // resources contain broad fiscal/compliance reference material or raw
-    // workspace lists that are outside the reviewed 53-tool business surface.
+    // workspace lists that are outside the reviewed 55-tool business surface.
     if (PROFILE.excludeResources) return;
 
     // Skip resources that expose too much raw PII
@@ -509,7 +511,7 @@ export const OPENAI_EXCLUDED_COUNT = PROFILE.excludeTools.size;
 export const OPENAI_ALLOWED_TOOL_COUNT = PROFILE.includeTools.size;
 
 /**
- * The reviewed OpenAI tool allow-list (the 53 business tools), exposed read-only
+ * The reviewed OpenAI tool allow-list (the 55 business tools), exposed read-only
  * so the grouped tool-exposure profile can pin its catalog to EXACTLY this set
  * when the two profiles are composed on openai-mcp.frihet.io. The progressive-
  * disclosure meta-tools (search_tools / describe_tool / list_tool_groups) must
@@ -517,11 +519,11 @@ export const OPENAI_ALLOWED_TOOL_COUNT = PROFILE.includeTools.size;
  * `allowlist` enforces that statically. This is the SAME object used to gate
  * registerTool, so the two can never drift apart.
  *
- * NOTE: this is the 53 BUSINESS tools only. It deliberately does NOT contain the
+ * NOTE: this is the 55 BUSINESS tools only. It deliberately does NOT contain the
  * 3 grouped meta-tools — those are registered directly on the real server
  * (bypassing the OpenAI gate) by applyToolExposureProfile when it runs first, so
- * OPENAI_ALLOWED_TOOL_COUNT (and every advertised "53 reviewed tools" doc) stays
- * correct while the live tools/list still materialises 53 + 3 = 56 tools.
+ * OPENAI_ALLOWED_TOOL_COUNT (and every advertised "55 reviewed tools" doc) stays
+ * correct while the live tools/list still materialises 55 + 3 = 58 tools.
  */
 export const OPENAI_REVIEWED_TOOL_ALLOWLIST: ReadonlySet<string> =
   PROFILE.includeTools;

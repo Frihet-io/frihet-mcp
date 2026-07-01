@@ -3,7 +3,7 @@
   "languageCount": 17,
   "lastEmit": "2026-06-15T00:00:00.000Z",
   "manifestChecksum": "659abd5b9923ef22c1f1a5f0c8d5af0dd0c957c3bd7c3227e02f15fff20c64f3",
-  "mcpToolCount": 157,
+  "mcpToolCount": 161,
   "products": {
     "app": {
       "status": "live",
@@ -34,9 +34,9 @@
     {
       "version": "1.14.5",
       "releasedAt": "2026-06-22",
-      "mcpToolCount": 157,
-      "delta": "Trust hardening: Langfuse PII redaction + OpenAI output-schema strip + metadata single-source",
-      "notes": "Sensitive fields (taxId/NIF/CIF, IBAN, webhook secrets, auth tokens) are now redacted before Langfuse tracing in every profile mode; OpenAI-mode output schema no longer declares government IDs/credentials; OAuth logs fingerprint uid/email; Worker version + tool count now single-sourced from package.json so root/health/metadata surfaces can no longer drift apart."
+      "mcpToolCount": 161,
+      "delta": "Trust hardening + agent-readiness tools",
+      "notes": "Sensitive fields (taxId/NIF/CIF, IBAN, webhook secrets, auth tokens) are redacted before Langfuse tracing in every profile mode. Agent-readiness adds global search, read-only reconciliation suggestions, and a metadata-only expense attachment reference flow. Worker version + tool count stay single-sourced from package.json so root/health/metadata surfaces can no longer drift apart."
     },
     {
       "version": "1.13.0",

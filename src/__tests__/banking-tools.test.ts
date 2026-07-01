@@ -5,7 +5,7 @@
  * Run: npm test (after build)
  *
  * Coverage:
- *   1. Tool registration — all 5 banking tools registered
+ *   1. Tool registration — all 6 banking tools registered
  *   2. list_bank_accounts — success path + structuredContent shape
  *   3. get_bank_account — success path
  *   4. list_transactions — success path + filters
@@ -86,6 +86,28 @@ const MOCK_TRANSACTIONS_LIST = {
   offset: 0,
 };
 
+const MOCK_RECONCILIATION_SUGGESTIONS = {
+  transactionId: "tx_abc123",
+  limit: 5,
+  suggestions: [
+    {
+      documentType: "expense",
+      documentId: "exp_match_001",
+      score: 94,
+      confidence: 94,
+      suggested: true,
+      amountDiff: 0,
+      dateDiff: 1,
+      breakdown: [
+        { signal: "amount", points: 40, similarity: 1, reason: "Amount matches within tolerance" },
+        { signal: "date", points: 24, similarity: 0.8, reason: "Date is within tolerance" },
+        { signal: "counterparty", points: 30, similarity: 1, reason: "Counterparty is similar" },
+      ],
+      reasons: ["Amount matches within tolerance", "Counterparty is similar"],
+    },
+  ],
+};
+
 // ── Client stubs ─────────────────────────────────────────────────────────────
 
 function makeSuccessClient(): import("../client-interface.js").IFrihetClient {
@@ -94,6 +116,7 @@ function makeSuccessClient(): import("../client-interface.js").IFrihetClient {
     getBankAccount: async (_id: string) => MOCK_ACCOUNT,
     listTransactions: async () => MOCK_TRANSACTIONS_LIST,
     categorizeTransaction: async (_id: string, data: Record<string, unknown>) => ({ ...MOCK_TRANSACTION, category: data["category"] }),
+    getReconciliationSuggestions: async () => MOCK_RECONCILIATION_SUGGESTIONS,
     matchTransactionToDocument: async (_txId: string, data: Record<string, unknown>) => ({
       ...MOCK_TRANSACTION,
       matchedDocId: data["documentId"],
@@ -111,6 +134,7 @@ function make404Client(): import("../client-interface.js").IFrihetClient {
     getBankAccount: notFound,
     listTransactions: notFound,
     categorizeTransaction: notFound,
+    getReconciliationSuggestions: notFound,
     matchTransactionToDocument: notFound,
   } as unknown as import("../client-interface.js").IFrihetClient;
 }
@@ -138,8 +162,8 @@ describe("Banking Tools — Registration", () => {
     server = await makeServer(makeSuccessClient);
   });
 
-  test("registers exactly 5 banking tools", () => {
-    assert.equal(server.tools.size, 5);
+  test("registers exactly 6 banking tools", () => {
+    assert.equal(server.tools.size, 6);
   });
 
   test("registers list_bank_accounts", () => {
@@ -160,6 +184,10 @@ describe("Banking Tools — Registration", () => {
 
   test("registers match_transaction_to_invoice", () => {
     assert.ok(server.tools.has("match_transaction_to_invoice"));
+  });
+
+  test("registers get_reconciliation_suggestions", () => {
+    assert.ok(server.tools.has("get_reconciliation_suggestions"));
   });
 });
 
@@ -276,6 +304,37 @@ describe("categorize_transaction — success path", () => {
     const tool = server.tools.get("categorize_transaction")!;
     const result = await tool.handler({ id: "tx_abc123", category: "software", notes: "SaaS Q2" });
     assert.ok(result.content[0]!.text.includes("categorized"));
+  });
+});
+
+// ── get_reconciliation_suggestions ──────────────────────────────────────────
+
+describe("get_reconciliation_suggestions — read-only suggestions", () => {
+  test("returns candidate matches with scoring breakdown", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_reconciliation_suggestions")!;
+    const result = await tool.handler({ transactionId: "tx_abc123", limit: 5 });
+
+    assert.ok(!result.isError);
+    const sc = result.structuredContent!;
+    assert.equal(sc["transactionId"], "tx_abc123");
+    const suggestions = sc["suggestions"] as Record<string, unknown>[];
+    assert.equal(suggestions.length, 1);
+    assert.equal(suggestions[0]!["documentId"], "exp_match_001");
+    assert.equal(suggestions[0]!["confidence"], 94);
+    assert.equal(suggestions[0]!["suggested"], true);
+    assert.deepEqual(suggestions[0]!["breakdown"], [
+      { signal: "amount", points: 40, similarity: 1, reason: "Amount matches within tolerance" },
+      { signal: "date", points: 24, similarity: 0.8, reason: "Date is within tolerance" },
+      { signal: "counterparty", points: 30, similarity: 1, reason: "Counterparty is similar" },
+    ]);
+  });
+
+  test("tool is annotated read-only and closed-world", async () => {
+    const server = await makeServer(makeSuccessClient);
+    const tool = server.tools.get("get_reconciliation_suggestions")!;
+    assert.equal(tool.config.annotations?.["readOnlyHint"], true);
+    assert.equal(tool.config.annotations?.["openWorldHint"], false);
   });
 });
 

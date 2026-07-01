@@ -1,12 +1,12 @@
 /**
- * Barrel module that registers all 151 Frihet ERP tools on an McpServer.
+ * Barrel module that registers all 161 Frihet ERP tools on an McpServer.
  *
  * Used by both the local (stdio) and remote (Cloudflare Workers) servers
  * so tool definitions stay in sync — one source of truth.
  *
  * Langfuse observability is injected by patching server.registerTool once
  * before any tool registration. This wraps every tool callback with
- * traceMCPTool so all 151 tools are instrumented at zero per-tool cost.
+ * traceMCPTool so all 161 tools are instrumented at zero per-tool cost.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -47,7 +47,7 @@ import { registerAccountingCloseTools } from "./accountingClose.js";
 /**
  * Patches server.registerTool to wrap every tool callback with Langfuse tracing.
  *
- * The patch is applied once before tool registration so all 151 tools are
+ * The patch is applied once before tool registration so all 161 tools are
  * instrumented without per-tool edits. Tool call signatures are unchanged —
  * existing MCP clients continue to work identically.
  *
@@ -64,6 +64,9 @@ import { registerAccountingCloseTools } from "./accountingClose.js";
  *   Onboarding (2): onboarding_status, onboarding_persona_set
  *   Permissions (2): permissions_matrix, permissions_me
  *   Period close (3): period_close_status, period_close, period_reopen
+ *
+ * Agent-readiness MCP wrapper: search_global, get_reconciliation_suggestions,
+ * create_expense_attachment_upload, attach_file_to_expense (+4).
  */
 function patchServerWithTracing(server: McpServer): void {
   // eslint-disable-next-line @typescript-eslint/unbound-method

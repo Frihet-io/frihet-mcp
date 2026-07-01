@@ -3,7 +3,7 @@
   "info": {
     "title": "Frihet API",
     "version": "2026-03-18",
-    "description": "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks, and monthly summaries). Regulated identifiers, banking identifiers, credentials, diagnostic metadata, and hidden product modules are excluded.",
+    "description": "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks, global search, reconciliation suggestions, and monthly summaries). Regulated identifiers, banking identifiers, credentials, diagnostic metadata, and hidden product modules are excluded.",
     "contact": {
       "name": "Frihet API Support",
       "url": "https://docs.frihet.io/desarrolladores/api-rest",
@@ -55,7 +55,15 @@
     },
     {
       "name": "Intelligence",
-      "description": "Business context and monthly financial summaries."
+      "description": "Business context, global search, and monthly financial summaries."
+    },
+    {
+      "name": "Search",
+      "description": "Read-only search across Frihet records."
+    },
+    {
+      "name": "Banking",
+      "description": "Read-only reconciliation suggestions without creating bank matches."
     },
     {
       "name": "Webhooks",
@@ -75,6 +83,99 @@
     }
   ],
   "paths": {
+    "/v1/search/global": {
+      "get": {
+        "operationId": "globalSearch",
+        "summary": "Global search",
+        "description": "Read-only bounded search across invoices, expenses, vendors, clients, and products. Uses existing workspace-scoped search paths and does not mutate data.",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Search query, maximum 200 characters.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "description": "Optional comma-separated resource types to search.",
+            "schema": {
+              "type": "string",
+              "example": "invoices,expenses,clients"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Typed global search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GlobalSearchResult"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "types": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/v1/invoices": {
       "get": {
         "operationId": "listInvoices",
@@ -3380,6 +3481,79 @@
           }
         }
       }
+    },
+    "/v1/banking/transactions/{transactionId}/suggestions": {
+      "get": {
+        "operationId": "getBankTransactionSuggestions",
+        "summary": "Get reconciliation suggestions",
+        "description": "Read-only ranked reconciliation candidates for a bank transaction.\nThis endpoint does not mutate the transaction, invoices, expenses,\nledger entries, or reconciled fields.\n",
+        "tags": [
+          "Banking"
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read-only reconciliation suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "transactionId": {
+                          "type": "string"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "suggestions": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ReconciliationSuggestion"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3605,6 +3779,104 @@
     },
     "headers": {},
     "schemas": {
+      "ReconciliationSuggestion": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "confidence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "suggested": {
+            "type": "boolean"
+          },
+          "amountDiff": {
+            "type": "number"
+          },
+          "dateDiff": {
+            "type": "number"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "breakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "signal": {
+                  "type": "string",
+                  "enum": [
+                    "amount",
+                    "date",
+                    "reference",
+                    "counterparty"
+                  ]
+                },
+                "points": {
+                  "type": "integer"
+                },
+                "similarity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "GlobalSearchResult": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "invoices",
+              "expenses",
+              "vendors",
+              "clients",
+              "products"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "secondary": {
+            "type": "string",
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "InvoiceStatus": {
         "type": "string",
         "enum": [
@@ -3870,6 +4142,41 @@
             "type": "boolean",
             "description": "Whether the expense is tax deductible",
             "example": true
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "ISO 4217 transaction currency. Defaults to EUR.",
+            "example": "EUR",
+            "default": "EUR"
+          },
+          "exchangeRate": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Exchange rate used to convert amount into functionalCurrency."
+          },
+          "exchangeRateSource": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Source/provider of the exchange rate snapshot."
+          },
+          "exchangeRateDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Exchange rate date (YYYY-MM-DD)."
+          },
+          "functionalCurrency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "Workspace/reporting currency. Defaults to EUR.",
+            "example": "EUR",
+            "default": "EUR"
+          },
+          "functionalAmount": {
+            "type": "number",
+            "description": "Amount converted into functionalCurrency."
           },
           "recurring": {
             "$ref": "#/components/schemas/ExpenseRecurringConfig"

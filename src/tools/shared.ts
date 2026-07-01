@@ -367,12 +367,44 @@ export const invoiceItemOutput = z.object({
 
 export const expenseItemOutput = z.object({
   id: z.string(),
-  description: z.string(),
-  amount: z.number(),
+  description: z.string().optional(),
+  amount: z.number().optional(),
   category: z.string().optional(),
   date: z.string().optional(),
   vendor: z.string().optional(),
   taxDeductible: z.boolean().optional(),
+  currency: z.string().optional(),
+  exchangeRate: z.number().optional(),
+  exchangeRateSource: z.string().optional(),
+  exchangeRateDate: z.string().optional(),
+  functionalCurrency: z.string().optional(),
+  functionalAmount: z.number().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+export const expenseAttachmentUploadOutput = z.object({
+  uploadId: z.string().optional(),
+  fileReferenceId: z.string().optional(),
+  fileReference: z.string().optional(),
+  uploadUrl: z.string().optional(),
+  method: z.string().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  expiresAt: z.string().optional(),
+  maxSizeBytes: z.number().int().optional(),
+  contentType: z.string().optional(),
+}).passthrough();
+
+export const expenseAttachmentOutput = z.object({
+  id: z.string().optional(),
+  attachmentId: z.string().optional(),
+  expenseId: z.string().optional(),
+  fileReferenceId: z.string().optional(),
+  fileReference: z.string().optional(),
+  fileName: z.string().optional(),
+  contentType: z.string().optional(),
+  sizeBytes: z.number().int().optional(),
+  status: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 }).passthrough();
@@ -630,6 +662,56 @@ export const bankTransactionItemOutput = z.object({
   matchedDocId: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
+}).passthrough();
+
+const reconciliationCandidateOutput = z.object({
+  id: z.string().optional(),
+  documentId: z.string().optional(),
+  resource: z.string().optional(),
+  type: z.string().optional(),
+  documentType: z.enum(["invoice", "expense"]).optional(),
+  confidence: z.number().optional(),
+  suggested: z.boolean().optional(),
+  amountDiff: z.number().optional(),
+  dateDiff: z.number().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  amount: z.number().optional(),
+  currency: z.string().optional(),
+  date: z.string().optional(),
+  score: z.number().optional(),
+  scoring: z.record(z.string(), z.number()).optional(),
+  scoringBreakdown: z.record(z.string(), z.number()).optional(),
+  breakdown: z.array(z.object({
+    signal: z.string().optional(),
+    points: z.number().optional(),
+    similarity: z.number().optional(),
+    reason: z.string().optional(),
+  }).passthrough()).optional(),
+  reasons: z.array(z.string()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+}).passthrough();
+
+export const reconciliationSuggestionsOutput = z.object({
+  transactionId: z.string().optional(),
+  limit: z.number().int().optional(),
+  candidates: z.array(reconciliationCandidateOutput).optional(),
+  topCandidates: z.array(reconciliationCandidateOutput).optional(),
+  suggestions: z.array(reconciliationCandidateOutput).optional(),
+  generatedAt: z.string().optional(),
+}).passthrough();
+
+export const globalSearchResultOutput = z.object({
+  id: z.string(),
+  resource: z.string().optional(),
+  type: z.string().optional(),
+  title: z.string().optional(),
+  snippet: z.string().optional(),
+  score: z.number().optional(),
+  url: z.string().optional(),
+  href: z.string().optional(),
+  path: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 }).passthrough();
 
 /* --- Fiscal item schemas --------------------------------------------------- */

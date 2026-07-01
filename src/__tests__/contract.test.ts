@@ -140,6 +140,21 @@ const EXPENSE_LIST_ENVELOPE = {
   offset: 0,
 };
 
+const LEGACY_EXPENSE_LIST_ENVELOPE = {
+  data: [
+    {
+      id: "exp_legacy_1",
+      category: "software",
+      date: "2026-03-03",
+      currency: "EUR",
+      _syncedAt: FIRESTORE_TS,
+    },
+  ],
+  total: 1,
+  limit: 20,
+  offset: 0,
+};
+
 const CLIENT_LIST_ENVELOPE = {
   data: [
     {
@@ -218,6 +233,18 @@ describe("output-schema contract — core list reads ({ data, ... } envelope)", 
     const schema = paginatedOutput(expenseItemOutput);
     const parsed = schema.safeParse(EXPENSE_LIST_ENVELOPE);
     assert.equal(parsed.success, true, parsed.success ? "" : JSON.stringify(parsed.error.issues, null, 2));
+  });
+
+  test("legacy expenses missing description/amount validate as optional output fields", () => {
+    const schema = paginatedOutput(expenseItemOutput);
+    const parsed = schema.safeParse(LEGACY_EXPENSE_LIST_ENVELOPE);
+    assert.equal(parsed.success, true, parsed.success ? "" : JSON.stringify(parsed.error.issues, null, 2));
+    if (parsed.success) {
+      const item = parsed.data.data[0] as Record<string, unknown>;
+      assert.equal(item.id, "exp_legacy_1");
+      assert.equal(item.description, undefined);
+      assert.equal(item.amount, undefined);
+    }
   });
 
   test("clients list envelope validates against paginatedOutput(clientItemOutput)", () => {

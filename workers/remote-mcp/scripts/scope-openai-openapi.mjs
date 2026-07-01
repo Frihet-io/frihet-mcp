@@ -5,7 +5,7 @@
  * Cloudflare Workers Assets serves files in the asset directory DIRECTLY,
  * before the Worker runs — so the openai-mcp host must ship an already-scoped
  * openapi.json rather than filtering at request time. This produces
- * public-openai/ from public/, keeping only the paths/schemas backing the 53
+ * public-openai/ from public/, keeping only the paths/schemas backing the 55
  * reviewed tools and stripping government-ID / banking / credential properties.
  *
  * Mirrors scopeOpenApiForOpenAI() in src/index.ts. Run before `wrangler deploy --env openai`.
@@ -55,6 +55,8 @@ const KEEP_PATHS_EXACT = new Set([
   "/v1/vendors/{vendorId}",
   "/v1/context",
   "/v1/monthly",
+  "/v1/search/global",
+  "/v1/banking/transactions/{transactionId}/suggestions",
   "/v1/webhooks",
   "/v1/webhooks/{webhookId}",
   "/v1/invoices/{invoiceId}/credit-note",
@@ -64,10 +66,11 @@ const DROP_SCHEMAS = new Set([
   "Channel", "ChannelCreate", "ChannelStatus", "Deposit", "DepositCreate", "DepositStatus",
   "Guest", "Property", "PropertyCreate", "PropertyStatus", "Reservation", "ReservationCreate",
   "ReservationStatus", "QuarterlySummary", "BatchResponse", "ReceiptQueueItem", "ResendInboundPayload",
+  "FileAttachment", "FileAttachmentInput", "FileAttachmentUpload", "FileAttachmentUploadCreate",
 ]);
 const ALLOWED_TAGS = new Set([
   "Invoices", "Expenses", "Clients", "Products", "Quotes", "Vendors",
-  "Summary", "Intelligence", "Webhooks", "Contacts", "Activities", "Notes",
+  "Summary", "Intelligence", "Search", "Banking", "Webhooks", "Contacts", "Activities", "Notes",
 ]);
 const TAG_DESCRIPTIONS = {
   Invoices: "Create, read, update, send, and manage invoice records.",
@@ -77,7 +80,9 @@ const TAG_DESCRIPTIONS = {
   Quotes: "Create, read, update, send, and manage quotes.",
   Vendors: "Manage vendor records with contact details and addresses.",
   Summary: "Financial dashboard data including revenue, expenses, and profit aggregations.",
-  Intelligence: "Business context and monthly financial summaries.",
+  Intelligence: "Business context, global search, and monthly financial summaries.",
+  Search: "Read-only search across Frihet records.",
+  Banking: "Read-only reconciliation suggestions without creating bank matches.",
   Webhooks: "Manage webhook subscriptions for Frihet business events.",
   Contacts: "Manage contact persons associated with a client.",
   Activities: "Manage client activity timeline entries.",
@@ -89,7 +94,7 @@ const STRIP_PROPS = [
   "dni", "nationalId", "national_id", "iban", "bankAccount", "bank_account", "accountNumber",
   "secret", "hasSecret", "has_secret", "apiKey", "api_key", "ssn", "socialSecurityNumber", "social_security_number",
   "requestId", "request_id", "traceId", "trace_id", "sessionId", "session_id",
-  "userId", "user_id", "verifactuHash", "verifactu_hash", "meta", "security",
+  "userId", "user_id", "verifactuHash", "verifactu_hash", "meta", "security", "attachments",
 ];
 
 function stripDeep(node) {
@@ -201,7 +206,7 @@ pruneUnusedComponents(spec);
 if (spec.info) {
   spec.info.description =
     "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, " +
-    "products, quotes, vendors, webhooks, and monthly summaries). Regulated identifiers, " +
+    "products, quotes, vendors, webhooks, global search, reconciliation suggestions, and monthly summaries). Regulated identifiers, " +
     "banking identifiers, credentials, diagnostic metadata, and hidden product modules are excluded.";
   spec.info["x-frihet-openai-profile"] = "chatgpt-reviewed-v2";
 }
@@ -217,13 +222,13 @@ if (existsSync(join(SRC, "releases.json"))) {
     version: sourceReleases.version,
     releasedAt: sourceReleases.releasedAt,
     surface: "openai-chatgpt",
-    mcpToolCount: 56,
-    reviewedBusinessToolCount: 53,
+    mcpToolCount: 58,
+    reviewedBusinessToolCount: 55,
     discoveryMetaToolCount: 3,
     promptsCount: 0,
     resourcesCount: 0,
     notes:
-      "ChatGPT connector metadata is scoped to reviewed invoices, expenses, clients/CRM, products, quotes, vendors, webhooks, and monthly summaries. Hidden product modules, regulated identifiers, credentials, and diagnostic metadata are excluded.",
+      "ChatGPT connector metadata is scoped to reviewed invoices, expenses, clients/CRM, products, quotes, vendors, webhooks, global search, read-only reconciliation suggestions, and monthly summaries. Hidden product modules, attachment writes, regulated identifiers, credentials, and diagnostic metadata are excluded.",
     products: {
       mcp_server: {
         status: "live",
@@ -234,12 +239,12 @@ if (existsSync(join(SRC, "releases.json"))) {
       {
         version: sourceReleases.version,
         releasedAt: sourceReleases.releasedAt,
-        mcpToolCount: 56,
+        mcpToolCount: 58,
         resourcesCount: 0,
         promptsCount: 0,
         delta: "OpenAI ChatGPT scoped connector surface",
         notes:
-          "OpenAI mode exposes 53 reviewed business tools plus 3 read-only discovery meta-tools. Prompts and hidden full-server modules are not part of this surface.",
+          "OpenAI mode exposes 55 reviewed business tools plus 3 read-only discovery meta-tools. Prompts, attachment writes, and hidden full-server modules are not part of this surface.",
       },
     ],
   };

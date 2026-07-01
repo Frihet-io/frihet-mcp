@@ -31,6 +31,7 @@ import {
   paginatedOutput,
   bankAccountItemOutput,
   bankTransactionItemOutput,
+  reconciliationSuggestionsOutput,
 } from "./shared.js";
 
 export function registerBankingTools(server: McpServer, client: IFrihetClient): void {
@@ -150,6 +151,33 @@ export function registerBankingTools(server: McpServer, client: IFrihetClient): 
       const result = await client.categorizeTransaction(id, { category, notes });
       return {
         content: [mutateContent(formatRecord("Transaction categorized", result))],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    }),
+  );
+
+  // -- get_reconciliation_suggestions --
+
+  server.registerTool(
+    "get_reconciliation_suggestions",
+    {
+      title: "Get Reconciliation Suggestions",
+      description:
+        "Read-only reconciliation assistant for a bank transaction. " +
+        "Returns top invoice/expense candidates and scoring breakdowns without creating a match. " +
+        "Use match_transaction_to_invoice with confirm=true only after the user confirms a candidate. " +
+        "/ Sugerencias de conciliacion de solo lectura para un movimiento bancario.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: {
+        transactionId: z.string().describe("Bank transaction ID / ID del movimiento bancario"),
+        limit: z.number().int().min(1).max(20).optional().describe("Max candidates (1-20) / Candidatos maximos"),
+      },
+      outputSchema: reconciliationSuggestionsOutput,
+    },
+    async ({ transactionId, limit }) => withToolLogging("get_reconciliation_suggestions", async () => {
+      const result = await client.getReconciliationSuggestions(transactionId, { limit });
+      return {
+        content: [getContent(formatRecord("Reconciliation suggestions", result))],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }),
