@@ -3,10 +3,10 @@
  *
  * Activated by FRIHET_TOOL_MODE=grouped (env var or Worker binding).
  * Default (unset, or FRIHET_TOOL_MODE=full) leaves the server BYTE-IDENTICAL
- * to today: all 151 tools registered with their full descriptions/schemas.
+ * to today: all 157 tools registered with their full descriptions/schemas.
  *
  * ── Why ──────────────────────────────────────────────────────────────────
- * Context rot is the 2026 problem: a flat list of 151 tool descriptions,
+ * Context rot is the 2026 problem: a flat list of 157 tool descriptions,
  * each a multi-paragraph bilingual blob, eats the agent's context window and
  * degrades tool selection before any work begins. Leaders cut flat lists.
  *
@@ -30,12 +30,12 @@
  *        • search_tools(query)     — fuzzy match → matching tool summaries
  *        • describe_tool(name)     — full original description + input fields
  *
- * The agent loads ~3 meta-tool descriptions + 151 terse one-liners instead of
- * 151 full bilingual blobs, then pulls full depth only for the handful of
+ * The agent loads ~3 meta-tool descriptions + 157 terse one-liners instead of
+ * 157 full bilingual blobs, then pulls full depth only for the handful of
  * tools it actually needs. Progressive disclosure, zero behavior change.
  *
  * IMPORTANT: this is purely an EXPOSURE layer. It does NOT live in
- * src/tools/*.ts, so the audited tool count stays 151 (+ meta). The meta-tools
+ * src/tools/*.ts, so the audited tool count stays 157 (+ meta). The meta-tools
  * are added only in grouped mode and are NOT counted as ERP tools.
  *
  * @see ./openai-profile.ts — the sibling interceptor this mirrors.
@@ -179,7 +179,7 @@ export const FILE_TO_GROUP: Record<string, ToolGroupId> = {
 
 /**
  * Per-tool overrides where the source FILE places a tool in a different group
- * than a naive name match would (verified against the 151 registration sites).
+ * than a naive name match would (verified against the 157 registration sites).
  * These eight names live in a file whose domain differs from their name prefix
  * (e.g. e-invoicing tools say "invoice" but belong to fiscal/compliance).
  */
@@ -200,7 +200,7 @@ const NAME_OVERRIDES: Record<string, ToolGroupId> = {
 
 /**
  * Assign a group by tool NAME. The name-based mapping reproduces the
- * source-file grouping exactly for all 151 current tools (verified), with the
+ * source-file grouping exactly for all 157 current tools (verified), with the
  * eight cross-file cases pinned via NAME_OVERRIDES. Driven off the name (not a
  * hand-kept list) so a future tool lands somewhere sensible automatically.
  *

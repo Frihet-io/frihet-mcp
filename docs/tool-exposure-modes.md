@@ -51,8 +51,8 @@ Then it adds **three discovery meta-tools** as the entry point:
 | `search_tools(query, group?, limit?)` | Tools matching a free-text query across name/title/summary/group, with their group, summary, read-only flag and input fields. Ranked, with the exact-name match on top. |
 | `describe_tool(name)` | The **full original description** and input fields for one tool, on demand. |
 
-The agent now loads three meta-tool descriptions plus ~151 terse one-liners
-instead of 151 multi-paragraph bilingual blobs, and pulls full depth only for
+The agent now loads three meta-tool descriptions plus ~157 terse one-liners
+instead of 157 multi-paragraph bilingual blobs, and pulls full depth only for
 the handful of tools it actually needs.
 
 ```
@@ -94,8 +94,8 @@ tools that say "invoice" but belong to fiscal/compliance) are pinned via a small
 - **No behavior change in `grouped`.** Names, input schemas, annotations and
   handlers are untouched; only the *description string* the agent loads up front
   is collapsed. The real tools stay fully invocable.
-- **Audited tool count stays 151.** The exposure layer lives in `src/`, not
-  `src/tools/*.ts`, so `npm run audit:mcp-refs` still counts 151 ERP tools. The
+- **Audited tool count stays 157.** The exposure layer lives in `src/`, not
+  `src/tools/*.ts`, so `npm run audit:mcp-refs` still counts 157 ERP tools. The
   three meta-tools are discovery helpers, not ERP tools, and are added only in
   grouped mode.
 - **Composes with `FRIHET_OPENAI_MODE`.** If both are set, the OpenAI allowlist
@@ -110,9 +110,9 @@ depth stays usable inside an agent's context budget as the surface grows.
 ## Tests
 
 `src/__tests__/tool-exposure.test.ts` covers: mode resolution; full mode is
-byte-identical (151 tools, no meta-tools, descriptions untouched); grouped mode
-adds 3 meta-tools + a 151-entry catalog and collapses descriptions; names,
+byte-identical (157 tools, no meta-tools, descriptions untouched); grouped mode
+adds 3 meta-tools + a 157-entry catalog and collapses descriptions; names,
 annotations, schemas and handler behavior are preserved; `groupForTool`
-reproduces `FILE_TO_GROUP` for all 151 tools; and each meta-tool's runtime
+reproduces `FILE_TO_GROUP` for all 157 tools; and each meta-tool's runtime
 behavior (`list_tool_groups`, `search_tools` with group filter, `describe_tool`
 including the unknown-name error path).
