@@ -2,10 +2,10 @@
  * Tests for the grouped tool-exposure profile (progressive disclosure).
  *
  * The default ("full") mode must stay BYTE-IDENTICAL to the un-profiled server
- * so existing users are unaffected. The opt-in "grouped" mode collapses the 151
+ * so existing users are unaffected. The opt-in "grouped" mode collapses the 157
  * full tool descriptions into terse one-liners and adds three discovery
  * meta-tools (list_tool_groups, search_tools, describe_tool) so agents load
- * depth on demand instead of a flat 151-tool wall of context.
+ * depth on demand instead of a flat 157-tool wall of context.
  */
 
 import { describe, test } from "node:test";
