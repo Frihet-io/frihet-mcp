@@ -256,7 +256,7 @@ export class FrihetClient {
   }
 
   async getInvoice(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/invoices/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/invoices/${encodeURIComponent(id)}`);
   }
 
   async createInvoice(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -309,7 +309,7 @@ export class FrihetClient {
   }
 
   async getExpense(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/expenses/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/expenses/${encodeURIComponent(id)}`);
   }
 
   async createExpense(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -344,7 +344,7 @@ export class FrihetClient {
   }
 
   async getClient(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/clients/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/clients/${encodeURIComponent(id)}`);
   }
 
   async createClient(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -379,7 +379,7 @@ export class FrihetClient {
   }
 
   async getProduct(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/products/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/products/${encodeURIComponent(id)}`);
   }
 
   async createProduct(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -417,7 +417,7 @@ export class FrihetClient {
   }
 
   async getQuote(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/quotes/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/quotes/${encodeURIComponent(id)}`);
   }
 
   async createQuote(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -451,7 +451,7 @@ export class FrihetClient {
   }
 
   async getVendor(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/vendors/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/vendors/${encodeURIComponent(id)}`);
   }
 
   async createVendor(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -481,11 +481,16 @@ export class FrihetClient {
   }
 
   async getInvoicePdf(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/invoices/${encodeURIComponent(id)}/pdf`);
+    // get_invoice_pdf's outputSchema (pdfResultOutput) expects the flat
+    // { id, url?, contentType? } item, same as every other single-object read.
+    return this.requestUnwrapped("GET", `/invoices/${encodeURIComponent(id)}/pdf`);
   }
 
   async getInvoiceEInvoice(invoiceId: string): Promise<any> {
-    return this.request("GET", `/invoices/${encodeURIComponent(invoiceId)}/xml`);
+    // get_invoice_einvoice's outputSchema expects the flat { xml, filename, format }
+    // item. requestUnwrapped is a no-op if the body isn't an object envelope
+    // (e.g. a bare XML string), so this is safe either way.
+    return this.requestUnwrapped("GET", `/invoices/${encodeURIComponent(invoiceId)}/xml`);
   }
 
   async createCreditNote(
@@ -519,7 +524,7 @@ export class FrihetClient {
   }
 
   async getWebhook(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/webhooks/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/webhooks/${encodeURIComponent(id)}`);
   }
 
   async createWebhook(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -615,7 +620,7 @@ export class FrihetClient {
   }
 
   async getDeposit(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/deposits/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/deposits/${encodeURIComponent(id)}`);
   }
 
   async createDeposit(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -660,7 +665,10 @@ export class FrihetClient {
     pdfA3Url?: string;
     xmlUrl?: string;
   }> {
-    return this.request("GET", `/einvoice/status/${encodeURIComponent(workflowRunId)}`);
+    // get_einvoice_status's outputSchema (eInvoiceStatusOutput) expects the
+    // flat status object, same single-object envelope convention as the rest
+    // of the /v1 REST surface.
+    return this.requestUnwrapped("GET", `/einvoice/status/${encodeURIComponent(workflowRunId)}`);
   }
 
   async validateEInvoiceXml(params: {
@@ -782,7 +790,7 @@ export class FrihetClient {
   }
 
   async getReservation(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/stay/reservations/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/stay/reservations/${encodeURIComponent(id)}`);
   }
 
   async createReservation(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -821,7 +829,7 @@ export class FrihetClient {
   }
 
   async getSale(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/pos/sales/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/pos/sales/${encodeURIComponent(id)}`);
   }
 
   async listSales(
@@ -859,7 +867,7 @@ export class FrihetClient {
   }
 
   async getKitchenTicket(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/kitchen/tickets/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/kitchen/tickets/${encodeURIComponent(id)}`);
   }
 
   async updateKitchenTicket(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -921,7 +929,7 @@ export class FrihetClient {
   }
 
   async getBankAccount(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/banking/accounts/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/banking/accounts/${encodeURIComponent(id)}`);
   }
 
   async listTransactions(
@@ -1003,7 +1011,7 @@ export class FrihetClient {
   }
 
   async getTimeEntry(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/time/entries/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/time/entries/${encodeURIComponent(id)}`);
   }
 
   async createTimeEntry(data: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -1021,7 +1029,7 @@ export class FrihetClient {
   async getTimeSummary(
     params: { from: string; to: string; userId?: string; projectId?: string; groupBy?: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("GET", "/time/summary", undefined, {
+    return this.requestUnwrapped("GET", "/time/summary", undefined, {
       from: params.from,
       to: params.to,
       userId: params?.userId,
@@ -1044,7 +1052,7 @@ export class FrihetClient {
   }
 
   async getRecurringInvoice(id: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/recurring/invoices/${encodeURIComponent(id)}`);
+    return this.requestUnwrapped("GET", `/recurring/invoices/${encodeURIComponent(id)}`);
   }
 
   async createRecurringInvoice(data: Record<string, unknown>): Promise<Record<string, unknown>> {
