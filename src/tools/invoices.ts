@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, invoiceItemOutput, actionResultOutput, pdfResultOutput } from "./shared.js";
+import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, invoiceItemOutput, actionResultOutput, creditNoteResultOutput, pdfResultOutput } from "./shared.js";
 
 const invoiceItemSchema = z.object({
   description: z.string().describe("Description of the line item / Descripcion del concepto"),
@@ -501,7 +501,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           .optional()
           .describe("ISO date for the credit note (YYYY-MM-DD). Defaults to today. / Fecha de emision (YYYY-MM-DD). Por defecto hoy."),
       },
-      outputSchema: invoiceItemOutput,
+      outputSchema: creditNoteResultOutput,
     },
     async ({ invoiceId, reason, reasonDescription, fullCredit, issueDate }) => withToolLogging("create_credit_note", async () => {
       const result = await client.createCreditNote(invoiceId, {

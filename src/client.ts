@@ -171,14 +171,24 @@ export class FrihetClient {
   }
 
   /**
-   * Wrapper for SINGLE-OBJECT endpoints whose backend wraps the item in a
-   * `{ data, meta }` envelope (e.g. the shipped `/v1/fiscal/modelo/:code` CF).
+   * Wrapper for endpoints whose backend wraps the payload in a `{ data, meta }`
+   * envelope. This is the UNIFORM convention across the Frihet `/v1` REST API:
+   *   - single-object GET reads (`getResource` → `{ data: <item>, meta }`),
+   *   - create/update mutations (201 / PUT / PATCH → `{ data: <resource>, meta }`,
+   *     publicApi.ts response block), AND
+   *   - action POSTs (`/invoices/:id/paid`, `/send`, `/credit-note`, deposit
+   *     apply/refund, etc. → `{ data: <actionResult>, meta }`, publicApi.ts
+   *     `actionResponse = { data: actionResult, meta }`).
    *
-   * The Cloudflare Function returns `res.json({ data: <item>, meta: {...} })`
-   * for single-object reads, so the raw HTTP body is the envelope — NOT the
-   * item. Passing that envelope straight into a tool's `structuredContent`
-   * surfaces `{ data, meta }` instead of the modelo summary, breaking the
-   * tool's output schema. This unwraps to `body.data`.
+   * Passing that envelope straight into a tool's `structuredContent` surfaces
+   * `{ data, meta }` instead of the resource/action result, breaking the tool's
+   * output schema (id/clientName/items/success all read as `undefined`). This
+   * unwraps to `body.data`. Every create/update/action mutation routes through
+   * here for exactly this reason; single-object reads (`getInvoice`/…) have since
+   * #64. `deleteX` methods deliberately keep `request` (they return `void` — the
+   * tool discards the body and synthesizes `{ success, id }`, so there is nothing
+   * to unwrap). Only unwraps a non-array-object `data` (see guard below), so an
+   * array-`data` list envelope and any non-enveloped body pass through unchanged.
    *
    * Only unwraps when the body is an object carrying a `data` property that is
    * itself a (non-array) object — i.e. a genuine single-object envelope. It is
@@ -260,14 +270,14 @@ export class FrihetClient {
   }
 
   async createInvoice(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/invoices", data);
+    return this.requestUnwrapped("POST", "/invoices", data);
   }
 
   async updateInvoice(
     id: string,
     data: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/invoices/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/invoices/${encodeURIComponent(id)}`, data);
   }
 
   async deleteInvoice(id: string): Promise<void> {
@@ -313,14 +323,14 @@ export class FrihetClient {
   }
 
   async createExpense(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/expenses", data);
+    return this.requestUnwrapped("POST", "/expenses", data);
   }
 
   async updateExpense(
     id: string,
     data: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/expenses/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/expenses/${encodeURIComponent(id)}`, data);
   }
 
   async deleteExpense(id: string): Promise<void> {
@@ -348,14 +358,14 @@ export class FrihetClient {
   }
 
   async createClient(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/clients", data);
+    return this.requestUnwrapped("POST", "/clients", data);
   }
 
   async updateClient(
     id: string,
     data: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/clients/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/clients/${encodeURIComponent(id)}`, data);
   }
 
   async deleteClient(id: string): Promise<void> {
@@ -383,14 +393,14 @@ export class FrihetClient {
   }
 
   async createProduct(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/products", data);
+    return this.requestUnwrapped("POST", "/products", data);
   }
 
   async updateProduct(
     id: string,
     data: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/products/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/products/${encodeURIComponent(id)}`, data);
   }
 
   async deleteProduct(id: string): Promise<void> {
@@ -421,14 +431,14 @@ export class FrihetClient {
   }
 
   async createQuote(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/quotes", data);
+    return this.requestUnwrapped("POST", "/quotes", data);
   }
 
   async updateQuote(
     id: string,
     data: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/quotes/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/quotes/${encodeURIComponent(id)}`, data);
   }
 
   async deleteQuote(id: string): Promise<void> {
@@ -455,14 +465,14 @@ export class FrihetClient {
   }
 
   async createVendor(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/vendors", data);
+    return this.requestUnwrapped("POST", "/vendors", data);
   }
 
   async updateVendor(
     id: string,
     data: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/vendors/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/vendors/${encodeURIComponent(id)}`, data);
   }
 
   async deleteVendor(id: string): Promise<void> {
@@ -473,11 +483,11 @@ export class FrihetClient {
   // ----------------------------------------------------------------
 
   async sendInvoice(id: string, to?: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/invoices/${encodeURIComponent(id)}/send`, to ? { to } : undefined);
+    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(id)}/send`, to ? { to } : undefined);
   }
 
   async markInvoicePaid(id: string, paidDate?: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/invoices/${encodeURIComponent(id)}/paid`, paidDate ? { paidDate } : undefined);
+    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(id)}/paid`, paidDate ? { paidDate } : undefined);
   }
 
   async getInvoicePdf(id: string): Promise<Record<string, unknown>> {
@@ -497,18 +507,18 @@ export class FrihetClient {
     invoiceId: string,
     data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("POST", `/invoices/${encodeURIComponent(invoiceId)}/credit-note`, data);
+    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(invoiceId)}/credit-note`, data);
   }
 
   async applyLateFee(invoiceId: string, data?: { amount?: number; daysOverdue?: number }): Promise<any> {
-    return this.request("POST", `/invoices/${encodeURIComponent(invoiceId)}/late-fee`, data ?? {});
+    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(invoiceId)}/late-fee`, data ?? {});
   }
 
   // ---------------------------------------------------------------- Quote Actions
   // ----------------------------------------------------------------
 
   async sendQuote(id: string, to?: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/quotes/${encodeURIComponent(id)}/send`, to ? { to } : undefined);
+    return this.requestUnwrapped("POST", `/quotes/${encodeURIComponent(id)}/send`, to ? { to } : undefined);
   }
 
   // ---------------------------------------------------------------- Webhooks
@@ -528,14 +538,14 @@ export class FrihetClient {
   }
 
   async createWebhook(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/webhooks", data);
+    return this.requestUnwrapped("POST", "/webhooks", data);
   }
 
   async updateWebhook(
     id: string,
     data: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/webhooks/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/webhooks/${encodeURIComponent(id)}`, data);
   }
 
   async deleteWebhook(id: string): Promise<void> {
@@ -556,7 +566,7 @@ export class FrihetClient {
   }
 
   async createClientContact(clientId: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", `/clients/${encodeURIComponent(clientId)}/contacts`, data);
+    return this.requestUnwrapped("POST", `/clients/${encodeURIComponent(clientId)}/contacts`, data);
   }
 
   async deleteClientContact(clientId: string, contactId: string): Promise<void> {
@@ -577,7 +587,7 @@ export class FrihetClient {
   }
 
   async logClientActivity(clientId: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", `/clients/${encodeURIComponent(clientId)}/activities`, data);
+    return this.requestUnwrapped("POST", `/clients/${encodeURIComponent(clientId)}/activities`, data);
   }
 
   // ---------------------------------------------------------------- CRM: Notes
@@ -594,7 +604,7 @@ export class FrihetClient {
   }
 
   async createClientNote(clientId: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", `/clients/${encodeURIComponent(clientId)}/notes`, data);
+    return this.requestUnwrapped("POST", `/clients/${encodeURIComponent(clientId)}/notes`, data);
   }
 
   async deleteClientNote(clientId: string, noteId: string): Promise<void> {
@@ -624,14 +634,14 @@ export class FrihetClient {
   }
 
   async createDeposit(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/deposits", data);
+    return this.requestUnwrapped("POST", "/deposits", data);
   }
 
   async updateDeposit(
     id: string,
     data: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/deposits/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/deposits/${encodeURIComponent(id)}`, data);
   }
 
   async deleteDeposit(id: string): Promise<void> {
@@ -639,11 +649,11 @@ export class FrihetClient {
   }
 
   async applyDeposit(id: string, data?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", `/deposits/${encodeURIComponent(id)}/apply`, data ?? {});
+    return this.requestUnwrapped("POST", `/deposits/${encodeURIComponent(id)}/apply`, data ?? {});
   }
 
   async refundDeposit(id: string, data?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", `/deposits/${encodeURIComponent(id)}/refund`, data ?? {});
+    return this.requestUnwrapped("POST", `/deposits/${encodeURIComponent(id)}/refund`, data ?? {});
   }
 
   // ---------------------------------------------------------------- E-Invoicing
@@ -654,7 +664,7 @@ export class FrihetClient {
     format: string;
     dispatchMode: string;
   }): Promise<{ workflowRunId: string; status: "queued"; estimatedCompletionSec: number }> {
-    return this.request("POST", "/einvoice/send", params);
+    return this.requestUnwrapped("POST", "/einvoice/send", params);
   }
 
   async getEInvoiceStatus(workflowRunId: string): Promise<{
@@ -680,7 +690,7 @@ export class FrihetClient {
     validator: "kosit" | "mustang" | "xsd" | "schematron";
     durationMs: number;
   }> {
-    return this.request("POST", "/einvoice/validate", params);
+    return this.requestUnwrapped("POST", "/einvoice/validate", params);
   }
 
   async exportDatev(params: {
@@ -694,7 +704,7 @@ export class FrihetClient {
     fiscalPeriod: string;
     encoding: "cp1252";
   }> {
-    return this.request("POST", "/einvoice/export-datev", params);
+    return this.requestUnwrapped("POST", "/einvoice/export-datev", params);
   }
 
   // ---------------------------------------------------------------- E-Invoice Day 4 (PR #414 + FACe PR #411 + TicketBAI PR #356)
@@ -713,7 +723,7 @@ export class FrihetClient {
     signed: boolean;
   }> {
     const { invoiceId, ...body } = params;
-    return this.request("POST", `/invoices/${encodeURIComponent(invoiceId)}/einvoice/export`, body);
+    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(invoiceId)}/einvoice/export`, body);
   }
 
   async faceSubmit(params: {
@@ -726,7 +736,7 @@ export class FrihetClient {
     mode: string;
   }> {
     const { invoiceId, mode } = params;
-    return this.request("POST", `/invoices/${encodeURIComponent(invoiceId)}/face/submit`, { mode });
+    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(invoiceId)}/face/submit`, { mode });
   }
 
   async faceStatus(params: {
@@ -751,7 +761,7 @@ export class FrihetClient {
     qrUrl?: string;
   }> {
     const { invoiceId, sandbox } = params;
-    return this.request("POST", `/invoices/${encodeURIComponent(invoiceId)}/ticketbai/submit`, { sandbox });
+    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(invoiceId)}/ticketbai/submit`, { sandbox });
   }
 
   async ticketbaiStatus(params: {
@@ -794,7 +804,7 @@ export class FrihetClient {
   }
 
   async createReservation(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/stay/reservations", data);
+    return this.requestUnwrapped("POST", "/stay/reservations", data);
   }
 
   async listProperties(
@@ -811,7 +821,7 @@ export class FrihetClient {
   }
 
   async syncChannel(channelId: string, direction: "pull" | "push" | "both"): Promise<Record<string, unknown>> {
-    return this.request("POST", `/stay/channels/${encodeURIComponent(channelId)}/sync`, { direction });
+    return this.requestUnwrapped("POST", `/stay/channels/${encodeURIComponent(channelId)}/sync`, { direction });
   }
 
   // ---------------------------------------------------------------- POS (Point of Sale)
@@ -847,7 +857,7 @@ export class FrihetClient {
   }
 
   async refundSale(id: string, data?: { amountCents?: number; reason?: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", `/pos/sales/${encodeURIComponent(id)}/refund`, data ?? {});
+    return this.requestUnwrapped("POST", `/pos/sales/${encodeURIComponent(id)}/refund`, data ?? {});
   }
 
   // ---------------------------------------------------------------- Kitchen (KDS)
@@ -871,7 +881,7 @@ export class FrihetClient {
   }
 
   async updateKitchenTicket(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/kitchen/tickets/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/kitchen/tickets/${encodeURIComponent(id)}`, data);
   }
 
   async listKitchenStations(
@@ -951,14 +961,14 @@ export class FrihetClient {
     id: string,
     data: { category: string; notes?: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/banking/transactions/${encodeURIComponent(id)}/categorize`, data);
+    return this.requestUnwrapped("PATCH", `/banking/transactions/${encodeURIComponent(id)}/categorize`, data);
   }
 
   async matchTransactionToDocument(
     transactionId: string,
     data: { documentId: string; documentType: "invoice" | "expense"; notes?: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("POST", `/banking/transactions/${encodeURIComponent(transactionId)}/match`, data);
+    return this.requestUnwrapped("POST", `/banking/transactions/${encodeURIComponent(transactionId)}/match`, data);
   }
 
   // ---------------------------------------------------------------- Fiscal
@@ -985,7 +995,7 @@ export class FrihetClient {
   }
 
   async resubmitVerifactu(invoiceId: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/fiscal/verifactu/${encodeURIComponent(invoiceId)}/resubmit`, {});
+    return this.requestUnwrapped("POST", `/fiscal/verifactu/${encodeURIComponent(invoiceId)}/resubmit`, {});
   }
 
   async getTicketbaiStatus(invoiceId: string): Promise<Record<string, unknown>> {
@@ -1015,11 +1025,11 @@ export class FrihetClient {
   }
 
   async createTimeEntry(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/time/entries", data);
+    return this.requestUnwrapped("POST", "/time/entries", data);
   }
 
   async updateTimeEntry(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/time/entries/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/time/entries/${encodeURIComponent(id)}`, data);
   }
 
   async deleteTimeEntry(id: string): Promise<void> {
@@ -1056,19 +1066,19 @@ export class FrihetClient {
   }
 
   async createRecurringInvoice(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("POST", "/recurring/invoices", data);
+    return this.requestUnwrapped("POST", "/recurring/invoices", data);
   }
 
   async updateRecurringInvoice(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/recurring/invoices/${encodeURIComponent(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/recurring/invoices/${encodeURIComponent(id)}`, data);
   }
 
   async pauseRecurringInvoice(id: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/recurring/invoices/${encodeURIComponent(id)}/pause`, {});
+    return this.requestUnwrapped("POST", `/recurring/invoices/${encodeURIComponent(id)}/pause`, {});
   }
 
   async resumeRecurringInvoice(id: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/recurring/invoices/${encodeURIComponent(id)}/resume`, {});
+    return this.requestUnwrapped("POST", `/recurring/invoices/${encodeURIComponent(id)}/resume`, {});
   }
 
   async deleteRecurringInvoice(id: string): Promise<void> {
@@ -1079,7 +1089,7 @@ export class FrihetClient {
     templateId: string,
     options?: { draftOnly?: boolean },
   ): Promise<Record<string, unknown>> {
-    return this.request("POST", `/recurring/invoices/${encodeURIComponent(templateId)}/run`, {
+    return this.requestUnwrapped("POST", `/recurring/invoices/${encodeURIComponent(templateId)}/run`, {
       draftOnly: options?.draftOnly ?? true,
     });
   }
@@ -1099,11 +1109,11 @@ export class FrihetClient {
   }
 
   async inviteTeamMember(data: { email: string; role: string; name?: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", "/team/members/invite", data);
+    return this.requestUnwrapped("POST", "/team/members/invite", data);
   }
 
   async updateTeamMemberRole(memberId: string, role: string): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/team/members/${encodeURIComponent(memberId)}/role`, { role });
+    return this.requestUnwrapped("PATCH", `/team/members/${encodeURIComponent(memberId)}/role`, { role });
   }
 
   async removeTeamMember(memberId: string): Promise<void> {
@@ -1122,7 +1132,7 @@ export class FrihetClient {
     parentId: string;
     body: string;
   }): Promise<Record<string, unknown>> {
-    return this.request("POST", "/gestoria/messages", data);
+    return this.requestUnwrapped("POST", "/gestoria/messages", data);
   }
 
   async listGestoriaMessages(params: {
@@ -1149,7 +1159,7 @@ export class FrihetClient {
     attachmentRequired?: boolean;
     variables?: Array<{ key: string; label?: string; defaultValue?: string }>;
   }): Promise<{ templateId: string }> {
-    return this.request("POST", "/gestoria/templates", data);
+    return this.requestUnwrapped("POST", "/gestoria/templates", data);
   }
 
   async bulkSendGestoriaTemplate(data: {
@@ -1157,7 +1167,7 @@ export class FrihetClient {
     clientWorkspaceIds: string[];
     periodOverrides?: { quarter?: string | number; year?: string | number; month?: string | number };
   }): Promise<Record<string, unknown>> {
-    return this.request("POST", "/gestoria/templates/bulk-send", data);
+    return this.requestUnwrapped("POST", "/gestoria/templates/bulk-send", data);
   }
 
   async getGestoriaAgingConsolidated(params?: { ownerUid?: string }): Promise<Record<string, unknown>> {
@@ -1170,11 +1180,11 @@ export class FrihetClient {
   // NOTE: /v1/gl/* endpoints proxy Firebase callables (PR #395). 404 until REST shell ships.
 
   async approveGLEntry(entryId: string, notes?: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/gl/entries/${encodeURIComponent(entryId)}/approve`, { notes });
+    return this.requestUnwrapped("POST", `/gl/entries/${encodeURIComponent(entryId)}/approve`, { notes });
   }
 
   async rejectGLEntry(entryId: string, reason: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/gl/entries/${encodeURIComponent(entryId)}/reject`, { reason });
+    return this.requestUnwrapped("POST", `/gl/entries/${encodeURIComponent(entryId)}/reject`, { reason });
   }
 
   async getGLEntryAuditLog(entryId: string): Promise<Record<string, unknown>> {
@@ -1185,11 +1195,11 @@ export class FrihetClient {
   // NOTE: /v1/portal/domain/* endpoints proxy Firebase callables (PR #397). 404 until REST shell ships.
 
   async addCustomPortalDomain(data: { domain: string; workspaceId?: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", "/portal/domain", data);
+    return this.requestUnwrapped("POST", "/portal/domain", data);
   }
 
   async verifyCustomPortalDomain(data: { domain: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", `/portal/domain/${encodeURIComponent(data.domain)}/verify`, {});
+    return this.requestUnwrapped("POST", `/portal/domain/${encodeURIComponent(data.domain)}/verify`, {});
   }
 
   async removeCustomPortalDomain(data: { domain: string }): Promise<Record<string, unknown>> {
@@ -1200,7 +1210,7 @@ export class FrihetClient {
   // NOTE: /v1/portal/onboard/* endpoints proxy Firebase callables (PR #398). 404 until REST shell ships.
 
   async generatePortalOnboardLink(data: { email: string; name?: string; expiresInHours?: number; workspaceId?: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", "/portal/onboard/link", data);
+    return this.requestUnwrapped("POST", "/portal/onboard/link", data);
   }
 
   async lookupTaxIdViaVIES(data: { vatNumber: string; countryCode: string }): Promise<Record<string, unknown>> {
@@ -1221,7 +1231,7 @@ export class FrihetClient {
   }
 
   async calculateAiem(data: { ncCode: string; amount: number; description?: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", "/igic/aiem/calculate", data);
+    return this.requestUnwrapped("POST", "/igic/aiem/calculate", data);
   }
 
   // ---------------------------------------------------------------- Impuesto Sociedades (IS)
@@ -1251,7 +1261,7 @@ export class FrihetClient {
     actions: Array<{ type: string; value: string }>;
     isActive?: boolean;
   }): Promise<Record<string, unknown>> {
-    return this.request("POST", "/banking/rules", data);
+    return this.requestUnwrapped("POST", "/banking/rules", data);
   }
 
   // ---------------------------------------------------------------- HR (Leaves + Attendance + Anomalies)
@@ -1274,29 +1284,29 @@ export class FrihetClient {
   async createLeaveRequest(
     data: { employeeId: string; type: string; startDate: string; endDate: string; reason?: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("POST", "/leaves", data);
+    return this.requestUnwrapped("POST", "/leaves", data);
   }
 
   async approveLeave(leaveId: string, data?: { reason?: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", `/leaves/${encodeURIComponent(leaveId)}/approve`, data ?? {});
+    return this.requestUnwrapped("POST", `/leaves/${encodeURIComponent(leaveId)}/approve`, data ?? {});
   }
 
   async rejectLeave(leaveId: string, data: { reason: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", `/leaves/${encodeURIComponent(leaveId)}/reject`, data);
+    return this.requestUnwrapped("POST", `/leaves/${encodeURIComponent(leaveId)}/reject`, data);
   }
 
   async cancelLeave(leaveId: string): Promise<Record<string, unknown>> {
-    return this.request("POST", `/leaves/${encodeURIComponent(leaveId)}/cancel`, {});
+    return this.requestUnwrapped("POST", `/leaves/${encodeURIComponent(leaveId)}/cancel`, {});
   }
 
   async attendanceClockIn(
     data: { employeeId: string; mood?: string; location?: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("POST", "/time-entries/clock-in", data);
+    return this.requestUnwrapped("POST", "/time-entries/clock-in", data);
   }
 
   async attendanceClockOut(entryId: string): Promise<Record<string, unknown>> {
-    return this.request("PATCH", `/time-entries/${encodeURIComponent(entryId)}/clock-out`, {});
+    return this.requestUnwrapped("PATCH", `/time-entries/${encodeURIComponent(entryId)}/clock-out`, {});
   }
 
   async getOvertimeReport(
@@ -1325,7 +1335,7 @@ export class FrihetClient {
   // NOTE: /v1/webhooks/:id/test — D4-A parallel deploy. 404 propagates until backend ships.
 
   async testWebhook(id: string, data?: { eventType?: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", `/webhooks/${encodeURIComponent(id)}/test`, data ?? {});
+    return this.requestUnwrapped("POST", `/webhooks/${encodeURIComponent(id)}/test`, data ?? {});
   }
 
   // ---------------------------------------------------------------- Payroll
@@ -1356,7 +1366,7 @@ export class FrihetClient {
   async setOnboardingPersona(
     data: { persona: "autonomo" | "empresa" | "agencia" | "gestoria" },
   ): Promise<Record<string, unknown>> {
-    return this.request("PATCH", "/onboarding/persona", data);
+    return this.requestUnwrapped("PATCH", "/onboarding/persona", data);
   }
 
   // ---------------------------------------------------------------- Permissions
@@ -1381,10 +1391,10 @@ export class FrihetClient {
   }
 
   async closePeriod(data: { type: "monthly" | "quarterly" }): Promise<Record<string, unknown>> {
-    return this.request("POST", "/periods/close", data);
+    return this.requestUnwrapped("POST", "/periods/close", data);
   }
 
   async reopenPeriod(data: { periodId: string; reason: string }): Promise<Record<string, unknown>> {
-    return this.request("POST", `/periods/${encodeURIComponent(data.periodId)}/reopen`, { reason: data.reason });
+    return this.requestUnwrapped("POST", `/periods/${encodeURIComponent(data.periodId)}/reopen`, { reason: data.reason });
   }
 }

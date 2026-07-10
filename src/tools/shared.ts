@@ -326,10 +326,22 @@ export function enrichResponse(
 
 /**
  * Wraps an item schema in a paginated envelope for list/search tools.
+ *
+ * The item schema is made `.partial()` (every field optional) BEFORE it goes
+ * into the array. Rationale: every list/search endpoint accepts a `fields=`
+ * projection (e.g. `fields=id,total` → rows shaped `{ id }`), and drafts
+ * legitimately omit otherwise-populated fields (an invoice draft with no line
+ * items, a null clientName). A non-partial item schema rejects the WHOLE list
+ * call the moment any row is a projection or a draft — verified live: `GET
+ * /invoices?fields=id,total` returns 200 with `{ id }`-shaped rows that failed
+ * `invoiceItemOutput`'s required `clientName`/`items`. `.partial()` preserves
+ * `.passthrough()`, so genuine fields still surface and stay documented; it only
+ * drops the "required" constraint that a projection can't satisfy. Create/get
+ * single-object tools keep their fuller item schemas (they return the whole row).
  */
-export function paginatedOutput<T extends z.ZodType>(itemSchema: T) {
+export function paginatedOutput<T extends z.ZodObject>(itemSchema: T) {
   return z.object({
-    data: z.array(itemSchema),
+    data: z.array(itemSchema.partial()),
     total: z.number(),
     limit: z.number(),
     offset: z.number(),
@@ -353,8 +365,12 @@ const lineItemSchema = z.object({
 
 export const invoiceItemOutput = z.object({
   id: z.string(),
-  clientName: z.string(),
-  items: z.array(lineItemSchema),
+  // clientName can be null (client not yet named) and items can be absent on a
+  // draft — verified live. Kept documented but non-required so get/create/update
+  // of a draft or a client-less invoice validates. `id` stays required: every
+  // single-object read/create/update returns the doc id.
+  clientName: z.string().nullable().optional(),
+  items: z.array(lineItemSchema).optional(),
   issueDate: z.string().optional(),
   dueDate: z.string().optional(),
   status: z.string().optional(),
@@ -408,8 +424,9 @@ export const productItemOutput = z.object({
 
 export const quoteItemOutput = z.object({
   id: z.string(),
-  clientName: z.string(),
-  items: z.array(lineItemSchema),
+  // Same draft/client-less tolerance as invoices (shared form engine).
+  clientName: z.string().nullable().optional(),
+  items: z.array(lineItemSchema).optional(),
   validUntil: z.string().optional(),
   notes: z.string().optional(),
   status: z.string().optional(),
@@ -598,11 +615,39 @@ export const posSaleItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/** Schema for action results (send, mark paid, etc.) */
+/**
+ * Schema for action results (send, mark paid, apply late fee, etc.).
+ *
+ * Verified against the LIVE action endpoints: `POST /invoices/:id/paid` returns
+ * `{ success, status, paidAt }` on the happy path but `{ message, status }` when
+ * the invoice is already paid (no `success`), and NO action endpoint returns an
+ * `id`. Both `success` and `id` are therefore optional; `.passthrough()` lets
+ * the genuine action fields (`status`, `paidAt`, `message`, …) surface. Before
+ * this relaxation every mark_paid/send call failed MCP output validation on the
+ * required `success`/`id` even after the `{ data, meta }` unwrap.
+ */
 export const actionResultOutput = z.object({
-  success: z.boolean(),
-  id: z.string(),
+  success: z.boolean().optional(),
+  id: z.string().optional(),
   message: z.string().optional(),
+}).passthrough();
+
+/**
+ * Schema for `create_credit_note` — the credit-note action returns
+ * `{ success, creditNote: { id, documentNumber, originalInvoiceId, reason,
+ * fullCredit } }` (verified in publicApi.ts), NOT a full invoice. It previously
+ * (wrongly) declared `invoiceItemOutput`, which the action result can never
+ * satisfy even after unwrapping.
+ */
+export const creditNoteResultOutput = z.object({
+  success: z.boolean().optional(),
+  creditNote: z.object({
+    id: z.string().optional(),
+    documentNumber: z.string().optional(),
+    originalInvoiceId: z.string().optional(),
+    reason: z.string().optional(),
+    fullCredit: z.boolean().optional(),
+  }).passthrough().optional(),
 }).passthrough();
 
 /* --- Banking item schemas -------------------------------------------------- */
