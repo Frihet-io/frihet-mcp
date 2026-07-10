@@ -246,6 +246,72 @@ describe("verifactu_status — success path", () => {
   });
 });
 
+// ── verifactu_status — app-level 404 semantics ───────────────────────────────
+// The live endpoint (publicApi GET /fiscal/verifactu/:id/status) IS deployed and
+// uses 404 for two app-level states. Neither may surface as the guard's
+// "backend unavailable" (which tells the user the feature is not enabled — the
+// exact misleading message a fresh invoice produced in the golden flow).
+
+describe("verifactu_status — 404 'no submission yet' is a normal state, not an error", () => {
+  function makeNoSubmissionClient(): import("../client-interface.js").IFrihetClient {
+    const noSub = () => {
+      const msg =
+        "No VeriFactu submission found for this invoice. Submit first via the VeriFactu submission flow.";
+      return Promise.reject(Object.assign(new Error(msg), { statusCode: 404, errorCode: msg }));
+    };
+    return { getVerifactuStatus: noSub } as unknown as import("../client-interface.js").IFrihetClient;
+  }
+
+  test("maps to status=not_submitted success result (no isError, no backend_unavailable)", async () => {
+    const server = await makeServer(makeNoSubmissionClient);
+    const tool = server.tools.get("verifactu_status")!;
+    const result = await tool.handler({ invoiceId: "inv_fresh" });
+
+    assert.ok(!result.isError);
+    const sc = result.structuredContent!;
+    assert.equal(sc["invoiceId"], "inv_fresh");
+    assert.equal(sc["status"], "not_submitted");
+    assert.equal(sc["accepted"], false);
+    assert.equal(sc["_backendUnavailable"], undefined);
+    // Copy must state it is a normal state — never "feature not enabled".
+    assert.ok(result.content[0]!.text.includes("NOT an error"));
+    assert.ok(!result.content[0]!.text.includes("not available yet"));
+  });
+});
+
+describe("verifactu_status — 404 'invoice not found' is a real error, not backend_unavailable", () => {
+  function makeInvoiceNotFoundClient(): import("../client-interface.js").IFrihetClient {
+    const nf = () => {
+      const msg = "Invoice 'inv_missing' not found";
+      return Promise.reject(Object.assign(new Error(msg), { statusCode: 404, errorCode: msg }));
+    };
+    return { getVerifactuStatus: nf } as unknown as import("../client-interface.js").IFrihetClient;
+  }
+
+  test("returns isError with invoice_not_found (guides to internal id)", async () => {
+    const server = await makeServer(makeInvoiceNotFoundClient);
+    const tool = server.tools.get("verifactu_status")!;
+    const result = await tool.handler({ invoiceId: "inv_missing" });
+
+    assert.ok(result.isError);
+    const sc = result.structuredContent!;
+    assert.equal(sc["error"], "invoice_not_found");
+    assert.equal(sc["_backendUnavailable"], undefined);
+    assert.ok(result.content[0]!.text.includes("internal invoice id"));
+  });
+});
+
+describe("verifactu_status — generic 404 still falls through to the backend guard", () => {
+  test("plain 'Not Found' body keeps backend_unavailable behavior", async () => {
+    const server = await makeServer(make404Client);
+    const tool = server.tools.get("verifactu_status")!;
+    const result = await tool.handler({ invoiceId: "inv_abc123" });
+
+    assert.ok(result.isError);
+    assert.equal(result.structuredContent!["error"], "backend_unavailable");
+  });
+});
+
 // ── verifactu_resubmit ───────────────────────────────────────────────────────
 
 describe("verifactu_resubmit — trust area gate", () => {

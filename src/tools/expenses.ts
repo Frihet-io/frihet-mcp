@@ -48,7 +48,7 @@ export function registerExpenseTools(server: McpServer, client: IFrihetClient): 
           .optional()
           .describe("Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor"),
       },
-      outputSchema: paginatedOutput(expenseItemOutput),
+      outputSchema: paginatedOutput(expenseItemOutput, { projectable: true }),
     },
     async ({ from, to, limit, offset, vendorId, category, fields, after }) => withToolLogging("list_expenses", async () => {
       const result = await client.listExpenses({ limit, offset, after, fields, from, to, vendorId, category });
