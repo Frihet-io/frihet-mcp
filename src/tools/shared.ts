@@ -643,8 +643,10 @@ export const actionResultOutput = z.object({
   // Anti-envelope tripwire: with everything optional + passthrough, a raw
   // {data, meta} API envelope would otherwise VALIDATE — silently re-hiding the
   // exact bug this PR fixes if a client method ever regresses to raw request().
-  // No action endpoint returns top-level `data`/`meta`; their presence always
-  // means "forgot requestUnwrapped", so reject the keys outright.
+  // No action endpoint returns top-level `data`/`meta`; their presence with any
+  // JSON value means "forgot requestUnwrapped", so reject the keys outright.
+  // (zod optional() still lets a literal `undefined` VALUE through — impossible
+  // over JSON/HTTP, so the tripwire covers every real transport shape.)
   data: z.never().optional(),
   meta: z.never().optional(),
 }).passthrough();
