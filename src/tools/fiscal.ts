@@ -27,10 +27,11 @@ import {
   getContent,
   mutateContent,
   READ_ONLY_ANNOTATIONS,
+  ERROR_CONTENT_ANNOTATIONS,
   fiscalModeloSummaryOutput,
   verifactuStatusOutput,
 } from "./shared.js";
-import { withBackendGuard } from "./backend-availability.js";
+import { withBackendGuard, isBackendNotFound } from "./backend-availability.js";
 
 export function registerFiscalTools(server: McpServer, client: IFrihetClient): void {
   // -- get_modelo_303_summary --
@@ -212,7 +213,55 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
     },
     async ({ invoiceId }) => withToolLogging("verifactu_status", () =>
       withBackendGuard("verifactu_status", "/v1/fiscal/verifactu/status", async () => {
-        const result = await client.getVerifactuStatus(invoiceId);
+        // The status endpoint IS deployed (publicApi GET /fiscal/verifactu/:id/status)
+        // and uses 404 for two APP-LEVEL states that must NOT be reported as
+        // "backend unavailable" by the guard:
+        //   - "No VeriFactu submission found ..." → the invoice simply has never
+        //     been submitted to AEAT. Normal state, not an error.
+        //   - "Invoice '<id>' not found"          → wrong/foreign invoice id.
+        // Only a 404 with any OTHER body still falls through to the guard
+        // (genuinely undeployed endpoint).
+        let result: Record<string, unknown>;
+        try {
+          result = await client.getVerifactuStatus(invoiceId);
+        } catch (error) {
+          if (isBackendNotFound(error) && error instanceof Error) {
+            if (/No VeriFactu submission found/i.test(error.message)) {
+              const structured = {
+                invoiceId,
+                status: "not_submitted",
+                accepted: false,
+                submittedAt: null,
+              };
+              return {
+                content: [getContent(
+                  "This invoice has NOT been submitted to VeriFactu (AEAT) yet — no submission record exists. " +
+                  "This is a normal state for an invoice that was never sent, NOT an error and NOT a disabled feature. " +
+                  "Submit it first via the VeriFactu submission flow if AEAT reporting is required. " +
+                  "/ Esta factura AUN NO se ha enviado a VeriFactu (AEAT) — no existe registro de envio. " +
+                  "Es un estado normal para una factura nunca enviada, NO un error ni una funcion desactivada. " +
+                  "Enviala primero mediante el flujo VeriFactu si procede.",
+                )],
+                structuredContent: structured as unknown as Record<string, unknown>,
+              };
+            }
+            if (/Invoice '.+' not found/i.test(error.message)) {
+              return {
+                content: [{
+                  type: "text" as const,
+                  text: `Error: Invoice '${invoiceId}' not found in this workspace. Use the internal invoice id ` +
+                    "(from list_invoices / create_invoice), not the human invoice number. " +
+                    `/ Factura '${invoiceId}' no encontrada en este workspace. Usa el id interno ` +
+                    "(de list_invoices / create_invoice), no el numero de factura.",
+                  annotations: ERROR_CONTENT_ANNOTATIONS,
+                }],
+                structuredContent: { error: "invoice_not_found", invoiceId } as Record<string, unknown>,
+                isError: true as const,
+              };
+            }
+          }
+          throw error;
+        }
         return {
           content: [getContent(formatRecord("VeriFactu Status", result))],
           structuredContent: result as unknown as Record<string, unknown>,

@@ -991,7 +991,7 @@ export class FrihetClient {
   }
 
   async getVerifactuStatus(invoiceId: string): Promise<Record<string, unknown>> {
-    return this.request("GET", `/fiscal/verifactu/${encodeURIComponent(invoiceId)}/status`);
+    return this.requestUnwrapped("GET", `/fiscal/verifactu/${encodeURIComponent(invoiceId)}/status`);
   }
 
   async resubmitVerifactu(invoiceId: string): Promise<Record<string, unknown>> {

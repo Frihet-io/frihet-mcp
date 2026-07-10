@@ -762,7 +762,18 @@ export const verifactuStatusOutput = z.object({
   invoiceId: z.string(),
   lastSubmissionAt: z.string().optional(),
   hash: z.string().optional(),
-  status: z.enum(["success", "pending", "failed"]).optional(),
+  // "accepted" is what the live endpoint returns after a successful AEAT
+  // submission (publicApi verifactu status: accepted = sub.status === 'accepted');
+  // "not_submitted" is the tool-level mapping of the API's 404 "No VeriFactu
+  // submission found" — a normal state for an invoice never sent to AEAT,
+  // NOT a missing backend.
+  status: z.enum(["success", "pending", "failed", "accepted", "not_submitted"]).optional(),
+  accepted: z.boolean().optional(),
+  submittedAt: z.string().nullable().optional(),
+  csv: z.string().nullable().optional(),
+  retryCount: z.number().optional(),
+  lastError: z.string().nullable().optional(),
+  sandbox: z.boolean().optional(),
   aeatResponse: z.string().optional(),
   qrUrl: z.string().optional(),
 }).passthrough();
