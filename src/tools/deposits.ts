@@ -48,7 +48,7 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
           .optional()
           .describe("Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor"),
       },
-      outputSchema: paginatedOutput(depositItemOutput),
+      outputSchema: paginatedOutput(depositItemOutput, { projectable: true }),
     },
     async ({ from, to, limit, offset, clientId, status, fields, after }) => withToolLogging("list_deposits", async () => {
       const result = await client.listDeposits({ limit, offset, after, fields, from, to, clientId, status });

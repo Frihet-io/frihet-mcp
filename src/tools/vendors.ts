@@ -38,7 +38,7 @@ export function registerVendorTools(server: McpServer, client: IFrihetClient): v
         after: z.string().optional().describe("Cursor for pagination / Cursor de paginacion"),
         fields: z.string().optional().describe("Comma-separated fields to return / Campos a devolver separados por coma"),
       },
-      outputSchema: paginatedOutput(vendorItemOutput),
+      outputSchema: paginatedOutput(vendorItemOutput, { projectable: true }),
     },
     async ({ q, limit, offset, after, fields }) => withToolLogging("list_vendors", async () => {
       const result = await client.listVendors({ q, limit, offset, after, fields });

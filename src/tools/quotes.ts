@@ -107,7 +107,7 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
           .optional()
           .describe("Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor"),
       },
-      outputSchema: paginatedOutput(quoteItemOutput),
+      outputSchema: paginatedOutput(quoteItemOutput, { projectable: true }),
     },
     async ({ status, from, to, limit, offset, clientId, seriesId, fields, after }) => withToolLogging("list_quotes", async () => {
       const result = await client.listQuotes({ limit, offset, after, fields, status, from, to, clientId, seriesId });

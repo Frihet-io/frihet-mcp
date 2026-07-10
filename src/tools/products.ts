@@ -40,7 +40,7 @@ export function registerProductTools(server: McpServer, client: IFrihetClient): 
           .optional()
           .describe("Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor"),
       },
-      outputSchema: paginatedOutput(productItemOutput),
+      outputSchema: paginatedOutput(productItemOutput, { projectable: true }),
     },
     async ({ limit, offset, q, isActive, fields, after }) => withToolLogging("list_products", async () => {
       const result = await client.listProducts({ limit, offset, after, fields, q, isActive });

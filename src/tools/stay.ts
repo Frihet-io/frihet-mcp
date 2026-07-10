@@ -68,7 +68,7 @@ export function registerStayTools(server: McpServer, client: IFrihetClient): voi
           .optional()
           .describe("Cursor for cursor-based pagination / Cursor de paginacion"),
       },
-      outputSchema: paginatedOutput(reservationItemOutput),
+      outputSchema: paginatedOutput(reservationItemOutput, { projectable: true }),
     },
     async (args) =>
       withToolLogging("list_reservations", async () => {
@@ -204,7 +204,7 @@ export function registerStayTools(server: McpServer, client: IFrihetClient): voi
           .optional()
           .describe("Cursor for cursor-based pagination / Cursor de paginacion"),
       },
-      outputSchema: paginatedOutput(propertyItemOutput),
+      outputSchema: paginatedOutput(propertyItemOutput, { projectable: true }),
     },
     async (args) =>
       withToolLogging("list_properties", async () => {

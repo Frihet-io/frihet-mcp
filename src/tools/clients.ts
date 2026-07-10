@@ -51,7 +51,7 @@ export function registerClientTools(server: McpServer, client: IFrihetClient): v
           .optional()
           .describe("Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor"),
       },
-      outputSchema: paginatedOutput(clientItemOutput),
+      outputSchema: paginatedOutput(clientItemOutput, { projectable: true }),
     },
     async ({ limit, offset, q, stage, fields, after }) => withToolLogging("list_clients", async () => {
       const result = await client.listClients({ limit, offset, after, fields, q, stage });

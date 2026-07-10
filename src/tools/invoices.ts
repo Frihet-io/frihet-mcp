@@ -139,7 +139,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           .optional()
           .describe("Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor"),
       },
-      outputSchema: paginatedOutput(invoiceItemOutput),
+      outputSchema: paginatedOutput(invoiceItemOutput, { projectable: true }),
     },
     async ({ status, from, to, limit, offset, clientId, seriesId, fields, after }) => withToolLogging("list_invoices", async () => {
       const result = await client.listInvoices({ limit, offset, after, fields, status, from, to, clientId, seriesId });
@@ -337,7 +337,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           .optional()
           .describe("Cursor for cursor-based pagination (document ID) / Cursor para paginacion"),
       },
-      outputSchema: paginatedOutput(invoiceItemOutput),
+      outputSchema: paginatedOutput(invoiceItemOutput, { projectable: true }),
     },
     async ({ query, status, from, to, limit, offset, fields, after }) => withToolLogging("search_invoices", async () => {
       const result = query

@@ -339,9 +339,19 @@ export function enrichResponse(
  * drops the "required" constraint that a projection can't satisfy. Create/get
  * single-object tools keep their fuller item schemas (they return the whole row).
  */
-export function paginatedOutput<T extends z.ZodObject>(itemSchema: T) {
+export function paginatedOutput<T extends z.ZodObject>(
+  itemSchema: T,
+  opts: { projectable?: boolean } = {},
+) {
+  // `.partial()` is ONLY safe where the tool actually exposes a `fields=`
+  // projection param (invoices, quotes, expenses, clients, products, vendors,
+  // deposits, stay): a projected row legitimately carries any subset. Lists
+  // whose tools expose NO `fields` param always receive full rows from the API,
+  // so they keep the item schema's own required contract (an `{}` row there is
+  // an API regression the schema must catch, not tolerate).
+  const rowSchema = opts.projectable ? itemSchema.partial() : itemSchema;
   return z.object({
-    data: z.array(itemSchema.partial()),
+    data: z.array(rowSchema),
     total: z.number(),
     limit: z.number(),
     offset: z.number(),
@@ -630,6 +640,13 @@ export const actionResultOutput = z.object({
   success: z.boolean().optional(),
   id: z.string().optional(),
   message: z.string().optional(),
+  // Anti-envelope tripwire: with everything optional + passthrough, a raw
+  // {data, meta} API envelope would otherwise VALIDATE — silently re-hiding the
+  // exact bug this PR fixes if a client method ever regresses to raw request().
+  // No action endpoint returns top-level `data`/`meta`; their presence always
+  // means "forgot requestUnwrapped", so reject the keys outright.
+  data: z.never().optional(),
+  meta: z.never().optional(),
 }).passthrough();
 
 /**
@@ -648,6 +665,9 @@ export const creditNoteResultOutput = z.object({
     reason: z.string().optional(),
     fullCredit: z.boolean().optional(),
   }).passthrough().optional(),
+  // Anti-envelope tripwire — see actionResultOutput.
+  data: z.never().optional(),
+  meta: z.never().optional(),
 }).passthrough();
 
 /* --- Banking item schemas -------------------------------------------------- */
