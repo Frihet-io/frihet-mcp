@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.14.5"
+      "version": "1.15.0"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -28,9 +28,16 @@
       "version": "0.1.0"
     }
   },
-  "releasedAt": "2026-06-22",
-  "version": "1.14.5",
+  "releasedAt": "2026-07-11",
+  "version": "1.15.0",
   "releases": [
+    {
+      "version": "1.15.0",
+      "releasedAt": "2026-07-11",
+      "mcpToolCount": 157,
+      "delta": "Envelope unwrap on all mutations + output-schema relax — invoices operable again",
+      "notes": "The Frihet API {data, meta} envelope is now unwrapped on single-object get_* reads and every mutation, so create/update/pay tools return the actual resource. Over-strict mutation output schemas relaxed (anti-envelope tripwire test guards the surface). verifactu_status returns honest not-submitted semantics on 404. OAuth key provisioning fixed against CF origin. Cursor marketplace manifest + ChatGPT submission kit refresh."
+    },
     {
       "version": "1.14.5",
       "releasedAt": "2026-06-22",
