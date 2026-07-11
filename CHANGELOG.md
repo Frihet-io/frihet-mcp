@@ -2,6 +2,25 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.15.0] — 2026-07-11
+
+### Fixed
+
+- **Invoices (and every other resource) were inoperable through MCP mutations** (#64, #65): the Frihet API wraps responses in a `{data, meta}` envelope, but the client returned it raw. Single-object `get_*` reads (#64) and **all mutations** (#65) now unwrap the envelope, so `create_invoice`, `update_invoice`, `pay_invoice`, etc. return the actual resource instead of an envelope that broke downstream tool chains.
+- **Over-strict output schemas relaxed** (#65): mutation `outputSchema`s rejected valid API responses, making agents treat successful calls as failures. Schemas are now permissive where the API is; an anti-envelope tripwire test guards the whole surface (`schema-envelope-guard.test.ts`).
+- **`verifactu_status` returns honest 404 semantics** (#65): a missing VeriFactu record now reads as "not submitted" instead of a hard error.
+- **OAuth key provisioning hits the CF origin, not `api.frihet.io`** (#56): fixes remote-MCP key exchange behind the same-zone Worker.
+
+### Added
+
+- **Cursor plugin marketplace manifest** (#54) and ChatGPT/marketplace submission kit refresh with UTM attribution + `llms-install.md` (#52).
+- **Projectable field selection opt-in** on supported reads (#65).
+
+### Security / Public surface
+
+- ChatGPT (OpenAI) profile hardening: submission metadata (#57), resources hidden from the profile (#58), sensitive OpenAPI schema variants stripped (#59).
+- Public MCP surface scrubbed of competitor comparison + business-secret material (#60); public tool list trimmed of roadmap/internal-leak signals (#53).
+
 ## [1.14.5] — 2026-06-23
 
 ### Added
