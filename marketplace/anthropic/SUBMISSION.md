@@ -89,7 +89,7 @@ Zero install: connect via the remote endpoint at mcp.frihet.io with OAuth 2.0 + 
 |-------|-------|
 | Privacy policy URL | `https://www.frihet.io/en/privacy` |
 | Terms of service URL | `https://www.frihet.io/en/terms` |
-| Data residency | EU (europe-west1, Frankfurt) |
+| Data residency | Google Cloud, EU-US Data Privacy Framework certified — compute in europe-west1 (Belgium); primary database in the US (Firestore nam5) |
 | GDPR compliant | Yes — see privacy policy |
 | Data stored | Tool inputs/outputs are not stored server-side beyond the API request lifecycle |
 | Support email | `hola@frihet.io` |

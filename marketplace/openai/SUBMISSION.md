@@ -140,7 +140,7 @@ OpenAI enforces strict OAuth 2.1 compliance. Verify before submitting:
 | Field | Value |
 |-------|-------|
 | Data storage | Per-request only — no persistent storage of user data server-side |
-| Data residency | EU (europe-west1) |
+| Data residency | Google Cloud, EU-US Data Privacy Framework certified — compute in europe-west1 (Belgium); primary database in the US (Firestore nam5) |
 | GDPR | Yes — see `https://www.frihet.io/en/privacy` |
 | PII handling | API key / Bearer token transmitted in headers only. No PII logged. |
 | EU users | Yes — primary market (Spain + EU) |
