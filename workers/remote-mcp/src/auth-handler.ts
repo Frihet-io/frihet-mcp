@@ -147,11 +147,15 @@ app.post("/callback", async (c) => {
     return c.json({ error: "Invalid or expired state" }, 400);
   }
   const oauthReq = JSON.parse(oauthReqJson) as AuthRequest;
-  // The state is single-use, but it is consumed (deleted) only AFTER the grant
-  // fully succeeds (post token-verify, post provision, post completeAuthorization).
-  // Deleting it HERE — before those steps — made any transient downstream failure
-  // unrecoverable: the user's retry found no state and got "Invalid or expired
-  // state" instead of a fresh attempt within the KV TTL.
+  // The state is consumed (deleted) only AFTER the grant fully succeeds (post
+  // token-verify, post provision, post completeAuthorization). Deleting it HERE —
+  // before those steps — made any transient downstream failure unrecoverable: the
+  // user's retry found no state and got "Invalid or expired state" instead of a
+  // fresh attempt within the KV TTL.
+  // NOTE: KV get/delete is NOT atomic, so this is best-effort single-use, not a
+  // hard guarantee — two concurrent callbacks for the same stateKey can both pass.
+  // That is benign here: each provisions an OAuth key that self-rotates within the
+  // bounded pool, and completeAuthorization just issues a second (unused) code.
 
   // Verify Firebase ID token using firebase-auth-cloudflare-workers
   const { Auth, WorkersKVStoreSingle } = await import(
@@ -195,19 +199,21 @@ app.post("/callback", async (c) => {
 
   if (!apiKeyResponse.ok) {
     const upstreamStatus = apiKeyResponse.status;
-    const upstreamBody = await apiKeyResponse.text().catch(() => "");
+    // Do NOT log the upstream response body: it is unmasked and could carry PII
+    // (the PII policy in this worker forbids it). The provisioning CF logs its own
+    // error detail; the status code is enough to correlate here.
     log({
       level: "error",
       message: `OAuth callback: failed to provision API key for uid:${await fingerprintPii(decoded.uid)}`,
       operation: "oauth_callback",
       error: {
-        message: upstreamBody.slice(0, 300) || `provisioning returned ${upstreamStatus}`,
+        message: `API key provisioning returned ${upstreamStatus}`,
         statusCode: upstreamStatus,
       },
     });
     // State was NOT consumed above → a transient upstream failure stays retryable
-    // within the KV TTL. Surface a genuine client error (4xx) verbatim; map
-    // opaque/5xx upstream failures to 502 Bad Gateway instead of a bare 500.
+    // within the KV TTL. Preserve the common client errors (400/401/403/429)
+    // verbatim; map every other status (incl. opaque 5xx) to 502 Bad Gateway.
     const clientStatus: 400 | 401 | 403 | 429 | 502 =
       upstreamStatus === 400
         ? 400
@@ -250,7 +256,9 @@ app.post("/callback", async (c) => {
     },
   });
 
-  // Consume the single-use state now that the grant has fully succeeded.
+  // Best-effort consume of the state now that the grant has fully succeeded.
+  // (Not atomic vs. completeAuthorization: if this delete fails the grant already
+  // committed and the state stays replayable until its TTL — a rare, benign edge.)
   await c.env.OAUTH_KV.delete(`auth_state:${body.stateKey}`);
 
   return c.json({ redirectTo });
