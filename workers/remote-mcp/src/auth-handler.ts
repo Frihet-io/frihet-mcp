@@ -147,7 +147,11 @@ app.post("/callback", async (c) => {
     return c.json({ error: "Invalid or expired state" }, 400);
   }
   const oauthReq = JSON.parse(oauthReqJson) as AuthRequest;
-  await c.env.OAUTH_KV.delete(`auth_state:${body.stateKey}`);
+  // The state is single-use, but it is consumed (deleted) only AFTER the grant
+  // fully succeeds (post token-verify, post provision, post completeAuthorization).
+  // Deleting it HERE — before those steps — made any transient downstream failure
+  // unrecoverable: the user's retry found no state and got "Invalid or expired
+  // state" instead of a fresh attempt within the KV TTL.
 
   // Verify Firebase ID token using firebase-auth-cloudflare-workers
   const { Auth, WorkersKVStoreSingle } = await import(
@@ -190,13 +194,31 @@ app.post("/callback", async (c) => {
   );
 
   if (!apiKeyResponse.ok) {
+    const upstreamStatus = apiKeyResponse.status;
+    const upstreamBody = await apiKeyResponse.text().catch(() => "");
     log({
       level: "error",
       message: `OAuth callback: failed to provision API key for uid:${await fingerprintPii(decoded.uid)}`,
       operation: "oauth_callback",
-      error: { message: `API key provisioning returned ${apiKeyResponse.status}`, statusCode: apiKeyResponse.status },
+      error: {
+        message: upstreamBody.slice(0, 300) || `provisioning returned ${upstreamStatus}`,
+        statusCode: upstreamStatus,
+      },
     });
-    return c.json({ error: "Failed to provision API key" }, 500);
+    // State was NOT consumed above → a transient upstream failure stays retryable
+    // within the KV TTL. Surface a genuine client error (4xx) verbatim; map
+    // opaque/5xx upstream failures to 502 Bad Gateway instead of a bare 500.
+    const clientStatus: 400 | 401 | 403 | 429 | 502 =
+      upstreamStatus === 400
+        ? 400
+        : upstreamStatus === 401
+          ? 401
+          : upstreamStatus === 403
+            ? 403
+            : upstreamStatus === 429
+              ? 429
+              : 502;
+    return c.json({ error: "Failed to provision API key", upstreamStatus }, clientStatus);
   }
 
   const { apiKey } = (await apiKeyResponse.json()) as { apiKey: string };
@@ -227,6 +249,9 @@ app.post("/callback", async (c) => {
       email: await fingerprintPii(decoded.email),
     },
   });
+
+  // Consume the single-use state now that the grant has fully succeeded.
+  await c.env.OAUTH_KV.delete(`auth_state:${body.stateKey}`);
 
   return c.json({ redirectTo });
 });
