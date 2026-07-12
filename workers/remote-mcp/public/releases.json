@@ -1,8 +1,8 @@
 {
   "integrationCount": 0,
   "languageCount": 17,
-  "lastEmit": "2026-06-15T00:00:00.000Z",
-  "manifestChecksum": "659abd5b9923ef22c1f1a5f0c8d5af0dd0c957c3bd7c3227e02f15fff20c64f3",
+  "lastEmit": "2026-07-12T01:39:18.540Z",
+  "manifestChecksum": "cb7bccb0cc7fcbb4c0189809cf6368eec4adc6955b4701aae97f64f505bd1782",
   "mcpToolCount": 157,
   "products": {
     "app": {
@@ -29,63 +29,63 @@
     }
   },
   "releasedAt": "2026-07-11",
-  "version": "1.15.0",
   "releases": [
     {
-      "version": "1.15.0",
-      "releasedAt": "2026-07-11",
-      "mcpToolCount": 157,
       "delta": "Envelope unwrap on all mutations + output-schema relax — invoices operable again",
-      "notes": "The Frihet API {data, meta} envelope is now unwrapped on single-object get_* reads and every mutation, so create/update/pay tools return the actual resource. Over-strict mutation output schemas relaxed (anti-envelope tripwire test guards the surface). verifactu_status returns honest not-submitted semantics on 404. OAuth key provisioning fixed against CF origin. Cursor marketplace manifest + ChatGPT submission kit refresh."
-    },
-    {
-      "version": "1.14.5",
-      "releasedAt": "2026-06-22",
       "mcpToolCount": 157,
+      "notes": "The Frihet API {data, meta} envelope is now unwrapped on single-object get_* reads and every mutation, so create/update/pay tools return the actual resource. Over-strict mutation output schemas relaxed (anti-envelope tripwire test guards the surface). verifactu_status returns honest not-submitted semantics on 404. OAuth key provisioning fixed against CF origin. Cursor marketplace manifest + ChatGPT submission kit refresh.",
+      "releasedAt": "2026-07-11",
+      "version": "1.15.0"
+    },
+    {
       "delta": "Trust hardening: Langfuse PII redaction + OpenAI output-schema strip + metadata single-source",
-      "notes": "Sensitive fields (taxId/NIF/CIF, IBAN, webhook secrets, auth tokens) are now redacted before Langfuse tracing in every profile mode; OpenAI-mode output schema no longer declares government IDs/credentials; OAuth logs fingerprint uid/email; Worker version + tool count now single-sourced from package.json so root/health/metadata surfaces can no longer drift apart."
+      "mcpToolCount": 157,
+      "notes": "Sensitive fields (taxId/NIF/CIF, IBAN, webhook secrets, auth tokens) are now redacted before Langfuse tracing in every profile mode; OpenAI-mode output schema no longer declares government IDs/credentials; OAuth logs fingerprint uid/email; Worker version + tool count now single-sourced from package.json so root/health/metadata surfaces can no longer drift apart.",
+      "releasedAt": "2026-06-22",
+      "version": "1.14.5"
     },
     {
-      "version": "1.13.0",
-      "releasedAt": "2026-06-15",
-      "mcpToolCount": 151,
       "delta": "Grouped tool-exposure mode + registry metadata refresh",
-      "notes": "Opt-in FRIHET_TOOL_MODE=grouped (progressive disclosure: list_tool_groups, search_tools, describe_tool) tames the 151-tool surface for agents; default unchanged. Registry/marketplace metadata corrected to 151 tools / 11 resources / 10 prompts. Anthropic DXT connector manifest added."
+      "mcpToolCount": 151,
+      "notes": "Opt-in FRIHET_TOOL_MODE=grouped (progressive disclosure: list_tool_groups, search_tools, describe_tool) tames the 151-tool surface for agents; default unchanged. Registry/marketplace metadata corrected to 151 tools / 11 resources / 10 prompts. Anthropic DXT connector manifest added.",
+      "releasedAt": "2026-06-15",
+      "version": "1.13.0"
     },
     {
-      "version": "1.12.0",
-      "releasedAt": "2026-06-10",
-      "mcpToolCount": 151,
       "delta": "Stable release",
-      "notes": "Promotes 1.12.0-beta.1 to npm latest. 151 tools / 11 resources / 10 prompts. Full ES/EU fiscal compliance: VeriFactu, TicketBAI, Facturae, FACe, PEPPOL, IGIC, Corporate Tax, GL Audit, HR, Payroll, Onboarding, Period Close, Gestoria."
-    },
-    {
-      "version": "1.12.0-beta.1",
-      "releasedAt": "2026-05-16",
       "mcpToolCount": 151,
+      "notes": "Promotes 1.12.0-beta.1 to npm latest. 151 tools / 11 resources / 10 prompts. Full ES/EU fiscal compliance: VeriFactu, TicketBAI, Facturae, FACe, PEPPOL, IGIC, Corporate Tax, GL Audit, HR, Payroll, Onboarding, Period Close, Gestoria.",
+      "releasedAt": "2026-06-10",
+      "version": "1.12.0"
+    },
+    {
       "delta": "+57 tools since 1.9.0-beta.1",
-      "notes": "Gestoria messaging/bulk/aging (5), Day-1 megasprint callables (audit GL, portal domain, IGIC, IS, VIES, bank rules), Day-4 e-invoicing (einvoice_export, face_submit/status, ticketbai_submit, ksef_submit stub), D4-B HR + Payroll + Onboarding + Permissions + Period close (19). ticketbai_status dedupe corrected count 152 to 151."
+      "mcpToolCount": 151,
+      "notes": "Gestoria messaging/bulk/aging (5), Day-1 megasprint callables (audit GL, portal domain, IGIC, IS, VIES, bank rules), Day-4 e-invoicing (einvoice_export, face_submit/status, ticketbai_submit, ksef_submit stub), D4-B HR + Payroll + Onboarding + Permissions + Period close (19). ticketbai_status dedupe corrected count 152 to 151.",
+      "releasedAt": "2026-05-16",
+      "version": "1.12.0-beta.1"
     },
     {
-      "version": "1.9.0-beta.1",
-      "releasedAt": "2026-05-10",
-      "mcpToolCount": 94,
       "delta": "+19 tools (Wave Mature 1)",
-      "notes": "Wave Mature 1: Banking (5) + Fiscal (8) + Time (4) + Recurring (2) tool families. Trust Area gates on match_transaction_to_invoice, verifactu_resubmit, delete_time_entry. 4 new test files ~35 tests."
-    },
-    {
-      "version": "1.8.0-beta.1",
+      "mcpToolCount": 94,
+      "notes": "Wave Mature 1: Banking (5) + Fiscal (8) + Time (4) + Recurring (2) tool families. Trust Area gates on match_transaction_to_invoice, verifactu_resubmit, delete_time_entry. 4 new test files ~35 tests.",
       "releasedAt": "2026-05-10",
-      "mcpToolCount": 75,
-      "delta": "+9 tools",
-      "notes": "Wave 4/5: Stay (5 tools) + POS (4 tools). Vacation rental management and point-of-sale tools with Trust Area confirmation gate on refund_sale."
+      "version": "1.9.0-beta.1"
     },
     {
-      "version": "1.7.0-beta.1",
-      "releasedAt": "2026-05-05",
-      "mcpToolCount": 66,
+      "delta": "+9 tools",
+      "mcpToolCount": 75,
+      "notes": "Wave 4/5: Stay (5 tools) + POS (4 tools). Vacation rental management and point-of-sale tools with Trust Area confirmation gate on refund_sale.",
+      "releasedAt": "2026-05-10",
+      "version": "1.8.0-beta.1"
+    },
+    {
       "delta": "+4 tools",
-      "notes": "E-invoicing beta: send_einvoice, get_einvoice_status, validate_einvoice_xml, export_datev. CF endpoints rolling out."
+      "mcpToolCount": 66,
+      "notes": "E-invoicing beta: send_einvoice, get_einvoice_status, validate_einvoice_xml, export_datev. CF endpoints rolling out.",
+      "releasedAt": "2026-05-05",
+      "version": "1.7.0-beta.1"
     }
-  ]
+  ],
+  "version": "1.15.0"
 }
