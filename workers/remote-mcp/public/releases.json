@@ -31,6 +31,11 @@
   "releasedAt": "2026-07-11",
   "releases": [
     {
+      "version": "1.15.1",
+      "date": "2026-07-12",
+      "notes": "Docs/claims refresh: Track B pricing (Pro EUR 9 / Premium EUR 29), 139 countries with fiscal data, honest data-residency statement (EU-US DPF, Firestore nam5). No tool changes."
+    },
+    {
       "delta": "Envelope unwrap on all mutations + output-schema relax — invoices operable again",
       "mcpToolCount": 157,
       "notes": "The Frihet API {data, meta} envelope is now unwrapped on single-object get_* reads and every mutation, so create/update/pay tools return the actual resource. Over-strict mutation output schemas relaxed (anti-envelope tripwire test guards the surface). verifactu_status returns honest not-submitted semantics on 404. OAuth key provisioning fixed against CF origin. Cursor marketplace manifest + ChatGPT submission kit refresh.",
@@ -87,5 +92,5 @@
       "version": "1.7.0-beta.1"
     }
   ],
-  "version": "1.15.0"
+  "version": "1.15.1"
 }
