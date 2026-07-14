@@ -255,7 +255,7 @@ export class FrihetClient {
     return this.requestPaginated("GET", "/invoices", undefined, {
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
       fields: params?.fields,
       status: params?.status,
       from: params?.from,
@@ -292,7 +292,7 @@ export class FrihetClient {
       q: query,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
       fields: params?.fields,
       status: params?.status,
       from: params?.from,
@@ -309,7 +309,7 @@ export class FrihetClient {
     return this.requestPaginated("GET", "/expenses", undefined, {
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
       fields: params?.fields,
       from: params?.from,
       to: params?.to,
@@ -346,7 +346,7 @@ export class FrihetClient {
     return this.requestPaginated("GET", "/clients", undefined, {
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
       fields: params?.fields,
       q: params?.q,
       stage: params?.stage,
@@ -381,7 +381,7 @@ export class FrihetClient {
     return this.requestPaginated("GET", "/products", undefined, {
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
       fields: params?.fields,
       q: params?.q,
       isActive: params?.isActive !== undefined ? (params.isActive ? 1 : 0) : undefined,
@@ -416,7 +416,7 @@ export class FrihetClient {
     return this.requestPaginated("GET", "/quotes", undefined, {
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
       fields: params?.fields,
       status: params?.status,
       from: params?.from,
@@ -455,7 +455,7 @@ export class FrihetClient {
       q: params?.q,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
       fields: params?.fields,
     });
   }
@@ -620,7 +620,7 @@ export class FrihetClient {
     return this.requestPaginated("GET", "/deposits", undefined, {
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
       fields: params?.fields,
       from: params?.from,
       to: params?.to,
@@ -795,7 +795,7 @@ export class FrihetClient {
       fields: params?.fields,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
     });
   }
 
@@ -816,7 +816,7 @@ export class FrihetClient {
       fields: params?.fields,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
     });
   }
 
@@ -852,7 +852,7 @@ export class FrihetClient {
       to: params?.to,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
     });
   }
 
@@ -872,7 +872,7 @@ export class FrihetClient {
       stationId: params?.stationId,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
     });
   }
 
@@ -901,7 +901,7 @@ export class FrihetClient {
       isActive: params?.isActive !== undefined ? (params.isActive ? 1 : 0) : undefined,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
     });
   }
 
@@ -953,7 +953,7 @@ export class FrihetClient {
       category: params?.category,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
     });
   }
 
@@ -1016,7 +1016,7 @@ export class FrihetClient {
       billable: params?.billable !== undefined ? (params.billable ? 1 : 0) : undefined,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
     });
   }
 
@@ -1277,7 +1277,7 @@ export class FrihetClient {
       to: params?.to,
       limit: params?.limit,
       offset: params?.offset,
-      after: params?.after,
+      cursor: params?.after,
     });
   }
 
