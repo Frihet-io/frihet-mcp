@@ -2,6 +2,14 @@
  * HTTP client wrapping the Frihet ERP REST API.
  *
  * Handles authentication, pagination, rate-limit retries, and error mapping.
+ *
+ * Pagination convention: every `list*`/`search*` method below keeps `after`
+ * as its caller-facing param name (tools/*.ts and other callers pass
+ * `{ after }` unchanged — it's a naming alias only), but the wire query
+ * built for `requestPaginated` always sends it under the `cursor` key
+ * (`cursor: params?.after`) — the query param the backend actually reads
+ * (`req.query.cursor`, functions/src/publicApi.ts in Frihet-ERP). `after`
+ * is never sent on the wire. See src/__tests__/pagination-cursor-param.test.ts.
  */
 
 import type { PaginatedResponse, ApiError } from "./types.js";
