@@ -4,7 +4,7 @@
  *
  * ⚠️ DO NOT RUN until the openai-mcp Worker has been deployed with
  *    FRIHET_TOOL_MODE=grouped (env.openai). The composition is gated behind
- *    Viktor's prod flip + an OpenAI app re-review (see DECISION_SPEC.md).
+ *    a production flip + an OpenAI app re-review.
  *    Running it before deploy asserts against the OLD ("full") surface and will
  *    fail on the meta-tool checks — that failure is expected pre-deploy.
  *

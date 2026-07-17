@@ -7,7 +7,7 @@
 
 The Frihet MCP server ships a wide surface: full ES/EU fiscal coverage plus
 native compliance (VeriFactu, TicketBAI, Facturae/FACe/KSeF), banking, CRM,
-HR/payroll, stay/PMS and POS. That depth is the moat — it's what makes an agent
+HR/payroll, stay/PMS and POS. That depth is the core differentiator — it's what makes an agent
 able to actually run a Spanish business end to end.
 
 But exposing every tool, with its full description and schema, in a single flat
