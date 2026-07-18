@@ -11,3 +11,7 @@ mcp-registry-key.pem
 mcp-registry-auth
 mcp-registry-private-key.txt
 SOUL.md
+
+# Local tooling / build cache (accidentally committed in #82)
+.wrangler/
+.serena/
