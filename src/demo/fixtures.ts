@@ -457,7 +457,9 @@ export const demoVendors: Rec[] = [
     name: "Servicios Cloud Ejemplo SL",
     email: "facturacion@cloud.example.com",
     phone: "+34 900 100 002",
-    taxId: "B45678901",
+    // Intentionally INVALID CIF checksum (control digit should be 1, not 0) so
+    // this demo vendor can never collide with a real registered company.
+    taxId: "B45678900",
     address: { city: "Santa Cruz de Tenerife", country: "ES" },
     createdAt: "2026-01-14T09:00:00.000Z",
     updatedAt: "2026-01-14T09:00:00.000Z",

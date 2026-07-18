@@ -118,17 +118,40 @@ function main(): void {
   const openaiMode = process.env.FRIHET_OPENAI_MODE === "true";
   const toolMode = resolveToolMode();
 
-  // PROFILE COMPOSITION ORDER (both interceptors wrap registerTool):
-  //   1. applyToolExposureProfile FIRST (innermost) — so the 3 discovery
-  //      meta-tools register against the REAL server.registerTool and bypass the
-  //      OpenAI allow-list gate. In allow-list mode it catalogs ONLY the reviewed
-  //      tools, keeping the progressive-disclosure surface == the reviewed 53.
-  //   2. applyOpenAIProfile SECOND (outermost) — a business-tool registration is
+  // PROFILE COMPOSITION ORDER (all interceptors wrap registerTool; each captures
+  // the CURRENT registerTool as its "original" and installs a wrapper, so the
+  // FIRST applied ends up INNERMOST — and its result post-processing runs
+  // LAST/outermost on every tool response):
+  //   0. applyDemoProfile FIRST (innermost) when demo mode is on — so the demo
+  //      stamper is the registerTool that applyToolExposureProfile captures as
+  //      its originalRegisterTool. This is load-bearing: tool-exposure registers
+  //      the 3 discovery meta-tools EAGERLY through that captured fn, so if demo
+  //      were applied AFTER grouped, the meta-tools would register against the
+  //      RAW registerTool and their textResult() responses would skip the _demo
+  //      banner (the grouped-mode guardrail #1 hole this fixes). Applying demo
+  //      first also keeps stampResult the OUTERMOST result transform (it wraps
+  //      the already traced/grouped/openai handler), so the banner still runs
+  //      last on every response.
+  //   1. applyToolExposureProfile SECOND — its originalRegisterTool is now the
+  //      demo-wrapped fn (in demo mode) or the raw one (otherwise). In allow-list
+  //      mode it catalogs ONLY the reviewed tools, keeping the progressive-
+  //      disclosure surface == the reviewed 53. The meta-tools still BYPASS the
+  //      OpenAI allow-list gate because OpenAI is applied AFTER this (below).
+  //   2. applyOpenAIProfile THIRD (outermost) — a business-tool registration is
   //      first gated/redacted/annotated/openWorldHint-justified by OpenAI, THEN
   //      collapsed by the grouped interceptor, so the terse collapsed line is the
   //      final description and OpenAI's handler redaction survives.
-  // Order only matters when BOTH are active (openai-mcp grouped); openai-only and
-  // grouped-only are unaffected by the swap.
+  // The demo-vs-grouped order matters in demo mode; the grouped-vs-openai order
+  // only matters when BOTH are active (openai-mcp grouped).
+
+  // Apply demo profile FIRST (see composition note above) so it wraps
+  // registerTool before applyToolExposureProfile captures it — this is what
+  // makes the grouped meta-tools pass through stampResult. Demo mode is
+  // FRIHET_DEMO=1 with NO API key (guardrail #4).
+  if (demoMode) {
+    applyDemoProfile(server);
+    emitDemoSessionStarted({ toolMode, openaiMode });
+  }
 
   // Apply grouped tool-exposure profile if enabled (progressive disclosure).
   // FRIHET_TOOL_MODE=grouped collapses the full tool descriptions into terse
@@ -157,14 +180,6 @@ function main(): void {
       message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions, ${OPENAI_EXCLUDED_RESOURCE_COUNT} resources excluded, gov IDs + credentials redacted`,
       operation: "startup",
     });
-  }
-
-  // Apply demo profile LAST among the pre-registration patches (but before
-  // registerAllTools' own tracing patch) so the demo banner is the outermost
-  // transformation and lands on EVERY tool response (guardrail #1).
-  if (demoMode) {
-    applyDemoProfile(server);
-    emitDemoSessionStarted({ toolMode, openaiMode });
   }
 
   // Register tools (62 full / 60 in OpenAI mode)
