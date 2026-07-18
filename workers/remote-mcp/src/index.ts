@@ -35,6 +35,7 @@ import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
 import { authHandler } from "./auth-handler.js";
 import { MCP_SERVER_VERSION, FULL_TOOL_COUNT } from "./server-meta.js";
+import { buildServerCard } from "./server-card.js";
 
 // ---------------------------------------------------------------------------
 // Auth props — stored in OAuth token, available via this.props in McpAgent
@@ -345,6 +346,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <url><loc>https://mcp.frihet.io/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>https://mcp.frihet.io/openapi.json</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
   <url><loc>https://mcp.frihet.io/.well-known/mcp</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://mcp.frihet.io/.well-known/mcp.json</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
   <url><loc>https://mcp.frihet.io/.well-known/jsonld</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://mcp.frihet.io/llms.txt</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
   <url><loc>https://mcp.frihet.io/agents.json</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
@@ -528,6 +530,19 @@ const WELL_KNOWN_MCP = JSON.stringify({
   ],
 }, null, 2);
 
+// /.well-known/mcp.json — SEP-1649 MCP Server Card. Standardized, crawlable
+// discovery so clients learn identity/transport/auth WITHOUT initializing.
+const WELL_KNOWN_MCP_CARD = JSON.stringify(buildServerCard({
+  name: "io.frihet/erp",
+  title: "Frihet ERP",
+  version: MCP_SERVER_VERSION,
+  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  host: "https://mcp.frihet.io",
+  toolCount: FULL_TOOL_COUNT,
+  resourceCount: 11,
+  promptCount: 10,
+}), null, 2);
+
 // ===========================================================================
 // OpenAI-mode discovery surface (FRIHET_OPENAI_MODE === "true")
 // ---------------------------------------------------------------------------
@@ -649,6 +664,19 @@ const OPENAI_MCP_DESCRIPTOR = {
 };
 const WELL_KNOWN_MCP_OPENAI = JSON.stringify(OPENAI_MCP_DESCRIPTOR, null, 2);
 const MCP_JSON_OPENAI = JSON.stringify({ ...OPENAI_MCP_DESCRIPTOR, name: "Frihet ERP MCP Connector" }, null, 2);
+
+// /.well-known/mcp.json (OpenAI mode) — SEP-1649 card scoped to the reviewed
+// profile: openai-mcp host + live reviewed tool count, no regulated surfaces.
+const WELL_KNOWN_MCP_CARD_OPENAI = JSON.stringify(buildServerCard({
+  name: "io.frihet/erp",
+  title: "Frihet ERP MCP Connector",
+  version: MCP_SERVER_VERSION,
+  description: OPENAI_SCOPED_DESC,
+  host: OPENAI_HOST,
+  toolCount: OPENAI_LIVE_TOOL_COUNT,
+  resourceCount: 0,
+  promptCount: 0,
+}), null, 2);
 
 const WELL_KNOWN_JSONLD_OPENAI = JSON.stringify([
   {
@@ -1147,6 +1175,17 @@ export default {
 
       if (pathname === "/mcp.json") {
         return new Response(openai ? MCP_JSON_OPENAI : MCP_JSON, {
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+            ...BASE_SECURITY_HEADERS,
+          },
+        });
+      }
+
+      // /.well-known/mcp.json — SEP-1649 MCP Server Card (standardized discovery)
+      if (pathname === "/.well-known/mcp.json") {
+        return new Response(openai ? WELL_KNOWN_MCP_CARD_OPENAI : WELL_KNOWN_MCP_CARD, {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
             "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
