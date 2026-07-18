@@ -2,6 +2,18 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [1.15.2] — 2026-07-18
+
+### Fixed
+
+- **List pagination no longer loops on page 1** (#71): the client sent the pagination token as `after`, but the API reads `req.query.cursor`. Every `list_*` tool now pages correctly with `cursor`; a regression test pins the parameter name (`pagination-cursor-param.test.ts`).
+
+## [1.15.1] — 2026-07-12
+
+### Changed
+
+- Metadata-only release — no code changes vs 1.15.0. README/npm claims aligned with verified public facts (pricing tiers 9/29/Premium, 139 supported country tax profiles, honest data-residency wording); `server.json` synced (audit-server-version gate); README tool-count line refreshed (157 tools).
+
 ## [1.15.0] — 2026-07-11
 
 ### Fixed
