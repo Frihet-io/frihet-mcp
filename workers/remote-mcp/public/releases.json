@@ -1,5 +1,5 @@
 {
-  "integrationCount": 0,
+  "integrationCount": 102,
   "languageCount": 17,
   "lastEmit": "2026-07-12T01:39:18.540Z",
   "manifestChecksum": "cb7bccb0cc7fcbb4c0189809cf6368eec4adc6955b4701aae97f64f505bd1782",
@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.15.0"
+      "version": "1.15.2"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -30,6 +30,12 @@
   },
   "releasedAt": "2026-07-11",
   "releases": [
+    {
+      "version": "1.15.2",
+      "date": "2026-07-18",
+      "mcpToolCount": 157,
+      "notes": "List pagination fix ships to npm: every list_* tool now pages correctly via the API's `cursor` query param (was sending `after`); regression test pins the parameter name. No tool changes."
+    },
     {
       "version": "1.15.1",
       "date": "2026-07-12",
@@ -92,5 +98,5 @@
       "version": "1.7.0-beta.1"
     }
   ],
-  "version": "1.15.1"
+  "version": "1.15.2"
 }
