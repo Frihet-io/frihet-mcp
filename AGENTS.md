@@ -39,13 +39,21 @@ npm publish                      # Publish stable release
 - Tool descriptions in English (LLM understanding)
 - Test fixtures in `src/__tests__/fixtures/`
 
+## Testing standards
+
+- Every mutating tool must have at least 1 idempotency test
+- Every tool must have at least 1 schema rejection test (bad input)
+- Every tool must have at least 1 happy path test
+- Coverage target: > 80% lines, 100% on auth/scope branches
+- Pre-publish: smoke install from npm tarball + run against staging API
+
 ## Gotchas
 
 - **NEVER mutate `process.env`** — read once into config object
 - **API client must respect `Idempotency-Key`** — propagate from tool input when present
 - **Don't log full request bodies** — PII (NIF/IBAN/email). Use `mask()` from logger
-- **Cloudflare Worker is separate** — `mcp.frihet.io` deployment is in a different repo. Pinging Worker is not a substitute for testing the npm package locally
-- **Smithery rebuilds on push** — verify Smithery config (`smithery.yaml`) when changing entry points
+- **Cloudflare Worker is a separate deployment surface** — pinging the Worker is not a substitute for testing the npm package locally
+- **Smithery rebuilds on push** — verify Smithery config when changing entry points
 - **MCP SDK breaking changes** — pin `@modelcontextprotocol/sdk` minor; major bumps require manual review
 - **Beta tag rules** — `1.x.x-beta.N` for prerelease, `1.x.x` for stable. NEVER publish stable from a `feat/*` branch
 - **Postinstall script** — `node scripts/postinstall.js || true` runs harmlessly. Do not make required
@@ -58,71 +66,7 @@ npm publish                      # Publish stable release
 - Worker (mcp.frihet.io) handles OAuth + key exchange separately
 - Errors include cause but never echo full Authorization header
 
----
-
-## Multi-agent dispatch + LiteLLM cost rules
-
-For tool-batch tasks (adding 8 tools in one family, refactoring across 13 files), dispatch parallel Sonnet workers in worktrees.
-
-### Worker prompt template
-
-```
-Sonnet worker, worktree, repo Frihet-io/frihet-mcp.
-
-Files in scope (verified):
-  - src/tools/<family>.ts (new file)
-  - src/tools/register-all.ts (add registration)
-  - src/__tests__/<family>.test.ts (new file)
-  - README.md (bump tool count badge)
-  - CHANGELOG.md (add entry)
-
-Task: Add <N> tools for <family>: <list>. Each tool follows frihet.<family>.<action>
-naming, structured JSON output, Zod inputSchema strict, McpError on failure,
-Idempotency-Key support on mutations.
-
-Constraints:
-  - Pre-commit: npm run build && npm test
-  - Branch: feat/<family>-tools
-  - Commits: 1 per tool minimum, semantic messages
-  - Use ~/.claude/bin/llm --code for tool scaffolding from existing patterns
-    (see src/tools/invoices.ts as canonical example)
-  - Use ~/.claude/bin/llm --grunt for JSDoc comments + test scaffolds
-  - DO NOT use llm router for: error handling logic, idempotency,
-    auth/scope, anything touching real customer money
-
-Trust Area: YES (this repo is Trust Area — tool errors propagate to agents
-acting on user data). Spend final 10% as adversarial reviewer.
-
-Report: branch, PR URL, build + test output.
-```
-
-### LiteLLM router (cost-optim)
-
-CLI: `~/.claude/bin/llm --grunt|--code|--pro|--reason "<prompt>"`. Use for:
-
-- Tool boilerplate from existing pattern (input schema, registration, output shaping)
-- JSDoc comments
-- README badge updates
-- CHANGELOG entries (Conventional Commits style)
-- OpenAPI fragment generation (matching API V1)
-- Test scaffolds with mocked client
-
-NEVER use LiteLLM for:
-- Auth/scope logic
-- Idempotency implementation
-- Error handling (must be hand-written for predictability)
-- Worker (mcp.frihet.io) routing logic
-- Any tool that touches real customer money
-
-### Trust Area gates (MCP-specific)
-
-- Every mutating tool must have at least 1 idempotency test
-- Every tool must have at least 1 schema rejection test (bad input)
-- Every tool must have at least 1 happy path test
-- Coverage target: > 80% lines, 100% on auth/scope branches
-- Pre-publish: smoke install from npm tarball + run against staging API
-
-### Worker-side static surface (Cloudflare Worker, separate repo)
+## Worker-side static surface (Cloudflare Worker)
 
 The Cloudflare Worker serving `mcp.frihet.io` MUST also serve:
 - `/llms.txt` (200, plain text, brief overview)
@@ -133,5 +77,3 @@ The Cloudflare Worker serving `mcp.frihet.io` MUST also serve:
 - `/mcp.json` (200, MCP server manifest)
 - `/.well-known/mcp` (200, well-known endpoint discovery)
 - `/.well-known/ai-plugin.json` (200, ChatGPT plugin spec)
-
-Wave 1 sprint includes this fix. Audit table in CLAUDE.md.

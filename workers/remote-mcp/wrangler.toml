@@ -64,7 +64,7 @@ FRIHET_OPENAI_MODE = "true"
 # is unchanged — meta-tools are discovery plumbing, not business capability.
 # ⚠️ COMPLIANCE: 53→56 tools/list change on the ChatGPT surface. Requires
 # Viktor's prod flip + an OpenAI app re-review BEFORE going live (see
-# DECISION_SPEC.md). Rollback = set back to "full" + redeploy.
+# docs/tool-exposure-modes.md). Rollback = set back to "full" + redeploy.
 FRIHET_TOOL_MODE = "grouped"
 
 # DO and KV are NOT inherited — must be redeclared

@@ -4,7 +4,7 @@ dist/
 .env
 .dev.vars
 *.dev.vars
-LANGFUSE_SECRETS.local.md
+docs/observability.local.md
 .DS_Store
 .mcpregistry_*
 mcp-registry-key.pem

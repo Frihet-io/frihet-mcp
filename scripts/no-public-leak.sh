@@ -39,7 +39,22 @@ if grep -rinE "distribution-roadmap|first-mover advantage|cease.?(and|&).?desist
   note "Business-secret / legal-strategy marker found on public surface — move to a private location."
 fi
 
+# 4. No internal doctrine / internal-tooling markers on prose surfaces (July-2026
+#    leak class: CLAUDE.md carried the "north star" roadmap + moat doctrine, and
+#    AGENTS.md carried internal multi-agent dispatch + LLM-router cost rules).
+#    Public-repo CLAUDE.md/AGENTS.md are docs for EXTERNAL contributors, never
+#    internal operating docs.
+if grep -rinE "north.?star|moat|SOUL\.md|~/\.claude/bin|litellm|sonnet worker|multi-agent dispatch|doctrina|doctrine" \
+     --include="*.md" --include="*.ts" --include="*.js" --include="*.toml" . 2>/dev/null | grep -v node_modules | grep -v "/dist/" | grep -v "scripts/no-public-leak.sh"; then
+  note "Internal doctrine / internal-tooling marker found — public repo docs are for external contributors only."
+fi
+
+# 5. Strategy/secret-named files must never be tracked (recurrence guard).
+if git ls-files | grep -inE "strategy|roadmap|secrets?\.md$|decision_spec" ; then
+  note "Strategy/secrets-named file tracked in public repo — keep these in a private repo."
+fi
+
 if [ "$fail" -eq 0 ]; then
-  echo "✓ no-public-leak: clean (no competitor comparison or strategy secret on public surface)"
+  echo "✓ no-public-leak: clean (no competitor comparison, strategy secret, or internal doctrine on public surface)"
 fi
 exit $fail
