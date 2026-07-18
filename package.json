@@ -11,6 +11,7 @@
     "build": "tsc",
     "test": "npm run build && node --test dist/__tests__/openai-profile.test.js dist/__tests__/tool-exposure.test.js dist/__tests__/einvoice-tools.test.js dist/__tests__/einvoice-day4-tools.test.js dist/__tests__/stay-tools.test.js dist/__tests__/pos-tools.test.js dist/__tests__/kitchen-tools.test.js dist/__tests__/banking-tools.test.js dist/__tests__/banking-client-contract.test.js dist/__tests__/pagination-cursor-param.test.js dist/__tests__/fiscal-tools.test.js dist/__tests__/time-tools.test.js dist/__tests__/recurring-tools.test.js dist/__tests__/team-tools.test.js dist/__tests__/d4b-hr-payroll-onboarding-tools.test.js dist/__tests__/audit-server-version.test.js dist/__tests__/openai-grouped-compose.test.js dist/__tests__/contract.test.js dist/__tests__/observability-redaction.test.js dist/__tests__/intelligence-duplicate-invoice.test.js dist/__tests__/get-envelope-unwrap-regression.test.js dist/__tests__/mutation-unwrap-and-schema-regression.test.js dist/__tests__/schema-envelope-guard.test.js",
     "start": "node dist/index.js",
+    "smoke:demo": "npm run build && node scripts/demo-smoke.mjs",
     "postinstall": "node scripts/postinstall.js || true",
     "prepublishOnly": "npm run build && npm run audit:mcp-refs -- --repo frihet-mcp",
     "audit:mcp-refs": "node scripts/audit-mcp-refs.mjs",

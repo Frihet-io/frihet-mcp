@@ -626,6 +626,25 @@ Two transports:
 | `FRIHET_API_KEY` | Yes (stdio) | -- |
 | `FRIHET_API_URL` | No | `https://api.frihet.io/v1` |
 | `FRIHET_TOOL_MODE` | No | `full` |
+| `FRIHET_DEMO` | No | -- |
+
+---
+
+## Demo mode (no account, no key)
+
+Try the full 157-tool surface with realistic sample data — no signup, no API key:
+
+```bash
+FRIHET_DEMO=1 npx -y @frihet/mcp-server
+```
+
+Every tool works against embedded, sanitized fixtures (Spanish invoices with IVA/IGIC, categorized expenses, clients, a quote) served entirely from memory.
+
+- **No network.** With `FRIHET_DEMO=1` and no key, the server never calls the real API — everything is served from fixtures.
+- **Every response is labelled.** Each tool result carries `_demo: true` and the banner *"DEMO MODE — datos de ejemplo; para datos reales: app.frihet.io → Settings → API keys"*.
+- **Writes are simulated in memory.** `create_*` returns the created entity for the session; nothing persists.
+- **Fiscal surface is safe.** E-invoice export/submit, VeriFactu, FACe, TicketBAI and email sending return a clearly-labelled simulation (`_simulated: true`) — never a real submission.
+- A real `FRIHET_API_KEY` always wins: if a key is set, demo mode is ignored and you talk to your live workspace.
 
 ---
 

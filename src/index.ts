@@ -39,11 +39,18 @@ import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } fr
 import { log } from "./logger.js";
 import { registerShutdownHook } from "./metrics.js";
 import { setTraceContext } from "./observability.js";
+import { DemoClient } from "./demo/demo-client.js";
+import { applyDemoProfile, emitDemoSessionStarted, isDemoMode, DEMO_BANNER } from "./demo/demo-profile.js";
 
 function main(): void {
   const apiKey = process.env.FRIHET_API_KEY;
 
-  if (!apiKey) {
+  // Demo mode: FRIHET_DEMO=1 AND no API key (guardrail #4 — a real key always
+  // wins and NEVER serves fixtures). Serves everything from embedded fixtures;
+  // no network to the real API.
+  const demoMode = isDemoMode();
+
+  if (!apiKey && !demoMode) {
     console.error(
       "Error: FRIHET_API_KEY environment variable is required.\n\n" +
         "Get your API key:\n" +
@@ -85,7 +92,11 @@ function main(): void {
     }
   }
 
-  const client = new FrihetClient(apiKey, baseUrl);
+  // In demo mode we serve everything from embedded fixtures via DemoClient —
+  // NO api key, NO network. Otherwise the real HTTP client.
+  const client = demoMode
+    ? new DemoClient()
+    : new FrihetClient(apiKey as string, baseUrl);
 
   // Set trace context for Langfuse (reads LANGFUSE_* from process.env automatically).
   // clientName can be overridden via FRIHET_CLIENT_NAME env var by the MCP host.
@@ -148,6 +159,14 @@ function main(): void {
     });
   }
 
+  // Apply demo profile LAST among the pre-registration patches (but before
+  // registerAllTools' own tracing patch) so the demo banner is the outermost
+  // transformation and lands on EVERY tool response (guardrail #1).
+  if (demoMode) {
+    applyDemoProfile(server);
+    emitDemoSessionStarted({ toolMode, openaiMode });
+  }
+
   // Register tools (62 full / 60 in OpenAI mode)
   registerAllTools(server, client);
 
@@ -164,11 +183,14 @@ function main(): void {
   const transport = new StdioServerTransport();
   server.connect(transport).then(() => {
     console.error(`[frihet-mcp] v${PKG_VERSION} | 157 tools | https://github.com/Frihet-io/frihet-mcp`);
+    if (demoMode) {
+      console.error(`[frihet-mcp] ${DEMO_BANNER}`);
+    }
     log({
       level: "info",
       message: "Frihet MCP server running on stdio",
       operation: "startup",
-      metadata: { version: PKG_VERSION, transport: "stdio" },
+      metadata: { version: PKG_VERSION, transport: "stdio", demoMode },
     });
   }).catch((error: unknown) => {
     log({
