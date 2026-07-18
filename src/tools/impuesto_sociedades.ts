@@ -20,6 +20,7 @@ import {
   withToolLogging,
   formatRecord,
   getContent,
+  openObjectOutput,
   READ_ONLY_ANNOTATIONS,
 } from "./shared.js";
 import { withBackendGuard } from "./backend-availability.js";
@@ -43,6 +44,9 @@ export function registerImpuestoSociedadesTools(server: McpServer, client: IFrih
       inputSchema: {
         year: z.string().optional().describe("Fiscal year (e.g. '2025', defaults to last closed year) / Ejercicio fiscal (ej. '2025', por defecto ultimo ejercicio cerrado)"),
       },
+      outputSchema: openObjectOutput(
+        "Modelo 200 annual corporate tax summary: taxable base, deductions, rate, net payable / Resumen anual IS: base, deducciones, tipo, cuota",
+      ),
     },
     async ({ year }) => withToolLogging("frihet_modelo_200_summary", () =>
       withBackendGuard("frihet_modelo_200_summary", "/v1/is/200", async () => {
@@ -73,6 +77,9 @@ export function registerImpuestoSociedadesTools(server: McpServer, client: IFrih
         year: z.string().optional().describe("Fiscal year of the installments (e.g. '2026') / Ejercicio de los pagos fraccionados (ej. '2026')"),
         installment: z.enum(["1P", "2P", "3P"]).optional().describe("Specific installment (1P=April, 2P=October, 3P=December) or omit for all three / Plazo especifico (1P=abril, 2P=octubre, 3P=diciembre) u omitir para los tres"),
       },
+      outputSchema: openObjectOutput(
+        "Modelo 202 installment payments: amounts, due dates, payment status / Pagos fraccionados Modelo 202: importes, plazos, estado",
+      ),
     },
     async ({ year, installment }) => withToolLogging("frihet_modelo_202_summary", () =>
       withBackendGuard("frihet_modelo_202_summary", "/v1/is/202", async () => {

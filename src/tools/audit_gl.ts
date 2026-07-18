@@ -22,6 +22,7 @@ import {
   formatRecord,
   getContent,
   mutateContent,
+  openObjectOutput,
   READ_ONLY_ANNOTATIONS,
   UPDATE_ANNOTATIONS,
 } from "./shared.js";
@@ -46,6 +47,9 @@ export function registerAuditGLTools(server: McpServer, client: IFrihetClient): 
         entryId: z.string().describe("GL entry ID to approve / ID del asiento contable a aprobar"),
         notes: z.string().optional().describe("Optional approval notes / Notas de aprobacion opcionales"),
       },
+      outputSchema: openObjectOutput(
+        "Approved GL entry record with new status and audit trail entry / Asiento contable aprobado con nuevo estado y entrada de auditoría",
+      ),
     },
     async ({ entryId, notes }) => withToolLogging("frihet_gl_entry_approve", () =>
       withBackendGuard("frihet_gl_entry_approve", "/v1/gl/entries/approve", async () => {
@@ -80,6 +84,9 @@ export function registerAuditGLTools(server: McpServer, client: IFrihetClient): 
         entryId: z.string().describe("GL entry ID to reject / ID del asiento contable a rechazar"),
         reason: z.string().describe("Mandatory rejection reason (visible to submitter) / Razon del rechazo (obligatoria, visible al emisor)"),
       },
+      outputSchema: openObjectOutput(
+        "Rejected GL entry record with reason and audit trail entry / Asiento contable rechazado con motivo y entrada de auditoría",
+      ),
     },
     async ({ entryId, reason }) => withToolLogging("frihet_gl_entry_reject", () =>
       withBackendGuard("frihet_gl_entry_reject", "/v1/gl/entries/reject", async () => {
@@ -113,6 +120,9 @@ export function registerAuditGLTools(server: McpServer, client: IFrihetClient): 
       inputSchema: {
         entryId: z.string().describe("GL entry ID / ID del asiento contable"),
       },
+      outputSchema: openObjectOutput(
+        "Audit trail entries for the GL entry (state transitions, actor, timestamp) / Historial de auditoría del asiento (transiciones, actor, fecha)",
+      ),
     },
     async ({ entryId }) => withToolLogging("frihet_gl_entry_audit_log", () =>
       withBackendGuard("frihet_gl_entry_audit_log", "/v1/gl/entries/audit-log", async () => {

@@ -25,6 +25,7 @@ import {
   formatRecord,
   getContent,
   mutateContent,
+  openObjectOutput,
   READ_ONLY_ANNOTATIONS,
   CREATE_ANNOTATIONS,
 } from "./shared.js";
@@ -54,6 +55,9 @@ export function registerOnboardViesTools(server: McpServer, client: IFrihetClien
           .describe("Link expiry in hours, 1-168 (default 72h) / Caducidad del enlace en horas (por defecto 72h)"),
         workspaceId: z.string().optional().describe("Target gestor workspace ID / ID del workspace del gestor"),
       },
+      outputSchema: openObjectOutput(
+        "Generated self-onboard link with expiry and token / Enlace de auto-registro generado con caducidad y token",
+      ),
     },
     async ({ email, name, expiresInHours, workspaceId }) => withToolLogging("frihet_portal_onboard_link_generate", () =>
       withBackendGuard("frihet_portal_onboard_link_generate", "/v1/portal/onboard/link", async () => {
@@ -90,6 +94,9 @@ export function registerOnboardViesTools(server: McpServer, client: IFrihetClien
         vatNumber: z.string().describe("EU VAT number to validate (without country prefix) / Numero de IVA intracomunitario (sin prefijo de pais)"),
         countryCode: z.string().length(2).describe("ISO 3166-1 alpha-2 country code (e.g. 'ES', 'DE', 'FR') / Codigo de pais ISO (ej. 'ES', 'DE', 'FR')"),
       },
+      outputSchema: openObjectOutput(
+        "VIES lookup result: company name, address and validity status / Resultado VIES: nombre, dirección y validez",
+      ),
     },
     async ({ vatNumber, countryCode }) => withToolLogging("frihet_tax_id_vies_lookup", () =>
       withBackendGuard("frihet_tax_id_vies_lookup", "/v1/portal/onboard/vies", async () => {

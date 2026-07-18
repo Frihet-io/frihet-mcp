@@ -27,6 +27,7 @@ import {
   formatRecord,
   listContent,
   mutateContent,
+  openObjectOutput,
   READ_ONLY_ANNOTATIONS,
   CREATE_ANNOTATIONS,
   paginatedOutput,
@@ -116,6 +117,9 @@ export function registerBankRulesTools(server: McpServer, client: IFrihetClient)
         ).min(1).describe("Actions to apply when rule matches / Acciones a aplicar cuando la regla se cumple"),
         isActive: z.boolean().optional().describe("Whether the rule is active (default true) / Si la regla esta activa (por defecto true)"),
       },
+      outputSchema: openObjectOutput(
+        "Created bank rule record with ID, conditions and actions / Regla bancaria creada con ID, condiciones y acciones",
+      ),
     },
     async ({ name, conditions, actions, isActive }) => withToolLogging("frihet_bank_rule_create", () =>
       withBackendGuard("frihet_bank_rule_create", "/v1/banking/rules", async () => {
