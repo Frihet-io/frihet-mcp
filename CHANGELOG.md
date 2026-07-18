@@ -2,6 +2,12 @@
 
 All notable changes to `@frihet/mcp-server` are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **`FRIHET_DEMO` mode** — fixture-backed demo, no API key required, nothing persisted. Set `FRIHET_DEMO=1` to serve realistic PII-safe example data (invoices with IVA/IGIC, expenses, clients, products, banking) with zero network calls; writes are simulated and fiscal/e-invoice/payroll actions return a labeled simulation, never a real submission. Lets an agent evaluate the full tool surface via `npx -y @frihet/mcp-server` without signup.
+
 ## [1.15.2] — 2026-07-18
 
 ### Fixed

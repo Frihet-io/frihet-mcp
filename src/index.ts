@@ -18,6 +18,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { FrihetClient } from "./client.js";
+import { DemoFrihetClient } from "./demo-client.js";
+import type { IFrihetClient } from "./client-interface.js";
 
 // Single source of truth for the server version: package.json (read at runtime
 // from dist/../package.json). Hardcoding it here caused repeated version drift
@@ -43,13 +45,20 @@ import { setTraceContext } from "./observability.js";
 function main(): void {
   const apiKey = process.env.FRIHET_API_KEY;
 
-  if (!apiKey) {
+  // Demo mode: FRIHET_DEMO=1|true serves fixture-backed example data with NO
+  // network calls and NO API key required. It's an explicit opt-in, so it wins
+  // even if a real key happens to be present. See demo-client.ts / demo-fixtures.ts.
+  const demoFlag = process.env.FRIHET_DEMO;
+  const demoMode = demoFlag === "1" || demoFlag === "true";
+
+  if (!demoMode && !apiKey) {
     console.error(
       "Error: FRIHET_API_KEY environment variable is required.\n\n" +
         "Get your API key:\n" +
         "  1. Create a free account at https://app.frihet.io\n" +
         "  2. Go to Settings > Developers > API Keys\n" +
         "  3. Create a key and add it to your MCP configuration\n\n" +
+        "Or try it instantly with no key: set FRIHET_DEMO=1 for example data.\n\n" +
         "Documentation: https://docs.frihet.io/desarrolladores/mcp-server\n",
     );
     process.exit(1);
@@ -57,7 +66,7 @@ function main(): void {
 
   const baseUrl = process.env.FRIHET_API_URL;
 
-  if (baseUrl !== undefined) {
+  if (!demoMode && baseUrl !== undefined) {
     let parsed: URL;
     try {
       parsed = new URL(baseUrl);
@@ -85,7 +94,15 @@ function main(): void {
     }
   }
 
-  const client = new FrihetClient(apiKey, baseUrl);
+  const client: IFrihetClient = demoMode
+    ? new DemoFrihetClient()
+    : new FrihetClient(apiKey as string, baseUrl);
+
+  if (demoMode) {
+    console.error(
+      "[frihet-mcp] DEMO MODE — serving example fixtures, no real data, nothing persisted",
+    );
+  }
 
   // Set trace context for Langfuse (reads LANGFUSE_* from process.env automatically).
   // clientName can be overridden via FRIHET_CLIENT_NAME env var by the MCP host.
