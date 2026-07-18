@@ -5,6 +5,23 @@ compatibility_flags = ["nodejs_compat"]
 
 routes = [{ pattern = "mcp.frihet.io/*", zone_name = "frihet.io" }]
 
+# DUAL-PACKAGE ZOD FIX (2026-07-18). This worker is a standalone npm project
+# with its OWN node_modules/zod, but it bundles tool code from the ROOT package
+# (../../../src/tools/*, which imports "zod/v4" → root's zod). The MCP SDK's
+# JSON-Schema converter imports "zod/v4-mini" → the WORKER's zod. Zod v4 keeps
+# .describe() metadata in a MODULE-SINGLETON global registry keyed by object
+# identity, so two physical zod copies = two registries: descriptions are
+# written into root's registry but read from the worker's → every tools/list
+# param description is silently dropped (types/enums survive). This aliased all
+# "zod" imports to the SINGLE root copy so the tool code and the SDK share one
+# registry and param descriptions survive serialization. Verify after any dep
+# change: the built bundle must contain exactly ONE zod/v4/core/registries.js.
+[alias]
+"zod" = "../../node_modules/zod"
+"zod/v4" = "../../node_modules/zod/v4"
+"zod/v4-mini" = "../../node_modules/zod/v4-mini"
+"zod/v4/core" = "../../node_modules/zod/v4/core"
+
 # Agent-facing endpoint runs grouped tool-exposure (progressive disclosure):
 # tools/list returns terse summaries + 3 discovery meta-tools instead of the
 # flat 151-tool wall. Full depth served on demand via describe_tool/search_tools.
