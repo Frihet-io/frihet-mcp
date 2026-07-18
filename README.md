@@ -66,6 +66,24 @@ Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,6
 npx skills add Frihet-io/frihet-mcp
 ```
 
+### Claude Code plugin (skill + MCP server in one install)
+
+This repository is also a Claude Code plugin (`frihet-erp`): installing it wires up both the business-management skill and the MCP server.
+
+```bash
+# Try it locally
+claude --plugin-dir /path/to/frihet-mcp
+```
+
+Once available in the community marketplace:
+
+```text
+/plugin marketplace add anthropics/claude-plugins-community
+/plugin install frihet-erp@claude-community
+```
+
+Skill invocation: `/frihet-erp:frihet-mcp`. The bundled `.mcp.json` launches `@frihet/mcp-server` via `npx` — set `FRIHET_API_KEY` in your environment (get one at [app.frihet.io](https://app.frihet.io) → Settings → API keys).
+
 ### Claude Code / Claude Desktop
 
 ```json
