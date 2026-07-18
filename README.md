@@ -58,6 +58,20 @@ Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,6
 
 ---
 
+## Try it instantly (no signup)
+
+Kick the tires with zero setup — no account, no API key:
+
+```bash
+FRIHET_DEMO=1 npx -y @frihet/mcp-server
+```
+
+In demo mode the server answers from realistic **example fixtures** (Spanish invoices with IVA/IGIC, expenses, clients, products, a bank account, and more). Every response is stamped `_demo: true`, **nothing is persisted**, and no network call is ever made. Writes are simulated and fiscal actions (e-invoice, VeriFactu, TicketBAI, FACe, payroll) return a clearly-labeled simulation — never a real submission to any tax authority.
+
+When you're ready for your real data, drop the flag and add your key ([app.frihet.io](https://app.frihet.io) → Settings → API keys). See [Install](#install) below.
+
+---
+
 ## Install
 
 ### One-line (Claude Code, Cursor, Copilot, Codex, Windsurf, Gemini CLI, and more)
