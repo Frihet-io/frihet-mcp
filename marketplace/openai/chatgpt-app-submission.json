@@ -1,0 +1,736 @@
+{
+  "$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "Frihet",
+    "subtitle": "Manage invoices & expenses",
+    "description": "Frihet connects ChatGPT directly to your business workspace.\n\nCreate invoices by describing what you sold. Log expenses in plain language. Look up clients, products, vendors, quotes, and monthly business summaries. Keep routine admin moving from inside ChatGPT without switching tabs.\n\nThe ChatGPT app exposes a reviewed OpenAI-safe surface for invoices, expenses, clients, CRM contacts/activities/notes, products, quotes, vendors, monthly summaries, and webhook management. It includes 53 reviewed business tools plus 3 read-only discovery tools (list_tool_groups, search_tools, describe_tool) that help ChatGPT select the right capability without exposing hidden product modules.\n\nRegulated identifiers, banking identifiers, webhook signing secrets, recipient override emails, payroll/HR, lodging/POS, banking, and regulated filing/export workflows are outside the ChatGPT surface.\n\nConnect via OAuth 2.0 in seconds. No API key required.\n\nFrihet is built for freelancers and small businesses that want AI-native business management.",
+    "category": "FINANCE"
+  },
+  "tools": {
+    "get_business_context": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "get_monthly_summary": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_invoices": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "get_invoice": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "search_invoices": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "get_invoice_pdf": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_expenses": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "get_expense": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_clients": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "get_client": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_client_contacts": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_client_activities": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_client_notes": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_products": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "get_product": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_quotes": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "get_quote": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_vendors": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "get_vendor": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_webhooks": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "get_webhook": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves data from the Frihet API. It does not create, update, or delete any records.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "list_tool_groups": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves MCP server tool/schema metadata. It does not access or modify any user data.",
+        "open_world_justification": "This tool operates locally within the MCP server context and only details server capabilities.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "search_tools": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves MCP server tool/schema metadata. It does not access or modify any user data.",
+        "open_world_justification": "This tool operates locally within the MCP server context and only details server capabilities.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "describe_tool": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool only retrieves MCP server tool/schema metadata. It does not access or modify any user data.",
+        "open_world_justification": "This tool operates locally within the MCP server context and only details server capabilities.",
+        "destructive_justification": "This tool is read-only and cannot modify or delete any data."
+      }
+    },
+    "create_invoice": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "duplicate_invoice": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "create_credit_note": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "apply_late_fee": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "create_expense": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "create_client": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "create_client_contact": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "log_client_activity": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "create_client_note": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "create_product": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "create_quote": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "create_vendor": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new record in the user's Frihet account.",
+        "open_world_justification": "This tool only writes to the Frihet database via api.frihet.io. It does not contact external services.",
+        "destructive_justification": "This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later."
+      }
+    },
+    "update_invoice": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool updates an existing record using PATCH semantics. Only the provided fields are changed.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool modifies fields on existing records but does not delete data. Changes are reversible by updating again."
+      }
+    },
+    "mark_invoice_paid": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool updates an existing record using PATCH semantics. Only the provided fields are changed.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool modifies fields on existing records but does not delete data. Changes are reversible by updating again."
+      }
+    },
+    "update_expense": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool updates an existing record using PATCH semantics. Only the provided fields are changed.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool modifies fields on existing records but does not delete data. Changes are reversible by updating again."
+      }
+    },
+    "update_client": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool updates an existing record using PATCH semantics. Only the provided fields are changed.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool modifies fields on existing records but does not delete data. Changes are reversible by updating again."
+      }
+    },
+    "update_product": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool updates an existing record using PATCH semantics. Only the provided fields are changed.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool modifies fields on existing records but does not delete data. Changes are reversible by updating again."
+      }
+    },
+    "update_quote": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool updates an existing record using PATCH semantics. Only the provided fields are changed.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool modifies fields on existing records but does not delete data. Changes are reversible by updating again."
+      }
+    },
+    "update_vendor": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool updates an existing record using PATCH semantics. Only the provided fields are changed.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool modifies fields on existing records but does not delete data. Changes are reversible by updating again."
+      }
+    },
+    "delete_invoice": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+      }
+    },
+    "delete_expense": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+      }
+    },
+    "delete_client": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+      }
+    },
+    "delete_client_contact": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+      }
+    },
+    "delete_client_note": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+      }
+    },
+    "delete_product": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+      }
+    },
+    "delete_quote": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+      }
+    },
+    "delete_vendor": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+      }
+    },
+    "delete_webhook": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
+        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+      }
+    },
+    "send_invoice": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": true,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool triggers sending an invoice to the client via email and updates the invoice status to sent.",
+        "open_world_justification": "This tool causes Frihet's transactional email service to deliver the invoice PDF to the client's stored email address. An email is sent to an external recipient.",
+        "destructive_justification": "The invoice data is preserved. While the email delivery cannot be recalled, the invoice can be updated or credit-noted afterward."
+      }
+    },
+    "send_quote": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": true,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool triggers sending a quote to the client via email and updates the quote status to sent.",
+        "open_world_justification": "This tool causes Frihet's transactional email service to deliver the quote to the client's stored email address. An email is sent to an external recipient.",
+        "destructive_justification": "The quote data is preserved. While the email delivery cannot be recalled, the quote can be updated afterward."
+      }
+    },
+    "create_webhook": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": true,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool creates a new webhook configuration that subscribes to business events.",
+        "open_world_justification": "This tool configures Frihet to send HTTP POST requests to a user-specified external URL when subscribed business events occur (e.g. invoice.created, invoice.paid). Event data is sent to the external endpoint.",
+        "destructive_justification": "This tool creates a new configuration. It does not delete existing data. The webhook can be deactivated or deleted later."
+      }
+    },
+    "update_webhook": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": true,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "This tool modifies an existing webhook configuration (URL, events, active status).",
+        "open_world_justification": "This tool can change the external URL that receives webhook notifications from Frihet, redirecting event data to a different external endpoint.",
+        "destructive_justification": "This tool modifies configuration but does not delete it. Changes are reversible by updating again."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Verify getting business profile context information without sensitive fields or PII.",
+      "user_prompt": "Give me my business context overview.",
+      "tools_triggered": "get_business_context",
+      "expected_output": "A summary of the business profile showing the company name, plan type, and recent business activities without exposing any personal identifiers or tax IDs."
+    },
+    {
+      "description": "List recent invoices to check outstanding amounts.",
+      "user_prompt": "Show me my outstanding draft invoices.",
+      "tools_triggered": "list_invoices",
+      "expected_output": "A list of recent invoices currently in draft status, demonstrating correct formatting and ensuring no sensitive client identifiers (like taxId) are rendered."
+    },
+    {
+      "description": "Create a draft invoice for consultation services.",
+      "user_prompt": "Create an invoice for Acme SL, 5 hours of consulting at 100 EUR per hour with 21% tax rate.",
+      "tools_triggered": "create_invoice",
+      "expected_output": "Confirmation of draft invoice creation with total calculated accurately as 605 EUR (500 EUR subtotal + 105 EUR tax)."
+    },
+    {
+      "description": "Log an office-related business expense.",
+      "user_prompt": "Log a 45.99 EUR expense for office supplies under the category office.",
+      "tools_triggered": "create_expense",
+      "expected_output": "Confirmation that the 45.99 EUR expense under office category has been logged successfully."
+    },
+    {
+      "description": "Retrieve details of a specific client.",
+      "user_prompt": "Find the client named OpenAI Test Corp and show their email.",
+      "tools_triggered": "list_clients",
+      "expected_output": "Details for client OpenAI Test Corp showing name and email address, with sensitive data columns like taxId completely redacted."
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Attempting to run a sensitive tool that should be blocked or unavailable.",
+      "user_prompt": "Retrieve my quarterly tax filing calculations.",
+      "tools_triggered": null,
+      "expected_output": "An explanation that quarterly tax calculations are not available in ChatGPT for security reasons."
+    },
+    {
+      "description": "Attempting to get EN16931 XML e-invoices which contains forbidden NIFs.",
+      "user_prompt": "Download the XML e-invoice format for my latest invoice.",
+      "tools_triggered": null,
+      "expected_output": "A message stating that e-invoice XML files containing government-issued identifiers are not accessible from the ChatGPT integration."
+    },
+    {
+      "description": "Attempting to delete a webhook configuration that does not exist.",
+      "user_prompt": "Delete webhook with ID non_existent_id.",
+      "tools_triggered": "delete_webhook",
+      "expected_output": "A clean error message from Frihet API indicating the webhook configuration was not found, handled gracefully."
+    }
+  ]
+}

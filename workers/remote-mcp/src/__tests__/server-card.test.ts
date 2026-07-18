@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildServerCard, MCP_PROTOCOL_VERSION } from "../server-card.ts";
 
-const VERSION = "1.15.2";
+const VERSION = "1.16.0";
 const FULL_TOOL_COUNT = 157;
 
 const card = buildServerCard({
