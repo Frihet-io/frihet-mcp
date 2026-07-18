@@ -21,6 +21,7 @@ import {
   withToolLogging,
   formatRecord,
   getContent,
+  openObjectOutput,
   READ_ONLY_ANNOTATIONS,
 } from "./shared.js";
 import { withBackendGuard } from "./backend-availability.js";
@@ -43,6 +44,9 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
       inputSchema: {
         year: z.string().optional().describe("Tax year (e.g. '2025', defaults to previous year) / Ejercicio fiscal (ej. '2025', por defecto ejercicio anterior)"),
       },
+      outputSchema: openObjectOutput(
+        "Modelo 415 summary: counterparty operations, totals and filing deadline / Resumen Modelo 415: operaciones, totales y plazo",
+      ),
     },
     async ({ year }) => withToolLogging("frihet_modelo_415_summary", () =>
       withBackendGuard("frihet_modelo_415_summary", "/v1/igic/415", async () => {
@@ -71,6 +75,9 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
       inputSchema: {
         year: z.string().optional().describe("Tax year (e.g. '2025', defaults to previous year) / Ejercicio fiscal (ej. '2025', por defecto ejercicio anterior)"),
       },
+      outputSchema: openObjectOutput(
+        "Modelo 425 annual IGIC recap: IGIC collected, deductible, net payable / Resumen anual IGIC: repercutido, soportado, cuota",
+      ),
     },
     async ({ year }) => withToolLogging("frihet_modelo_425_summary", () =>
       withBackendGuard("frihet_modelo_425_summary", "/v1/igic/425", async () => {
@@ -100,6 +107,9 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
       inputSchema: {
         period: z.string().optional().describe("Period in YYYY-MM format (defaults to last month) / Periodo YYYY-MM (por defecto mes anterior)"),
       },
+      outputSchema: openObjectOutput(
+        "Modelo 418 monthly IGIC summary: collected, deductible, net due, carryover / Resumen mensual IGIC: repercutido, soportado, cuota, saldo",
+      ),
     },
     async ({ period }) => withToolLogging("frihet_modelo_418_summary", () =>
       withBackendGuard("frihet_modelo_418_summary", "/v1/igic/418", async () => {
@@ -132,6 +142,9 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
         amount: z.number().describe("Taxable base amount in EUR / Base imponible en EUR"),
         description: z.string().optional().describe("Product description for audit reference / Descripcion del producto (referencia auditoria)"),
       },
+      outputSchema: openObjectOutput(
+        "AIEM calculation result: applicable rate, tax base and amount due / Resultado AIEM: tipo aplicable, base imponible y cuota",
+      ),
     },
     async ({ ncCode, amount, description }) => withToolLogging("frihet_aiem_calculate", () =>
       withBackendGuard("frihet_aiem_calculate", "/v1/igic/aiem", async () => {

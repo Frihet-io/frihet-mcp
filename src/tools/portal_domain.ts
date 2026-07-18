@@ -22,6 +22,7 @@ import {
   formatRecord,
   getContent,
   mutateContent,
+  openObjectOutput,
   READ_ONLY_ANNOTATIONS,
   CREATE_ANNOTATIONS,
   DELETE_ANNOTATIONS,
@@ -46,6 +47,9 @@ export function registerPortalDomainTools(server: McpServer, client: IFrihetClie
         domain: z.string().describe("Custom domain to add (e.g. 'portal.miempresa.com') / Dominio personalizado (ej. 'portal.miempresa.com')"),
         workspaceId: z.string().optional().describe("Target workspace ID (defaults to caller's workspace) / ID del workspace destino"),
       },
+      outputSchema: openObjectOutput(
+        "Added domain record with required DNS (CNAME) records / Dominio añadido con los registros DNS (CNAME) necesarios",
+      ),
     },
     async ({ domain, workspaceId }) => withToolLogging("frihet_portal_domain_add", () =>
       withBackendGuard("frihet_portal_domain_add", "/v1/portal/domain/add", async () => {
@@ -81,6 +85,9 @@ export function registerPortalDomainTools(server: McpServer, client: IFrihetClie
       inputSchema: {
         domain: z.string().describe("Custom domain to verify / Dominio personalizado a verificar"),
       },
+      outputSchema: openObjectOutput(
+        "Domain verification status (pending/verified/failed) and any DNS errors / Estado de verificación del dominio y errores DNS",
+      ),
     },
     async ({ domain }) => withToolLogging("frihet_portal_domain_verify", () =>
       withBackendGuard("frihet_portal_domain_verify", "/v1/portal/domain/verify", async () => {
@@ -109,6 +116,9 @@ export function registerPortalDomainTools(server: McpServer, client: IFrihetClie
       inputSchema: {
         domain: z.string().describe("Custom domain to remove / Dominio personalizado a eliminar"),
       },
+      outputSchema: openObjectOutput(
+        "Confirmation that the custom domain was removed / Confirmación de que el dominio personalizado fue eliminado",
+      ),
     },
     async ({ domain }) => withToolLogging("frihet_portal_domain_remove", () =>
       withBackendGuard("frihet_portal_domain_remove", "/v1/portal/domain/remove", async () => {

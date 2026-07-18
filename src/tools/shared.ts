@@ -365,6 +365,20 @@ export const deleteResultOutput = z.object({
   id: z.string(),
 });
 
+/**
+ * Permissive structured-output schema for tools whose API returns an open
+ * `Record<string, unknown>` (summaries, single-object actions, VIES/portal
+ * responses). Declares NO required fields and stays `.passthrough()`, so the
+ * SDK's output validation (safeParseAsync of structuredContent) can NEVER
+ * reject a real response — the same over-strict-schema class of bug that made
+ * invoices inoperable in #65. The `.describe()` carries the semantic intent
+ * into the JSON Schema so agents (and directory scanners) still see what the
+ * tool returns, without the runtime risk of pinning a shape we don't control.
+ */
+export function openObjectOutput(description: string) {
+  return z.object({}).passthrough().describe(description);
+}
+
 /* --- Per-resource item schemas ------------------------------------ */
 
 const lineItemSchema = z.object({

@@ -468,6 +468,12 @@ function registerMetaTools(
         "/ Lista los dominios de herramientas de Frihet ERP con descripción y recuento. Empieza aquí.",
       annotations: META_ANNOTATIONS,
       inputSchema: {},
+      outputSchema: z
+        .object({})
+        .passthrough()
+        .describe(
+          "Tool domains with per-group blurb and tool count / Dominios de herramientas con descripción y recuento",
+        ),
     },
     async () => {
       const out = (Object.keys(GROUPS) as ToolGroupId[])
@@ -519,6 +525,12 @@ function registerMetaTools(
           .optional()
           .describe("Max results (default 25) / Máximo de resultados (por defecto 25)."),
       },
+      outputSchema: z
+        .object({})
+        .passthrough()
+        .describe(
+          "Matching tools with group, summary, read-only flag and input fields / Herramientas coincidentes con grupo, resumen y campos",
+        ),
     },
     // The SDK passes parsed args; we read defensively to stay schema-light.
     async (args: { query?: unknown; group?: unknown; limit?: unknown } = {}) => {
@@ -588,6 +600,12 @@ function registerMetaTools(
               "Nombre exacto de la herramienta devuelto por search_tools.",
           ),
       },
+      outputSchema: z
+        .object({})
+        .passthrough()
+        .describe(
+          "A tool's full description, group, read-only flag and input field names / Descripción completa de una herramienta",
+        ),
     },
     async (args: { name?: unknown } = {}) => {
       const name = typeof args.name === "string" ? args.name.trim() : "";

@@ -18,6 +18,7 @@ import {
   formatRecord,
   getContent,
   mutateContent,
+  openObjectOutput,
   READ_ONLY_ANNOTATIONS,
   CREATE_ANNOTATIONS,
 } from "./shared.js";
@@ -37,6 +38,9 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
         "principales clientes y resumen del mes actual. Llama a esto PRIMERO en cualquier sesion.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {},
+      outputSchema: openObjectOutput(
+        "Business context snapshot: workspace profile, fiscal setup, recent activity / Contexto de negocio: perfil, configuración fiscal y actividad reciente",
+      ),
     },
     async () => withToolLogging("get_business_context", async () => {
       const result = await client.getBusinessContext();
@@ -69,6 +73,9 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
             "/ Mes en formato YYYY-MM (por defecto el mes actual)",
           ),
       },
+      outputSchema: openObjectOutput(
+        "Monthly P&L summary: revenue, expenses, profit, tax liability, invoice stats / Resumen mensual: ingresos, gastos, beneficio, impuestos",
+      ),
     },
     async ({ month }) => withToolLogging("get_monthly_summary", async () => {
       const result = await client.getMonthlySummary(month);
@@ -102,6 +109,9 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
             "/ Trimestre en formato YYYY-Q# (por defecto trimestre actual)",
           ),
       },
+      outputSchema: openObjectOutput(
+        "Quarterly tax prep data: Modelo 303/130 totals, tax collected vs deductible / Datos trimestrales: Modelo 303/130, impuesto repercutido vs soportado",
+      ),
     },
     async ({ quarter }) => withToolLogging("get_quarterly_taxes", async () => {
       const result = await client.getQuarterlyTaxes(quarter);
@@ -138,6 +148,9 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
           .optional()
           .describe("Due date for the new invoice (YYYY-MM-DD) / Fecha de vencimiento de la nueva factura"),
       },
+      outputSchema: openObjectOutput(
+        "The newly created draft invoice, cloned from the original / La nueva factura borrador, clonada de la original",
+      ),
     },
     async ({ id, newIssueDate, newDueDate }) => withToolLogging("duplicate_invoice", async () => {
       // 1. Fetch the original invoice (returns the FULL raw stored document —
