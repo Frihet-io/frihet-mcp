@@ -182,11 +182,8 @@ export function getLoginPage(opts: {
 </head>
 <body>
   <div class="card">
-    <svg class="logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="48" height="48" rx="24" fill="#171717"/>
-      <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle"
-            font-family="-apple-system, BlinkMacSystemFont, sans-serif"
-            font-size="20" font-weight="700" fill="white">F</text>
+    <svg class="logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Frihet">
+      <circle cx="24" cy="24" r="22" fill="#171717"/>
     </svg>
     <h1>Connect to Frihet</h1>
     <p class="subtitle">
