@@ -90,6 +90,13 @@ export function getLoginPage(opts: {
       color: #171717;
       font-weight: 600;
     }
+    .permissions .scope-note {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #e5e5e5;
+      color: #737373;
+      line-height: 1.4;
+    }
     .btn {
       display: flex;
       align-items: center;
@@ -187,8 +194,8 @@ export function getLoginPage(opts: {
     </svg>
     <h1>Connect to Frihet</h1>
     <p class="subtitle">
-      An application wants to access your Frihet account to manage
-      invoices, expenses, clients, and more via AI.
+      An application wants full access to manage your Frihet account
+      via AI. This grants broad read and write access — review below.
     </p>
 
     <div class="client-info">
@@ -196,14 +203,22 @@ export function getLoginPage(opts: {
     </div>
 
     <div class="permissions">
-      <h3>This will allow access to:</h3>
+      <h3>This will allow the application to view and manage:</h3>
       <ul>
-        <li>View and create invoices</li>
-        <li>View and create expenses</li>
-        <li>View and manage clients</li>
-        <li>View and manage products</li>
-        <li>View and create quotes</li>
+        <li>Invoices, quotes, recurring billing and deposits</li>
+        <li>Expenses and vendors</li>
+        <li>Clients, contacts and products</li>
+        <li>Banking, transactions and reconciliation</li>
+        <li>Tax &amp; fiscal reports (VAT/IGIC, modelos, corporate tax)</li>
+        <li>HR, payroll, time tracking and your team</li>
+        <li>POS, kitchen and stay/PMS operations</li>
+        <li>Gestoría, general-ledger entries and portal settings</li>
       </ul>
+      <p class="scope-note">
+        In short: near-complete access to your account. Not included:
+        e-invoicing submission (VeriFactu, TicketBAI, Facturae/FACe),
+        which requires a separate permission.
+      </p>
     </div>
 
     <div id="error" class="error"></div>
