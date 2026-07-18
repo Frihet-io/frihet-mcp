@@ -39,7 +39,7 @@
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
 
-> **Tool count:** npm `latest` (1.15.2) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
+> **Tool count:** npm `latest` (1.15.3) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
 
 ---
 
@@ -66,7 +66,7 @@ Kick the tires with zero setup — no account, no API key:
 FRIHET_DEMO=1 npx -y @frihet/mcp-server
 ```
 
-In demo mode the server answers from realistic **example fixtures** (Spanish invoices with IVA/IGIC, expenses, clients, products, a bank account, and more). Every response is stamped `_demo: true`, **nothing is persisted**, and no network call is ever made. Writes are simulated and fiscal actions (e-invoice, VeriFactu, TicketBAI, FACe, payroll) return a clearly-labeled simulation — never a real submission to any tax authority.
+In demo mode the server answers from realistic **example fixtures** (Spanish invoices with IVA/IGIC, expenses, clients, products, a bank account, and more) — every record uses `demo_`-prefixed IDs and the server prints a `DEMO MODE` banner on startup. **Nothing is persisted** and no network call is ever made. Writes are simulated and fiscal actions (e-invoice, VeriFactu, TicketBAI, FACe, payroll) return a clearly-labeled simulation — never a real submission to any tax authority.
 
 When you're ready for your real data, drop the flag and add your key ([app.frihet.io](https://app.frihet.io) → Settings → API keys). See [Install](#install) below.
 
