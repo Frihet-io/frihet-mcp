@@ -12,6 +12,10 @@
 </p>
 
 <p align="center">
+  <sub>Works with <strong>Claude</strong> · <strong>ChatGPT</strong> · <strong>Cursor</strong> · <strong>Windsurf</strong> · <strong>Cline</strong> · <strong>Antigravity</strong> · <strong>Codex</strong> · <strong>Copilot</strong> · <strong>Gemini CLI</strong> — and any MCP-compatible client.</sub>
+</p>
+
+<p align="center">
   <a href="https://www.npmjs.com/package/@frihet/mcp-server"><img src="https://img.shields.io/npm/v/@frihet/mcp-server?style=flat&color=18181b&labelColor=09090b" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/@frihet/mcp-server"><img src="https://img.shields.io/npm/dm/@frihet/mcp-server?style=flat&color=18181b&labelColor=09090b&label=downloads" alt="npm downloads"></a>
   <a href="https://smithery.ai/server/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
