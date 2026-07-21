@@ -69,6 +69,7 @@ const REPOS = {
       'skill/SKILL.md',
       'src/index.ts',
       'scripts/postinstall.js',
+      'workers/api-proxy/worker.js',
       'workers/remote-mcp/src/index.ts',
       'workers/remote-mcp/src/auth-handler.ts',
       'workers/remote-mcp/src/server-meta.ts',
@@ -309,6 +310,47 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
           findings.push({ repo: repoName, file: rel, severity: 'fixed', msg: `FULL_TOOL_COUNT synced to ${TOOL_COUNT}` });
         }
       }
+    }
+
+    // Special case: api-proxy worker.js is the AI-discovery surface served at
+    // api.frihet.io. It carries three drift vectors invisible to the generic
+    // line scan: (a) bare-numeric `tools_count:` fields, (b) the legacy
+    // `X-Frihet-API-Key` auth header (live API reads `X-API-Key`), and (c)
+    // discovery `openapi:` descriptors pointing at api.frihet.io/openapi.json
+    // (canonical is mcp.frihet.io/openapi.json; api.frihet.io only 302-redirects).
+    // All three are asserted here against the SoT (TOOL_COUNT from package.json —
+    // no second source of truth) so the discovery surface can't re-drift.
+    if (repoName === 'frihet-mcp' && rel === 'workers/api-proxy/worker.js') {
+      lines.forEach((line, idx) => {
+        // (a) bare-numeric tools_count field
+        const tc = line.match(/tools_count:\s*(\d+)/);
+        if (tc && parseInt(tc[1], 10) !== TOOL_COUNT) {
+          findings.push({
+            repo: repoName, file: rel, line: idx + 1, severity: 'fail',
+            kind: 'tool-count', found: parseInt(tc[1], 10), expected: TOOL_COUNT,
+            snippet: line.trim().slice(0, 120),
+          });
+        }
+        // (b) legacy auth header
+        if (/X-Frihet-API-Key/.test(line)) {
+          findings.push({
+            repo: repoName, file: rel, line: idx + 1, severity: 'fail',
+            kind: 'legacy-header', found: 'X-Frihet-API-Key', expected: 'X-API-Key',
+            snippet: line.trim().slice(0, 120),
+          });
+        }
+        // (c) discovery openapi descriptor pointing at api.frihet.io (only a JSON
+        // `openapi: "https://api.frihet.io/openapi.json"` field — quoted value —
+        // is flagged, NOT the self-referential llms.txt/ai.txt/sitemap mentions).
+        if (/openapi['"]?\s*:\s*["']https:\/\/api\.frihet\.io\/openapi\.json/i.test(line)) {
+          findings.push({
+            repo: repoName, file: rel, line: idx + 1, severity: 'fail',
+            kind: 'discovery-openapi', found: 'api.frihet.io/openapi.json',
+            expected: 'mcp.frihet.io/openapi.json',
+            snippet: line.trim().slice(0, 120),
+          });
+        }
+      });
     }
 
     lines.forEach((line, idx) => {

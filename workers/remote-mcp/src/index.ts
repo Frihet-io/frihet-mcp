@@ -229,7 +229,7 @@ Frihet is an AI-native ERP for freelancers and SMEs. Invoicing, expenses, tax co
 ## API resources
 
 - **Base URL:** https://api.frihet.io/v1
-- **Auth:** API key (header \`X-Frihet-API-Key\`) or OAuth2
+- **Auth:** API key (header \`X-API-Key\`) or OAuth2
 - **Format:** JSON, cursor pagination
 - **Webhooks:** 60+ events (invoice.*, expense.*, client.*, payment.*)
 - **OpenAPI spec:** https://api.frihet.io/openapi.json
@@ -285,8 +285,8 @@ const AGENTS_JSON = JSON.stringify({
   auth: [
     {
       type: "apiKey",
-      headerName: "X-Frihet-API-Key",
-      description: "API key authentication via X-Frihet-API-Key header",
+      headerName: "X-API-Key",
+      description: "API key authentication via X-API-Key header",
     },
     {
       type: "oauth2",
