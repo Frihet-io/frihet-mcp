@@ -25,7 +25,7 @@
  *   GET  /v1/invoices/:id/face/status      — FACe submission status
  *   POST /v1/invoices/:id/ticketbai/submit — Basque Country TicketBAI (Bizkaia/Gipuzkoa/Araba)
  *   GET  /v1/invoices/:id/ticketbai/status — TicketBAI submission status
- *   POST /v1/invoices/:id/ksef/submit      — Poland KSeF (stub — activates post-PR #417 merge)
+ *   POST /v1/invoices/:id/ksef/submit      — Poland KSeF (stub — endpoint not yet exposed; returns unavailable)
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -210,7 +210,7 @@ export const ticketbaiStatusOutput = z.object({
 }).passthrough();
 
 export const kSeFSubmitOutput = z.object({
-  _notImplemented: z.boolean().optional().describe("Always true — endpoint pending PR #417"),
+  _notImplemented: z.boolean().optional().describe("Always true — KSeF endpoint not yet exposed as a live API"),
   _note: z.string().optional().describe("Guidance on when the tool activates"),
   _plannedEndpoint: z.string().optional().describe("Planned REST endpoint path"),
   invoiceId: z.string().optional(),
@@ -802,9 +802,10 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
   );
 
   // -- ksef_submit --
-  // STUB ONLY — depends on api.frihet.io/v1/invoices/:id/ksef/submit endpoint
-  // which lands with KSeF PR #417 (Poland KSeF mandatory e-invoicing 2025+).
-  // When PR #417 merges, remove the NotImplementedYet throw and wire to client.kSeFSubmit().
+  // STUB ONLY — depends on the public api.frihet.io/v1/invoices/:id/ksef/submit endpoint,
+  // which is not yet exposed. The KSeF transport is infra-ready in Frihet-ERP (submitKsef CF,
+  // builder, encryption); production is gated on live KSeF cert issuance.
+  // When the endpoint goes live, remove the NotImplementedYet throw and wire to client.kSeFSubmit().
 
   server.registerTool(
     "ksef_submit",
@@ -819,10 +820,10 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
         "  • sandbox — KSeF test environment (demo.ksef.mf.gov.pl)\n" +
         "  • production — live KSeF endpoint (ksef.mf.gov.pl)\n" +
         "\n\n" +
-        "NOTE: This tool is a forward-compatible stub. The KSeF Cloud Function lands in PR #417. " +
-        "Until merged, all calls return a NotImplementedYet error with guidance on when it will be available. " +
-        "/ NOTA: Este tool es un stub anticipatorio. La Cloud Function KSeF se activa con el PR #417. " +
-        "Hasta su merge, todas las llamadas devuelven un error NotImplementedYet con instrucciones.",
+        "NOTE: This tool is a forward-compatible stub. The KSeF transport is infra-ready in Frihet-ERP but not yet exposed as a live public endpoint (production gated on KSeF cert issuance). " +
+        "Until activated, all calls return a NotImplementedYet error with guidance. " +
+        "/ NOTA: Este tool es un stub anticipatorio. El transporte KSeF está infra-ready en Frihet-ERP pero aún no expuesto como endpoint público (producción pendiente del certificado KSeF). " +
+        "Hasta su activación, todas las llamadas devuelven un error NotImplementedYet con instrucciones.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
         invoiceId: z.string().describe("Frihet invoice ID to submit to KSeF / ID de la factura a enviar a KSeF"),
@@ -835,10 +836,11 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
     },
     async ({ invoiceId, mode }) =>
       withToolLogging("ksef_submit", async () => {
-        // HONEST unavailable: KSeF CF endpoint not yet deployed — PR #417 required.
+        // HONEST unavailable: the public KSeF submit endpoint is not yet exposed
+        // (transport is infra-ready in Frihet-ERP; production gated on KSeF cert).
         // Returns isError:true + _unavailable so an AI agent treats this as a
-        // failure, NOT as a (successful) tool result it can act on. When PR #417
-        // merges (api.frihet.io/v1/invoices/:id/ksef/submit live), replace this
+        // failure, NOT as a (successful) tool result it can act on. When the endpoint
+        // goes live (api.frihet.io/v1/invoices/:id/ksef/submit), replace this
         // block with: await (_client as IFrihetClientWithDay4EInvoice).kSeFSubmit({ invoiceId, mode })
         const resolvedMode = mode ?? "production";
         const result = unavailableResult({
@@ -846,7 +848,7 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           plannedEndpoint: `/v1/invoices/${invoiceId}/ksef/submit`,
           what: "KSeF (Poland) submission",
           workaround:
-            "It will activate automatically once Frihet-ERP PR #417 merges. " +
+            "It will activate once the KSeF submit endpoint is exposed (transport is infra-ready in Frihet-ERP; production gated on cert). " +
             "In the meantime, use einvoice_export with format='ubl' + manual KSeF portal " +
             "upload at ksef.mf.gov.pl.",
         });
@@ -987,5 +989,5 @@ interface IFrihetClientWithDay4EInvoice extends IFrihetClient {
     error?: string;
   }>;
 
-  // kSeFSubmit intentionally omitted — stub only until PR #417 merges.
+  // kSeFSubmit intentionally omitted — always-stub (public KSeF endpoint not yet exposed).
 }

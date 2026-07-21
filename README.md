@@ -12,9 +12,13 @@
 </p>
 
 <p align="center">
+  <sub>Works with <strong>Claude</strong> · <strong>ChatGPT</strong> · <strong>Cursor</strong> · <strong>Windsurf</strong> · <strong>Cline</strong> · <strong>Antigravity</strong> · <strong>Codex</strong> · <strong>Copilot</strong> · <strong>Gemini CLI</strong> — and any MCP-compatible client.</sub>
+</p>
+
+<p align="center">
   <a href="https://www.npmjs.com/package/@frihet/mcp-server"><img src="https://img.shields.io/npm/v/@frihet/mcp-server?style=flat&color=18181b&labelColor=09090b" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/@frihet/mcp-server"><img src="https://img.shields.io/npm/dm/@frihet/mcp-server?style=flat&color=18181b&labelColor=09090b&label=downloads" alt="npm downloads"></a>
-  <a href="https://smithery.ai/server/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
+  <a href="https://smithery.ai/servers/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
   <img src="https://img.shields.io/badge/tools-157-18181b?style=flat&labelColor=09090b" alt="157 tools">
@@ -30,16 +34,16 @@
 |---------|--------|---------|
 | **npm** | Live | `npx @frihet/mcp-server` |
 | **Remote endpoint** | Live | `https://mcp.frihet.io/mcp` (zero install, OAuth or API key) |
-| **Smithery** | Live | [smithery.ai/server/frihet/frihet-mcp](https://smithery.ai/server/frihet/frihet-mcp) |
+| **Smithery** | Live | [smithery.ai/servers/frihet/frihet-mcp](https://smithery.ai/servers/frihet/frihet-mcp) |
 | **MCP Registry** | Live | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/?q=io.frihet) |
-| **Glama** | Live | [glama.ai/mcp/servers/@Frihet-io/frihet-mcp](https://glama.ai/mcp/servers/@Frihet-io/frihet-mcp) |
+| **Glama** | Live | [glama.ai/mcp/servers/Frihet-io/frihet-mcp](https://glama.ai/mcp/servers/Frihet-io/frihet-mcp) |
 | **mcp.so** | Auto-index (unverified) | [mcp.so](https://mcp.so) — indexes from npm + GitHub |
 | **PulseMCP** | Auto-index (unverified) | [pulsemcp.com](https://pulsemcp.com) — indexes from npm + GitHub |
 | **Cursor Marketplace** | Coming soon | [cursor.com/marketplace](https://cursor.com/marketplace) |
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
 
-> **Tool count:** npm `latest` (1.16.0) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
+> **Tool count:** npm `latest` (1.16.1) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
 
 ---
 
@@ -214,7 +218,7 @@ Talk to your ERP. These are real prompts, not marketing copy.
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. All 157 tools are CRUD operations over the REST API.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. Most of the 157 tools are CRUD operations over the REST API; the rest are read-only summaries and fiscal/e-invoice actions.
 
 **Works great:**
 
@@ -357,7 +361,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `face_status` | Poll submission status from FACe for a submitted invoice |
 | `ticketbai_submit` | Submit TicketBAI fiscal record to Basque Country tax authority (Hacienda) |
 | `ticketbai_status` | Poll TicketBAI submission status from the Basque tax authority |
-| `ksef_submit` | Submit invoice to KSeF (Poland national e-invoicing system) |
+| `ksef_submit` | Submit invoice to KSeF (Poland) — *stub: transport is infra-ready in Frihet-ERP but not yet exposed as a live endpoint (production gated on KSeF cert); returns a labeled "unavailable" error until activated* |
 
 ### Time Tracking (6)
 
@@ -480,7 +484,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `categorize_transaction` | Assign a category and expense/income type to a transaction |
 | `match_transaction_to_invoice` | Link a bank transaction to an existing invoice |
 
-### Fiscal — Spanish Tax Models (8)
+### Fiscal — Spanish Tax Models (7)
 
 | Tool | What it does |
 |------|-------------|
@@ -491,7 +495,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_modelo_347_summary` | Annual third-party transactions >€3,005 (Modelo 347) |
 | `verifactu_status` | Get VeriFactu submission status for a fiscal record |
 | `verifactu_resubmit` | Resubmit a rejected VeriFactu fiscal record |
-| `ticketbai_status` | Poll TicketBAI submission status (also available in E-Invoicing section) |
+| `ticketbai_status` | Poll TicketBAI submission status — *cross-reference from E-Invoicing (10); NOT counted toward this section's 7* |
 
 ### Vacation Rentals / Stay (5)
 
@@ -511,6 +515,17 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_sale` | Get details for a POS sale transaction |
 | `list_sales` | List POS sales with pagination |
 | `refund_sale` | Issue a refund for a POS sale |
+
+### Kitchen / Restaurant (6)
+
+| Tool | What it does |
+|------|-------------|
+| `list_kitchen_tickets` | List kitchen order tickets for the live board, filtered by status or station |
+| `get_kitchen_ticket` | Get a single kitchen ticket by ID with all items and their individual statuses |
+| `update_kitchen_ticket` | Advance a ticket's status (queued → preparing → ready → served) or reassign it to another station |
+| `list_kitchen_stations` | List all kitchen stations with id, name, and active status |
+| `list_menu_items` | List the kitchen menu catalog with free-text search and active/inactive filter |
+| `kitchen_flow_summary` | Slow-station detection: aggregate open tickets per station and flag the bottleneck |
 
 ### HR — Human Resources (9)
 
@@ -645,7 +660,7 @@ Two transports:
 
 ## Tool exposure: depth served on demand
 
-Frihet's differentiator is **depth** — full ES/EU fiscal coverage plus native compliance (VeriFactu, TicketBAI, Facturae/FACe/KSeF), banking, CRM, HR/payroll, stay/PMS and POS. But a flat list of every tool, loaded into an agent's context up front, is the 2026 context-rot problem: it crowds out the task and degrades tool selection before any work begins.
+Frihet's differentiator is **depth** — full ES/EU fiscal coverage plus native compliance (VeriFactu, TicketBAI, Facturae/FACe; KSeF Poland infra-ready, activation pending), banking, CRM, HR/payroll, stay/PMS and POS. But a flat list of every tool, loaded into an agent's context up front, is the 2026 context-rot problem: it crowds out the task and degrades tool selection before any work begins.
 
 `FRIHET_TOOL_MODE` lets you choose how that depth is exposed.
 
@@ -793,10 +808,10 @@ npm run build   # must pass before submitting
 - [API reference](https://docs.frihet.io/desarrolladores/api-rest) -- REST API
 - [MCP server docs](https://docs.frihet.io/desarrolladores/mcp-server) -- Setup guides, troubleshooting
 - [npm](https://www.npmjs.com/package/@frihet/mcp-server) -- Package registry
-- [Smithery](https://smithery.ai/server/frihet/frihet-mcp) -- Smithery marketplace
+- [Smithery](https://smithery.ai/servers/frihet/frihet-mcp) -- Smithery marketplace
 - [MCP Registry](https://registry.modelcontextprotocol.io/?q=io.frihet) -- Anthropic official registry
 - [Remote endpoint](https://mcp.frihet.io) -- Hosted MCP server (Cloudflare Workers)
-- [OpenAPI spec](https://api.frihet.io/openapi.yaml) -- Machine-readable API definition
+- [OpenAPI spec](https://api.frihet.io/openapi.json) -- Machine-readable API definition
 
 ---
 

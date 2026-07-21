@@ -110,7 +110,7 @@ export interface IFrihetClient {
   faceStatus(params: { invoiceId: string }): Promise<{ registroFACe: string; statusCode: string; statusDescription: string; rejectionReason?: string }>;
   ticketbaiSubmit(params: { invoiceId: string; sandbox: boolean }): Promise<{ tbaiId: string; territory: "bizkaia" | "gipuzkoa" | "araba"; status: "submitted" | "accepted" | "rejected" | "error"; sandbox: boolean; qrUrl?: string }>;
   ticketbaiStatus(params: { invoiceId: string }): Promise<{ tbaiId: string; territory: "bizkaia" | "gipuzkoa" | "araba"; status: "submitted" | "accepted" | "rejected" | "error"; rejectionReason?: string; error?: string }>;
-  // kSeFSubmit omitted — stub only (PR #417 pending)
+  // kSeFSubmit omitted — always-stub (public KSeF endpoint not yet exposed)
 
   // Stay — vacation rental endpoints (/v1/stay/*)
   listReservations(params?: { propertyId?: string; status?: string; checkInFrom?: string; checkInTo?: string; fields?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
