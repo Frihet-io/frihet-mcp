@@ -117,7 +117,7 @@ function main(): void {
     description:
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
       "Provides 157 tools (including business context, monthly summaries, quarterly taxes, invoice duplication, CRM subcollections, and deposit management), " +
-      "11 resources (8 static + 3 live), and 10 workflow prompts for business management " +
+      "11 resources (7 static + 4 live), and 10 workflow prompts for business management " +
       "with full Spanish tax compliance (IVA, IGIC, IPSI).",
   });
 
@@ -168,7 +168,7 @@ function main(): void {
   // Register tools (62 full / 60 in OpenAI mode)
   registerAllTools(server, client);
 
-  // Register 11 resources (8 static + 3 dynamic via API)
+  // Register 11 resources (7 static + 4 dynamic via API)
   registerAllResources(server, client);
 
   // Register 10 workflow prompts

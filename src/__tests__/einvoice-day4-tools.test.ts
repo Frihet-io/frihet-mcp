@@ -453,7 +453,7 @@ describe("Compliance smoke — real CF failure (500) never masked as success", (
 
 // ── ksef_submit tests ─────────────────────────────────────────────────────────
 
-describe("ksef_submit — always-stub (PR #417 pending)", () => {
+describe("ksef_submit — always-stub (endpoint not yet exposed)", () => {
   test("returns _notImplemented=true regardless of client", async () => {
     // Test with both 404 and live clients — ksef_submit is always-stub
     for (const clientFactory of [make404Client, makeLiveClient]) {
@@ -463,7 +463,7 @@ describe("ksef_submit — always-stub (PR #417 pending)", () => {
       const sc = result.structuredContent!;
       assert.equal(sc["_notImplemented"], true, "_notImplemented should be true");
       assert.ok(typeof sc["_note"] === "string", "_note should be present");
-      assert.ok((sc["_note"] as string).includes("PR #417"), "_note should mention PR #417");
+      assert.ok((sc["_note"] as string).includes("infra-ready"), "_note should reflect honest KSeF infra-ready status");
       assert.ok(typeof sc["_plannedEndpoint"] === "string", "_plannedEndpoint should be set");
     }
   });
@@ -490,7 +490,7 @@ describe("ksef_submit — always-stub (PR #417 pending)", () => {
     const tool = server.tools.get("ksef_submit")!;
     const result = await tool.handler({ invoiceId: "inv_ksef_004", mode: "mock" });
     const text = result.content[0]!.text;
-    assert.ok(text.includes("PR #417"), "Content should mention PR #417");
+    assert.ok(text.includes("infra-ready"), "Content should reflect honest unavailable/infra-ready status");
     assert.ok(text.includes("einvoice_export"), "Content should suggest einvoice_export as workaround");
   });
 

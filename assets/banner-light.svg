@@ -42,7 +42,8 @@
   <g transform="translate(820, 90)">
     <rect width="300" height="120" rx="12" fill="#ffffff" stroke="#e4e4e7" stroke-width="1"/>
     <text x="24" y="36" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="13" fill="#a1a1aa">$ npx @frihet/mcp-server</text>
-    <text x="24" y="64" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="13" fill="#16a34a">&#x2713; 35 tools registered</text>
+    <!-- tool count must match README badge (157) -->
+    <text x="24" y="64" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="13" fill="#16a34a">&#x2713; 157 tools registered</text>
     <text x="24" y="88" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="13" fill="#16a34a">&#x2713; stdio transport ready</text>
     <text x="24" y="108" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="11" fill="#a1a1aa">invoices | expenses | clients | products | quotes</text>
   </g>

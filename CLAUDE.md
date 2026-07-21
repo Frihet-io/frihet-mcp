@@ -4,12 +4,12 @@ Guidance for AI coding assistants working on this repository. See `AGENTS.md` fo
 
 ## What is this
 
-MCP server that connects AI assistants (Claude Code, ChatGPT, Cursor, Copilot, Codex, Windsurf, Antigravity, Gemini CLI, ChatGPT Desktop) to Frihet ERP. Natural language → invoices, expenses, clients, fiscal reports.
+MCP server that connects AI assistants (Claude · ChatGPT · Cursor · Windsurf · Cline · Antigravity · Codex · Copilot · Gemini CLI) to Frihet ERP. Natural language → invoices, expenses, clients, fiscal reports.
 
 **Live:**
-- npm: https://www.npmjs.com/package/@frihet/mcp-server (v1.16.0, 157 tools)
+- npm: https://www.npmjs.com/package/@frihet/mcp-server (v1.16.1, 157 tools)
 - MCP remote: https://mcp.frihet.io (Cloudflare Worker)
-- Smithery: https://smithery.ai/server/frihet/frihet-mcp
+- Smithery: https://smithery.ai/servers/frihet/frihet-mcp
 - Anthropic registry: https://registry.modelcontextprotocol.io/?q=io.frihet
 - License: MIT
 

@@ -784,7 +784,7 @@ export class FrihetClient {
     return this.request("GET", `/invoices/${encodeURIComponent(params.invoiceId)}/ticketbai/status`);
   }
 
-  // kSeFSubmit intentionally omitted — ksef_submit tool is always-stub until PR #417 merges.
+  // kSeFSubmit intentionally omitted — ksef_submit tool is always-stub (public KSeF endpoint not yet exposed; transport infra-ready in Frihet-ERP).
 
   // ---------------------------------------------------------------- Stay (Vacation Rental)
   // ----------------------------------------------------------------

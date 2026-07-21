@@ -4,6 +4,26 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [1.16.1] — 2026-07-21
+
+### Fixed
+
+- Worker zod-alias regression restoring `tools/list` param descriptions (#84).
+
+### Docs
+
+- Corrected banner tool count (35 → 157), documented Kitchen/Restaurant tools, labeled `ksef_submit` as a pending stub, shortened npm description, canonical Smithery/Glama/OpenAPI links.
+
+## [1.16.0] — 2026-07-18
+
+### Added
+
+- outputSchema coverage 138 → 160/160.
+
+### Changed
+
+- Honest OAuth consent-scope disclosure (#82).
+
 ## [1.15.3] — 2026-07-18
 
 ### Added
