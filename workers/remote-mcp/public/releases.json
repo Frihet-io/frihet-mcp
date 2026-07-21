@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.15.2"
+      "version": "1.16.1"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -28,8 +28,20 @@
       "version": "0.1.0"
     }
   },
-  "releasedAt": "2026-07-11",
+  "releasedAt": "2026-07-21",
   "releases": [
+    {
+      "version": "1.16.1",
+      "date": "2026-07-21",
+      "mcpToolCount": 157,
+      "notes": "Pre-publish 10/10 hardening: corrected hero banner tool count, documented Kitchen/Restaurant tools, KSeF status corrected to honest infra-ready, canonical links, npm description shortened. Worker zod-alias fix (#84). No tool changes."
+    },
+    {
+      "version": "1.16.0",
+      "date": "2026-07-18",
+      "mcpToolCount": 157,
+      "notes": "outputSchema coverage complete (160/160 schemas across 157 tools); honest OAuth consent-scope disclosure (#82)."
+    },
     {
       "version": "1.15.2",
       "date": "2026-07-18",
