@@ -26,6 +26,10 @@
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Frihet-io/frihet-mcp/main/assets/demo-tour.gif" alt="Frihet MCP — talk to your ERP in natural language" width="82%">
+</p>
+
 ---
 
 ## Distribution
@@ -43,7 +47,7 @@
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
 
-> **Tool count:** npm `latest` (1.16.1) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
+> **Tool count:** npm `latest` (1.16.2) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
 
 ---
 

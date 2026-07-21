@@ -4,6 +4,12 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [1.16.2] — 2026-07-21
+
+### Added
+
+- Animated product demo in the README — Dashboard → Facturas tour (rounded window, no tool changes).
+
 ## [1.16.1] — 2026-07-21
 
 ### Fixed
