@@ -276,7 +276,7 @@ Sitemap: https://www.frihet.io/sitemap-index.xml
 const AGENTS_JSON = JSON.stringify({
   name: "Frihet ERP",
   version: "0.1.0",
-  description: "AI-native ERP for freelancers and SMEs. 94 MCP tools covering invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified. MIT open-source.",
+  description: "AI-native ERP for freelancers and SMEs. 157 MCP tools covering invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified. MIT open-source.",
   url: "https://www.frihet.io",
   contact: {
     email: "ayuda@frihet.io",
@@ -317,7 +317,7 @@ const AGENTS_JSON = JSON.stringify({
   tools: [
     {
       name: "frihet.*",
-      description: "94 MCP tools available. Install @frihet/mcp-server or connect to https://mcp.frihet.io",
+      description: "157 MCP tools available. Install @frihet/mcp-server or connect to https://mcp.frihet.io",
       endpoint: "https://mcp.frihet.io/mcp",
       method: "POST",
       readOnly: false,
@@ -406,7 +406,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
     "downloadUrl": "https://www.npmjs.com/package/@frihet/mcp-server",
     "description": "MCP server for Frihet ERP. 157 tools for invoicing, expenses, accounting, tax compliance (VeriFactu/TicketBAI/Facturae), banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, HR, payroll, and gestoria. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
     "featureList": [
-      "151 MCP tools for ERP operations",
+      `${FULL_TOOL_COUNT} MCP tools for ERP operations`,
       "OAuth 2.0 + PKCE authentication",
       "Full ES/EU fiscal compliance: VeriFactu, TicketBAI, Facturae, FACe, PEPPOL",
       "REST API proxy (OpenAPI 3.1)",
@@ -1072,8 +1072,10 @@ export default {
     if (url.pathname === "/health") {
       const checks: Record<string, { status: string; latencyMs?: number; statusCode?: number }> = {};
 
-      // Check upstream API directly (bypass api.frihet.io proxy — same-zone Worker fetch returns 522)
-      const UPSTREAM_HEALTH = "https://us-central1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/health";
+      // Check upstream API directly (bypass api.frihet.io proxy — same-zone Worker fetch returns 522).
+      // Region is europe-west1 (canonical). us-central1 is the legacy region and 404s — a 404 is NOT
+      // healthy, so status must be 2xx to count as "ok" (previously `< 500` reported a 404 as ok).
+      const UPSTREAM_HEALTH = "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/health";
       try {
         const apiStart = Date.now();
         const apiRes = await fetch(UPSTREAM_HEALTH, {
@@ -1082,7 +1084,7 @@ export default {
           signal: AbortSignal.timeout(5000),
         });
         checks.api = {
-          status: apiRes.status < 500 ? "ok" : "degraded",
+          status: apiRes.ok ? "ok" : "degraded",
           latencyMs: Math.round(Date.now() - apiStart),
           statusCode: apiRes.status,
         };

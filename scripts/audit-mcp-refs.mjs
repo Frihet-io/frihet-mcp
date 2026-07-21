@@ -63,12 +63,15 @@ const REPOS = {
     files: [
       'server.json',
       'package.json',
+      'glama.json',
       'README.md',
       'CHANGELOG.md',
       'skill/SKILL.md',
       'src/index.ts',
+      'scripts/postinstall.js',
       'workers/remote-mcp/src/index.ts',
       'workers/remote-mcp/src/auth-handler.ts',
+      'workers/remote-mcp/src/server-meta.ts',
       'workers/remote-mcp/public/releases.json',
     ],
   },
@@ -124,8 +127,10 @@ const TOOL_NOUNS = [
   'ツール',
 ];
 const TOOL_NOUN_RE = TOOL_NOUNS.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-// e.g. "94 tools", "94 herramientas"
-const TOOL_COUNT_RE = new RegExp(`\\b(\\d{1,4})[\\s_-]+(${TOOL_NOUN_RE})\\b`, 'gi');
+// e.g. "94 tools", "94 herramientas", and "157 MCP tools" (one optional qualifier
+// word between the number and the noun — the worker JSON-LD said "151 MCP tools"
+// and slipped past the tighter `\d+ tools` pattern, letting the count drift).
+const TOOL_COUNT_RE = new RegExp(`\\b(\\d{1,4})[\\s_-]+(?:MCP[\\s_-]+)?(${TOOL_NOUN_RE})\\b`, 'gi');
 
 // Files whose tool-count entries are entirely historical/narrative — skip count checks.
 // These files record past release totals as changelog entries (not current-state claims).
@@ -287,6 +292,25 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
       }
     }
 
+    // Special case: server-meta.ts carries the Worker's FULL_TOOL_COUNT as a bare
+    // numeric constant (no tool-noun on the line), invisible to the generic scan.
+    // Assert it equals the SoT tool count so the Worker surfaces can't re-drift.
+    if (repoName === 'frihet-mcp' && rel === 'workers/remote-mcp/src/server-meta.ts') {
+      const src = readFileSync(abs, 'utf8');
+      const m = src.match(/FULL_TOOL_COUNT\s*=\s*(\d+)/);
+      if (m && parseInt(m[1], 10) !== TOOL_COUNT) {
+        findings.push({
+          repo: repoName, file: rel, line: 'FULL_TOOL_COUNT', severity: 'fail',
+          kind: 'tool-count', found: parseInt(m[1], 10), expected: TOOL_COUNT,
+          snippet: `export const FULL_TOOL_COUNT = ${m[1]}`,
+        });
+        if (FIX) {
+          writeFileSync(abs, src.replace(/(FULL_TOOL_COUNT\s*=\s*)\d+/, `$1${TOOL_COUNT}`));
+          findings.push({ repo: repoName, file: rel, severity: 'fixed', msg: `FULL_TOOL_COUNT synced to ${TOOL_COUNT}` });
+        }
+      }
+    }
+
     lines.forEach((line, idx) => {
       // Skip safe-pattern lines for tool-count check
       const safeLine = isHistoryFile || SAFE_PATTERNS.some((re) => re.test(line));
@@ -346,8 +370,9 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
       // Replace tool-count: only on flagged file lines
       const fileFails = findings.filter((f) => f.repo === repoName && f.file === rel && f.kind === 'tool-count');
       for (const fail of fileFails) {
-        // Replace exact pattern "N tools/herramientas" → "TOOL_COUNT $noun"
-        const re = new RegExp(`\\b${fail.found}([\\s_-]+(?:${TOOL_NOUN_RE}))\\b`, 'gi');
+        // Replace "N tools/herramientas" and "N MCP tools" → "TOOL_COUNT $qualifier+noun"
+        // ($1 captures the optional "MCP " qualifier + noun so it is preserved).
+        const re = new RegExp(`\\b${fail.found}([\\s_-]+(?:MCP[\\s_-]+)?(?:${TOOL_NOUN_RE}))\\b`, 'gi');
         const newTxt = txt.replace(re, `${TOOL_COUNT}$1`);
         if (newTxt !== txt) { txt = newTxt; mutated = true; }
       }
