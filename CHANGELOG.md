@@ -4,6 +4,12 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [1.16.3] — 2026-07-21
+
+### Changed
+
+- Reworked the README product demo into a 3-surface tour — Dashboard (natural-language "Pregúntale a Frihet" ask) → Facturas split view (line items, IGIC, Pagada) → Analytics chart — framed in a browser-chrome mockup with Ken-Burns motion and crossfades. Replaces the flatter two-surface v1. No tool changes; GIF served via raw-GitHub URL, excluded from the npm tarball.
+
 ## [1.16.2] — 2026-07-21
 
 ### Added

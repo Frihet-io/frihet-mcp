@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.16.2"
+      "version": "1.16.3"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -30,6 +30,12 @@
   },
   "releasedAt": "2026-07-21",
   "releases": [
+    {
+      "version": "1.16.3",
+      "date": "2026-07-21",
+      "mcpToolCount": 157,
+      "notes": "Reworked README product demo: 3-surface tour (Dashboard AI → Facturas split view → Analytics) with browser chrome, motion and crossfades. No tool changes."
+    },
     {
       "version": "1.16.2",
       "date": "2026-07-21",
@@ -116,5 +122,5 @@
       "version": "1.7.0-beta.1"
     }
   ],
-  "version": "1.16.2"
+  "version": "1.16.3"
 }

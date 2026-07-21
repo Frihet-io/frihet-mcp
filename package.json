@@ -1,6 +1,6 @@
 {
   "name": "@frihet/mcp-server",
-  "version": "1.16.2",
+  "version": "1.16.3",
   "description": "AI-native MCP server for Frihet ERP — 157 tools: invoicing, expenses, CRM, banking, POS + ES/EU fiscal compliance (VeriFactu, TicketBAI, Facturae). Zero-install at mcp.frihet.io. Works with Claude, ChatGPT, Cursor, Windsurf, Cline & any MCP client.",
   "type": "module",
   "main": "./dist/index.js",
