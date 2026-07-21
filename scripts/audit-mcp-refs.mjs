@@ -339,10 +339,15 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
             snippet: line.trim().slice(0, 120),
           });
         }
-        // (c) discovery openapi descriptor pointing at api.frihet.io (only a JSON
-        // `openapi: "https://api.frihet.io/openapi.json"` field — quoted value —
-        // is flagged, NOT the self-referential llms.txt/ai.txt/sitemap mentions).
-        if (/openapi['"]?\s*:\s*["']https:\/\/api\.frihet\.io\/openapi\.json/i.test(line)) {
+        // (c) discovery descriptor naming api.frihet.io as the openapi/canonical
+        // spec location — the quoted `openapi: "..."` JSON field OR the yaml-note
+        // lowercase `canonical:` key. Both must point at the 200 host
+        // mcp.frihet.io; api.frihet.io only 302-redirects. Self-referential
+        // plain-text mentions (e.g. `OpenAPI: https://api.frihet.io/openapi.json`
+        // in the ai.txt block, or the curl example) carry no quoted `openapi:` /
+        // lowercase `canonical:` key and are intentionally NOT flagged.
+        if (/openapi['"]?\s*:\s*["']https:\/\/api\.frihet\.io\/openapi\.json/i.test(line) ||
+            /canonical:\s*https:\/\/api\.frihet\.io\/openapi\.json/.test(line)) {
           findings.push({
             repo: repoName, file: rel, line: idx + 1, severity: 'fail',
             kind: 'discovery-openapi', found: 'api.frihet.io/openapi.json',

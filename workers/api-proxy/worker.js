@@ -276,11 +276,11 @@ const MCP_JSON = JSON.stringify({
 // /openapi.yaml — note redirecting to canonical JSON (pragmatic: no YAML transpile needed)
 const OPENAPI_YAML_NOTE = `# Frihet API OpenAPI Specification
 # The canonical machine-readable spec is available in JSON format.
-# Redirect: https://api.frihet.io/openapi.json
+# This path (api.frihet.io/openapi.json) 302-redirects to the canonical copy.
 #
 # To convert to YAML locally:
-#   curl https://api.frihet.io/openapi.json | python3 -c "import sys,json,yaml;print(yaml.dump(json.load(sys.stdin)))"
-canonical: https://api.frihet.io/openapi.json
+#   curl https://mcp.frihet.io/openapi.json | python3 -c "import sys,json,yaml;print(yaml.dump(json.load(sys.stdin)))"
+canonical: https://mcp.frihet.io/openapi.json
 format: JSON
 note: Use the JSON endpoint for programmatic access.
 `;
