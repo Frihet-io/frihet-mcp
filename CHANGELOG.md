@@ -4,6 +4,10 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Demo GIF: re-framed the Dashboard scene so the pan stops above a buggy `Antigüedad de Cobros` widget that rendered `NaNd cobro medio` (an upstream ERP display defect) — it was briefly visible in the shipped v2. Asset-only fix (GIF is raw-served, not in the npm tarball), no version bump.
+
 ## [1.16.3] — 2026-07-21
 
 ### Changed
