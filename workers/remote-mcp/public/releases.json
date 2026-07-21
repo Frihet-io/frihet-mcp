@@ -19,7 +19,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.16.3"
+      "version": "1.16.4"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -30,6 +30,12 @@
   },
   "releasedAt": "2026-07-21",
   "releases": [
+    {
+      "version": "1.16.4",
+      "date": "2026-07-21",
+      "mcpToolCount": 157,
+      "notes": "Trust/metadata hygiene: postinstall version now dynamic (was stale v1.5.2) + fixed docs link; /health uses canonical europe-west1 and only counts 2xx as healthy; tool-count drift root-caused via SoT+gate (audit now catches 'N MCP tools', asserts FULL_TOOL_COUNT); new no-legacy-region gate; slimmer tarball. No tool changes."
+    },
     {
       "version": "1.16.3",
       "date": "2026-07-21",
@@ -122,5 +128,5 @@
       "version": "1.7.0-beta.1"
     }
   ],
-  "version": "1.16.3"
+  "version": "1.16.4"
 }

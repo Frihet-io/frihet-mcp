@@ -18,7 +18,8 @@ import pkg from "../../../package.json";
 export const MCP_SERVER_VERSION: string = (pkg as { version: string }).version;
 
 /**
- * Full MCP surface size: 151 business tools + 6 grouped discovery meta-tools.
- * Mirrors the audit:mcp-refs SoT (count of registerTool calls across src/tools).
+ * Full MCP surface size (business tools + grouped discovery meta-tools).
+ * Mirrors the audit:mcp-refs SoT (count of registerTool calls across src/tools);
+ * the gate asserts this constant equals that count, so it cannot silently drift.
  */
 export const FULL_TOOL_COUNT = 157;

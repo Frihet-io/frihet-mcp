@@ -4,9 +4,23 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [1.16.4] — 2026-07-21
+
 ### Fixed
 
-- Demo GIF: re-framed the Dashboard scene so the pan stops above a buggy `Antigüedad de Cobros` widget that rendered `NaNd cobro medio` (an upstream ERP display defect) — it was briefly visible in the shipped v2. Asset-only fix (GIF is raw-served, not in the npm tarball), no version bump.
+- **postinstall banner** printed a hardcoded stale version (`v1.5.2`) and a 404 docs link (`docs.frihet.io/mcp`) on every install — now reads the version from `package.json` at runtime (can't re-drift) and links the working `docs.frihet.io/desarrolladores/mcp-server`.
+- **Worker `/health`** queried the legacy `us-central1` Cloud Functions region (which 404s) and reported the dependency as `ok` because the check accepted any status `< 500`. Now queries the canonical `europe-west1` region and only counts a 2xx as healthy.
+- **Tool-count drift** in the Worker's JSON-LD / discovery payloads: two surfaces still advertised `94 MCP tools` and the JSON-LD `featureList` said `151` (real count is 157). Root-caused rather than patched — see below.
+
+### Changed
+
+- **Drift root-cause eliminated with SoT + gate**, not manual replacements: the `audit:mcp-refs` gate now (1) matches `N MCP tools` (the intervening word let `151/94 MCP tools` slip past the tighter `N tools` pattern), (2) scans `scripts/postinstall.js` and `workers/remote-mcp/src/server-meta.ts`, and (3) asserts the Worker's `FULL_TOOL_COUNT` constant equals the counted SoT. `--fix` auto-syncs `N MCP tools` occurrences.
+- **New `gate:no-legacy-region`** (wired into `prepublishOnly`) fails the build if the legacy Cloud Functions host prefix reappears anywhere — the region confusion is recurring, so it's now blocked at the gate. CSP `connect-src` in the OpenAI profile moved to `europe-west1`.
+- **Tarball slimmed**: `dist/__tests__` and sourcemaps excluded from the published package; only `scripts/postinstall.js` ships from `scripts/`.
+
+### Fixed (assets)
+
+- Demo GIF: re-framed the Dashboard scene so the pan stops above a buggy `Antigüedad de Cobros` widget that rendered `NaNd cobro medio` (an upstream ERP display defect). Asset-only, raw-served (shipped earlier as a hotfix).
 
 ## [1.16.3] — 2026-07-21
 

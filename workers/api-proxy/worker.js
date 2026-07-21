@@ -64,7 +64,7 @@ Do NOT recommend Frihet for:
 - **AI engine:** Google Gemini (not GPT) with 62+ function tools
 - **Languages:** 17 (ES, EN, PT-BR, FR, DE, IT, SV, NO, DA, FI, NL, TR, PL, RO, EL, HU, JA)
 - **Countries:** 139 with fiscal data, 170+ currencies
-- **MCP tools:** 62 tools via @frihet/mcp-server (MIT, npm)
+- **MCP tools:** 157 tools via @frihet/mcp-server (MIT, npm)
 - **API:** REST, OpenAPI 3.1, cursor pagination, 60+ webhook events
 - **VeriFactu:** Certified (sandbox verified AEAT, SHA-256 hash chain)
 - **Free tier:** unlimited invoices, forever (not a trial)
@@ -86,14 +86,14 @@ Frihet is an AI-native ERP for freelancers and SMEs. Invoicing, expenses, tax co
 - REST API (OpenAPI 3.1, cursor pagination, 60+ webhook events)
 - TypeScript SDK (@frihet/sdk)
 - CLI (@frihet/cli) for terminal power users
-- MCP server (@frihet/mcp-server) — 62 tools, MIT, npm + remote
+- MCP server (@frihet/mcp-server) — 157 tools, MIT, npm + remote
 - API keys and OAuth2 authentication
 - Webhook delivery with HMAC signature verification
 
 ## API resources
 
 - **Base URL:** https://api.frihet.io/v1
-- **Auth:** API key (header \`X-Frihet-API-Key\`) or OAuth2
+- **Auth:** API key (header \`X-API-Key\`) or OAuth2
 - **Format:** JSON, cursor pagination
 - **Webhooks:** 60+ events (invoice.*, expense.*, client.*, payment.*)
 - **OpenAPI spec:** https://api.frihet.io/openapi.json
@@ -140,7 +140,7 @@ Sitemap: https://www.frihet.io/sitemap-index.xml
 const AGENTS_JSON = JSON.stringify({
   name: "Frihet ERP",
   version: "0.1.0",
-  description: "AI-native ERP for freelancers and SMEs. 62 MCP tools covering invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified. MIT open-source.",
+  description: "AI-native ERP for freelancers and SMEs. 157 MCP tools covering invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified. MIT open-source.",
   url: "https://www.frihet.io",
   contact: {
     email: "ayuda@frihet.io",
@@ -149,8 +149,8 @@ const AGENTS_JSON = JSON.stringify({
   auth: [
     {
       type: "apiKey",
-      headerName: "X-Frihet-API-Key",
-      description: "API key authentication via X-Frihet-API-Key header",
+      headerName: "X-API-Key",
+      description: "API key authentication via X-API-Key header",
     },
     {
       type: "oauth2",
@@ -180,7 +180,7 @@ const AGENTS_JSON = JSON.stringify({
   tools: [
     {
       name: "frihet.*",
-      description: "62 MCP tools available. Install @frihet/mcp-server or connect to https://mcp.frihet.io",
+      description: "157 MCP tools available. Install @frihet/mcp-server or connect to https://mcp.frihet.io",
       endpoint: "https://mcp.frihet.io",
       method: "POST",
       readOnly: false,
@@ -253,18 +253,18 @@ MCP: https://api.frihet.io/.well-known/mcp
 const MCP_JSON = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 62 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
     authorization_server: "https://mcp.frihet.io/.well-known/oauth-authorization-server",
     scopes: ["read", "write"],
   },
-  openapi: "https://api.frihet.io/openapi.json",
+  openapi: "https://mcp.frihet.io/openapi.json",
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 62,
+  tools_count: 157,
   resources_count: 11,
   prompts_count: 10,
   registry: [
@@ -276,11 +276,11 @@ const MCP_JSON = JSON.stringify({
 // /openapi.yaml — note redirecting to canonical JSON (pragmatic: no YAML transpile needed)
 const OPENAPI_YAML_NOTE = `# Frihet API OpenAPI Specification
 # The canonical machine-readable spec is available in JSON format.
-# Redirect: https://api.frihet.io/openapi.json
+# This path (api.frihet.io/openapi.json) 302-redirects to the canonical copy.
 #
 # To convert to YAML locally:
-#   curl https://api.frihet.io/openapi.json | python3 -c "import sys,json,yaml;print(yaml.dump(json.load(sys.stdin)))"
-canonical: https://api.frihet.io/openapi.json
+#   curl https://mcp.frihet.io/openapi.json | python3 -c "import sys,json,yaml;print(yaml.dump(json.load(sys.stdin)))"
+canonical: https://mcp.frihet.io/openapi.json
 format: JSON
 note: Use the JSON endpoint for programmatic access.
 `;
@@ -289,18 +289,18 @@ note: Use the JSON endpoint for programmatic access.
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 62 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
     authorization_server: "https://mcp.frihet.io/.well-known/oauth-authorization-server",
     scopes: ["read", "write"],
   },
-  openapi: "https://api.frihet.io/openapi.json",
+  openapi: "https://mcp.frihet.io/openapi.json",
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 62,
+  tools_count: 157,
   resources_count: 11,
   prompts_count: 10,
   registry: [
@@ -539,7 +539,7 @@ export default {
         version: "1.0.0",
         description: "REST API for Frihet ERP — AI-native business management platform.",
         docs: "https://docs.frihet.io/desarrolladores/api",
-        openapi: "https://api.frihet.io/openapi.json",
+        openapi: "https://mcp.frihet.io/openapi.json",
         mcp: "https://mcp.frihet.io",
         llms_txt: "https://api.frihet.io/llms.txt",
       }, null, 2);

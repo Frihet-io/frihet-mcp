@@ -1,6 +1,6 @@
 {
   "name": "@frihet/mcp-server",
-  "version": "1.16.3",
+  "version": "1.16.4",
   "description": "AI-native MCP server for Frihet ERP — 157 tools: invoicing, expenses, CRM, banking, POS + ES/EU fiscal compliance (VeriFactu, TicketBAI, Facturae). Zero-install at mcp.frihet.io. Works with Claude, ChatGPT, Cursor, Windsurf, Cline & any MCP client.",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,10 +12,11 @@
     "test": "npm run build && node --test dist/__tests__/openai-profile.test.js dist/__tests__/tool-exposure.test.js dist/__tests__/einvoice-tools.test.js dist/__tests__/einvoice-day4-tools.test.js dist/__tests__/stay-tools.test.js dist/__tests__/pos-tools.test.js dist/__tests__/kitchen-tools.test.js dist/__tests__/banking-tools.test.js dist/__tests__/banking-client-contract.test.js dist/__tests__/pagination-cursor-param.test.js dist/__tests__/fiscal-tools.test.js dist/__tests__/time-tools.test.js dist/__tests__/recurring-tools.test.js dist/__tests__/team-tools.test.js dist/__tests__/d4b-hr-payroll-onboarding-tools.test.js dist/__tests__/audit-server-version.test.js dist/__tests__/openai-grouped-compose.test.js dist/__tests__/contract.test.js dist/__tests__/observability-redaction.test.js dist/__tests__/intelligence-duplicate-invoice.test.js dist/__tests__/get-envelope-unwrap-regression.test.js dist/__tests__/mutation-unwrap-and-schema-regression.test.js dist/__tests__/schema-envelope-guard.test.js dist/__tests__/demo-mode.test.js",
     "start": "node dist/index.js",
     "postinstall": "node scripts/postinstall.js || true",
-    "prepublishOnly": "npm run build && npm run audit:mcp-refs -- --repo frihet-mcp",
+    "prepublishOnly": "npm run build && npm run audit:mcp-refs -- --repo frihet-mcp && npm run gate:no-legacy-region",
     "audit:mcp-refs": "node scripts/audit-mcp-refs.mjs",
     "audit:mcp-refs:fix": "node scripts/audit-mcp-refs.mjs --fix",
-    "gate:no-leak": "bash scripts/no-public-leak.sh"
+    "gate:no-leak": "bash scripts/no-public-leak.sh",
+    "gate:no-legacy-region": "bash scripts/no-legacy-region.sh"
   },
   "keywords": [
     "accounting",
@@ -76,7 +77,9 @@
   },
   "files": [
     "dist",
-    "scripts",
+    "!dist/__tests__",
+    "!dist/**/*.map",
+    "scripts/postinstall.js",
     "assets/banner.svg",
     "assets/banner-light.svg",
     "assets/logo-400.png",

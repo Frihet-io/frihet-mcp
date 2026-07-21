@@ -333,7 +333,7 @@ export const OPENAI_CSP =
   "default-src 'self'; " +
   "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com; " +
   "style-src 'self' 'unsafe-inline'; " +
-  "connect-src 'self' https://api.frihet.io https://us-central1-gen-lang-client-0335716041.cloudfunctions.net " +
+  "connect-src 'self' https://api.frihet.io https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net " +
     "https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://www.gstatic.com; " +
   "frame-src https://accounts.google.com https://github.com https://login.microsoftonline.com; " +
   "img-src 'self' data: https:; " +
