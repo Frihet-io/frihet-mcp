@@ -321,7 +321,7 @@ All notable changes to `@frihet/mcp-server` are documented here.
 ## [1.5.3] — 2026-03-28
 
 ### Added
-- **Tool #53 — `create_credit_note`**: Create credit notes linked to existing invoices with full line-item control.
+- **Tool #53 — `create_credit_note`**: Create credit notes linked to existing invoices with full line-item control. _(Correction, 1.16.5: "full line-item control" was never true. The endpoint has no line-level or partial credit — `fullCredit: false` returns `400 PARTIAL_CREDIT_NOT_IMPLEMENTED`. Left in place rather than rewritten, since this entry is a released record.)_
 - **Tool #54 — `get_invoice_einvoice`**: Retrieve the EN16931-compliant e-invoice (XML/UBL) for any issued invoice.
 - **Tool #55 — `apply_late_fee`**: Apply a late payment fee to an overdue invoice, with configurable rate and description.
 

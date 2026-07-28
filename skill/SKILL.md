@@ -137,7 +137,16 @@ draft → sent → paid
                         → cancelled
 ```
 
-Rectificativa (credit note) types: R1 (error), R2 (insolvency), R3 (discount), R4 (other), R5 (simplified).
+Rectificativa (credit note) types, per the LIVA article each one keys on:
+R1 (art. 80.1-2 / 80.6 — error in law, returns, retroactive discounts), R2 (art. 80.3 —
+concurso de acreedores, i.e. a court has declared the customer insolvent), R3 (art. 80.4 —
+wholly or partly uncollectible debt), R4 (anything else), R5 (rectifying a simplified invoice).
+
+`create_credit_note` only reaches R1 and R4: the type is derived server-side from `reason`
+(`error` -> R1, everything else -> R4). R2, R3 and R5 exist in the regulation but cannot be
+selected through the API — use the app. The tool creates a DRAFT (no fiscal number, no hash,
+not submitted to VeriFactu), always rectifies by differences (`TipoRectificativa = I`), and
+only does full credits — `fullCredit: false` returns `400 PARTIAL_CREDIT_NOT_IMPLEMENTED`.
 
 ### Quote Status Flow
 
