@@ -179,15 +179,22 @@ export class DemoFrihetClient implements IFrihetClient {
       ...FISCAL_STAMP,
     };
   }
-  async createCreditNote(invoiceId: string, data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string }): Promise<Rec> {
+  // Mirrors the live 201 body: a DRAFT rectificativa, always by differences
+  // (`rectificationMethod: "I"`), R-type derived from `reason` server-side
+  // (`error` → R1, everything else → R4 — R2/R3/R5 are unreachable via the API).
+  async createCreditNote(invoiceId: string, data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string }, _idempotencyKey?: string): Promise<Rec> {
+    const rType = data.reason === "error" ? "R1" : "R4";
     return {
       success: true,
       creditNote: {
         id: demoId("demo_cn"),
-        documentNumber: "R4-DEMO-001",
+        documentNumber: `${rType}-DEMO-001`,
         originalInvoiceId: invoiceId,
         reason: data.reason,
         fullCredit: data.fullCredit ?? true,
+        status: "draft",
+        rectificationMethod: "I",
+        totalCredited: 1210.0,
       },
       ...FISCAL_STAMP,
     };

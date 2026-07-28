@@ -467,13 +467,14 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Create Credit Note",
       description:
-        "Create a credit note (factura rectificativa) for an existing invoice. " +
-        "This reverses all or part of an invoice for compliance. " +
-        "Spanish market: generates VeriFactu-compliant R1-R5 rectificativa. " +
-        "Other markets: standard credit note with negative amounts. " +
-        "/ Crea una factura rectificativa para una factura existente. " +
-        "Mercado espanol: genera rectificativa R1-R5 conforme a VeriFactu. " +
-        "Otros mercados: nota de credito estandar con importes negativos.",
+        "Create a full credit note (factura rectificativa) for an existing invoice, as a DRAFT. " +
+        "It does NOT issue: the draft carries no fiscal number, no hash and is not sent to VeriFactu — " +
+        "issue it from the app when you are ready. Always rectifies by differences (TipoRectificativa = I). " +
+        "Spanish market: R-type is derived from `reason` (error -> R1, anything else -> R4). " +
+        "Partial credits are not supported. Requires the `pro` plan. " +
+        "/ Crea una factura rectificativa completa como BORRADOR. No emite: sin numero fiscal, sin hash, " +
+        "sin envio a VeriFactu. Siempre rectifica por diferencias (tipo I). El tipo R se deriva de `reason` " +
+        "(error -> R1, resto -> R4). No admite abonos parciales. Requiere plan `pro`.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
         invoiceId: z
@@ -493,23 +494,35 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           .boolean()
           .optional()
           .describe(
-            "true = full credit (tipo S, sustitucion), false = partial (tipo I, diferencias). Default: true " +
-            "/ true = abono total (tipo S), false = parcial (tipo I). Por defecto: true",
+            "Must be true (the default). `false` is rejected with 400 PARTIAL_CREDIT_NOT_IMPLEMENTED — " +
+            "the API has no line-level or partial credit. It does NOT select the rectification method: " +
+            "that is always I (por diferencias). " +
+            "/ Debe ser true (por defecto). `false` devuelve 400 PARTIAL_CREDIT_NOT_IMPLEMENTED. " +
+            "No elige el metodo de rectificacion: siempre es I (por diferencias).",
           ),
         issueDate: z
           .string()
           .optional()
           .describe("ISO date for the credit note (YYYY-MM-DD). Defaults to today. / Fecha de emision (YYYY-MM-DD). Por defecto hoy."),
+        idempotencyKey: z
+          .string()
+          .optional()
+          .describe(
+            "Optional idempotency key. One is generated per call when omitted; pass your own to make a " +
+            "retry replay the stored result instead of creating a second draft. Reusing a key with a " +
+            "different body returns 409 IDEMPOTENCY_KEY_REUSED — reconcile, do not retry with a new key. " +
+            "/ Clave de idempotencia opcional. Se genera una por llamada si se omite.",
+          ),
       },
       outputSchema: creditNoteResultOutput,
     },
-    async ({ invoiceId, reason, reasonDescription, fullCredit, issueDate }) => withToolLogging("create_credit_note", async () => {
+    async ({ invoiceId, reason, reasonDescription, fullCredit, issueDate, idempotencyKey }) => withToolLogging("create_credit_note", async () => {
       const result = await client.createCreditNote(invoiceId, {
         reason,
         reasonDescription,
         fullCredit: fullCredit ?? true,
         issueDate,
-      });
+      }, idempotencyKey);
       const hints = enrichResponse("invoices", "create", result);
       return {
         content: [mutateContent(formatRecord("Credit note created", result))],

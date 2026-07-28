@@ -21,6 +21,29 @@ const MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 const REQUEST_TIMEOUT_MS = 30000;
 
+/**
+ * HTTP methods for which the backend treats the request as a mutation and
+ * therefore accepts (and for some endpoints REQUIRES) an `Idempotency-Key`
+ * header. `POST /v1/invoices/:id/credit-note` rejects a keyless request with
+ * `400 IDEMPOTENCY_KEY_REQUIRED`, so a client that never sends one fails 100%
+ * of the time — see src/__tests__/idempotency-key-contract.test.ts.
+ */
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Fresh idempotency key. `crypto.randomUUID` exists on Node >= 19 globals and
+ * on the Cloudflare Workers runtime; Node 18 (our floor) exposes it via
+ * `globalThis.crypto` too, but guard anyway so an exotic runtime degrades to a
+ * still-unique key rather than throwing inside a mutation.
+ */
+function newIdempotencyKey(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (typeof c?.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  return `frihet-mcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
 export class FrihetApiError extends Error {
   constructor(
     public readonly statusCode: number,
@@ -65,8 +88,17 @@ export class FrihetClient {
     body?: unknown,
     query?: Record<string, string | number | undefined>,
     retryCount = 0,
+    idempotencyKey?: string,
   ): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
+
+    // Resolved once, at the top of the call chain: a caller-supplied key wins,
+    // otherwise mutations get a freshly minted one. The resolved value is then
+    // threaded through the 429 recursion below so a retry replays the SAME key
+    // — retrying with a new key is exactly the duplicate the key exists to
+    // prevent (a retried credit-note would create a second draft).
+    const resolvedIdempotencyKey =
+      idempotencyKey ?? (MUTATING_METHODS.has(method) ? newIdempotencyKey() : undefined);
 
     if (query) {
       for (const [key, value] of Object.entries(query)) {
@@ -81,6 +113,10 @@ export class FrihetClient {
       "Content-Type": "application/json",
       Accept: "application/json",
     };
+
+    if (resolvedIdempotencyKey) {
+      headers["Idempotency-Key"] = resolvedIdempotencyKey;
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -131,7 +167,14 @@ export class FrihetClient {
 
       logRetry(method, path, retryCount, delayMs);
       await this.sleep(delayMs);
-      return this.request<T>(method, path, body, query, retryCount + 1);
+      return this.request<T>(
+        method,
+        path,
+        body,
+        query,
+        retryCount + 1,
+        resolvedIdempotencyKey,
+      );
     }
 
     // Error responses
@@ -210,8 +253,9 @@ export class FrihetClient {
     path: string,
     body?: unknown,
     query?: Record<string, string | number | undefined>,
+    idempotencyKey?: string,
   ): Promise<T> {
-    const raw = await this.request<unknown>(method, path, body, query);
+    const raw = await this.request<unknown>(method, path, body, query, 0, idempotencyKey);
 
     if (
       raw !== null &&
@@ -511,11 +555,27 @@ export class FrihetClient {
     return this.requestUnwrapped("GET", `/invoices/${encodeURIComponent(invoiceId)}/xml`);
   }
 
+  /**
+   * `POST /v1/invoices/:id/credit-note` — creates a rectificativa DRAFT.
+   *
+   * The backend REQUIRES an `Idempotency-Key` header (`400
+   * IDEMPOTENCY_KEY_REQUIRED` without it). `request` mints one for every
+   * mutation, so passing `idempotencyKey` is optional: supply it to make a
+   * caller-driven retry replay the stored 201 instead of creating a second
+   * draft (the replay carries `X-Idempotent-Replayed: true`).
+   */
   async createCreditNote(
     invoiceId: string,
     data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string },
+    idempotencyKey?: string,
   ): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(invoiceId)}/credit-note`, data);
+    return this.requestUnwrapped(
+      "POST",
+      `/invoices/${encodeURIComponent(invoiceId)}/credit-note`,
+      data,
+      undefined,
+      idempotencyKey,
+    );
   }
 
   async applyLateFee(invoiceId: string, data?: { amount?: number; daysOverdue?: number }): Promise<any> {
