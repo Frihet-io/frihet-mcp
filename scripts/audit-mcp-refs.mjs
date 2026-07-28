@@ -339,19 +339,28 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
             snippet: line.trim().slice(0, 120),
           });
         }
-        // (c) discovery descriptor naming api.frihet.io as the openapi/canonical
-        // spec location — the quoted `openapi: "..."` JSON field OR the yaml-note
-        // lowercase `canonical:` key. Both must point at the 200 host
-        // mcp.frihet.io; api.frihet.io only 302-redirects. Self-referential
-        // plain-text mentions (e.g. `OpenAPI: https://api.frihet.io/openapi.json`
-        // in the ai.txt block, or the curl example) carry no quoted `openapi:` /
-        // lowercase `canonical:` key and are intentionally NOT flagged.
-        if (/openapi['"]?\s*:\s*["']https:\/\/api\.frihet\.io\/openapi\.json/i.test(line) ||
-            /canonical:\s*https:\/\/api\.frihet\.io\/openapi\.json/.test(line)) {
+        // (c) discovery descriptor naming the WRONG canonical openapi host — the
+        // quoted `openapi: "..."` JSON field or the lowercase `canonical:` key.
+        //
+        // This rule used to point the other way: it required mcp.frihet.io,
+        // because api.frihet.io/openapi.json only 302-redirected there. That
+        // redirect was itself the bug. mcp.frihet.io served a HAND-COPIED static
+        // file that had been stale for six weeks and told every client that
+        // POST /v1/invoices/:id/credit-note returns 200 and issues a fiscal
+        // document (it returns 201 and creates a draft). The gate was enforcing
+        // the drifted copy as canonical.
+        //
+        // api.frihet.io now proxies the publicApi Cloud Function, which serves
+        // the spec bundled with its own deployed code — it cannot describe an
+        // API other than the one it is fronting. That is the canonical host, and
+        // the mcp.frihet.io copy is a generated artifact of it
+        // (scripts/sync-openapi.mjs).
+        if (/openapi['"]?\s*:\s*["']https:\/\/mcp\.frihet\.io\/openapi\.json/i.test(line) ||
+            /canonical:\s*https:\/\/mcp\.frihet\.io\/openapi\.json/.test(line)) {
           findings.push({
             repo: repoName, file: rel, line: idx + 1, severity: 'fail',
-            kind: 'discovery-openapi', found: 'api.frihet.io/openapi.json',
-            expected: 'mcp.frihet.io/openapi.json',
+            kind: 'discovery-openapi', found: 'mcp.frihet.io/openapi.json',
+            expected: 'api.frihet.io/openapi.json',
             snippet: line.trim().slice(0, 120),
           });
         }
