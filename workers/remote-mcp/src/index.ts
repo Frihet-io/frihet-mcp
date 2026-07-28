@@ -1227,8 +1227,22 @@ export default {
       }
 
       // /openapi.json — served from ASSETS binding (public/openapi.json)
-      // Note: Cannot proxy api.frihet.io/openapi.json — same-zone Worker subrequest is blocked by Cloudflare (522).
-      // Instead, openapi.json is bundled into public/ at deploy time (copied from Frihet-ERP/functions/src/openapi.json).
+      //
+      // Cannot proxy api.frihet.io/openapi.json: same-zone Worker subrequest is
+      // blocked by Cloudflare (522). And Workers Assets serves the asset
+      // directory BEFORE this Worker runs, so this host has to ship a real file.
+      //
+      // That file is DERIVED, never hand-edited. `node scripts/sync-openapi.mjs`
+      // (repo root) regenerates public/openapi.json and public-openai/openapi.json
+      // from the publicApi Cloud Function origin; `--check` fails on drift and
+      // `--live` diffs what each host actually serves. Run it before
+      // `wrangler deploy` — an un-regenerated deploy republishes a stale contract.
+      //
+      // This comment used to say the file was "copied from
+      // Frihet-ERP/functions/src/openapi.json at deploy time". No such copy step
+      // existed anywhere — no script, no workflow, no hook — and the file sat
+      // six weeks stale, telling every client that POST /credit-note returns 200
+      // and issues a fiscal document.
       if (pathname === "/openapi.json") {
         if (env.ASSETS) {
           const assetReq = new Request(new URL("/openapi.json", request.url).toString());

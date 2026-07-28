@@ -16,7 +16,10 @@
     "audit:mcp-refs": "node scripts/audit-mcp-refs.mjs",
     "audit:mcp-refs:fix": "node scripts/audit-mcp-refs.mjs --fix",
     "gate:no-leak": "bash scripts/no-public-leak.sh",
-    "gate:no-legacy-region": "bash scripts/no-legacy-region.sh"
+    "gate:no-legacy-region": "bash scripts/no-legacy-region.sh",
+    "sync:openapi": "node scripts/sync-openapi.mjs",
+    "gate:openapi-fresh": "node scripts/sync-openapi.mjs --check",
+    "gate:openapi-fresh:live": "node scripts/sync-openapi.mjs --check --live"
   },
   "keywords": [
     "accounting",

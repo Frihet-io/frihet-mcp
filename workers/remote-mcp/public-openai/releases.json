@@ -1,6 +1,6 @@
 {
-  "version": "1.14.5",
-  "releasedAt": "2026-06-22",
+  "version": "1.16.4",
+  "releasedAt": "2026-07-21",
   "surface": "openai-chatgpt",
   "mcpToolCount": 56,
   "reviewedBusinessToolCount": 53,
@@ -11,13 +11,13 @@
   "products": {
     "mcp_server": {
       "status": "live",
-      "version": "1.14.5"
+      "version": "1.16.4"
     }
   },
   "releases": [
     {
-      "version": "1.14.5",
-      "releasedAt": "2026-06-22",
+      "version": "1.16.4",
+      "releasedAt": "2026-07-21",
       "mcpToolCount": 56,
       "resourcesCount": 0,
       "promptsCount": 0,

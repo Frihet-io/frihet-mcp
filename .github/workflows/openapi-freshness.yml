@@ -1,0 +1,68 @@
+name: OpenAPI freshness
+
+# Deliberately NOT on `pull_request`.
+#
+# This gate reads live hosts. A required check that depends on someone else's
+# uptime turns an outage into a merge block, and a flaky required check gets
+# routed around within a week. It runs on a schedule instead, where a red run
+# is a real signal about what is PUBLISHED — which is the thing that drifted.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "workers/remote-mcp/public/openapi.json"
+      - "workers/remote-mcp/public-openai/openapi.json"
+      - "workers/api-proxy/worker.js"
+      - "scripts/sync-openapi.mjs"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  freshness:
+    name: Published spec vs canonical
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Compares the committed derived artifacts AND what api.frihet.io,
+      # mcp.frihet.io and openai-mcp.frihet.io actually serve against the
+      # publicApi Cloud Function origin.
+      - name: Check committed artifacts and live hosts
+        id: check
+        run: node scripts/sync-openapi.mjs --check --live 2>&1 | tee /tmp/openapi-freshness.log
+
+      - name: Open or update drift issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="OpenAPI drift: a published spec no longer matches the API"
+          BODY_FILE=$(mktemp)
+          {
+            echo "\`scripts/sync-openapi.mjs --check --live\` failed on ${{ github.sha }}."
+            echo
+            echo '```'
+            cat /tmp/openapi-freshness.log || echo "(no log captured)"
+            echo '```'
+            echo
+            echo "Regenerate committed artifacts with \`npm run sync:openapi\`."
+            echo "A live-host failure needs a **deploy**, not a commit — the file on disk"
+            echo "being correct says nothing about a Worker that was never redeployed."
+          } > "$BODY_FILE"
+
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file "$BODY_FILE"
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE" --label bug
+          fi
