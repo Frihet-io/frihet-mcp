@@ -60,11 +60,21 @@ const FULL_ASSET = join(root, "workers/remote-mcp/public/openapi.json");
 const SCOPED_ASSET = join(root, "workers/remote-mcp/public-openai/openapi.json");
 const SCOPE_SCRIPT = join(root, "workers/remote-mcp/scripts/scope-openai-openapi.mjs");
 
-/** Hosts checked by --live. `expectScoped` = serves the OpenAI-reviewed subset. */
+/**
+ * EVERY host that publishes an openapi.json, not just this repo's.
+ *
+ * The drift was never confined to one repo — four surfaces across three repos
+ * served the same false credit-note contract, and each repo's own gates were
+ * blind to the other three. `owner` says who fixes a red line; this list is the
+ * only place that sees all of them at once.
+ */
 const LIVE_HOSTS = [
-  { url: "https://api.frihet.io/openapi.json", expectScoped: false },
-  { url: "https://mcp.frihet.io/openapi.json", expectScoped: false },
-  { url: "https://openai-mcp.frihet.io/openapi.json", expectScoped: true },
+  { url: "https://api.frihet.io/openapi.json", owner: "frihet-mcp (workers/api-proxy)" },
+  { url: "https://mcp.frihet.io/openapi.json", owner: "frihet-mcp (workers/remote-mcp)" },
+  { url: "https://openai-mcp.frihet.io/openapi.json", owner: "frihet-mcp (workers/remote-mcp --env openai)" },
+  { url: "https://www.frihet.io/openapi.json", owner: "Frihet-Saas-Website (prebuild sync)" },
+  { url: "https://docs.frihet.io/openapi.json", owner: "frihet-docs (vercel-build sync)" },
+  { url: "https://app.frihet.io/openapi.json", owner: "Frihet-ERP (apps/erp/public, needs a frontend deploy)" },
 ];
 
 const args = new Set(process.argv.slice(2));
@@ -183,7 +193,8 @@ if (LIVE) {
       fail.push(
         `${host.url} serves a stale credit-note contract: responses ${c.responses} ` +
           `(canonical ${cn.responses}), Idempotency-Key required ${c.requiresIdempotencyKey} ` +
-          `(canonical ${cn.requiresIdempotencyKey})${c.saysSent ? ', and still says "`sent` status"' : ""}`,
+          `(canonical ${cn.requiresIdempotencyKey})${c.saysSent ? ', and still says "`sent` status"' : ""}` +
+          ` — owner: ${host.owner}`,
       );
     } else {
       note(`ok         ${host.url} matches the canonical credit-note contract`);
