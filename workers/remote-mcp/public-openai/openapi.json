@@ -3187,14 +3187,25 @@
     "/v1/invoices/{invoiceId}/credit-note": {
       "post": {
         "operationId": "createCreditNote",
-        "summary": "Create a credit note",
-        "description": "Create a rectificative invoice (credit note) for an existing invoice.\nThe original invoice must not be in `draft` or `cancelled` status.\nThe credit note is created with `sent` status and negative line item amounts.\nThe `rectificativa` field is populated according to Spanish credit-note metadata.\n",
+        "summary": "Create a credit note draft",
+        "description": "Create a rectificative invoice (credit note) as a **draft**, by differences\n(`TipoRectificativa = I`), for the full amount of an existing invoice.\n\nThe endpoint never issues. The draft carries no fiscal number, no hash and\nno internal compliance metadata.\nA previous version created the document with `sent` status — that behaviour\nis gone.\n\nRequirements:\n  * Plan `pro` or above. Otherwise `403 PLAN_UPGRADE_REQUIRED`.\n  * An `Idempotency-Key` header. Otherwise `400 IDEMPOTENCY_KEY_REQUIRED`.\n  * The original invoice must not be `draft`, `cancelled`, or already\n    fully credited.\n\nErrors carry a stable machine-readable `code` alongside `error`.\n",
         "tags": [
           "Invoices"
         ],
         "parameters": [
           {
             "$ref": "#/components/parameters/InvoiceId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique key identifying this credit-note operation. REQUIRED here (unlike\nother POST endpoints, where it is optional): a credit note is a fiscal\ndocument, so a retry must replay rather than create a second one.\n\nThe key is reserved against the operation — method, path AND request\nbody — before the handler runs, and the draft plus the stored response\nare written in a single transaction. Two concurrent calls with the same\nkey therefore produce exactly one draft.\n\nA retry receives the **stored `201`** with the same `id` and the header\n`X-Idempotent-Replayed: true`. It is not downgraded to `200`. The same\nkey sent with a DIFFERENT body is a different operation and is refused\nwith `409 IDEMPOTENCY_KEY_REUSED`; the same key on a different endpoint\nis refused the same way, without executing.\n",
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "example": "550e8400-e29b-41d4-a716-446655440000"
+            }
           }
         ],
         "requestBody": {
@@ -3216,7 +3227,7 @@
                       "cancellation",
                       "other"
                     ],
-                    "description": "Reason for the credit note",
+                    "description": "Reason for the credit note. Maps to the R-type (R1 for `error`, R4 otherwise).",
                     "example": "error"
                   },
                   "reasonDescription": {
@@ -3228,7 +3239,7 @@
                   "fullCredit": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, issues a full credit (tipo S — sustitución).\nWhen false, issues a partial correction (tipo I — corrección por diferencias).\n",
+                    "description": "Only `true` (or omitted) is supported: a full credit by differences.\nSending `false` returns `400 PARTIAL_CREDIT_NOT_IMPLEMENTED` — partial\ncorrections need the corrected lines, which this endpoint does not accept.\nCreate those in the app.\n",
                     "example": true
                   },
                   "issueDate": {
@@ -3243,52 +3254,56 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Credit note created",
+          "201": {
+            "description": "Credit note draft created — and the status a REPLAY returns too. A retry\nwith the same Idempotency-Key receives this same `201`, the same `id` and\nthe same body, plus `X-Idempotent-Replayed: true`; no second document is\nwritten. (Earlier versions replayed as `200`.)\n",
+            "headers": {
+              "X-Idempotent-Replayed": {
+                "$ref": "#/components/headers/X-Idempotent-Replayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "creditNote": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string",
-                          "description": "ID of the newly created credit note invoice",
-                          "example": "cn_abc123"
-                        },
-                        "originalInvoiceId": {
-                          "type": "string",
-                          "example": "abc123def456"
-                        },
-                        "reason": {
-                          "type": "string",
-                          "example": "error"
-                        },
-                        "fullCredit": {
-                          "type": "boolean",
-                          "example": true
-                        }
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/CreditNoteResult"
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Validation error, or one of `IDEMPOTENCY_KEY_REQUIRED`,\n`PARTIAL_CREDIT_NOT_IMPLEMENTED`, `ORIGINAL_INVOICE_IS_DRAFT`,\n`ORIGINAL_INVOICE_IS_CANCELLED`, `ORIGINAL_INVOICE_FULLY_CREDITED`,\n`ORIGINAL_INVOICE_MISSING_FISCAL_ZONE` (the original invoice has no\n`clientLocation`, so the correct rectificativa form cannot be determined).\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteError"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "description": "The effective plan is below `pro` (`PLAN_UPGRADE_REQUIRED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteError"
+                }
+              }
+            }
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Either `IDEMPOTENCY_KEY_REUSED` — the key is live for a DIFFERENT\noperation (another endpoint, or this one with a different body), which\nis refused without executing — or `IDEMPOTENCY_REQUEST_IN_PROGRESS`:\na request with this key is still running, or its outcome could not be\nrecorded. Reconcile the invoice's credit notes before starting another\noperation; a fresh key would create a second document.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteError"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -3603,8 +3618,109 @@
         }
       }
     },
-    "headers": {},
+    "headers": {
+      "X-Idempotent-Replayed": {
+        "description": "Present and set to \"true\" when this response is a stored replay of an earlier\nrequest with the same Idempotency-Key. The status and body are the ORIGINAL\nones; nothing was executed to produce this response.\n",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        }
+      }
+    },
     "schemas": {
+      "CreditNoteResult": {
+        "type": "object",
+        "description": "Result of `POST /v1/invoices/{invoiceId}/credit-note`. `status` is always\n`draft` — the endpoint creates, it does not issue.\n",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "boolean",
+                "example": true
+              },
+              "creditNote": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "ID of the newly created credit note draft",
+                    "example": "cn_abc123"
+                  },
+                  "originalInvoiceId": {
+                    "type": "string",
+                    "example": "abc123def456"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "example": "error"
+                  },
+                  "fullCredit": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft"
+                    ],
+                    "description": "Always `draft`.",
+                    "example": "draft"
+                  },
+                  "rectificationMethod": {
+                    "type": "string",
+                    "enum": [
+                      "I"
+                    ],
+                    "description": "Always `I` (por diferencias). `S` is not offered over the API.",
+                    "example": "I"
+                  },
+                  "totalCredited": {
+                    "type": "number",
+                    "description": "Tax-inclusive amount credited, as a positive number.",
+                    "example": 544.5
+                  },
+                  "replayed": {
+                    "type": "boolean",
+                    "deprecated": true,
+                    "description": "DEPRECATED and no longer emitted. A replay is now signalled by the\n`X-Idempotent-Replayed: true` response header, and the replayed\nbody is byte-identical to the original — which a body-level flag\nwould contradict. Documented only so existing clients know the\nfield is absent rather than false.\n",
+                    "example": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "CreditNoteError": {
+        "type": "object",
+        "description": "Credit-note refusal, with a stable machine-readable code.",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable message.",
+            "example": "Credit notes require the pro plan or above."
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "IDEMPOTENCY_KEY_REQUIRED",
+              "PLAN_UPGRADE_REQUIRED",
+              "PARTIAL_CREDIT_NOT_IMPLEMENTED",
+              "INVOICE_NOT_FOUND",
+              "ORIGINAL_INVOICE_IS_DRAFT",
+              "ORIGINAL_INVOICE_IS_CANCELLED",
+              "ORIGINAL_INVOICE_FULLY_CREDITED",
+              "ORIGINAL_INVOICE_MISSING_FISCAL_ZONE",
+              "IDEMPOTENCY_KEY_REUSED",
+              "IDEMPOTENCY_REQUEST_IN_PROGRESS"
+            ],
+            "example": "PLAN_UPGRADE_REQUIRED"
+          }
+        }
+      },
       "InvoiceStatus": {
         "type": "string",
         "enum": [
@@ -3833,6 +3949,53 @@
           }
         ]
       },
+      "FileAttachment": {
+        "type": "object",
+        "required": [
+          "fileId",
+          "originalName",
+          "contentType",
+          "size"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque uploaded file reference. Not a path or URL."
+          },
+          "originalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Filename only; local paths are rejected."
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/jpg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+              "image/tiff"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "checksumSha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        }
+      },
       "ExpenseCreate": {
         "type": "object",
         "required": [
@@ -3856,6 +4019,13 @@
             "description": "Expense date in ISO format",
             "example": "2026-03-09"
           },
+          "paidDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Effective payment date (fecha de pago, YYYY-MM-DD). Drives cash-basis period assignment for Modelos 111/115/130. When absent: under accrual (devengo) criteria the expense `date` is used; under the opt-in Modelo 130 cash-basis criterion (criterio de cobros y pagos) an absent paidDate means not yet paid and the expense is excluded until paid. On PATCH, an explicit null clears the field.",
+            "example": "2026-03-12"
+          },
           "category": {
             "type": "string",
             "description": "Expense category",
@@ -3870,6 +4040,48 @@
             "type": "boolean",
             "description": "Whether the expense is tax deductible",
             "example": true
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "ISO 4217 transaction currency. Defaults to EUR.",
+            "example": "EUR",
+            "default": "EUR"
+          },
+          "exchangeRate": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Exchange rate used to convert amount into functionalCurrency."
+          },
+          "exchangeRateSource": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Source/provider of the exchange rate snapshot."
+          },
+          "exchangeRateDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Exchange rate date (YYYY-MM-DD)."
+          },
+          "functionalCurrency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "Workspace/reporting currency. Defaults to EUR.",
+            "example": "EUR",
+            "default": "EUR"
+          },
+          "functionalAmount": {
+            "type": "number",
+            "description": "Amount converted into functionalCurrency."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileAttachment"
+            },
+            "readOnly": true
           },
           "recurring": {
             "$ref": "#/components/schemas/ExpenseRecurringConfig"
@@ -4039,6 +4251,71 @@
           },
           "address": {
             "$ref": "#/components/schemas/Address"
+          },
+          "integrationSource": {
+            "type": "string",
+            "enum": [
+              "hubspot",
+              "pipedrive",
+              "intercom",
+              "mailchimp"
+            ],
+            "description": "Source integration when the client is imported from an external CRM or marketing tool."
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/ClientNextAction"
+          }
+        }
+      },
+      "ClientNextAction": {
+        "type": "object",
+        "required": [
+          "title",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Current next step for this client.",
+            "example": "Call to validate the accepted quote"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Optional due date for the next action.",
+            "example": "2026-07-10"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "done"
+            ],
+            "description": "Whether the next action is still open or already completed."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "api",
+              "integration",
+              "system"
+            ],
+            "description": "Origin of the next action."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -4129,10 +4406,14 @@
         "enum": [
           "call",
           "email",
+          "email_sent",
           "meeting",
-          "task"
+          "note_added",
+          "task",
+          "stage_changed",
+          "client_created"
         ],
-        "description": "Manual activity types. System types (invoice_created, quote_sent, etc.) are auto-generated."
+        "description": "CRM activity types accepted for manual/API-created entries. The legacy `email` value is stored as `email_sent`. Invoice, quote and expense system activity types are auto-generated."
       },
       "ActivityCreate": {
         "type": "object",
@@ -4157,7 +4438,7 @@
           "metadata": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Free-form additional data"
+            "description": "Free-form additional data. For `task` activities, use string fields such as `status` and `dueDate` to mirror the client's current next action."
           }
         }
       },

@@ -260,7 +260,7 @@ const MCP_JSON = JSON.stringify({
     authorization_server: "https://mcp.frihet.io/.well-known/oauth-authorization-server",
     scopes: ["read", "write"],
   },
-  openapi: "https://mcp.frihet.io/openapi.json",
+  openapi: "https://api.frihet.io/openapi.json",
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
@@ -273,18 +273,6 @@ const MCP_JSON = JSON.stringify({
   ],
 }, null, 2);
 
-// /openapi.yaml — note redirecting to canonical JSON (pragmatic: no YAML transpile needed)
-const OPENAPI_YAML_NOTE = `# Frihet API OpenAPI Specification
-# The canonical machine-readable spec is available in JSON format.
-# This path (api.frihet.io/openapi.json) 302-redirects to the canonical copy.
-#
-# To convert to YAML locally:
-#   curl https://mcp.frihet.io/openapi.json | python3 -c "import sys,json,yaml;print(yaml.dump(json.load(sys.stdin)))"
-canonical: https://mcp.frihet.io/openapi.json
-format: JSON
-note: Use the JSON endpoint for programmatic access.
-`;
-
 // /.well-known/mcp — MCP discovery metadata
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
@@ -296,7 +284,7 @@ const WELL_KNOWN_MCP = JSON.stringify({
     authorization_server: "https://mcp.frihet.io/.well-known/oauth-authorization-server",
     scopes: ["read", "write"],
   },
-  openapi: "https://mcp.frihet.io/openapi.json",
+  openapi: "https://api.frihet.io/openapi.json",
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
@@ -511,25 +499,10 @@ export default {
         });
       }
 
-      if (pathname === "/openapi.yaml" || pathname === "/v1/openapi.yaml") {
-        return new Response(OPENAPI_YAML_NOTE, {
-          headers: {
-            "Content-Type": "text/yaml; charset=utf-8",
-            "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
-            ...SECURITY_HEADERS,
-          },
-        });
-      }
-
-      // ---------------------------------------------------------------------------
-      // /openapi.json — 302 redirect to canonical mcp.frihet.io copy.
-      // V2.1-D fix: ASSETS binding broke worker routing (404 on /llms.txt etc).
-      // Removed [assets] binding entirely; openapi.json now single-sourced from
-      // remote-mcp worker which has functional ASSETS binding.
-      // ---------------------------------------------------------------------------
-      if (pathname === "/openapi.json" || pathname === "/v1/openapi.json") {
-        return Response.redirect("https://mcp.frihet.io/openapi.json", 302);
-      }
+      // /openapi.json and /openapi.yaml are NOT handled here — they fall through
+      // to PUBLIC_PATHS below and are proxied straight from the publicApi Cloud
+      // Function, which serves the spec bundled with the deployed code. See the
+      // comment on PUBLIC_PATHS for why this host is the canonical one.
     }
 
     // Root landing — return a minimal JSON descriptor so GET / → 200 (not 404)
@@ -539,7 +512,7 @@ export default {
         version: "1.0.0",
         description: "REST API for Frihet ERP — AI-native business management platform.",
         docs: "https://docs.frihet.io/desarrolladores/api",
-        openapi: "https://mcp.frihet.io/openapi.json",
+        openapi: "https://api.frihet.io/openapi.json",
         mcp: "https://mcp.frihet.io",
         llms_txt: "https://api.frihet.io/llms.txt",
       }, null, 2);
@@ -555,16 +528,74 @@ export default {
       return new Response(landing, { status: 200, headers });
     }
 
-    // Public routes: forward to /publicApi/ (no /api/ prefix) for root-level endpoints
-    const PUBLIC_PATHS = ['/openapi.yaml', '/v1', '/v1/', '/v1/openapi.yaml', '/health', '/v1/health'];
-    if (request.method === "GET" && PUBLIC_PATHS.includes(url.pathname)) {
+    // ---------------------------------------------------------------------------
+    // Public routes: forward to /publicApi/ (no /api/ prefix) for root-level
+    // endpoints.
+    //
+    // `/openapi.json` and `/openapi.yaml` live here on purpose. The publicApi
+    // Cloud Function serves the spec that is BUNDLED WITH THE DEPLOYED CODE
+    // (functions/src/openapi.{json,yaml} in Frihet-ERP), so this host cannot
+    // describe an API other than the one it is fronting — the spec ships with
+    // the handler or not at all. That makes `api.frihet.io/openapi.json` the
+    // single source every other surface derives from.
+    //
+    // It used to be the opposite: `/openapi.json` 302'd to a hand-copied static
+    // file on mcp.frihet.io and `/openapi.yaml` returned a 443-byte stub. Both
+    // drifted for six weeks and told every client that
+    // `POST /v1/invoices/:id/credit-note` returns 200 and issues a fiscal
+    // document; it returns 201 and creates a draft.
+    // ---------------------------------------------------------------------------
+    const PUBLIC_PATHS = [
+      '/openapi.json', '/v1/openapi.json',
+      '/openapi.yaml', '/v1/openapi.yaml',
+      '/v1', '/v1/', '/health', '/v1/health',
+    ];
+    // Edge-cache the SPEC only. `cacheEverything` overrides the origin's
+    // response headers, and /health answers `cache-control: no-cache, no-store`
+    // on purpose: it is a live liveness verdict (Firestore + Stripe probes).
+    // Caching it for 300 s would show every uptime monitor a five-minute-old
+    // "healthy" during an outage — while still forwarding the origin's
+    // `no-store` header, so nothing downstream could tell.
+    const SPEC_PATHS = new Set([
+      '/openapi.json', '/v1/openapi.json',
+      '/openapi.yaml', '/v1/openapi.yaml',
+    ]);
+    if ((request.method === "GET" || request.method === "HEAD") && PUBLIC_PATHS.includes(url.pathname)) {
       const upstream = new URL(url.pathname, UPSTREAM);
       upstream.pathname = "/publicApi" + url.pathname;
       upstream.search = url.search;
       const headers = buildUpstreamHeaders(request);
-      const response = await fetch(upstream.toString(), { method: "GET", headers });
-      const responseHeaders = buildResponseHeaders(response, request);
-      return new Response(response.body, { status: response.status, headers: responseHeaders });
+      const isSpec = SPEC_PATHS.has(url.pathname);
+
+      // Same failure contract as the generic proxy below: this branch replaced
+      // a static 302, so an origin blip that used to be impossible here now
+      // has to surface as the API's JSON 502 and not as Cloudflare's HTML
+      // "Error 1101" page (which reads downstream as a spec parse error).
+      const publicController = new AbortController();
+      const publicTimeoutId = setTimeout(() => publicController.abort(), 25000);
+      try {
+        const response = await fetch(upstream.toString(), {
+          method: request.method,
+          headers,
+          signal: publicController.signal,
+          ...(isSpec ? { cf: { cacheEverything: true, cacheTtl: 300 } } : {}),
+        });
+        clearTimeout(publicTimeoutId);
+        const responseHeaders = buildResponseHeaders(response, request);
+        return new Response(request.method === "HEAD" ? null : response.body, {
+          status: response.status,
+          headers: responseHeaders,
+        });
+      } catch (error) {
+        clearTimeout(publicTimeoutId);
+        const errorHeaders = { 'Content-Type': 'application/json', ...SECURITY_HEADERS };
+        const corsHeaders = getCorsHeaders(request);
+        if (corsHeaders) Object.assign(errorHeaders, corsHeaders);
+        return new Response(
+          JSON.stringify({ error: 'Service temporarily unavailable' }),
+          { status: 502, headers: errorHeaders },
+        );
+      }
     }
 
     const path = url.pathname + url.search;

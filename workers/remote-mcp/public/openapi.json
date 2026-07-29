@@ -3,7 +3,7 @@
   "info": {
     "title": "Frihet API",
     "version": "2026-03-18",
-    "description": "The Frihet REST API provides programmatic access to your business data\nin Frihet, the AI-native business management platform for modern businesses.\n\n## Authentication\n\nAll API requests require an API key passed via the `X-API-Key` header.\nGenerate keys from **Settings > API Keys** in the Frihet app.\n\n```\nX-API-Key: fri_your_api_key_here\n```\n\n## Rate Limiting\n\nThe API enforces a rate limit of **100 requests per minute** per API key.\nWhen exceeded, the API returns `429 Too Many Requests` with a `retryAfter` field.\n\nEvery authenticated response includes rate limit headers:\n\n| Header | Description |\n|--------|-------------|\n| `X-RateLimit-Limit` | Maximum requests per window (100) |\n| `X-RateLimit-Remaining` | Remaining requests in current window |\n| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |\n\n## Idempotency\n\nPOST requests accept an `Idempotency-Key` header to prevent duplicate resource\ncreation from network retries. If the same key is sent within 24 hours,\nthe API returns the original response with an `X-Idempotent-Replayed: true` header.\n\n```\nIdempotency-Key: 550e8400-e29b-41d4-a716-446655440000\n```\n\nKeys must be at most 64 characters. We recommend UUID v4.\n\n## API Versioning\n\nEvery response includes an `X-API-Version` header (e.g., `2026-03-18`)\nindicating the current API version. Monitor this header to detect changes.\n\n## Pagination\n\nList endpoints support two pagination strategies:\n\n**Offset pagination:** Use `limit` and `offset` query parameters.\nDefault limit is 50, maximum is 100.\n\n**Cursor pagination:** Use `cursor` and `limit` query parameters.\nPass the `nextCursor` value from a previous response to fetch the next page.\nCursor pagination is more efficient for large datasets and avoids skipped/duplicated\nitems when data changes between requests. When `cursor` is provided, `offset` is ignored.\n\nResponses include `total`, `limit`, `offset`, and optionally `nextCursor`.\n\n## Filtering\n\nList endpoints support filtering by `status` (where applicable), date\nranges using `from` and `to` query parameters in ISO 8601 format (`YYYY-MM-DD`),\nand resource-specific filters like `clientId`, `seriesId`, `vendorId`,\n`category`, `isActive`, and `stage`.\n\n## Field Selection\n\nAll GET endpoints support a `fields` query parameter to select specific fields.\nPass a comma-separated list of field names: `?fields=id,name,total`.\nThe `id` field is always included.\n\n## Errors\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Human-readable error message\",\n  \"details\": [],\n  \"meta\": { \"requestId\": \"uuid\" }\n}\n```\n\nThe `details` array is only present on validation errors (Zod issues).\nThe `meta.requestId` is included on every error response for tracing.\n\n## Resources\n\n- [Documentation](https://docs.frihet.io/desarrolladores/api-rest)\n- [MCP Server](https://mcp.frihet.io)\n- [Status](https://status.frihet.io)\n",
+    "description": "The Frihet REST API provides programmatic access to your business data\nin Frihet, the AI-native business management platform for modern businesses.\n\n## Authentication\n\nAll API requests require an API key passed via the `X-API-Key` header.\nGenerate keys from **Settings > API Keys** in the Frihet app.\n\n```\nX-API-Key: fri_your_api_key_here\n```\n\n## Rate Limiting\n\nThe API enforces a rate limit of **100 requests per minute** per API key.\nWhen exceeded, the API returns `429 Too Many Requests` with a `retryAfter` field.\n\nEvery authenticated response includes rate limit headers:\n\n| Header | Description |\n|--------|-------------|\n| `X-RateLimit-Limit` | Maximum requests per window (100) |\n| `X-RateLimit-Remaining` | Remaining requests in current window |\n| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |\n\n## Idempotency\n\nPOST requests accept an `Idempotency-Key` header to prevent duplicate resource\ncreation from network retries. The key is reserved against the operation\n*before* the request is executed, and it stays reserved for 24 hours.\n\n```\nIdempotency-Key: 550e8400-e29b-41d4-a716-446655440000\n```\n\nKeys must be at most 64 characters. We recommend UUID v4.\n\nA retry of the same operation gets one of three answers:\n\n| Situation | Response |\n|---|---|\n| The first request finished | The **original status and body**, verbatim, with `X-Idempotent-Replayed: true` |\n| The first request is still running, or its outcome could not be recorded | `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` |\n| The key is live but was used for a **different** operation | `409 IDEMPOTENCY_KEY_REUSED` — the second operation is not executed |\n\nThe replayed status is the **stored** one. A `201` replays as `201`, not `200`.\nThis includes error responses: a request that answered `4xx` or `5xx` replays\nthat same status and body, it does not re-execute.\n\n### When a retry is refused\n\nA `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` after the first request already\nreturned means the outcome could not be recorded — the response was too large\nor unserializable, or the bookkeeping write failed. The API refuses rather than\nexecute a second time, because for a fiscal document a duplicate is not\nrecoverable.\n\n**Reconcile; do not simply retry with a fresh key.** Read the resource back\n(`GET` the collection, or look for the document the operation would have\ncreated) and decide from its actual state. A new key would happily create a\nsecond document, which is exactly what the first key existed to prevent.\n\nIdentity note: for `POST /v1/invoices/{invoiceId}/credit-note` the request body\nis part of the operation identity, so the same key with a different body is a\n`409 IDEMPOTENCY_KEY_REUSED`. For other endpoints the identity is the method\nand path only.\n\n## API Versioning\n\nEvery response includes an `X-API-Version` header (e.g., `2026-03-18`)\nindicating the current API version. Monitor this header to detect changes.\n\n## Pagination\n\nList endpoints support two pagination strategies:\n\n**Offset pagination:** Use `limit` and `offset` query parameters.\nDefault limit is 50, maximum is 100.\n\n**Cursor pagination:** Use `cursor` and `limit` query parameters.\nPass the `nextCursor` value from a previous response to fetch the next page.\nCursor pagination is more efficient for large datasets and avoids skipped/duplicated\nitems when data changes between requests. When `cursor` is provided, `offset` is ignored.\n\nResponses include `total`, `limit`, `offset`, and optionally `nextCursor`.\n\n## Filtering\n\nList endpoints support filtering by `status` (where applicable), date\nranges using `from` and `to` query parameters in ISO 8601 format (`YYYY-MM-DD`),\nand resource-specific filters like `clientId`, `seriesId`, `vendorId`,\n`category`, `isActive`, and `stage`.\n\n## Field Selection\n\nAll GET endpoints support a `fields` query parameter to select specific fields.\nPass a comma-separated list of field names: `?fields=id,name,total`.\nThe `id` field is always included.\n\n## Errors\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Human-readable error message\",\n  \"details\": [],\n  \"meta\": { \"requestId\": \"uuid\" }\n}\n```\n\nThe `details` array is only present on validation errors (Zod issues).\nThe `meta.requestId` is included on every error response for tracing.\n\n## Resources\n\n- [Documentation](https://docs.frihet.io/desarrolladores/api-rest)\n- [MCP Server](https://mcp.frihet.io)\n- [Status](https://status.frihet.io)\n",
     "contact": {
       "name": "Frihet API Support",
       "url": "https://docs.frihet.io/desarrolladores/api-rest",
@@ -62,6 +62,14 @@
       "description": "AI-optimized endpoints providing business context, monthly P&L, and quarterly tax figures in a single call."
     },
     {
+      "name": "Search",
+      "description": "Read-only global search across Frihet business records."
+    },
+    {
+      "name": "Banking",
+      "description": "Bank accounts, transactions, categorization, and read-only reconciliation helpers."
+    },
+    {
       "name": "Webhooks",
       "description": "CRUD endpoints for managing webhook subscriptions that receive real-time event notifications."
     },
@@ -103,10 +111,103 @@
     },
     {
       "name": "E-Invoicing",
-      "description": "EN16931-compliant e-invoicing export and B2G submission endpoints.\nSupports 8 formats (Facturae, XRechnung-CII/UBL, Factur-X, FatturaPA, PEPPOL-BIS-3, UBL, CII).\nFACe (Spain B2G portal) and TicketBAI (Bizkaia BATUZ) submission pipelines.\nTrust Area: COMPLIANCE. Requires owner role or API key with `einvoice:*` scope.\n"
+      "description": "EN16931-compliant e-invoicing export and B2G submission endpoints.\nSupports 9 formats (Facturae, XRechnung-CII/UBL, Factur-X, FatturaPA, PEPPOL-BIS-3, FA-2-KSeF, UBL, CII).\nFACe (Spain B2G portal) and TicketBAI (Bizkaia BATUZ) submission pipelines.\nTrust Area: COMPLIANCE. Requires owner role or API key with `einvoice:*` scope.\n"
     }
   ],
   "paths": {
+    "/v1/search/global": {
+      "get": {
+        "operationId": "globalSearch",
+        "summary": "Global search",
+        "description": "Read-only bounded search across invoices, expenses, vendors, clients, and products. Uses existing workspace-scoped search paths and does not mutate data.",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Search query, maximum 200 characters.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "description": "Optional comma-separated resource types to search.",
+            "schema": {
+              "type": "string",
+              "example": "invoices,expenses,clients"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Typed global search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GlobalSearchResult"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "types": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/v1/gestoria/aging": {
       "post": {
         "operationId": "gestoriaAgingConsolidated",
@@ -931,6 +1032,58 @@
         }
       }
     },
+    "/v1/expenses/attachments/uploads": {
+      "post": {
+        "operationId": "createExpenseAttachmentUpload",
+        "summary": "Prepare an expense attachment upload reference",
+        "description": "Prepare a metadata-only attachment reference for an expense receipt.\nThis endpoint does not accept raw bytes, local file paths, signed URLs,\nor secrets. It returns an opaque fileReferenceId plus limits that a full\nMCP/API client can use before linking the uploaded file to an expense.\n",
+        "tags": [
+          "Expenses"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileAttachmentUploadCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attachment upload reference prepared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FileAttachmentUpload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/v1/expenses/{expenseId}": {
       "get": {
         "operationId": "getExpense",
@@ -1087,6 +1240,71 @@
         "responses": {
           "204": {
             "description": "Expense deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/expenses/{expenseId}/attachments": {
+      "post": {
+        "operationId": "attachExpenseFileReference",
+        "summary": "Attach a file reference to an expense",
+        "description": "Appends an existing safe file reference to an expense. The request\naccepts metadata only: no raw bytes, local paths, signed URLs, or\nsecrets. MIME type and size are validated server-side.\n",
+        "tags": [
+          "Expenses"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ExpenseId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileAttachmentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attachment reference appended",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "expenseId": {
+                          "type": "string"
+                        },
+                        "attachment": {
+                          "$ref": "#/components/schemas/FileAttachment"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -4106,14 +4324,25 @@
     "/v1/invoices/{invoiceId}/credit-note": {
       "post": {
         "operationId": "createCreditNote",
-        "summary": "Create a credit note",
-        "description": "Create a rectificative invoice (credit note) for an existing invoice.\nThe original invoice must not be in `draft` or `cancelled` status.\nThe credit note is created with `sent` status and negative line item amounts.\nThe `rectificativa` field is populated according to Spanish Facturae R-type codes.\n",
+        "summary": "Create a credit note draft",
+        "description": "Create a rectificative invoice (credit note) as a **draft**, by differences\n(`TipoRectificativa = I`), for the full amount of an existing invoice.\n\nThe endpoint never issues. The draft carries no fiscal number, no hash and\nno VeriFactu submission: those happen when a person issues it in the app.\nA previous version created the document with `sent` status — that behaviour\nis gone.\n\nRequirements:\n  * Plan `pro` or above. Otherwise `403 PLAN_UPGRADE_REQUIRED`.\n  * An `Idempotency-Key` header. Otherwise `400 IDEMPOTENCY_KEY_REQUIRED`.\n  * The original invoice must not be `draft`, `cancelled`, or already\n    fully credited.\n\nErrors carry a stable machine-readable `code` alongside `error`.\n",
         "tags": [
           "Invoices"
         ],
         "parameters": [
           {
             "$ref": "#/components/parameters/InvoiceId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique key identifying this credit-note operation. REQUIRED here (unlike\nother POST endpoints, where it is optional): a credit note is a fiscal\ndocument, so a retry must replay rather than create a second one.\n\nThe key is reserved against the operation — method, path AND request\nbody — before the handler runs, and the draft plus the stored response\nare written in a single transaction. Two concurrent calls with the same\nkey therefore produce exactly one draft.\n\nA retry receives the **stored `201`** with the same `id` and the header\n`X-Idempotent-Replayed: true`. It is not downgraded to `200`. The same\nkey sent with a DIFFERENT body is a different operation and is refused\nwith `409 IDEMPOTENCY_KEY_REUSED`; the same key on a different endpoint\nis refused the same way, without executing.\n",
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "example": "550e8400-e29b-41d4-a716-446655440000"
+            }
           }
         ],
         "requestBody": {
@@ -4135,7 +4364,7 @@
                       "cancellation",
                       "other"
                     ],
-                    "description": "Reason for the credit note",
+                    "description": "Reason for the credit note. Maps to the R-type (R1 for `error`, R4 otherwise).",
                     "example": "error"
                   },
                   "reasonDescription": {
@@ -4147,7 +4376,7 @@
                   "fullCredit": {
                     "type": "boolean",
                     "default": true,
-                    "description": "When true, issues a full credit (tipo S — sustitución).\nWhen false, issues a partial correction (tipo I — corrección por diferencias).\n",
+                    "description": "Only `true` (or omitted) is supported: a full credit by differences.\nSending `false` returns `400 PARTIAL_CREDIT_NOT_IMPLEMENTED` — partial\ncorrections need the corrected lines, which this endpoint does not accept.\nCreate those in the app.\n",
                     "example": true
                   },
                   "issueDate": {
@@ -4162,56 +4391,56 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Credit note created",
+          "201": {
+            "description": "Credit note draft created — and the status a REPLAY returns too. A retry\nwith the same Idempotency-Key receives this same `201`, the same `id` and\nthe same body, plus `X-Idempotent-Replayed: true`; no second document is\nwritten. (Earlier versions replayed as `200`.)\n",
+            "headers": {
+              "X-Idempotent-Replayed": {
+                "$ref": "#/components/headers/X-Idempotent-Replayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "creditNote": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string",
-                          "description": "ID of the newly created credit note invoice",
-                          "example": "cn_abc123"
-                        },
-                        "documentNumber": {
-                          "type": "string",
-                          "example": "CN-FAC-2026-0042"
-                        },
-                        "originalInvoiceId": {
-                          "type": "string",
-                          "example": "abc123def456"
-                        },
-                        "reason": {
-                          "type": "string",
-                          "example": "error"
-                        },
-                        "fullCredit": {
-                          "type": "boolean",
-                          "example": true
-                        }
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/CreditNoteResult"
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Validation error, or one of `IDEMPOTENCY_KEY_REQUIRED`,\n`PARTIAL_CREDIT_NOT_IMPLEMENTED`, `ORIGINAL_INVOICE_IS_DRAFT`,\n`ORIGINAL_INVOICE_IS_CANCELLED`, `ORIGINAL_INVOICE_FULLY_CREDITED`,\n`ORIGINAL_INVOICE_MISSING_FISCAL_ZONE` (the original invoice has no\n`clientLocation`, so the correct rectificativa form cannot be determined).\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteError"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "description": "The effective plan is below `pro` (`PLAN_UPGRADE_REQUIRED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteError"
+                }
+              }
+            }
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Either `IDEMPOTENCY_KEY_REUSED` — the key is live for a DIFFERENT\noperation (another endpoint, or this one with a different body), which\nis refused without executing — or `IDEMPOTENCY_REQUEST_IN_PROGRESS`:\na request with this key is still running, or its outcome could not be\nrecorded. Reconcile the invoice's credit notes before starting another\noperation; a fresh key would create a second document.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditNoteError"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -5190,7 +5419,7 @@
       "post": {
         "operationId": "exportEInvoice",
         "summary": "Export e-invoice XML",
-        "description": "Generate and return an e-invoice XML document for the invoice in one of 8 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, UBL 2.1, CII D16B.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
+        "description": "Generate and return an e-invoice XML document for the invoice in one of 9 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, FA-2-KSeF (Polish KSeF FA(3)), UBL 2.1, CII D16B.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -5219,10 +5448,11 @@
                       "Factur-X",
                       "FatturaPA",
                       "PEPPOL-BIS-3",
+                      "FA-2-KSeF",
                       "UBL",
                       "CII"
                     ],
-                    "description": "Target e-invoice format.\n- Facturae: Spanish B2G (Agencia Tributaria, FACe)\n- XRechnung-CII/UBL: German B2G (PEPPOL/ZRE/OZG-RE)\n- Factur-X: French standard (PDF/A-3 XML component)\n- FatturaPA: Italian SDI clearance\n- PEPPOL-BIS-3: Pan-European PEPPOL network\n- UBL/CII: Generic cross-border EU\n",
+                    "description": "Target e-invoice format.\n- Facturae: Spanish B2G (Agencia Tributaria, FACe)\n- XRechnung-CII/UBL: German B2G (PEPPOL/ZRE/OZG-RE)\n- Factur-X: French standard (PDF/A-3 XML component)\n- FatturaPA: Italian SDI clearance\n- PEPPOL-BIS-3: Pan-European PEPPOL network\n- FA-2-KSeF: Polish KSeF FA(3) XML\n- UBL/CII: Generic cross-border EU\n",
                     "example": "Facturae"
                   },
                   "signed": {
@@ -8376,7 +8606,7 @@
       "post": {
         "operationId": "inviteTeamMember",
         "summary": "Invite a team member",
-        "description": "Send an email invitation to join the workspace. Subject to plan seat limits (free/starter: 1, pro: 3, business: 10, enterprise: 999). Invitation expires in 7 days.",
+        "description": "Send an email invitation to join the workspace. Subject to plan seat limits (free: 1; pro, Premium and enterprise: unlimited). Invitation expires in 7 days.",
         "tags": [
           "Team"
         ],
@@ -8922,6 +9152,84 @@
         }
       }
     },
+    "/v1/banking/transactions/{transactionId}/suggestions": {
+      "get": {
+        "operationId": "getBankTransactionSuggestions",
+        "summary": "Get reconciliation suggestions",
+        "description": "Read-only ranked reconciliation candidates for a bank transaction.\nThis endpoint does not mutate the transaction, invoices, expenses,\nledger entries, or reconciled fields.\n",
+        "tags": [
+          "Banking"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "default": 5
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read-only reconciliation suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "transactionId": {
+                          "type": "string"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "suggestions": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ReconciliationSuggestion"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
     "/v1/banking/transactions/{transactionId}/categorize": {
       "patch": {
         "operationId": "categorizeBankTransaction",
@@ -9302,7 +9610,7 @@
         "name": "Idempotency-Key",
         "in": "header",
         "required": false,
-        "description": "Unique key to prevent duplicate resource creation from network retries.\nIf the same key is sent within 24 hours, the original response is returned\nwith an X-Idempotent-Replayed: true header. Max 64 characters. UUID v4 recommended.\n",
+        "description": "Unique key to prevent duplicate resource creation from network retries.\nReserved against the operation (method + path) before the request runs, and\nheld for 24 hours.\n\nA retry of the same operation returns the ORIGINAL status and body, verbatim,\nwith an `X-Idempotent-Replayed: true` header — a `201` replays as `201`, and\na stored error replays as that same error rather than re-executing. The same\nkey used for a DIFFERENT operation gets `409 IDEMPOTENCY_KEY_REUSED` and the\nsecond operation is not executed; a request still in flight, or one whose\noutcome could not be recorded, gets `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`\n(reconcile the resource rather than retrying with a new key).\n\nMax 64 characters. UUID v4 recommended.\n",
         "schema": {
           "type": "string",
           "maxLength": 64,
@@ -9340,7 +9648,7 @@
         }
       },
       "X-Idempotent-Replayed": {
-        "description": "Present and set to \"true\" when returning a cached idempotent response",
+        "description": "Present and set to \"true\" when this response is a stored replay of an earlier\nrequest with the same Idempotency-Key. The status and body are the ORIGINAL\nones; nothing was executed to produce this response.\n",
         "schema": {
           "type": "string",
           "enum": [
@@ -9350,6 +9658,102 @@
       }
     },
     "schemas": {
+      "CreditNoteResult": {
+        "type": "object",
+        "description": "Result of `POST /v1/invoices/{invoiceId}/credit-note`. `status` is always\n`draft` — the endpoint creates, it does not issue.\n",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "boolean",
+                "example": true
+              },
+              "creditNote": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "ID of the newly created credit note draft",
+                    "example": "cn_abc123"
+                  },
+                  "documentNumber": {
+                    "type": "string",
+                    "description": "Provisional reference, not a fiscal number. Numbering happens on issue.",
+                    "example": "CN-FAC-2026-0042"
+                  },
+                  "originalInvoiceId": {
+                    "type": "string",
+                    "example": "abc123def456"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "example": "error"
+                  },
+                  "fullCredit": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft"
+                    ],
+                    "description": "Always `draft`.",
+                    "example": "draft"
+                  },
+                  "rectificationMethod": {
+                    "type": "string",
+                    "enum": [
+                      "I"
+                    ],
+                    "description": "Always `I` (por diferencias). `S` is not offered over the API.",
+                    "example": "I"
+                  },
+                  "totalCredited": {
+                    "type": "number",
+                    "description": "Tax-inclusive amount credited, as a positive number.",
+                    "example": 544.5
+                  },
+                  "replayed": {
+                    "type": "boolean",
+                    "deprecated": true,
+                    "description": "DEPRECATED and no longer emitted. A replay is now signalled by the\n`X-Idempotent-Replayed: true` response header, and the replayed\nbody is byte-identical to the original — which a body-level flag\nwould contradict. Documented only so existing clients know the\nfield is absent rather than false.\n",
+                    "example": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "CreditNoteError": {
+        "type": "object",
+        "description": "Credit-note refusal, with a stable machine-readable code.",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable message.",
+            "example": "Credit notes require the pro plan or above."
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "IDEMPOTENCY_KEY_REQUIRED",
+              "PLAN_UPGRADE_REQUIRED",
+              "PARTIAL_CREDIT_NOT_IMPLEMENTED",
+              "INVOICE_NOT_FOUND",
+              "ORIGINAL_INVOICE_IS_DRAFT",
+              "ORIGINAL_INVOICE_IS_CANCELLED",
+              "ORIGINAL_INVOICE_FULLY_CREDITED",
+              "ORIGINAL_INVOICE_MISSING_FISCAL_ZONE",
+              "IDEMPOTENCY_KEY_REUSED",
+              "IDEMPOTENCY_REQUEST_IN_PROGRESS"
+            ],
+            "example": "PLAN_UPGRADE_REQUIRED"
+          }
+        }
+      },
       "BankAccount": {
         "type": "object",
         "description": "A connected bank account (backed by the bankConnections collection).",
@@ -9600,6 +10004,111 @@
             "required": [
               "name"
             ]
+          }
+        }
+      },
+      "ReconciliationSuggestion": {
+        "type": "object",
+        "properties": {
+          "documentType": {
+            "type": "string",
+            "enum": [
+              "invoice",
+              "expense"
+            ]
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "confidence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "suggested": {
+            "type": "boolean"
+          },
+          "amountDiff": {
+            "type": "number"
+          },
+          "dateDiff": {
+            "type": "number"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "breakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "signal": {
+                  "type": "string",
+                  "enum": [
+                    "amount",
+                    "date",
+                    "reference",
+                    "counterparty"
+                  ]
+                },
+                "points": {
+                  "type": "integer"
+                },
+                "similarity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "GlobalSearchResult": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "invoices",
+              "expenses",
+              "vendors",
+              "clients",
+              "products"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "secondary": {
+            "type": "string",
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -9964,6 +10473,213 @@
           }
         ]
       },
+      "FileAttachmentUploadCreate": {
+        "type": "object",
+        "required": [
+          "fileName",
+          "contentType",
+          "sizeBytes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Filename only; local paths are rejected.",
+            "example": "receipt.pdf"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/jpg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+              "image/tiff"
+            ]
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "expenseId": {
+            "type": "string",
+            "description": "Optional expense ID to scope the upload reference to."
+          },
+          "checksumSha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        }
+      },
+      "FileAttachmentUpload": {
+        "type": "object",
+        "properties": {
+          "uploadId": {
+            "type": "string"
+          },
+          "fileReferenceId": {
+            "type": "string",
+            "description": "Opaque backend-issued file reference to pass to attachExpenseFileReference."
+          },
+          "fileId": {
+            "type": "string",
+            "description": "Backward-compatible alias for fileReferenceId."
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "maxSizeBytes": {
+            "type": "integer"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "example": "prepared"
+          },
+          "attach": {
+            "type": "object",
+            "properties": {
+              "expenseId": {
+                "type": "string",
+                "nullable": true
+              },
+              "endpoint": {
+                "type": "string"
+              },
+              "body": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "FileAttachmentInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque uploaded file reference. Not a path or URL."
+          },
+          "fileReferenceId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque uploaded file reference. Not a path or URL."
+          },
+          "originalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Filename only; local paths are rejected."
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Filename only; local paths are rejected."
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/jpg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+              "image/tiff"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "checksumSha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        }
+      },
+      "FileAttachment": {
+        "type": "object",
+        "required": [
+          "fileId",
+          "originalName",
+          "contentType",
+          "size"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque uploaded file reference. Not a path or URL."
+          },
+          "originalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Filename only; local paths are rejected."
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/jpeg",
+              "image/jpg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+              "image/tiff"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "checksumSha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          }
+        }
+      },
       "ExpenseCreate": {
         "type": "object",
         "required": [
@@ -9987,6 +10703,13 @@
             "description": "Expense date in ISO format",
             "example": "2026-03-09"
           },
+          "paidDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Effective payment date (fecha de pago, YYYY-MM-DD). Drives cash-basis period assignment for Modelos 111/115/130. When absent: under accrual (devengo) criteria the expense `date` is used; under the opt-in Modelo 130 cash-basis criterion (criterio de cobros y pagos) an absent paidDate means not yet paid and the expense is excluded until paid. On PATCH, an explicit null clears the field.",
+            "example": "2026-03-12"
+          },
           "category": {
             "type": "string",
             "description": "Expense category",
@@ -10001,6 +10724,48 @@
             "type": "boolean",
             "description": "Whether the expense is tax deductible",
             "example": true
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "ISO 4217 transaction currency. Defaults to EUR.",
+            "example": "EUR",
+            "default": "EUR"
+          },
+          "exchangeRate": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Exchange rate used to convert amount into functionalCurrency."
+          },
+          "exchangeRateSource": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Source/provider of the exchange rate snapshot."
+          },
+          "exchangeRateDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Exchange rate date (YYYY-MM-DD)."
+          },
+          "functionalCurrency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "description": "Workspace/reporting currency. Defaults to EUR.",
+            "example": "EUR",
+            "default": "EUR"
+          },
+          "functionalAmount": {
+            "type": "number",
+            "description": "Amount converted into functionalCurrency."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileAttachment"
+            },
+            "readOnly": true
           },
           "recurring": {
             "$ref": "#/components/schemas/ExpenseRecurringConfig"
@@ -10175,6 +10940,71 @@
           },
           "address": {
             "$ref": "#/components/schemas/Address"
+          },
+          "integrationSource": {
+            "type": "string",
+            "enum": [
+              "hubspot",
+              "pipedrive",
+              "intercom",
+              "mailchimp"
+            ],
+            "description": "Source integration when the client is imported from an external CRM or marketing tool."
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/ClientNextAction"
+          }
+        }
+      },
+      "ClientNextAction": {
+        "type": "object",
+        "required": [
+          "title",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Current next step for this client.",
+            "example": "Call to validate the accepted quote"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Optional due date for the next action.",
+            "example": "2026-07-10"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "done"
+            ],
+            "description": "Whether the next action is still open or already completed."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "api",
+              "integration",
+              "system"
+            ],
+            "description": "Origin of the next action."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -10265,10 +11095,14 @@
         "enum": [
           "call",
           "email",
+          "email_sent",
           "meeting",
-          "task"
+          "note_added",
+          "task",
+          "stage_changed",
+          "client_created"
         ],
-        "description": "Manual activity types. System types (invoice_created, quote_sent, etc.) are auto-generated."
+        "description": "CRM activity types accepted for manual/API-created entries. The legacy `email` value is stored as `email_sent`. Invoice, quote and expense system activity types are auto-generated."
       },
       "ActivityCreate": {
         "type": "object",
@@ -10293,7 +11127,7 @@
           "metadata": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Free-form additional data"
+            "description": "Free-form additional data. For `task` activities, use string fields such as `status` and `dueDate` to mirror the client's current next action."
           }
         }
       },

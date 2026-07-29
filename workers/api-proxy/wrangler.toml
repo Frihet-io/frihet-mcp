@@ -5,8 +5,10 @@ account_id = "ac385684ceb71bc889f6eb3abade1e32"
 
 # V2.1-D: [assets] binding REMOVED — was intercepting /llms.txt /robots.txt
 # /sitemap.xml /ai.txt /openapi.yaml /mcp.json /agents.json /.well-known/mcp
-# even with run_worker_first=true (wrangler 4.80 quirk). Worker now handles
-# all paths inline. /openapi.json redirects to canonical mcp.frihet.io copy.
+# even with run_worker_first=true (wrangler 4.80 quirk). Worker handles the
+# discovery paths inline. /openapi.{json,yaml} are NOT inline and NOT
+# redirected: they proxy the publicApi Cloud Function, which is now the single
+# canonical spec. mcp.frihet.io serves a DERIVED copy of that same origin.
 
 [vars]
 # publicApi CF deployed europe-west1 (confirmed via `firebase functions:list` 7-may).
