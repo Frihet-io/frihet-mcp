@@ -31,17 +31,39 @@ const REQUEST_TIMEOUT_MS = 30000;
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /**
- * Fresh idempotency key. `crypto.randomUUID` exists on Node >= 19 globals and
- * on the Cloudflare Workers runtime; Node 18 (our floor) exposes it via
- * `globalThis.crypto` too, but guard anyway so an exotic runtime degrades to a
- * still-unique key rather than throwing inside a mutation.
+ * Fresh idempotency key, always a syntactically valid UUID v4.
+ *
+ * `crypto.randomUUID` is a global on the Cloudflare Workers runtime and on
+ * Node >= 19. On Node 18 — our declared `engines` floor — `globalThis.crypto`
+ * is behind `--experimental-global-webcrypto`, so the fallback is a REAL code
+ * path there, not a theoretical one. It therefore has to produce a UUID and
+ * not an ad-hoc string: the backend documents "UUID v4 recommended", and
+ * src/__tests__/idempotency-key-contract.test.ts asserts the shape.
  */
 function newIdempotencyKey(): string {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
   if (typeof c?.randomUUID === "function") {
     return c.randomUUID();
   }
-  return `frihet-mcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+  // RFC 4122 v4 layout from Math.random. Weaker entropy than the CSPRNG, but
+  // the key only has to be unique per caller, never unguessable.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    const v = ch === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * A caller-supplied key counts only if it carries a value. An empty or
+ * whitespace-only string is what an LLM client emits for "I have nothing to
+ * put here" on an optional string param — treating it as PRESENT would leave
+ * the request keyless and reproduce the very `400 IDEMPOTENCY_KEY_REQUIRED`
+ * this client exists to prevent.
+ */
+function normalizeIdempotencyKey(key: string | undefined): string | undefined {
+  const trimmed = key?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 export class FrihetApiError extends Error {
@@ -98,7 +120,8 @@ export class FrihetClient {
     // — retrying with a new key is exactly the duplicate the key exists to
     // prevent (a retried credit-note would create a second draft).
     const resolvedIdempotencyKey =
-      idempotencyKey ?? (MUTATING_METHODS.has(method) ? newIdempotencyKey() : undefined);
+      normalizeIdempotencyKey(idempotencyKey) ??
+      (MUTATING_METHODS.has(method) ? newIdempotencyKey() : undefined);
 
     if (query) {
       for (const [key, value] of Object.entries(query)) {
@@ -562,7 +585,10 @@ export class FrihetClient {
    * IDEMPOTENCY_KEY_REQUIRED` without it). `request` mints one for every
    * mutation, so passing `idempotencyKey` is optional: supply it to make a
    * caller-driven retry replay the stored 201 instead of creating a second
-   * draft (the replay carries `X-Idempotent-Replayed: true`).
+   * draft. The backend marks that replay with `X-Idempotent-Replayed: true`,
+   * but this client reads no response headers, so the replayed 201 and the
+   * original are indistinguishable to the caller — both are the same draft,
+   * which is the property that matters here.
    */
   async createCreditNote(
     invoiceId: string,

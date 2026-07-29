@@ -178,4 +178,66 @@ describe("Idempotency-Key wire contract", () => {
     assert.ok(post?.idempotencyKey, "POST /paid had no Idempotency-Key");
     assert.equal(get?.idempotencyKey, undefined);
   });
+
+  // -- blank keys --------------------------------------------------------
+  //
+  // An LLM client filling an optional string param routinely emits "" rather
+  // than omitting it. `idempotencyKey ?? mint()` treats "" as PRESENT, and the
+  // `if (key)` that writes the header then drops it — a keyless POST, i.e.
+  // exactly the 400 IDEMPOTENCY_KEY_REQUIRED this file exists to pin. These
+  // two cases FAIL on the pre-fix client.
+
+  test("an empty-string key is treated as absent, not as a key", async () => {
+    await client().createCreditNote("inv_8", { reason: "error", fullCredit: true }, "");
+
+    assert.equal(captured.length, 1);
+    assert.ok(
+      captured[0].idempotencyKey,
+      'idempotencyKey:"" dropped the header — the live API answers 400 IDEMPOTENCY_KEY_REQUIRED',
+    );
+    assert.match(captured[0].idempotencyKey as string, UUID_RE);
+  });
+
+  test("a whitespace-only key is treated as absent, and a padded key is trimmed", async () => {
+    const c = client();
+    await c.createCreditNote("inv_9", { reason: "error", fullCredit: true }, "   ");
+    await c.createCreditNote("inv_10", { reason: "error", fullCredit: true }, "  pedido-42  ");
+
+    assert.equal(captured.length, 2);
+    assert.match(
+      captured[0].idempotencyKey as string,
+      UUID_RE,
+      "whitespace-only key left the request keyless",
+    );
+    assert.equal(
+      captured[1].idempotencyKey,
+      "pedido-42",
+      "a padded key must reach the wire trimmed — leading/trailing spaces make the retry a different key",
+    );
+  });
+
+  // -- Node 18 ------------------------------------------------------------
+  //
+  // `engines.node` is ">=18" and CI pins 20, so the fallback branch of
+  // newIdempotencyKey() never runs in a green run. On Node 18
+  // `globalThis.crypto` needs --experimental-global-webcrypto, so that branch
+  // is the REAL one for part of our install base. It must still emit a UUID.
+
+  test("the no-globalThis.crypto fallback still emits a UUID (Node 18 floor)", async () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+    Object.defineProperty(globalThis, "crypto", { value: undefined, configurable: true });
+    try {
+      await client().createCreditNote("inv_11", { reason: "error", fullCredit: true });
+    } finally {
+      if (original) Object.defineProperty(globalThis, "crypto", original);
+      else delete (globalThis as { crypto?: unknown }).crypto;
+    }
+
+    assert.equal(captured.length, 1);
+    assert.match(
+      captured[0].idempotencyKey as string,
+      UUID_RE,
+      "the Node 18 fallback produced a non-UUID key",
+    );
+  });
 });

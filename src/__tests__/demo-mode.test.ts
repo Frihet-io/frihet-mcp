@@ -116,6 +116,45 @@ describe("demo fixtures — PII safety", () => {
     }
   });
 
+  test("the credit-note fixture mirrors the live 201 body, field by field", async () => {
+    // The fixture's whole job is to teach a reviewing agent (App Store /
+    // ChatGPT connector review runs in demo mode) what the live response looks
+    // like. Every field here is pinned against the live builder in
+    // Frihet-ERP/functions/src/publicApi.ts, not against a previous fixture.
+    const client = new DemoFrihetClient();
+    const invoiceId = fixtures.demoInvoices[0]!.id as string;
+    const originalNumber = fixtures.demoInvoices[0]!.documentNumber as string | undefined;
+    const res = (await client.createCreditNote(invoiceId, {
+      reason: "refund",
+      fullCredit: true,
+    })) as { creditNote: Record<string, unknown> };
+
+    const cn = res.creditNote;
+    assert.equal(cn.status, "draft", "live creates a DRAFT — never an issued document");
+    assert.equal(cn.rectificationMethod, "I", "the API only ever emits I (por diferencias)");
+    assert.equal(cn.originalInvoiceId, invoiceId);
+    assert.equal(cn.fullCredit, true, "live hardcodes fullCredit:true in the 201");
+    assert.equal(
+      cn.documentNumber,
+      `CN-${originalNumber ?? "DEMO-001"}`,
+      "live numbering is CN-<original>; encoding the R-type here teaches a parse that fails on real data",
+    );
+    assert.doesNotMatch(
+      cn.documentNumber as string,
+      /^R[1-5]-/,
+      "documentNumber must not encode the R-type",
+    );
+
+    // Documented divergence, pinned so it cannot widen silently: demo never
+    // throws, so fullCredit:false returns a draft where live answers
+    // 400 PARTIAL_CREDIT_NOT_IMPLEMENTED. The echoed field must still be true.
+    const partial = (await client.createCreditNote(invoiceId, {
+      reason: "refund",
+      fullCredit: false,
+    })) as { creditNote: Record<string, unknown> };
+    assert.equal(partial.creditNote.fullCredit, true);
+  });
+
   test("fixtures use the ECBS/AEAT test IBAN, not a real one", () => {
     assert.equal(fixtures.DEMO_TEST_IBAN, "ES9121000418450200051332");
     const account = fixtures.demoBankAccounts[0]!;

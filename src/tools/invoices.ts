@@ -506,12 +506,14 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           .describe("ISO date for the credit note (YYYY-MM-DD). Defaults to today. / Fecha de emision (YYYY-MM-DD). Por defecto hoy."),
         idempotencyKey: z
           .string()
+          .max(64)
           .optional()
           .describe(
-            "Optional idempotency key. One is generated per call when omitted; pass your own to make a " +
-            "retry replay the stored result instead of creating a second draft. Reusing a key with a " +
-            "different body returns 409 IDEMPOTENCY_KEY_REUSED — reconcile, do not retry with a new key. " +
-            "/ Clave de idempotencia opcional. Se genera una por llamada si se omite.",
+            "Optional idempotency key, max 64 chars. One is generated per call when omitted or blank; " +
+            "pass your own to make a retry replay the stored result instead of creating a second draft. " +
+            "Reusing a key with a different body returns 409 IDEMPOTENCY_KEY_REUSED — reconcile, do not " +
+            "retry with a new key. " +
+            "/ Clave de idempotencia opcional (max 64). Se genera una por llamada si se omite o va vacia.",
           ),
       },
       outputSchema: creditNoteResultOutput,
