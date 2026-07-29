@@ -33,9 +33,10 @@
  * turns someone else's outage into a merge block.
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -86,7 +87,30 @@ async function fetchSpec(url) {
     headers: { "User-Agent": UA, Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`GET ${url} → HTTP ${res.status}`);
-  return JSON.parse(await res.text());
+  return assertIsSpec(JSON.parse(await res.text()), url);
+}
+
+/**
+ * A 200 with parseable JSON is NOT a spec. `JSON.parse` rejects HTML and
+ * truncation and nothing else, so an error envelope (`{"error":"Not found"}`,
+ * which this API serves with 200 from some handlers) would sail through: in
+ * generate mode it gets written verbatim over both published artifacts, and in
+ * `--live` mode `creditNoteContract` returns null and the host is reported as
+ * "ok". Both are false greens on the exact surface this script exists to
+ * protect, so assert the floor before anything downstream trusts the payload.
+ */
+function assertIsSpec(doc, url) {
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+    throw new Error(`GET ${url} → not a JSON object`);
+  }
+  if (typeof doc.openapi !== "string") {
+    throw new Error(`GET ${url} → no "openapi" version field — this is not an OpenAPI document`);
+  }
+  const paths = doc.paths;
+  if (!paths || typeof paths !== "object" || Object.keys(paths).length === 0) {
+    throw new Error(`GET ${url} → OpenAPI document with 0 paths`);
+  }
+  return doc;
 }
 
 /**
@@ -141,10 +165,78 @@ if (cn) {
 
 // A canonical that itself carries the falsehood must stop the run — otherwise
 // this script would faithfully propagate it to every surface.
+//
+// It has to stop HERE, not at the exit below: `fail.push` is not a stop, and
+// the generate branch 20 lines down writes both published artifacts before
+// `process.exit(1)` is ever reached. The guard then "fails" with the poisoned
+// spec already on disk, one `wrangler deploy` away from mcp.frihet.io.
 if (cn?.saysSent) {
-  fail.push(
-    "CANONICAL describes the credit note as created with `sent` status. It creates a draft. Fix functions/src/openapi.yaml in Frihet-ERP before syncing anything.",
+  console.error(
+    "\nFAIL (1):\n  - CANONICAL describes the credit note as created with `sent` status. " +
+      "It creates a draft. Fix functions/src/openapi.yaml in Frihet-ERP before syncing anything.",
   );
+  process.exit(1);
+}
+
+// Canonical must carry the operation this script is here to police. Losing it
+// means the endpoint was renamed or dropped upstream — the loudest drift there
+// is, and the one that would otherwise surface as a null-deref stack trace.
+if (!cn) {
+  console.error(
+    "\nFAIL (1):\n  - CANONICAL has no `*/credit-note` path. Either the endpoint moved " +
+      "(update this script) or the origin is serving something that is not the Frihet API.",
+  );
+  process.exit(1);
+}
+
+/**
+ * Regenerate public-openai/ into a scratch directory and byte-compare.
+ *
+ * `--check` used to read FULL_ASSET only, while openai-mcp.frihet.io publishes
+ * public-openai/openapi.json AND public-openai/releases.json verbatim through
+ * Workers Assets. Those are the artifacts that demonstrably drifted six weeks
+ * (releases.json sat at 1.14.5 while the package shipped 1.16.4), so leaving
+ * them unchecked is checking the copy that did not rot.
+ *
+ * The scratch source is CANONICAL, not the committed full asset: otherwise a
+ * hand-edit that hit both files in the same way would validate against itself.
+ */
+function checkScopedArtifacts() {
+  const tmp = mkdtempSync(join(tmpdir(), "frihet-openapi-scope-"));
+  const src = join(tmp, "public");
+  const out = join(tmp, "out");
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "openapi.json"), canonicalBytes);
+
+  // releases.json is NOT derived from canonical — the scoped copy is derived
+  // from the committed one, so it has to come from the tree.
+  const committedReleases = join(root, "workers/remote-mcp/public/releases.json");
+  if (existsSync(committedReleases)) {
+    writeFileSync(join(src, "releases.json"), readFileSync(committedReleases, "utf8"));
+  }
+
+  execFileSync(process.execPath, [SCOPE_SCRIPT], {
+    stdio: "pipe",
+    env: { ...process.env, SCOPE_SRC_DIR: src, SCOPE_OUT_DIR: out },
+  });
+
+  for (const name of ["openapi.json", "releases.json"]) {
+    const committedPath = join(root, "workers/remote-mcp/public-openai", name);
+    const regenerated = join(out, name);
+    if (!existsSync(regenerated)) continue;
+    if (!existsSync(committedPath)) {
+      fail.push(`workers/remote-mcp/public-openai/${name} is missing`);
+      continue;
+    }
+    if (readFileSync(committedPath, "utf8") !== readFileSync(regenerated, "utf8")) {
+      fail.push(
+        `workers/remote-mcp/public-openai/${name} does not match what scope-openai-openapi.mjs ` +
+          "produces from canonical — regenerate with `node scripts/sync-openapi.mjs` and never hand-edit it",
+      );
+    } else {
+      note(`ok         workers/remote-mcp/public-openai/${name} matches canonical (regenerated)`);
+    }
+  }
 }
 
 // ── committed artifacts ─────────────────────────────────────────────────────
@@ -164,6 +256,7 @@ if (CHECK) {
       note(`ok         ${relative(root, FULL_ASSET)} matches canonical`);
     }
   }
+  checkScopedArtifacts();
 } else {
   writeFileSync(FULL_ASSET, canonicalBytes);
   note(`wrote      ${relative(root, FULL_ASSET)}`);
@@ -185,8 +278,17 @@ if (LIVE) {
     }
     const c = creditNoteContract(served);
     if (!c) {
-      // The scoped OpenAI surface deliberately drops this path.
-      note(`ok         ${host.url} (no credit-note path — scoped surface)`);
+      // This used to report `ok (no credit-note path — scoped surface)`. That
+      // justification is false: scope-openai-openapi.mjs lists the path in
+      // KEEP_PATHS_EXACT and openai-mcp.frihet.io does serve it (verified
+      // live). So the branch never fired for its stated reason — what it
+      // actually did was turn "the host is serving a spec without the endpoint
+      // this script polices" into a green line.
+      fail.push(
+        `${host.url} serves an OpenAPI document with NO */credit-note path while canonical has ` +
+          `${cn.path} — the endpoint was dropped, renamed, or this is not the Frihet spec` +
+          ` — owner: ${host.owner}`,
+      );
       continue;
     }
     if (c.saysSent || c.responses !== cn.responses || c.requiresIdempotencyKey !== cn.requiresIdempotencyKey) {

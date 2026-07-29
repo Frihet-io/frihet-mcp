@@ -550,23 +550,52 @@ export default {
       '/openapi.yaml', '/v1/openapi.yaml',
       '/v1', '/v1/', '/health', '/v1/health',
     ];
+    // Edge-cache the SPEC only. `cacheEverything` overrides the origin's
+    // response headers, and /health answers `cache-control: no-cache, no-store`
+    // on purpose: it is a live liveness verdict (Firestore + Stripe probes).
+    // Caching it for 300 s would show every uptime monitor a five-minute-old
+    // "healthy" during an outage — while still forwarding the origin's
+    // `no-store` header, so nothing downstream could tell.
+    const SPEC_PATHS = new Set([
+      '/openapi.json', '/v1/openapi.json',
+      '/openapi.yaml', '/v1/openapi.yaml',
+    ]);
     if ((request.method === "GET" || request.method === "HEAD") && PUBLIC_PATHS.includes(url.pathname)) {
       const upstream = new URL(url.pathname, UPSTREAM);
       upstream.pathname = "/publicApi" + url.pathname;
       upstream.search = url.search;
       const headers = buildUpstreamHeaders(request);
-      // Edge-cache the spec: it only changes on a functions deploy, and the
-      // uncached body is ~370 KB.
-      const response = await fetch(upstream.toString(), {
-        method: request.method,
-        headers,
-        cf: { cacheEverything: true, cacheTtl: 300 },
-      });
-      const responseHeaders = buildResponseHeaders(response, request);
-      return new Response(request.method === "HEAD" ? null : response.body, {
-        status: response.status,
-        headers: responseHeaders,
-      });
+      const isSpec = SPEC_PATHS.has(url.pathname);
+
+      // Same failure contract as the generic proxy below: this branch replaced
+      // a static 302, so an origin blip that used to be impossible here now
+      // has to surface as the API's JSON 502 and not as Cloudflare's HTML
+      // "Error 1101" page (which reads downstream as a spec parse error).
+      const publicController = new AbortController();
+      const publicTimeoutId = setTimeout(() => publicController.abort(), 25000);
+      try {
+        const response = await fetch(upstream.toString(), {
+          method: request.method,
+          headers,
+          signal: publicController.signal,
+          ...(isSpec ? { cf: { cacheEverything: true, cacheTtl: 300 } } : {}),
+        });
+        clearTimeout(publicTimeoutId);
+        const responseHeaders = buildResponseHeaders(response, request);
+        return new Response(request.method === "HEAD" ? null : response.body, {
+          status: response.status,
+          headers: responseHeaders,
+        });
+      } catch (error) {
+        clearTimeout(publicTimeoutId);
+        const errorHeaders = { 'Content-Type': 'application/json', ...SECURITY_HEADERS };
+        const corsHeaders = getCorsHeaders(request);
+        if (corsHeaders) Object.assign(errorHeaders, corsHeaders);
+        return new Response(
+          JSON.stringify({ error: 'Service temporarily unavailable' }),
+          { status: 502, headers: errorHeaders },
+        );
+      }
     }
 
     const path = url.pathname + url.search;

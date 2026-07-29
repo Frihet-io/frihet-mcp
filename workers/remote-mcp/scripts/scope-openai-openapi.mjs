@@ -13,11 +13,15 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SRC = join(root, "public");
-const OUT = join(root, "public-openai");
+// Overridable so a gate can regenerate into a scratch directory and byte-compare
+// against the committed artifact WITHOUT mutating the tree — see the scoped
+// half of `--check` in scripts/sync-openapi.mjs. Unset (the normal case) these
+// resolve exactly as before.
+const SRC = process.env.SCOPE_SRC_DIR ? resolve(process.env.SCOPE_SRC_DIR) : join(root, "public");
+const OUT = process.env.SCOPE_OUT_DIR ? resolve(process.env.SCOPE_OUT_DIR) : join(root, "public-openai");
 
 const DROP_PATH_PREFIXES = [
   "/v1/channels", "/v1/deposits", "/v1/guests", "/v1/properties",

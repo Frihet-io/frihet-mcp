@@ -316,8 +316,12 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
     // api.frihet.io. It carries three drift vectors invisible to the generic
     // line scan: (a) bare-numeric `tools_count:` fields, (b) the legacy
     // `X-Frihet-API-Key` auth header (live API reads `X-API-Key`), and (c)
-    // discovery `openapi:` descriptors pointing at api.frihet.io/openapi.json
-    // (canonical is mcp.frihet.io/openapi.json; api.frihet.io only 302-redirects).
+    // discovery `openapi:` descriptors pointing at mcp.frihet.io/openapi.json
+    // (canonical is api.frihet.io/openapi.json, a live proxy of the publicApi
+    // Cloud Function; mcp.frihet.io serves a DERIVED file that can go stale
+    // between deploys — pointing discovery at it is what let the spec rot).
+    // NOTE: this rule was inverted on 29-jul-2026 together with the redirect
+    // removal. The enforcement below is the source of truth for its direction.
     // All three are asserted here against the SoT (TOOL_COUNT from package.json —
     // no second source of truth) so the discovery surface can't re-drift.
     if (repoName === 'frihet-mcp' && rel === 'workers/api-proxy/worker.js') {

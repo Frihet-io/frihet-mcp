@@ -15,7 +15,10 @@
  *   GET /robots.txt         — Bot crawl rules (text/plain)
  *   GET /agents.json        — AI agent discovery (application/json)
  *   GET /.well-known/mcp    — MCP server metadata (application/json)
- *   GET /openapi.json       — OpenAPI 3.1 spec (proxied from api.frihet.io)
+ *   GET /openapi.json       — OpenAPI 3.1 spec (served from the ASSETS binding;
+ *                             a same-zone subrequest to api.frihet.io is blocked
+ *                             by Cloudflare with a 522, so it CANNOT be proxied —
+ *                             see the handler comment where it is served)
  *   GET /releases.json      — Release metadata from manifest emit (application/json)
  *
  * IMPORTANT: All static handlers run BEFORE OAuthProvider so they are never
