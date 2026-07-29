@@ -179,15 +179,35 @@ export class DemoFrihetClient implements IFrihetClient {
       ...FISCAL_STAMP,
     };
   }
-  async createCreditNote(invoiceId: string, data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string }): Promise<Rec> {
+  // Mirrors the live 201 body: a DRAFT rectificativa, always by differences
+  // (`rectificationMethod: "I"`), R-type derived from `reason` server-side
+  // (`error` → R1, everything else → R4 — R2/R3/R5 are unreachable via the API).
+  async createCreditNote(invoiceId: string, data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string }, _idempotencyKey?: string): Promise<Rec> {
+    // Shape rules taken from the live 201 (functions/src/publicApi.ts) rather
+    // than invented:
+    //  - documentNumber is `CN-<original document number>` and NEVER encodes
+    //    the R-type (creditNoteService.ts: `CN-${originalDocNumber}`). An
+    //    earlier fixture emitted `R1-DEMO-001`, teaching an agent to parse a
+    //    field that carries no R-type live.
+    //  - fullCredit is hardcoded `true` in the live body: `false` never
+    //    reaches a 201, it is refused with 400 PARTIAL_CREDIT_NOT_IMPLEMENTED.
+    //    Echoing the input would contradict this tool's own description.
+    // Documented divergence: demo mode never throws (the seam's contract), so
+    // `fullCredit: false` returns the same simulated draft instead of the live
+    // 400. Pinned in src/__tests__/demo-mode.test.ts.
+    const original = findOrStub(demoInvoices, invoiceId);
+    const originalNumber = typeof original.documentNumber === "string" ? original.documentNumber : "DEMO-001";
     return {
       success: true,
       creditNote: {
         id: demoId("demo_cn"),
-        documentNumber: "R4-DEMO-001",
+        documentNumber: `CN-${originalNumber}`,
         originalInvoiceId: invoiceId,
         reason: data.reason,
-        fullCredit: data.fullCredit ?? true,
+        fullCredit: true,
+        status: "draft",
+        rectificationMethod: "I",
+        totalCredited: 1210.0,
       },
       ...FISCAL_STAMP,
     };

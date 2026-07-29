@@ -4,6 +4,20 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [1.16.5] — 2026-07-29
+
+### Fixed
+
+- **`create_credit_note` failed 100% of the time.** The API client never sent an `Idempotency-Key` header — `grep -ri idempotency src/` returned 0 hits, and the same grep over the previously published tarball returned 0 too (positive control: `X-API-Key` → 1 hit). `POST /v1/invoices/:id/credit-note` requires the header, so every call from every agent (Claude · ChatGPT · Cursor · Cline · the `mcp.frihet.io` Worker, which bundles this same client) came back `400 · IDEMPOTENCY_KEY_REQUIRED` with 0 drafts created. Reproduced against `api.frihet.io`, not inferred: with the header the same request reaches the handler (`404 · INVOICE_NOT_FOUND` on a non-existent invoice).
+- **The 429 retry re-POSTed the mutation with no key at all** — precisely the duplicate an idempotency key exists to prevent. Retries now replay the *same* key rather than minting a new one.
+- Two docs promised the mechanism and no line implemented it (`AGENTS.md` "API client must respect `Idempotency-Key`", `CLAUDE.md` "every mutating tool MUST support `Idempotency-Key`. Test it."). Pinned by `src/__tests__/idempotency-key-contract.test.ts` — 5 of its 6 assertions fail if the header is removed.
+
+### Changed
+
+- Every mutating request (`POST`/`PUT`/`PATCH`/`DELETE`) now carries a freshly minted `Idempotency-Key`; reads never do. `create_credit_note` accepts an optional `idempotencyKey` input so a caller-driven retry replays the stored `201` instead of creating a second draft.
+- **`create_credit_note` description corrected to the contract the server actually implements.** It said the tool "generates VeriFactu-compliant R1-R5 rectificativa"; it creates a **draft** — no fiscal number, no hash, not submitted to VeriFactu — always by differences (`TipoRectificativa = I`), with the R-type derived from `reason` (only R1 and R4 are reachable), for the full amount only, behind the `pro` plan. The `fullCredit` description was inverted: it claimed `true` = tipo S substitution / `false` = tipo I partial, when `false` is rejected with `400 PARTIAL_CREDIT_NOT_IMPLEMENTED` and the method is always I.
+- Demo-mode fixture (`FRIHET_DEMO=1`) now mirrors the live 201 body (`status: "draft"`, `rectificationMethod: "I"`, `totalCredited`) and derives the R-type from `reason` instead of hardcoding `R4`.
+
 ## [1.16.4] — 2026-07-21
 
 ### Fixed
@@ -307,7 +321,7 @@ All notable changes to `@frihet/mcp-server` are documented here.
 ## [1.5.3] — 2026-03-28
 
 ### Added
-- **Tool #53 — `create_credit_note`**: Create credit notes linked to existing invoices with full line-item control.
+- **Tool #53 — `create_credit_note`**: Create credit notes linked to existing invoices with full line-item control. _(Correction, 1.16.5: "full line-item control" was never true. The endpoint has no line-level or partial credit — `fullCredit: false` returns `400 PARTIAL_CREDIT_NOT_IMPLEMENTED`. Left in place rather than rewritten, since this entry is a released record.)_
 - **Tool #54 — `get_invoice_einvoice`**: Retrieve the EN16931-compliant e-invoice (XML/UBL) for any issued invoice.
 - **Tool #55 — `apply_late_fee`**: Apply a late payment fee to an overdue invoice, with configurable rate and description.
 

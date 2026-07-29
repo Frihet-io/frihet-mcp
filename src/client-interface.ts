@@ -57,7 +57,7 @@ export interface IFrihetClient {
   markInvoicePaid(id: string, paidDate?: string): Promise<Record<string, unknown>>;
   getInvoicePdf(id: string): Promise<Record<string, unknown>>;
   getInvoiceEInvoice(invoiceId: string): Promise<any>;
-  createCreditNote(invoiceId: string, data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string }): Promise<Record<string, unknown>>;
+  createCreditNote(invoiceId: string, data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string }, idempotencyKey?: string): Promise<Record<string, unknown>>;
   applyLateFee(invoiceId: string, data?: { amount?: number; daysOverdue?: number }): Promise<any>;
 
   // Quote actions

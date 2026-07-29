@@ -130,7 +130,11 @@ npm start              # node dist/index.js (local stdio)
 
 Tool errors propagate to user agents which act on the user's business data — treat every change accordingly.
 
-- **Idempotency** — every mutating tool MUST support `Idempotency-Key`. Test it.
+- **Idempotency** — `src/client.ts` mints an `Idempotency-Key` for EVERY mutating
+  request (`src/__tests__/idempotency-key-contract.test.ts` pins it on the wire).
+  Accepting a caller-supplied key as a tool input is a separate, per-tool step:
+  today only `create_credit_note` does (`src/tools/invoices.ts`). Adding it to a
+  tool means adding its test in the same diff.
 - **Input validation** — strict Zod schemas. Reject ambiguous input rather than infer.
 - **Auth scope** — tools must respect API key scope. No privilege escalation.
 - **Rate limiting** — client-side backoff on 429. Don't burn the user's quota.

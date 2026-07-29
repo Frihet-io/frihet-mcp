@@ -21,6 +21,51 @@ const MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 const REQUEST_TIMEOUT_MS = 30000;
 
+/**
+ * HTTP methods for which the backend treats the request as a mutation and
+ * therefore accepts (and for some endpoints REQUIRES) an `Idempotency-Key`
+ * header. `POST /v1/invoices/:id/credit-note` rejects a keyless request with
+ * `400 IDEMPOTENCY_KEY_REQUIRED`, so a client that never sends one fails 100%
+ * of the time — see src/__tests__/idempotency-key-contract.test.ts.
+ */
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Fresh idempotency key, always a syntactically valid UUID v4.
+ *
+ * `crypto.randomUUID` is a global on the Cloudflare Workers runtime and on
+ * Node >= 19. On Node 18 — our declared `engines` floor — `globalThis.crypto`
+ * is behind `--experimental-global-webcrypto`, so the fallback is a REAL code
+ * path there, not a theoretical one. It therefore has to produce a UUID and
+ * not an ad-hoc string: the backend documents "UUID v4 recommended", and
+ * src/__tests__/idempotency-key-contract.test.ts asserts the shape.
+ */
+function newIdempotencyKey(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (typeof c?.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  // RFC 4122 v4 layout from Math.random. Weaker entropy than the CSPRNG, but
+  // the key only has to be unique per caller, never unguessable.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    const v = ch === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * A caller-supplied key counts only if it carries a value. An empty or
+ * whitespace-only string is what an LLM client emits for "I have nothing to
+ * put here" on an optional string param — treating it as PRESENT would leave
+ * the request keyless and reproduce the very `400 IDEMPOTENCY_KEY_REQUIRED`
+ * this client exists to prevent.
+ */
+function normalizeIdempotencyKey(key: string | undefined): string | undefined {
+  const trimmed = key?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 export class FrihetApiError extends Error {
   constructor(
     public readonly statusCode: number,
@@ -65,8 +110,18 @@ export class FrihetClient {
     body?: unknown,
     query?: Record<string, string | number | undefined>,
     retryCount = 0,
+    idempotencyKey?: string,
   ): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
+
+    // Resolved once, at the top of the call chain: a caller-supplied key wins,
+    // otherwise mutations get a freshly minted one. The resolved value is then
+    // threaded through the 429 recursion below so a retry replays the SAME key
+    // — retrying with a new key is exactly the duplicate the key exists to
+    // prevent (a retried credit-note would create a second draft).
+    const resolvedIdempotencyKey =
+      normalizeIdempotencyKey(idempotencyKey) ??
+      (MUTATING_METHODS.has(method) ? newIdempotencyKey() : undefined);
 
     if (query) {
       for (const [key, value] of Object.entries(query)) {
@@ -81,6 +136,10 @@ export class FrihetClient {
       "Content-Type": "application/json",
       Accept: "application/json",
     };
+
+    if (resolvedIdempotencyKey) {
+      headers["Idempotency-Key"] = resolvedIdempotencyKey;
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -131,7 +190,14 @@ export class FrihetClient {
 
       logRetry(method, path, retryCount, delayMs);
       await this.sleep(delayMs);
-      return this.request<T>(method, path, body, query, retryCount + 1);
+      return this.request<T>(
+        method,
+        path,
+        body,
+        query,
+        retryCount + 1,
+        resolvedIdempotencyKey,
+      );
     }
 
     // Error responses
@@ -210,8 +276,9 @@ export class FrihetClient {
     path: string,
     body?: unknown,
     query?: Record<string, string | number | undefined>,
+    idempotencyKey?: string,
   ): Promise<T> {
-    const raw = await this.request<unknown>(method, path, body, query);
+    const raw = await this.request<unknown>(method, path, body, query, 0, idempotencyKey);
 
     if (
       raw !== null &&
@@ -511,11 +578,30 @@ export class FrihetClient {
     return this.requestUnwrapped("GET", `/invoices/${encodeURIComponent(invoiceId)}/xml`);
   }
 
+  /**
+   * `POST /v1/invoices/:id/credit-note` — creates a rectificativa DRAFT.
+   *
+   * The backend REQUIRES an `Idempotency-Key` header (`400
+   * IDEMPOTENCY_KEY_REQUIRED` without it). `request` mints one for every
+   * mutation, so passing `idempotencyKey` is optional: supply it to make a
+   * caller-driven retry replay the stored 201 instead of creating a second
+   * draft. The backend marks that replay with `X-Idempotent-Replayed: true`,
+   * but this client reads no response headers, so the replayed 201 and the
+   * original are indistinguishable to the caller — both are the same draft,
+   * which is the property that matters here.
+   */
   async createCreditNote(
     invoiceId: string,
     data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string },
+    idempotencyKey?: string,
   ): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(invoiceId)}/credit-note`, data);
+    return this.requestUnwrapped(
+      "POST",
+      `/invoices/${encodeURIComponent(invoiceId)}/credit-note`,
+      data,
+      undefined,
+      idempotencyKey,
+    );
   }
 
   async applyLateFee(invoiceId: string, data?: { amount?: number; daysOverdue?: number }): Promise<any> {
