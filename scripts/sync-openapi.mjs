@@ -85,6 +85,10 @@ const LIVE = args.has("--live");
 async function fetchSpec(url) {
   const res = await fetch(`${url}?cb=${Date.now()}`, {
     headers: { "User-Agent": UA, Accept: "application/json" },
+    // Without a signal, undici waits 300 000 ms on a blackholed host — six
+    // hosts is a half-hour hang instead of a red gate. 30 s covers a Cloud
+    // Function cold start on a 372 KB body (warm is ~1 s).
+    signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) throw new Error(`GET ${url} → HTTP ${res.status}`);
   return assertIsSpec(JSON.parse(await res.text()), url);
