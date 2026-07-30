@@ -15,6 +15,8 @@
  *       carries an openWorldHint rationale marker.
  *   (3) search_tools (browse-all) and describe_tool only ever surface tools that
  *       are in tools/list — i.e. the catalog never leaks a non-reviewed tool.
+ *   (4) The complete tools/list descriptors and OAuth metadata match the frozen
+ *       OpenAI review snapshot exactly (after object/tool ordering only).
  *
  * Usage (AFTER deploy only):
  *   FRIHET_API_KEY=fri_xxx node scripts/test-openai-grouped-compose.mjs
@@ -22,6 +24,15 @@
  *
  * Exit 0 = all invariants hold. Exit 1 = a violation. Exit 2 = setup/transport error.
  */
+
+import { readFileSync } from "node:fs";
+
+const SNAPSHOT = JSON.parse(
+  readFileSync(
+    new URL("../src/__tests__/fixtures/openai-review-descriptor.snapshot.json", import.meta.url),
+    "utf8",
+  ),
+);
 
 const ARGS = process.argv.slice(2);
 function arg(flag) {
@@ -52,17 +63,21 @@ if (!API_KEY || !API_KEY.startsWith("fri_")) {
 }
 
 let nextId = 1;
+let sessionId;
 async function rpc(method, params) {
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+    Authorization: `Bearer ${API_KEY}`,
+  };
+  if (sessionId) headers["Mcp-Session-Id"] = sessionId;
   const res = await fetch(ENDPOINT, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-      Authorization: `Bearer ${API_KEY}`,
-    },
+    headers,
     body: JSON.stringify({ jsonrpc: "2.0", id: nextId++, method, params }),
   });
   if (!res.ok) throw new Error(`${method} → HTTP ${res.status} ${res.statusText}`);
+  sessionId = res.headers.get("mcp-session-id") || sessionId;
   const ct = res.headers.get("content-type") || "";
   let payload;
   if (ct.includes("text/event-stream")) {
@@ -87,6 +102,24 @@ function parseToolText(callResult) {
   return block ? JSON.parse(block.text) : null;
 }
 
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, child]) => [key, canonicalize(child)]),
+    );
+  }
+  return value;
+}
+
+function canonicalTools(tools) {
+  return [...tools]
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map(canonicalize);
+}
+
 async function main() {
   const failures = [];
   const note = (ok, label) => {
@@ -105,6 +138,11 @@ async function main() {
   const list = await rpc("tools/list", {});
   const tools = list.tools || [];
   const names = new Set(tools.map((t) => t.name));
+
+  note(
+    JSON.stringify(canonicalTools(tools)) === JSON.stringify(canonicalTools(SNAPSHOT.tools)),
+    "tools/list matches the exact frozen OpenAI review descriptor",
+  );
 
   // Invariant (1): 56 tools, meta-tools present.
   note(tools.length === EXPECTED_TOTAL, `tools/list returns ${EXPECTED_TOTAL} tools (got ${tools.length})`);
@@ -156,6 +194,34 @@ async function main() {
   const groups = await rpc("tools/call", { name: "list_tool_groups", arguments: {} });
   const gPayload = parseToolText(groups);
   note(gPayload?.totalTools === EXPECTED_BUSINESS, `list_tool_groups totalTools === ${EXPECTED_BUSINESS} (got ${gPayload?.totalTools})`);
+
+  // Public OAuth metadata and the unauthenticated MCP challenge are read-only.
+  const origin = new URL(ENDPOINT).origin;
+  const authorizationServer = await fetch(`${origin}/.well-known/oauth-authorization-server`).then((res) => res.json());
+  note(
+    JSON.stringify(canonicalize(authorizationServer)) ===
+      JSON.stringify(canonicalize(SNAPSHOT.oauth.authorizationServer)),
+    "OAuth authorization-server discovery matches the freeze",
+  );
+  const protectedResource = await fetch(`${origin}/.well-known/oauth-protected-resource`).then((res) => res.json());
+  note(
+    JSON.stringify(canonicalize(protectedResource)) ===
+      JSON.stringify(canonicalize(SNAPSHOT.oauth.protectedResource)),
+    "OAuth protected-resource metadata matches the freeze",
+  );
+  const challenge = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: "descriptor-auth-check", method: "tools/list", params: {} }),
+  });
+  note(challenge.status === 401, `unauthenticated tools/list returns 401 (got ${challenge.status})`);
+  note(
+    challenge.headers.get("www-authenticate") === SNAPSHOT.oauth.wwwAuthenticate.missingTokenHeader,
+    "WWW-Authenticate resource_metadata URL matches the freeze",
+  );
 
   console.log("");
   if (failures.length) {

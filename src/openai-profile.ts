@@ -25,6 +25,7 @@ import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { MCP_RESOURCE_COUNT } from "./resources/register-all.js";
 import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
+import { applyToolExposureProfile } from "./tool-exposure.js";
 
 /* ------------------------------------------------------------------ */
 /*  Profile definition                                                 */
@@ -525,6 +526,21 @@ export const OPENAI_ALLOWED_TOOL_COUNT = PROFILE.includeTools.size;
  */
 export const OPENAI_REVIEWED_TOOL_ALLOWLIST: ReadonlySet<string> =
   PROFILE.includeTools;
+
+/**
+ * Apply the exact profile composition used by the ChatGPT review Worker.
+ *
+ * Keep this helper as the single source for the security-sensitive ordering:
+ * grouped exposure first (with the frozen allow-list), OpenAI profile second.
+ * Tool registration happens afterwards through registerAllTools().
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function applyOpenAIReviewProfiles(server: any): void {
+  applyToolExposureProfile(server, {
+    allowlist: OPENAI_REVIEWED_TOOL_ALLOWLIST,
+  });
+  applyOpenAIProfile(server);
+}
 
 /** Number of resources excluded in OpenAI mode (for logging). */
 export const OPENAI_EXCLUDED_RESOURCE_COUNT = PROFILE.excludeResources

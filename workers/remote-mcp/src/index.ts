@@ -31,12 +31,19 @@ import { McpAgent } from "agents/mcp";
 import { registerAllTools } from "../../../src/tools/register-all.js";
 import { registerAllResources } from "../../../src/resources/register-all.js";
 import { registerAllPrompts } from "../../../src/prompts/register-all.js";
-import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_CSP, OPENAI_REVIEWED_TOOL_ALLOWLIST } from "../../../src/openai-profile.js";
+import {
+  applyOpenAIProfile,
+  applyOpenAIReviewProfiles,
+  OPENAI_ALLOWED_TOOL_COUNT,
+  OPENAI_EXCLUDED_COUNT,
+  OPENAI_CSP,
+} from "../../../src/openai-profile.js";
 import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
 import { log } from "../../../src/logger.js";
 import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
 import { authHandler } from "./auth-handler.js";
+import { OAUTH_PROVIDER_REVIEW_OPTIONS } from "../../../src/openai-review-oauth.js";
 import { MCP_SERVER_VERSION, FULL_TOOL_COUNT } from "./server-meta.js";
 import { buildServerCard } from "./server-card.js";
 
@@ -123,10 +130,11 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     // In OpenAI mode, pass the reviewed allow-list so progressive disclosure can
     // never reveal or describe a tool outside the 53-tool ChatGPT-reviewed set.  // mcp-refs:ok
     if (toolMode === "grouped") {
-      applyToolExposureProfile(
-        server,
-        openaiMode ? { allowlist: OPENAI_REVIEWED_TOOL_ALLOWLIST } : undefined,
-      );
+      if (openaiMode) {
+        applyOpenAIReviewProfiles(server);
+      } else {
+        applyToolExposureProfile(server);
+      }
       log({
         level: "info",
         message: `Grouped tool-exposure active — tools collapsed to terse summaries, ${GROUPED_META_TOOL_COUNT} discovery meta-tools added; full depth served on demand`,
@@ -136,7 +144,9 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
 
     // Apply OpenAI-safe profile if this worker is deployed in OpenAI mode
     if (openaiMode) {
-      applyOpenAIProfile(server);
+      if (toolMode !== "grouped") {
+        applyOpenAIProfile(server);
+      }
       log({
         level: "info",
         message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions`,
@@ -965,16 +975,9 @@ function scopeOpenApiForOpenAI(specText: string): string {
 // ---------------------------------------------------------------------------
 
 const oauthProvider = new OAuthProvider({
-  apiRoute: "/mcp",
+  ...OAUTH_PROVIDER_REVIEW_OPTIONS,
   apiHandler: FrihetMCP.serve("/mcp"),
   defaultHandler: authHandler,
-  authorizeEndpoint: "/authorize",
-  tokenEndpoint: "/token",
-  clientRegistrationEndpoint: "/register",
-  scopesSupported: ["read", "write"],
-  accessTokenTTL: 3600,
-  refreshTokenTTL: 2592000,
-  allowPlainPKCE: false,
 
   // Backward compat: accept fri_* API keys directly without OAuth flow
   resolveExternalToken: async ({
