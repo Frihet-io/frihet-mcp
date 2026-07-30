@@ -27,11 +27,11 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  applyOpenAIProfile,
+  applyOpenAIReviewProfiles,
   OPENAI_REVIEWED_TOOL_ALLOWLIST,
   OPENAI_ALLOWED_TOOL_COUNT,
 } from "../openai-profile.js";
-import { applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "../tool-exposure.js";
+import { GROUPED_META_TOOL_COUNT } from "../tool-exposure.js";
 import { registerAllTools } from "../tools/register-all.js";
 import { registerAllPrompts } from "../prompts/register-all.js";
 import { registerAllResources } from "../resources/register-all.js";
@@ -103,13 +103,7 @@ const asMcp = (s: StubMcpServer) =>
  */
 function makeComposedServer(): StubMcpServer {
   const server = new StubMcpServer();
-  // 1. grouped FIRST (innermost) — meta-tools bypass the OpenAI gate; catalog
-  //    pinned to the reviewed allow-list.
-  applyToolExposureProfile(asMcp(server), {
-    allowlist: OPENAI_REVIEWED_TOOL_ALLOWLIST,
-  });
-  // 2. OpenAI SECOND (outermost) — gate/redact/annotate, then collapse.
-  applyOpenAIProfile(asMcp(server));
+  applyOpenAIReviewProfiles(asMcp(server));
   registerAllTools(asMcp(server), makeClient());
   registerAllResources(asMcp(server));
   registerAllPrompts(asMcp(server));
