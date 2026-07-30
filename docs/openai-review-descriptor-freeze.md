@@ -32,6 +32,10 @@ Run the fail-closed gate with:
 npm run gate:openai-review-descriptor
 ```
 
+The repository CI runs this gate on every pull request and every push to
+`main`; the freeze is therefore a blocking contract, not an optional local
+check.
+
 Run the positive capture and mutation selftests with:
 
 ```bash
