@@ -78,7 +78,7 @@
     "url": "https://github.com/Frihet-io/frihet-mcp/issues"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "files": [
     "dist",
