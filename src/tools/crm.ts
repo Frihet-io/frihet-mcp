@@ -162,7 +162,6 @@ export function registerCrmTools(server: McpServer, client: IFrihetClient): void
           .describe("Activity type / Tipo de actividad"),
         title: z.string().describe("Activity title / Titulo de la actividad"),
         description: z.string().optional().describe("Detailed description / Descripcion detallada"),
-        date: z.string().optional().describe("Activity date (ISO 8601, defaults to now) / Fecha de la actividad"),
       },
       outputSchema: activityItemOutput,
     },

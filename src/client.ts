@@ -621,10 +621,29 @@ export class FrihetClient {
   async listWebhooks(
     params?: { limit?: number; offset?: number },
   ): Promise<PaginatedResponse<Record<string, unknown>>> {
-    return this.requestPaginated("GET", "/webhooks", undefined, {
+    const result = await this.requestPaginated<Record<string, unknown>>("GET", "/webhooks", undefined, {
       limit: params?.limit,
       offset: params?.offset,
     });
+
+    // The current /webhooks endpoint returns the complete list as
+    // { data, total, meta } and ignores limit/offset. The MCP tool promises a
+    // real offset page with numeric limit/offset, so normalize the legacy API
+    // shape locally. If the server starts returning its own pagination fields,
+    // preserve that authoritative page instead of slicing it a second time.
+    if (Number.isFinite(result.limit) && Number.isFinite(result.offset)) {
+      return result;
+    }
+
+    const limit = Math.min(Math.max(params?.limit ?? 50, 1), 100);
+    const offset = Math.max(params?.offset ?? 0, 0);
+    return {
+      ...result,
+      data: result.data.slice(offset, offset + limit),
+      total: Number.isFinite(result.total) ? result.total : result.data.length,
+      limit,
+      offset,
+    };
   }
 
   async getWebhook(id: string): Promise<Record<string, unknown>> {

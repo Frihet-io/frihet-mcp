@@ -229,7 +229,7 @@ export class DemoFrihetClient implements IFrihetClient {
     return { id, ...READ_STAMP };
   }
   async createWebhook(data: Rec): Promise<Rec> {
-    return simulateWrite("demo_wh", data, { active: data.active ?? true });
+    return simulateWrite("demo_wh", data, { status: data.status ?? "active" });
   }
   async updateWebhook(id: string, data: Rec): Promise<Rec> {
     return simulateAction(id, { ...data });

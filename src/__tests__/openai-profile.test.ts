@@ -9,8 +9,12 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { z } from "zod/v4";
 
-import { applyOpenAIProfile } from "../openai-profile.js";
+import {
+  applyOpenAIProfile,
+  OPENAI_COMMERCIAL_DOCUMENT_NUMBER_TOOLS,
+} from "../openai-profile.js";
 import { SENSITIVE_FIELD_NAMES } from "../redaction.js";
 import { registerAllTools } from "../tools/register-all.js";
 import { registerAllPrompts } from "../prompts/register-all.js";
@@ -65,6 +69,28 @@ function makeClient(): IFrihetClient {
           email: "test@example.com",
           taxId: "B12345678",
           secret: "should-not-leak",
+        };
+      }
+      if (prop === "listInvoices") {
+        return {
+          data: [{
+            id: "inv_openai",
+            documentNumber: "FAC-2026-0042",
+            clientTaxId: "B12345678",
+          }],
+          total: 1,
+          limit: 20,
+          offset: 0,
+        };
+      }
+      if (prop === "createCreditNote") {
+        return {
+          success: true,
+          creditNote: {
+            id: "cn_openai",
+            documentNumber: "R-2026-0007",
+            clientTaxId: "B12345678",
+          },
         };
       }
       return {
@@ -136,6 +162,12 @@ describe("OpenAI profile", () => {
       assert.equal("taxId" in (tool.config.inputSchema ?? {}), false);
     }
 
+    for (const name of ["create_invoice", "update_invoice", "create_quote", "update_quote"]) {
+      const tool = server.tools.get(name);
+      assert.ok(tool, `${name} should be visible`);
+      assert.equal("clientTaxId" in (tool.config.inputSchema ?? {}), false);
+    }
+
     for (const name of ["send_invoice", "send_quote"]) {
       const tool = server.tools.get(name);
       assert.ok(tool, `${name} should be visible`);
@@ -190,24 +222,49 @@ describe("OpenAI profile", () => {
     assert.equal(serialized.includes("should-not-leak"), false);
   });
 
+  test("preserves commercial document numbers while redacting client tax identity", async () => {
+    const server = makeOpenAIServer();
+
+    const invoiceResult = await server.tools.get("list_invoices")!.handler({});
+    const invoiceSerialized = JSON.stringify(invoiceResult);
+    assert.equal(invoiceSerialized.includes("FAC-2026-0042"), true);
+    assert.equal(invoiceSerialized.includes("clientTaxId"), false);
+    assert.equal(invoiceSerialized.includes("B12345678"), false);
+
+    const creditNoteTool = server.tools.get("create_credit_note")!;
+    const creditNoteResult = await creditNoteTool.handler({
+      invoiceId: "inv_openai",
+      reason: "error",
+    });
+    const creditNoteSerialized = JSON.stringify(creditNoteResult);
+    assert.equal(creditNoteSerialized.includes("R-2026-0007"), true);
+    assert.equal(creditNoteSerialized.includes("clientTaxId"), false);
+    assert.equal(creditNoteSerialized.includes("B12345678"), false);
+
+    const publishedSchema = z.toJSONSchema(creditNoteTool.config.outputSchema as z.ZodType);
+    assert.equal(JSON.stringify(publishedSchema).includes("documentNumber"), true);
+  });
+
   test("no reviewed tool DECLARES a sensitive field in its outputSchema", () => {
     const server = makeOpenAIServer();
 
-    // Recursively collect every object key declared by a Zod output schema.
-    const collectKeys = (schema: unknown, acc: Set<string>): Set<string> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const def = (schema as any)?._def;
-      const typeName: string | undefined = def?.typeName;
-      if (typeName === "ZodObject") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const [key, value] of Object.entries((schema as any).shape as Record<string, unknown>)) {
-          acc.add(key);
-          collectKeys(value, acc);
+    // Inspect the JSON Schema that clients receive, not the same Zod internals
+    // used by the stripping implementation. The previous mirror traversal was
+    // Zod-3-only and therefore passed vacuously over every Zod 4 tool schema.
+    const collectPropertyNames = (value: unknown, acc: Set<string>): Set<string> => {
+      if (Array.isArray(value)) {
+        for (const item of value) collectPropertyNames(item, acc);
+        return acc;
+      }
+      if (value && typeof value === "object") {
+        for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+          if (key === "properties" && child && typeof child === "object" && !Array.isArray(child)) {
+            for (const propertyName of Object.keys(child as Record<string, unknown>)) {
+              acc.add(propertyName);
+            }
+          }
+          collectPropertyNames(child, acc);
         }
-      } else if (typeName === "ZodArray") {
-        collectKeys(def.type, acc);
-      } else if (typeName === "ZodOptional" || typeName === "ZodNullable") {
-        collectKeys(def.innerType, acc);
       }
       return acc;
     };
@@ -215,8 +272,15 @@ describe("OpenAI profile", () => {
     for (const tool of server.tools.values()) {
       const out = tool.config.outputSchema;
       if (!out) continue;
-      const keys = collectKeys(out, new Set<string>());
+      const publishedSchema = z.toJSONSchema(out as z.ZodType);
+      const keys = collectPropertyNames(publishedSchema, new Set<string>());
       for (const field of SENSITIVE_FIELD_NAMES) {
+        if (
+          field === "documentNumber" &&
+          OPENAI_COMMERCIAL_DOCUMENT_NUMBER_TOOLS.has(tool.name)
+        ) {
+          continue;
+        }
         assert.equal(
           keys.has(field),
           false,

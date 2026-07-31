@@ -73,6 +73,10 @@ export function registerWebhookTools(server: McpServer, client: IFrihetClient): 
         "/ Registra un nuevo endpoint de webhook. Especifica la URL y los eventos a suscribir.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
+        name: z
+          .string()
+          .max(200)
+          .describe("Webhook name / Nombre del webhook"),
         url: z.string().url().describe("Webhook endpoint URL / URL del endpoint del webhook"),
         events: z
           .array(z.string())
@@ -94,8 +98,11 @@ export function registerWebhookTools(server: McpServer, client: IFrihetClient): 
       },
       outputSchema: webhookItemOutput,
     },
-    async (input) => withToolLogging("create_webhook", async () => {
-      const result = await client.createWebhook(input);
+    async ({ active, ...input }) => withToolLogging("create_webhook", async () => {
+      const result = await client.createWebhook({
+        ...input,
+        ...(active === undefined ? {} : { status: active ? "active" : "inactive" }),
+      });
       return {
         content: [mutateContent(formatRecord("Webhook created", result))],
         structuredContent: result as unknown as Record<string, unknown>,
@@ -123,8 +130,11 @@ export function registerWebhookTools(server: McpServer, client: IFrihetClient): 
       },
       outputSchema: webhookItemOutput,
     },
-    async ({ id, ...data }) => withToolLogging("update_webhook", async () => {
-      const result = await client.updateWebhook(id, data);
+    async ({ id, active, ...data }) => withToolLogging("update_webhook", async () => {
+      const result = await client.updateWebhook(id, {
+        ...data,
+        ...(active === undefined ? {} : { status: active ? "active" : "inactive" }),
+      });
       return {
         content: [mutateContent(formatRecord("Webhook updated", result))],
         structuredContent: result as unknown as Record<string, unknown>,

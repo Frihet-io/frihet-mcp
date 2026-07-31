@@ -18,6 +18,7 @@ import { redactClone, SENSITIVE_FIELD_NAMES } from "../redaction.js";
 
 const SECRETS = {
   taxId: "B12345678",
+  clientTaxId: "A87654321",
   nif: "12345678Z",
   secret: "whsec_live_DEADBEEFCAFE",
   iban: "ES9121000418450200051332",
@@ -99,7 +100,7 @@ describe("observability redaction", () => {
   });
 
   test("the sensitive field set covers the critical Trust fields", () => {
-    for (const f of ["taxId", "secret", "iban", "apiKey", "accessToken", "password"]) {
+    for (const f of ["taxId", "clientTaxId", "secret", "iban", "apiKey", "accessToken", "password"]) {
       assert.ok(SENSITIVE_FIELD_NAMES.includes(f), `missing critical sensitive field: ${f}`);
     }
   });

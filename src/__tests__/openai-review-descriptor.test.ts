@@ -117,6 +117,14 @@ test("mutation selftest: sensitive schema field turns the checker red", () => {
   });
 });
 
+test("mutation selftest: documentNumber remains sensitive outside commercial-document tools", () => {
+  expectMutationRejected((contract) => {
+    const outputSchema = asObject(findTool(contract, "get_client").outputSchema);
+    const properties = asObject(outputSchema.properties);
+    properties.documentNumber = { type: "string" };
+  });
+});
+
 test("mutation selftest: hidden tool leak turns the checker red", () => {
   expectMutationRejected((contract) => {
     const leaked = structuredClone(findTool(contract, "list_invoices"));

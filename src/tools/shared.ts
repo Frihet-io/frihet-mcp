@@ -474,6 +474,9 @@ export const webhookItemOutput = z.object({
   id: z.string(),
   url: z.string(),
   events: z.array(z.string()),
+  name: z.string().optional(),
+  status: z.enum(["active", "inactive", "paused"]).optional(),
+  hasSecret: z.boolean().optional(),
   active: z.boolean().optional(),
   secret: z.string().optional(),
   createdAt: z.string().optional(),
@@ -499,6 +502,7 @@ export const activityItemOutput = z.object({
   title: z.string(),
   description: z.string().optional(),
   date: z.string().optional(),
+  timestamp: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 }).passthrough();
