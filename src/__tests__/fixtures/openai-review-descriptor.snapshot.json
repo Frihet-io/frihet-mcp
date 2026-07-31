@@ -211,9 +211,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -425,9 +422,6 @@
           "creditNote": {
             "additionalProperties": {},
             "properties": {
-              "documentNumber": {
-                "type": "string"
-              },
               "fullCredit": {
                 "type": "boolean"
               },
@@ -579,10 +573,6 @@
           },
           "clientName": {
             "description": "Client/customer name / Nombre del cliente",
-            "type": "string"
-          },
-          "clientTaxId": {
-            "description": "Client tax ID (NIF/CIF/VAT) shown on the invoice / NIF/CIF del cliente",
             "type": "string"
           },
           "discountRate": {
@@ -877,10 +867,6 @@
             "description": "Client name / Nombre del cliente",
             "type": "string"
           },
-          "clientTaxId": {
-            "description": "Client tax ID (NIF/CIF/VAT) / NIF/CIF del cliente",
-            "type": "string"
-          },
           "dueDate": {
             "description": "Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento",
             "type": "string"
@@ -1126,9 +1112,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -1167,6 +1150,11 @@
             "minItems": 1,
             "type": "array"
           },
+          "name": {
+            "description": "Webhook name / Nombre del webhook",
+            "maxLength": 200,
+            "type": "string"
+          },
           "url": {
             "description": "Webhook endpoint URL / URL del endpoint del webhook",
             "format": "uri",
@@ -1174,6 +1162,7 @@
           }
         },
         "required": [
+          "name",
           "url",
           "events"
         ],
@@ -1196,10 +1185,21 @@
             },
             "type": "array"
           },
+          "hasSecret": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
-          "secret": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "paused"
+            ],
             "type": "string"
           },
           "updatedAt": {
@@ -1791,9 +1791,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -2262,9 +2259,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -2318,10 +2312,21 @@
             },
             "type": "array"
           },
+          "hasSecret": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
-          "secret": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "paused"
+            ],
             "type": "string"
           },
           "updatedAt": {
@@ -2395,6 +2400,9 @@
                   "type": "string"
                 },
                 "id": {
+                  "type": "string"
+                },
+                "timestamp": {
                   "type": "string"
                 },
                 "title": {
@@ -2725,9 +2733,6 @@
                   "type": "string"
                 },
                 "phone": {
-                  "type": "string"
-                },
-                "taxId": {
                   "type": "string"
                 },
                 "updatedAt": {
@@ -3409,9 +3414,6 @@
                 "phone": {
                   "type": "string"
                 },
-                "taxId": {
-                  "type": "string"
-                },
                 "updatedAt": {
                   "type": "string"
                 }
@@ -3493,10 +3495,21 @@
                   },
                   "type": "array"
                 },
+                "hasSecret": {
+                  "type": "boolean"
+                },
                 "id": {
                   "type": "string"
                 },
-                "secret": {
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "active",
+                    "inactive",
+                    "paused"
+                  ],
                   "type": "string"
                 },
                 "updatedAt": {
@@ -3556,10 +3569,6 @@
             "description": "Client ID / ID del cliente",
             "type": "string"
           },
-          "date": {
-            "description": "Activity date (ISO 8601, defaults to now) / Fecha de la actividad",
-            "type": "string"
-          },
           "description": {
             "description": "Detailed description / Descripcion detallada",
             "type": "string"
@@ -3601,6 +3610,9 @@
             "type": "string"
           },
           "id": {
+            "type": "string"
+          },
+          "timestamp": {
             "type": "string"
           },
           "title": {
@@ -4087,9 +4099,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -4227,10 +4236,6 @@
           },
           "clientName": {
             "description": "Client name / Nombre del cliente",
-            "type": "string"
-          },
-          "clientTaxId": {
-            "description": "Client tax ID (NIF/CIF/VAT) shown on the invoice / NIF/CIF del cliente",
             "type": "string"
           },
           "discountRate": {
@@ -4531,10 +4536,6 @@
             "description": "Client name / Nombre del cliente",
             "type": "string"
           },
-          "clientTaxId": {
-            "description": "Client tax ID (NIF/CIF/VAT) / NIF/CIF del cliente",
-            "type": "string"
-          },
           "dueDate": {
             "description": "Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento",
             "type": "string"
@@ -4787,9 +4788,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -4860,10 +4858,21 @@
             },
             "type": "array"
           },
+          "hasSecret": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
-          "secret": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "paused"
+            ],
             "type": "string"
           },
           "updatedAt": {

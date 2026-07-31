@@ -9,6 +9,7 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { z } from "zod/v4";
 
 import { applyOpenAIProfile } from "../openai-profile.js";
 import { SENSITIVE_FIELD_NAMES } from "../redaction.js";
@@ -136,6 +137,12 @@ describe("OpenAI profile", () => {
       assert.equal("taxId" in (tool.config.inputSchema ?? {}), false);
     }
 
+    for (const name of ["create_invoice", "update_invoice", "create_quote", "update_quote"]) {
+      const tool = server.tools.get(name);
+      assert.ok(tool, `${name} should be visible`);
+      assert.equal("clientTaxId" in (tool.config.inputSchema ?? {}), false);
+    }
+
     for (const name of ["send_invoice", "send_quote"]) {
       const tool = server.tools.get(name);
       assert.ok(tool, `${name} should be visible`);
@@ -193,21 +200,23 @@ describe("OpenAI profile", () => {
   test("no reviewed tool DECLARES a sensitive field in its outputSchema", () => {
     const server = makeOpenAIServer();
 
-    // Recursively collect every object key declared by a Zod output schema.
-    const collectKeys = (schema: unknown, acc: Set<string>): Set<string> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const def = (schema as any)?._def;
-      const typeName: string | undefined = def?.typeName;
-      if (typeName === "ZodObject") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const [key, value] of Object.entries((schema as any).shape as Record<string, unknown>)) {
-          acc.add(key);
-          collectKeys(value, acc);
+    // Inspect the JSON Schema that clients receive, not the same Zod internals
+    // used by the stripping implementation. The previous mirror traversal was
+    // Zod-3-only and therefore passed vacuously over every Zod 4 tool schema.
+    const collectPropertyNames = (value: unknown, acc: Set<string>): Set<string> => {
+      if (Array.isArray(value)) {
+        for (const item of value) collectPropertyNames(item, acc);
+        return acc;
+      }
+      if (value && typeof value === "object") {
+        for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+          if (key === "properties" && child && typeof child === "object" && !Array.isArray(child)) {
+            for (const propertyName of Object.keys(child as Record<string, unknown>)) {
+              acc.add(propertyName);
+            }
+          }
+          collectPropertyNames(child, acc);
         }
-      } else if (typeName === "ZodArray") {
-        collectKeys(def.type, acc);
-      } else if (typeName === "ZodOptional" || typeName === "ZodNullable") {
-        collectKeys(def.innerType, acc);
       }
       return acc;
     };
@@ -215,7 +224,8 @@ describe("OpenAI profile", () => {
     for (const tool of server.tools.values()) {
       const out = tool.config.outputSchema;
       if (!out) continue;
-      const keys = collectKeys(out, new Set<string>());
+      const publishedSchema = z.toJSONSchema(out as z.ZodType);
+      const keys = collectPropertyNames(publishedSchema, new Set<string>());
       for (const field of SENSITIVE_FIELD_NAMES) {
         assert.equal(
           keys.has(field),

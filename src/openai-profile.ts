@@ -22,7 +22,7 @@
  */
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { MCP_RESOURCE_COUNT } from "./resources/register-all.js";
 import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
 import { applyToolExposureProfile } from "./tool-exposure.js";
@@ -200,11 +200,11 @@ const PROFILE: OpenAIProfile = {
       "/ Envia un presupuesto al cliente por email usando el email almacenado del cliente.",
 
     create_webhook:
-      "Register a new webhook endpoint. Specify the URL and events to subscribe to. " +
+      "Register a new webhook endpoint. Specify its name, URL, and events to subscribe to. " +
       "Available events: invoice.created, invoice.updated, invoice.paid, invoice.deleted, " +
       "expense.created, expense.updated, expense.deleted, client.created, client.updated, " +
       "quote.created, quote.updated, quote.accepted. " +
-      "Example: url='https://example.com/webhook', events=['invoice.created','invoice.paid'] " +
+      "Example: name='Invoice notifications', url='https://example.com/webhook', events=['invoice.created','invoice.paid'] " +
       "[openWorldHint: true — configures Frihet to POST event data to the specified external URL] " +
       "/ Registra un nuevo endpoint de webhook.",
 
@@ -219,6 +219,10 @@ const PROFILE: OpenAIProfile = {
   // Government IDs (NIF/CIF/VAT), auth credentials, and unsolicited
   // email address collection removed from input schemas.
   stripInputFields: {
+    create_invoice: ["clientTaxId"],
+    update_invoice: ["clientTaxId"],
+    create_quote:   ["clientTaxId"],
+    update_quote:   ["clientTaxId"],
     create_client:  ["taxId"],   // NIF/CIF/VAT — government-issued identifier
     update_client:  ["taxId"],
     create_vendor:  ["taxId"],
@@ -266,44 +270,57 @@ function stripSensitiveOutputSchema(
 ): unknown {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const def = (schema as any)?._def;
-  const typeName: string | undefined = def?.typeName;
+  // Zod 3 identified nodes with `_def.typeName` (for example `ZodObject`).
+  // Zod 4 uses `_def.type` (`object`, `array`, ...). Supporting both matters:
+  // all tool schemas are imported from zod/v4, and a Zod-3-only inspection
+  // silently left sensitive fields in the descriptor while its mirror test
+  // also traversed zero nodes.
+  const typeName: string | undefined = def?.typeName ?? def?.type;
 
-  if (typeName === "ZodObject") {
+  if (typeName === "ZodObject" || typeName === "object") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const shape = (schema as any).shape as Record<string, unknown>;
-    const newShape: Record<string, unknown> = {};
-    let changed = false;
+    const objectSchema = schema as any;
+    const shape = objectSchema.shape as Record<string, unknown>;
+    const omitMask: Record<string, true> = {};
+    const replacements: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(shape)) {
       if (fields.includes(key)) {
-        changed = true;
-        continue; // drop the sensitive field entirely from the descriptor
+        omitMask[key] = true;
+        continue;
       }
       const stripped = stripSensitiveOutputSchema(value, fields);
-      if (stripped !== value) changed = true;
-      newShape[key] = stripped;
+      if (stripped !== value) replacements[key] = stripped;
     }
-    if (!changed) return schema;
-    let rebuilt: z.ZodTypeAny = z.object(newShape as z.ZodRawShape);
-    if (typeof def.description === "string") rebuilt = rebuilt.describe(def.description);
+    if (Object.keys(omitMask).length === 0 && Object.keys(replacements).length === 0) {
+      return schema;
+    }
+
+    // Use the schema's own object combinators so passthrough/strict catchall
+    // behavior survives. Rebuilding with bare z.object(newShape) would change
+    // runtime output semantics while trying to alter only the descriptor.
+    let rebuilt = objectSchema;
+    if (Object.keys(omitMask).length > 0) rebuilt = rebuilt.omit(omitMask);
+    if (Object.keys(replacements).length > 0) rebuilt = rebuilt.extend(replacements);
     return rebuilt;
   }
 
-  if (typeName === "ZodArray") {
-    const inner = def.type;
+  if (typeName === "ZodArray" || typeName === "array") {
+    const inner = def.element ?? def.type;
     const stripped = stripSensitiveOutputSchema(inner, fields);
     if (stripped === inner) return schema;
     let rebuilt: z.ZodTypeAny = z.array(stripped as z.ZodTypeAny);
-    if (typeof def.description === "string") rebuilt = rebuilt.describe(def.description);
+    const description = (schema as { description?: unknown }).description ?? def.description;
+    if (typeof description === "string") rebuilt = rebuilt.describe(description);
     return rebuilt;
   }
 
-  if (typeName === "ZodOptional") {
+  if (typeName === "ZodOptional" || typeName === "optional") {
     const inner = def.innerType;
     const stripped = stripSensitiveOutputSchema(inner, fields);
     return stripped === inner ? schema : z.optional(stripped as z.ZodTypeAny);
   }
 
-  if (typeName === "ZodNullable") {
+  if (typeName === "ZodNullable" || typeName === "nullable") {
     const inner = def.innerType;
     const stripped = stripSensitiveOutputSchema(inner, fields);
     return stripped === inner ? schema : z.nullable(stripped as z.ZodTypeAny);
