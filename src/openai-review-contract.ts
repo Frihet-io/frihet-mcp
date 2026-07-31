@@ -12,6 +12,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { IFrihetClient } from "./client-interface.js";
 import {
   applyOpenAIReviewProfiles,
+  OPENAI_COMMERCIAL_DOCUMENT_NUMBER_TOOLS,
   OPENAI_REVIEWED_TOOL_ALLOWLIST,
 } from "./openai-profile.js";
 import { SENSITIVE_FIELD_NAMES } from "./redaction.js";
@@ -190,22 +191,30 @@ function schemaSensitivePaths(tools: readonly OpenAIReviewTool[]): Set<string> {
   const sensitive = new Set(SENSITIVE_FIELD_NAMES.map((field) => field.toLowerCase()));
   const paths = new Set<string>();
 
-  const visit = (value: JsonValue | undefined, path: string): void => {
+  const visit = (
+    value: JsonValue | undefined,
+    path: string,
+    allowed: ReadonlySet<string>,
+  ): void => {
     if (value === undefined || value === null || typeof value !== "object") return;
     if (Array.isArray(value)) {
-      value.forEach((child, index) => visit(child, `${path}[${index}]`));
+      value.forEach((child, index) => visit(child, `${path}[${index}]`, allowed));
       return;
     }
     for (const [key, child] of Object.entries(value)) {
       const childPath = `${path}.${key}`;
-      if (sensitive.has(key.toLowerCase())) paths.add(childPath);
-      visit(child, childPath);
+      const normalizedKey = key.toLowerCase();
+      if (sensitive.has(normalizedKey) && !allowed.has(normalizedKey)) paths.add(childPath);
+      visit(child, childPath, allowed);
     }
   };
 
   for (const tool of tools) {
-    visit(tool.inputSchema, `${tool.name}.inputSchema`);
-    visit(tool.outputSchema, `${tool.name}.outputSchema`);
+    visit(tool.inputSchema, `${tool.name}.inputSchema`, new Set());
+    const allowedOutputFields = OPENAI_COMMERCIAL_DOCUMENT_NUMBER_TOOLS.has(tool.name)
+      ? new Set(["documentnumber"])
+      : new Set<string>();
+    visit(tool.outputSchema, `${tool.name}.outputSchema`, allowedOutputFields);
   }
   return paths;
 }

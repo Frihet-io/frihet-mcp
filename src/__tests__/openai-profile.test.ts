@@ -11,7 +11,10 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod/v4";
 
-import { applyOpenAIProfile } from "../openai-profile.js";
+import {
+  applyOpenAIProfile,
+  OPENAI_COMMERCIAL_DOCUMENT_NUMBER_TOOLS,
+} from "../openai-profile.js";
 import { SENSITIVE_FIELD_NAMES } from "../redaction.js";
 import { registerAllTools } from "../tools/register-all.js";
 import { registerAllPrompts } from "../prompts/register-all.js";
@@ -66,6 +69,28 @@ function makeClient(): IFrihetClient {
           email: "test@example.com",
           taxId: "B12345678",
           secret: "should-not-leak",
+        };
+      }
+      if (prop === "listInvoices") {
+        return {
+          data: [{
+            id: "inv_openai",
+            documentNumber: "FAC-2026-0042",
+            clientTaxId: "B12345678",
+          }],
+          total: 1,
+          limit: 20,
+          offset: 0,
+        };
+      }
+      if (prop === "createCreditNote") {
+        return {
+          success: true,
+          creditNote: {
+            id: "cn_openai",
+            documentNumber: "R-2026-0007",
+            clientTaxId: "B12345678",
+          },
         };
       }
       return {
@@ -197,6 +222,29 @@ describe("OpenAI profile", () => {
     assert.equal(serialized.includes("should-not-leak"), false);
   });
 
+  test("preserves commercial document numbers while redacting client tax identity", async () => {
+    const server = makeOpenAIServer();
+
+    const invoiceResult = await server.tools.get("list_invoices")!.handler({});
+    const invoiceSerialized = JSON.stringify(invoiceResult);
+    assert.equal(invoiceSerialized.includes("FAC-2026-0042"), true);
+    assert.equal(invoiceSerialized.includes("clientTaxId"), false);
+    assert.equal(invoiceSerialized.includes("B12345678"), false);
+
+    const creditNoteTool = server.tools.get("create_credit_note")!;
+    const creditNoteResult = await creditNoteTool.handler({
+      invoiceId: "inv_openai",
+      reason: "error",
+    });
+    const creditNoteSerialized = JSON.stringify(creditNoteResult);
+    assert.equal(creditNoteSerialized.includes("R-2026-0007"), true);
+    assert.equal(creditNoteSerialized.includes("clientTaxId"), false);
+    assert.equal(creditNoteSerialized.includes("B12345678"), false);
+
+    const publishedSchema = z.toJSONSchema(creditNoteTool.config.outputSchema as z.ZodType);
+    assert.equal(JSON.stringify(publishedSchema).includes("documentNumber"), true);
+  });
+
   test("no reviewed tool DECLARES a sensitive field in its outputSchema", () => {
     const server = makeOpenAIServer();
 
@@ -227,6 +275,12 @@ describe("OpenAI profile", () => {
       const publishedSchema = z.toJSONSchema(out as z.ZodType);
       const keys = collectPropertyNames(publishedSchema, new Set<string>());
       for (const field of SENSITIVE_FIELD_NAMES) {
+        if (
+          field === "documentNumber" &&
+          OPENAI_COMMERCIAL_DOCUMENT_NUMBER_TOOLS.has(tool.name)
+        ) {
+          continue;
+        }
         assert.equal(
           keys.has(field),
           false,

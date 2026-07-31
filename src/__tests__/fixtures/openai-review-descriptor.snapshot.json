@@ -422,6 +422,9 @@
           "creditNote": {
             "additionalProperties": {},
             "properties": {
+              "documentNumber": {
+                "type": "string"
+              },
               "fullCredit": {
                 "type": "boolean"
               },

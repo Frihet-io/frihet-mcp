@@ -240,6 +240,38 @@ const PROFILE: OpenAIProfile = {
   redactOutputFields: SENSITIVE_FIELD_NAMES,
 };
 
+/**
+ * In these reviewed tools `documentNumber` is an invoice, quote, or credit-note
+ * reference — never a guest identity-document number. The shared redaction
+ * policy still treats that ambiguous key as sensitive everywhere else (Stay,
+ * full-server traces, and any future tool that is not explicitly listed).
+ */
+export const OPENAI_COMMERCIAL_DOCUMENT_NUMBER_TOOLS: ReadonlySet<string> = new Set([
+  "list_invoices",
+  "get_invoice",
+  "search_invoices",
+  "create_invoice",
+  "duplicate_invoice",
+  "create_credit_note",
+  "update_invoice",
+  "mark_invoice_paid",
+  "send_invoice",
+  "apply_late_fee",
+  "list_quotes",
+  "get_quote",
+  "create_quote",
+  "update_quote",
+  "send_quote",
+]);
+
+function sensitiveOutputFieldsForTool(
+  toolName: string,
+  fields: readonly string[],
+): readonly string[] {
+  if (!OPENAI_COMMERCIAL_DOCUMENT_NUMBER_TOOLS.has(toolName)) return fields;
+  return fields.filter((field) => field !== "documentNumber");
+}
+
 /* ------------------------------------------------------------------ */
 /*  Deep field redaction — shared policy in redaction.ts               */
 /* ------------------------------------------------------------------ */
@@ -433,12 +465,14 @@ export function applyOpenAIProfile(server: any): void {
       }
     }
 
+    const outputFieldsToRedact = sensitiveOutputFieldsForTool(name, fieldsToRedact);
+
     // 4b. Strip sensitive fields from the OUTPUT schema descriptor too.
     // The handler wrapper (step 5) redacts VALUES at runtime; this removes the
     // field DECLARATIONS (taxId/secret/iban/…) from the outputSchema advertised
     // at tools/list, so OpenAI review never sees a gov-ID/credential field.
     if (config.outputSchema) {
-      config.outputSchema = stripSensitiveOutputSchema(config.outputSchema, fieldsToRedact);
+      config.outputSchema = stripSensitiveOutputSchema(config.outputSchema, outputFieldsToRedact);
     }
 
     // 5. Wrap handler to redact sensitive output fields
@@ -448,14 +482,14 @@ export function applyOpenAIProfile(server: any): void {
 
       // Redact structuredContent (programmatic output)
       if (result.structuredContent) {
-        deepRedact(result.structuredContent, fieldsToRedact);
+        deepRedact(result.structuredContent, outputFieldsToRedact);
       }
 
       // Best-effort redact text content (display output)
       if (Array.isArray(result.content)) {
         for (const block of result.content) {
           if (block.type === "text" && typeof block.text === "string") {
-            block.text = redactText(block.text, fieldsToRedact);
+            block.text = redactText(block.text, outputFieldsToRedact);
           }
         }
       }
