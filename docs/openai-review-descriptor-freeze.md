@@ -104,3 +104,20 @@ mode only. Direct MCP clients retain the existing comma-delimited projection.
 
 This is a subtractive input-schema change: tool names, counts, annotations,
 handlers, outputs, OAuth metadata, prompts, and resources remain unchanged.
+
+## Approved final-submission delta — 2026-08-03
+
+Before the third review, the owner requested a no-warning submission. The
+candidate replaces the permissive empty-object output schemas on
+`get_business_context`, `get_monthly_summary`, and `duplicate_invoice` with
+concrete schemas derived from the live API implementations.
+
+The same review found that sensitive output-schema stripping inspected Zod
+v3's `_def.typeName`, while the tool schemas use Zod v4. Runtime values were
+redacted, but descriptor declarations such as `taxId` and `secret` survived.
+The traversal now uses Zod v4 types, and the contract gate rejects every
+sensitive schema path instead of grandfathering paths from an old snapshot.
+
+The only contextual exception is `documentNumber` on create/update invoice
+inputs: there it is the business invoice sequence, not a government identity
+document. The exception is pinned to those two exact schema paths.

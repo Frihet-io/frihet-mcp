@@ -188,6 +188,14 @@ export function serializeOpenAIReviewContract(contract: OpenAIReviewContract): s
 
 function schemaSensitivePaths(tools: readonly OpenAIReviewTool[]): Set<string> {
   const sensitive = new Set(SENSITIVE_FIELD_NAMES.map((field) => field.toLowerCase()));
+  // `documentNumber` is an invoice sequence identifier on these two tools,
+  // not the guest/customer identity-document field covered by the shared
+  // redaction policy. Keep the exception exact so any future occurrence is
+  // still rejected by default.
+  const nonSensitiveBusinessPaths = new Set([
+    "create_invoice.inputSchema.properties.documentNumber",
+    "update_invoice.inputSchema.properties.documentNumber",
+  ]);
   const paths = new Set<string>();
 
   const visit = (value: JsonValue | undefined, path: string): void => {
@@ -198,7 +206,12 @@ function schemaSensitivePaths(tools: readonly OpenAIReviewTool[]): Set<string> {
     }
     for (const [key, child] of Object.entries(value)) {
       const childPath = `${path}.${key}`;
-      if (sensitive.has(key.toLowerCase())) paths.add(childPath);
+      if (
+        sensitive.has(key.toLowerCase()) &&
+        !nonSensitiveBusinessPaths.has(childPath)
+      ) {
+        paths.add(childPath);
+      }
       visit(child, childPath);
     }
   };
@@ -300,13 +313,17 @@ export function assertOpenAIReviewContract(
     );
   }
 
-  const expectedSensitivePaths = schemaSensitivePaths(expected.tools);
-  const newSensitivePaths = [...schemaSensitivePaths(actual.tools)].filter(
-    (path) => !expectedSensitivePaths.has(path),
-  );
-  if (newSensitivePaths.length > 0) {
+  const sensitivePaths = [...schemaSensitivePaths(actual.tools)];
+  if (sensitivePaths.length > 0) {
     throw new Error(
-      `Sensitive schema fields were introduced outside the reviewed snapshot: ${newSensitivePaths.join(", ")}`,
+      `Sensitive schema fields are forbidden in the OpenAI review surface: ${sensitivePaths.join(", ")}`,
+    );
+  }
+
+  const expectedSensitivePaths = [...schemaSensitivePaths(expected.tools)];
+  if (expectedSensitivePaths.length > 0) {
+    throw new Error(
+      `Frozen OpenAI review snapshot contains sensitive schema fields: ${expectedSensitivePaths.join(", ")}`,
     );
   }
 

@@ -211,9 +211,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -425,9 +422,6 @@
           "creditNote": {
             "additionalProperties": {},
             "properties": {
-              "documentNumber": {
-                "type": "string"
-              },
               "fullCredit": {
                 "type": "boolean"
               },
@@ -1126,9 +1120,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -1197,9 +1188,6 @@
             "type": "array"
           },
           "id": {
-            "type": "string"
-          },
-          "secret": {
             "type": "string"
           },
           "updatedAt": {
@@ -1695,7 +1683,71 @@
         "$schema": "http://json-schema.org/draft-07/schema#",
         "additionalProperties": {},
         "description": "The newly created draft invoice, cloned from the original / La nueva factura borrador, clonada de la original",
-        "properties": {},
+        "properties": {
+          "clientName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "issueDate": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unitPrice": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "taxRate": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
         "type": "object"
       },
       "title": "Duplicate Invoice"
@@ -1720,8 +1772,298 @@
       "outputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "additionalProperties": {},
-        "description": "Business context snapshot: workspace profile, fiscal setup, recent activity / Contexto de negocio: perfil, configuración fiscal y actividad reciente",
-        "properties": {},
+        "description": "Business context snapshot: workspace profile, fiscal setup, plan usage, recent activity and current-month performance",
+        "properties": {
+          "business": {
+            "additionalProperties": {},
+            "properties": {
+              "country": {
+                "type": "string"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "fiscalZone": {
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "fiscalZone",
+              "currency",
+              "language",
+              "country"
+            ],
+            "type": "object"
+          },
+          "currentMonth": {
+            "additionalProperties": {},
+            "properties": {
+              "expenseCount": {
+                "type": "number"
+              },
+              "expenses": {
+                "type": "number"
+              },
+              "invoiceCount": {
+                "type": "number"
+              },
+              "profit": {
+                "type": "number"
+              },
+              "revenue": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "revenue",
+              "expenses",
+              "profit",
+              "invoiceCount",
+              "expenseCount"
+            ],
+            "type": "object"
+          },
+          "defaults": {
+            "additionalProperties": {},
+            "properties": {
+              "currency": {
+                "type": "string"
+              },
+              "dueDays": {
+                "type": "number"
+              },
+              "irpfRate": {
+                "type": "number"
+              },
+              "taxRate": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "taxRate",
+              "irpfRate",
+              "dueDays",
+              "currency"
+            ],
+            "type": "object"
+          },
+          "plan": {
+            "additionalProperties": {},
+            "properties": {
+              "aiMessages": {
+                "additionalProperties": false,
+                "properties": {
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "const": "unlimited",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "used": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit"
+                ],
+                "type": "object"
+              },
+              "expenses": {
+                "additionalProperties": false,
+                "properties": {
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "const": "unlimited",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "used": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit"
+                ],
+                "type": "object"
+              },
+              "invoices": {
+                "additionalProperties": false,
+                "properties": {
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "const": "unlimited",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "used": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit"
+                ],
+                "type": "object"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "invoices",
+              "expenses",
+              "aiMessages"
+            ],
+            "type": "object"
+          },
+          "recentActivity": {
+            "additionalProperties": {},
+            "properties": {
+              "lastExpense": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {},
+                    "properties": {
+                      "amount": {
+                        "type": "number"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "vendor": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "amount"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastInvoice": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {},
+                    "properties": {
+                      "client": {
+                        "type": "string"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "number": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "overdueAmount": {
+                "type": "number"
+              },
+              "overdueCount": {
+                "type": "number"
+              },
+              "unpaidCount": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "lastInvoice",
+              "lastExpense",
+              "overdueCount",
+              "overdueAmount",
+              "unpaidCount"
+            ],
+            "type": "object"
+          },
+          "series": {
+            "items": {
+              "additionalProperties": {},
+              "properties": {
+                "current": {
+                  "type": "number"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                },
+                "year": {
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "topClients": {
+            "items": {
+              "additionalProperties": {},
+              "properties": {
+                "invoiceCount": {
+                  "type": "number"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "totalRevenue": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "totalRevenue",
+                "invoiceCount"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "business",
+          "defaults",
+          "plan",
+          "series",
+          "recentActivity",
+          "topClients",
+          "currentMonth"
+        ],
         "type": "object"
       },
       "title": "Get Business Context"
@@ -1789,9 +2131,6 @@
             "type": "string"
           },
           "phone": {
-            "type": "string"
-          },
-          "taxId": {
             "type": "string"
           },
           "updatedAt": {
@@ -2040,8 +2379,158 @@
       "outputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "additionalProperties": {},
-        "description": "Monthly P&L summary: revenue, expenses, profit, tax liability, invoice stats / Resumen mensual: ingresos, gastos, beneficio, impuestos",
-        "properties": {},
+        "description": "Monthly financial summary with revenue, expenses, profit, invoice status, top clients and estimated tax liability",
+        "properties": {
+          "byCategory": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "expenses": {
+            "additionalProperties": {},
+            "properties": {
+              "deductible": {
+                "type": "number"
+              },
+              "tax": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "total",
+              "deductible",
+              "tax"
+            ],
+            "type": "object"
+          },
+          "invoices": {
+            "additionalProperties": {},
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "overdue": {
+                "type": "number"
+              },
+              "paid": {
+                "type": "number"
+              },
+              "sent": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "created",
+              "sent",
+              "paid",
+              "overdue"
+            ],
+            "type": "object"
+          },
+          "period": {
+            "type": "string"
+          },
+          "profit": {
+            "additionalProperties": {},
+            "properties": {
+              "gross": {
+                "type": "number"
+              },
+              "net": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "gross",
+              "net"
+            ],
+            "type": "object"
+          },
+          "revenue": {
+            "additionalProperties": {},
+            "properties": {
+              "irpf": {
+                "type": "number"
+              },
+              "tax": {
+                "type": "number"
+              },
+              "taxBase": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "total",
+              "taxBase",
+              "tax",
+              "irpf"
+            ],
+            "type": "object"
+          },
+          "taxLiability": {
+            "additionalProperties": {},
+            "properties": {
+              "estimatedModel303": {
+                "type": "number"
+              },
+              "irpfRetained": {
+                "type": "number"
+              },
+              "vatPayable": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "vatPayable",
+              "irpfRetained",
+              "estimatedModel303"
+            ],
+            "type": "object"
+          },
+          "topClients": {
+            "items": {
+              "additionalProperties": {},
+              "properties": {
+                "invoiceCount": {
+                  "type": "number"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "totalRevenue": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "totalRevenue",
+                "invoiceCount"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "period",
+          "revenue",
+          "expenses",
+          "profit",
+          "invoices",
+          "topClients",
+          "byCategory",
+          "taxLiability"
+        ],
         "type": "object"
       },
       "title": "Get Monthly Summary"
@@ -2262,9 +2751,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -2319,9 +2805,6 @@
             "type": "array"
           },
           "id": {
-            "type": "string"
-          },
-          "secret": {
             "type": "string"
           },
           "updatedAt": {
@@ -2721,9 +3204,6 @@
                   "type": "string"
                 },
                 "phone": {
-                  "type": "string"
-                },
-                "taxId": {
                   "type": "string"
                 },
                 "updatedAt": {
@@ -3385,9 +3865,6 @@
                 "phone": {
                   "type": "string"
                 },
-                "taxId": {
-                  "type": "string"
-                },
                 "updatedAt": {
                   "type": "string"
                 }
@@ -3470,9 +3947,6 @@
                   "type": "array"
                 },
                 "id": {
-                  "type": "string"
-                },
-                "secret": {
                   "type": "string"
                 },
                 "updatedAt": {
@@ -4057,9 +4531,6 @@
             "type": "string"
           },
           "phone": {
-            "type": "string"
-          },
-          "taxId": {
             "type": "string"
           },
           "updatedAt": {
@@ -4759,9 +5230,6 @@
           "phone": {
             "type": "string"
           },
-          "taxId": {
-            "type": "string"
-          },
           "updatedAt": {
             "type": "string"
           }
@@ -4833,9 +5301,6 @@
             "type": "array"
           },
           "id": {
-            "type": "string"
-          },
-          "secret": {
             "type": "string"
           },
           "updatedAt": {

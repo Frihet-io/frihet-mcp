@@ -18,10 +18,109 @@ import {
   formatRecord,
   getContent,
   mutateContent,
+  invoiceItemOutput,
   openObjectOutput,
   READ_ONLY_ANNOTATIONS,
   CREATE_ANNOTATIONS,
 } from "./shared.js";
+
+const usageLimitOutput = z.union([z.number(), z.literal("unlimited")]);
+
+const businessContextOutput = z.object({
+  business: z.object({
+    name: z.string(),
+    taxId: z.string().optional(),
+    fiscalZone: z.string(),
+    currency: z.string(),
+    language: z.string(),
+    country: z.string(),
+  }).passthrough(),
+  defaults: z.object({
+    taxRate: z.number(),
+    irpfRate: z.number(),
+    dueDays: z.number(),
+    currency: z.string(),
+  }).passthrough(),
+  plan: z.object({
+    name: z.string(),
+    invoices: z.object({ used: z.number(), limit: usageLimitOutput }),
+    expenses: z.object({ used: z.number(), limit: usageLimitOutput }),
+    aiMessages: z.object({ used: z.number(), limit: usageLimitOutput }),
+  }).passthrough(),
+  series: z.array(z.object({
+    id: z.string().optional(),
+    prefix: z.string().optional(),
+    current: z.number().optional(),
+    year: z.number().optional(),
+  }).passthrough()),
+  recentActivity: z.object({
+    lastInvoice: z.object({
+      number: z.string().optional(),
+      date: z.string().optional(),
+      client: z.string().optional(),
+    }).passthrough().nullable(),
+    lastExpense: z.object({
+      date: z.string().optional(),
+      vendor: z.string().optional(),
+      amount: z.number(),
+    }).passthrough().nullable(),
+    overdueCount: z.number(),
+    overdueAmount: z.number(),
+    unpaidCount: z.number(),
+  }).passthrough(),
+  topClients: z.array(z.object({
+    name: z.string(),
+    totalRevenue: z.number(),
+    invoiceCount: z.number(),
+  }).passthrough()),
+  currentMonth: z.object({
+    revenue: z.number(),
+    expenses: z.number(),
+    profit: z.number(),
+    invoiceCount: z.number(),
+    expenseCount: z.number(),
+  }).passthrough(),
+}).passthrough().describe(
+  "Business context snapshot: workspace profile, fiscal setup, plan usage, recent activity and current-month performance",
+);
+
+const monthlySummaryOutput = z.object({
+  period: z.string(),
+  revenue: z.object({
+    total: z.number(),
+    taxBase: z.number(),
+    tax: z.number(),
+    irpf: z.number(),
+  }).passthrough(),
+  expenses: z.object({
+    total: z.number(),
+    deductible: z.number(),
+    tax: z.number(),
+  }).passthrough(),
+  profit: z.object({
+    gross: z.number(),
+    net: z.number(),
+  }).passthrough(),
+  invoices: z.object({
+    created: z.number(),
+    sent: z.number(),
+    paid: z.number(),
+    overdue: z.number(),
+  }).passthrough(),
+  topClients: z.array(z.object({
+    name: z.string(),
+    totalRevenue: z.number(),
+    invoiceCount: z.number(),
+  }).passthrough()),
+  byCategory: z.record(z.string(), z.number()),
+  taxLiability: z.object({
+    vatPayable: z.number(),
+    irpfRetained: z.number(),
+    estimatedModel303: z.number(),
+  }).passthrough(),
+}).passthrough().describe(
+  "Monthly financial summary with revenue, expenses, profit, invoice status, top clients and estimated tax liability",
+);
 
 export function registerIntelligenceTools(server: McpServer, client: IFrihetClient): void {
   // -- get_business_context --
@@ -38,9 +137,7 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
         "principales clientes y resumen del mes actual. Llama a esto PRIMERO en cualquier sesion.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {},
-      outputSchema: openObjectOutput(
-        "Business context snapshot: workspace profile, fiscal setup, recent activity / Contexto de negocio: perfil, configuración fiscal y actividad reciente",
-      ),
+      outputSchema: businessContextOutput,
     },
     async () => withToolLogging("get_business_context", async () => {
       const result = await client.getBusinessContext();
@@ -73,9 +170,7 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
             "/ Mes en formato YYYY-MM (por defecto el mes actual)",
           ),
       },
-      outputSchema: openObjectOutput(
-        "Monthly P&L summary: revenue, expenses, profit, tax liability, invoice stats / Resumen mensual: ingresos, gastos, beneficio, impuestos",
-      ),
+      outputSchema: monthlySummaryOutput,
     },
     async ({ month }) => withToolLogging("get_monthly_summary", async () => {
       const result = await client.getMonthlySummary(month);
@@ -148,7 +243,7 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
           .optional()
           .describe("Due date for the new invoice (YYYY-MM-DD) / Fecha de vencimiento de la nueva factura"),
       },
-      outputSchema: openObjectOutput(
+      outputSchema: invoiceItemOutput.describe(
         "The newly created draft invoice, cloned from the original / La nueva factura borrador, clonada de la original",
       ),
     },

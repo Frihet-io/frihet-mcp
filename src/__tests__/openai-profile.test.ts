@@ -9,6 +9,7 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { z } from "zod/v4";
 
 import { applyOpenAIProfile } from "../openai-profile.js";
 import { SENSITIVE_FIELD_NAMES } from "../redaction.js";
@@ -190,6 +191,26 @@ describe("OpenAI profile", () => {
     assert.doesNotMatch(sendInvoiceDesc, /openWorldHint: false/);
   });
 
+  test("reviewed intelligence tools expose concrete output properties", () => {
+    const server = makeOpenAIServer();
+    const expectedProperties: Record<string, string[]> = {
+      get_business_context: ["business", "defaults", "plan", "recentActivity", "currentMonth"],
+      get_monthly_summary: ["period", "revenue", "expenses", "profit", "taxLiability"],
+      duplicate_invoice: ["id", "clientName", "items", "issueDate", "status"],
+    };
+
+    for (const [name, expected] of Object.entries(expectedProperties)) {
+      const tool = server.tools.get(name);
+      assert.ok(tool, `${name} should be visible`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const shape = (tool.config.outputSchema as any)?.shape as Record<string, unknown> | undefined;
+      assert.ok(shape, `${name} should expose an object output schema`);
+      for (const property of expected) {
+        assert.ok(property in shape, `${name} should declare output property "${property}"`);
+      }
+    }
+  });
+
   test("redacts restricted output fields from structured content and text", async () => {
     const server = makeOpenAIServer();
     const tool = server.tools.get("create_client");
@@ -209,19 +230,15 @@ describe("OpenAI profile", () => {
 
     // Recursively collect every object key declared by a Zod output schema.
     const collectKeys = (schema: unknown, acc: Set<string>): Set<string> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const def = (schema as any)?._def;
-      const typeName: string | undefined = def?.typeName;
-      if (typeName === "ZodObject") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const [key, value] of Object.entries((schema as any).shape as Record<string, unknown>)) {
+      if (schema instanceof z.ZodObject) {
+        for (const [key, value] of Object.entries(schema.shape as Record<string, unknown>)) {
           acc.add(key);
           collectKeys(value, acc);
         }
-      } else if (typeName === "ZodArray") {
-        collectKeys(def.type, acc);
-      } else if (typeName === "ZodOptional" || typeName === "ZodNullable") {
-        collectKeys(def.innerType, acc);
+      } else if (schema instanceof z.ZodArray) {
+        collectKeys(schema.element, acc);
+      } else if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
+        collectKeys(schema.unwrap(), acc);
       }
       return acc;
     };

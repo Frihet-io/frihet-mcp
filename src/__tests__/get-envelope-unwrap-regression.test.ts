@@ -78,6 +78,30 @@ const FIXTURES = {
   invoicePdf: { id: "inv_1", url: "https://cdn.example.com/inv_1.pdf", contentType: "application/pdf" },
   timeSummary: { from: "2026-06-01", to: "2026-06-30", totalHours: 40, billableHours: 32, nonBillableHours: 8 },
   einvoiceStatus: { status: "succeeded" as const, step: "delivered", ackId: "ack_123" },
+  businessContext: {
+    business: { name: "Demo Studio SL", fiscalZone: "IVA", currency: "EUR", language: "es", country: "ES" },
+    defaults: { taxRate: 21, irpfRate: 15, dueDays: 30, currency: "EUR" },
+    plan: {
+      name: "free",
+      invoices: { used: 5, limit: 999 },
+      expenses: { used: 1, limit: 5 },
+      aiMessages: { used: 2, limit: 30 },
+    },
+    series: [],
+    recentActivity: { lastInvoice: null, lastExpense: null, overdueCount: 0, overdueAmount: 0, unpaidCount: 0 },
+    topClients: [],
+    currentMonth: { revenue: 0, expenses: 0, profit: 0, invoiceCount: 0, expenseCount: 0 },
+  },
+  monthlySummary: {
+    period: "2026-07",
+    revenue: { total: 0, taxBase: 0, tax: 0, irpf: 0 },
+    expenses: { total: 0, deductible: 0, tax: 0 },
+    profit: { gross: 0, net: 0 },
+    invoices: { created: 0, sent: 0, paid: 0, overdue: 0 },
+    topClients: [],
+    byCategory: {},
+    taxLiability: { vatPayable: 0, irpfRetained: 0, estimatedModel303: 0 },
+  },
 };
 
 before(async () => {
@@ -115,6 +139,8 @@ before(async () => {
     if (url.pathname === "/time/summary" && req.method === "GET") return send(envelope(FIXTURES.timeSummary));
     if (url.pathname === "/recurring/invoices/rec_1" && req.method === "GET") return send(envelope(FIXTURES.recurringInvoice));
     if (url.pathname === "/einvoice/status/wf_1" && req.method === "GET") return send(envelope(FIXTURES.einvoiceStatus));
+    if (url.pathname === "/context" && req.method === "GET") return send(envelope(FIXTURES.businessContext));
+    if (url.pathname === "/monthly" && req.method === "GET") return send(envelope(FIXTURES.monthlySummary));
 
     res.statusCode = 404;
     return send({ error: "not_found" });
@@ -230,6 +256,22 @@ describe("client.ts single-object get_* reads unwrap the { data, meta } envelope
   test("getEInvoiceStatus unwraps + validates against eInvoiceStatusOutput", async () => {
     const result = await makeClient().getEInvoiceStatus("wf_1");
     assertUnwrappedAndValid(result, eInvoiceStatusOutput);
+  });
+
+  test("getBusinessContext unwraps the intelligence envelope", async () => {
+    const result = await makeClient().getBusinessContext();
+    assertUnwrappedAndValid(result, { safeParse: (value) => ({
+      success: typeof value === "object" && value !== null && "business" in value,
+    }) });
+    assert.equal((result.business as { name: string }).name, "Demo Studio SL");
+  });
+
+  test("getMonthlySummary unwraps the intelligence envelope", async () => {
+    const result = await makeClient().getMonthlySummary("2026-07");
+    assertUnwrappedAndValid(result, { safeParse: (value) => ({
+      success: typeof value === "object" && value !== null && "period" in value,
+    }) });
+    assert.equal(result.period, "2026-07");
   });
 
   test("getInvoiceEInvoice unwraps the object-data envelope", async () => {

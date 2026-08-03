@@ -22,7 +22,7 @@
  */
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { MCP_RESOURCE_COUNT } from "./resources/register-all.js";
 import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
 import { applyToolExposureProfile } from "./tool-exposure.js";
@@ -275,13 +275,8 @@ function stripSensitiveOutputSchema(
   schema: unknown,
   fields: readonly string[],
 ): unknown {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const def = (schema as any)?._def;
-  const typeName: string | undefined = def?.typeName;
-
-  if (typeName === "ZodObject") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const shape = (schema as any).shape as Record<string, unknown>;
+  if (schema instanceof z.ZodObject) {
+    const shape = schema.shape as Record<string, z.ZodTypeAny>;
     const newShape: Record<string, unknown> = {};
     let changed = false;
     for (const [key, value] of Object.entries(shape)) {
@@ -294,28 +289,40 @@ function stripSensitiveOutputSchema(
       newShape[key] = stripped;
     }
     if (!changed) return schema;
-    let rebuilt: z.ZodTypeAny = z.object(newShape as z.ZodRawShape);
-    if (typeof def.description === "string") rebuilt = rebuilt.describe(def.description);
+
+    const base = z.object(newShape as z.ZodRawShape);
+    // Zod v4 stores passthrough/strict behavior in `catchall`. Preserve it so
+    // redacting one declared field never changes validation of unrelated API
+    // fields. The previous implementation inspected Zod v3's `_def.typeName`,
+    // which is absent in v4 and silently returned the original schema.
+    const catchall = schema._def.catchall;
+    let rebuilt: z.ZodTypeAny;
+    if (catchall instanceof z.ZodUnknown) rebuilt = base.passthrough();
+    else if (catchall instanceof z.ZodNever) rebuilt = base.strict();
+    else if (catchall) rebuilt = base.catchall(catchall);
+    else rebuilt = base;
+
+    if (typeof schema.description === "string") rebuilt = rebuilt.describe(schema.description);
     return rebuilt;
   }
 
-  if (typeName === "ZodArray") {
-    const inner = def.type;
+  if (schema instanceof z.ZodArray) {
+    const inner = schema.element;
     const stripped = stripSensitiveOutputSchema(inner, fields);
     if (stripped === inner) return schema;
     let rebuilt: z.ZodTypeAny = z.array(stripped as z.ZodTypeAny);
-    if (typeof def.description === "string") rebuilt = rebuilt.describe(def.description);
+    if (typeof schema.description === "string") rebuilt = rebuilt.describe(schema.description);
     return rebuilt;
   }
 
-  if (typeName === "ZodOptional") {
-    const inner = def.innerType;
+  if (schema instanceof z.ZodOptional) {
+    const inner = schema.unwrap();
     const stripped = stripSensitiveOutputSchema(inner, fields);
     return stripped === inner ? schema : z.optional(stripped as z.ZodTypeAny);
   }
 
-  if (typeName === "ZodNullable") {
-    const inner = def.innerType;
+  if (schema instanceof z.ZodNullable) {
+    const inner = schema.unwrap();
     const stripped = stripSensitiveOutputSchema(inner, fields);
     return stripped === inner ? schema : z.nullable(stripped as z.ZodTypeAny);
   }

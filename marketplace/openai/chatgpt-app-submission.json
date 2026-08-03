@@ -3,9 +3,9 @@
   "schema_version": 1,
   "app_info": {
     "display_name": "Frihet",
-    "subtitle": "Manage invoices & expenses",
-    "description": "Frihet connects ChatGPT to your business workspace. Create and update invoices, log expenses, manage clients, contacts, products, quotes, vendors, and webhooks, and review monthly business summaries without switching tabs.\n\nAsk in plain language to find records, prepare draft invoices and quotes, mark invoices paid, or send documents to a client's saved email address. Mutating and external actions remain explicit and reviewable.\n\nThis ChatGPT integration uses a deliberately limited business-management surface. It does not expose government identifiers, banking data, payroll or HR records, accommodation or POS data, webhook secrets, or regulated filing and export workflows.\n\nSign in with OAuth 2.0 using an existing Frihet account. No API key is required. Frihet is an AI-native business operating system for organizations that want to run a connected business without operational friction.",
-    "category": "FINANCE"
+    "subtitle": "Manage business operations",
+    "description": "Frihet connects ChatGPT to your business workspace. Create and update invoices, log expenses, manage clients, contacts, products, quotes, vendors, and webhooks, and review monthly business summaries without switching tabs.\n\nAsk in plain language to find records, prepare draft invoices and quotes, mark invoices paid, or send documents to a client's saved email address. Mutating and external actions remain explicit and reviewable.\n\nUse Frihet in Spanish, English, Brazilian Portuguese, French, German, Italian, Swedish, Norwegian, Danish, Finnish, Dutch, Turkish, Polish, Romanian, Greek, Hungarian, or Japanese.\n\nThis ChatGPT integration uses a deliberately limited business-management surface. It does not expose government identifiers, banking data, payroll or HR records, accommodation or POS data, webhook secrets, or regulated filing and export workflows.\n\nSign in with OAuth 2.0 using an existing Frihet account. No API key is required. Frihet is an AI-native business operating system for organizations that want to run a connected business without operational friction.",
+    "category": "BUSINESS"
   },
   "tools": {
     "get_business_context": {

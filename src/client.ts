@@ -1003,11 +1003,11 @@ export class FrihetClient {
   // ----------------------------------------------------------------
 
   async getBusinessContext(): Promise<Record<string, unknown>> {
-    return this.request("GET", "/context");
+    return this.requestUnwrapped("GET", "/context");
   }
 
   async getMonthlySummary(month?: string): Promise<Record<string, unknown>> {
-    return this.request("GET", "/monthly", undefined, {
+    return this.requestUnwrapped("GET", "/monthly", undefined, {
       month,
     });
   }
