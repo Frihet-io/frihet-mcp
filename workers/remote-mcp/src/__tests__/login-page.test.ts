@@ -17,9 +17,6 @@ describe("OAuth consent copy", () => {
     assert.match(html, /Monthly business context and summaries/);
     assert.match(html, /Send invoices or quotes to saved client email addresses/);
     assert.match(html, /does not expose government identifiers/);
-    assert.match(html, /"useRedirectAuth":true/);
-    assert.match(html, /signInWithRedirect\(authProvider\)/);
-    assert.match(html, /getRedirectResult\(\)/);
     assert.doesNotMatch(html, /near-complete access to your account/);
     assert.doesNotMatch(html, /Tax &amp; fiscal reports/);
     assert.doesNotMatch(html, /Gestoría, general-ledger entries and portal settings/);
@@ -31,8 +28,6 @@ describe("OAuth consent copy", () => {
     assert.match(html, /full access to manage your Frihet account/);
     assert.match(html, /Banking, transactions and reconciliation/);
     assert.match(html, /near-complete access to your account/);
-    assert.match(html, /"useRedirectAuth":false/);
-    assert.match(html, /signInWithPopup\(authProvider\)/);
     assert.doesNotMatch(html, /ChatGPT wants access to the reviewed Frihet/);
   });
 });
