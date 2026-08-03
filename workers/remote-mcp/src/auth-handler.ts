@@ -121,6 +121,7 @@ app.get("/authorize", async (c) => {
       stateKey,
       clientId: oauthReq.clientId,
       firebaseProjectId: c.env.FIREBASE_PROJECT_ID,
+      accessProfile: c.env.FRIHET_OPENAI_MODE === "true" ? "openai" : "full",
     }),
   );
 });

@@ -12,7 +12,38 @@ export function getLoginPage(opts: {
   stateKey: string;
   clientId: string;
   firebaseProjectId: string;
+  accessProfile?: "full" | "openai";
 }): string {
+  const openAIProfile = opts.accessProfile === "openai";
+  const consentSummary = openAIProfile
+    ? `ChatGPT wants access to the reviewed Frihet business-management tools
+      listed below. Sensitive and regulated areas remain excluded.`
+    : `An application wants full access to manage your Frihet account
+      via AI. This grants broad read and write access — review below.`;
+  const consentPermissions = openAIProfile
+    ? `<li>Invoices, credit notes and invoice PDFs</li>
+        <li>Expenses and vendors</li>
+        <li>Clients, contacts, notes and activity</li>
+        <li>Products and quotes</li>
+        <li>Monthly business context and summaries</li>
+        <li>Send invoices or quotes to saved client email addresses</li>
+        <li>Create and manage webhook configurations</li>`
+    : `<li>Invoices, quotes, recurring billing and deposits</li>
+        <li>Expenses and vendors</li>
+        <li>Clients, contacts and products</li>
+        <li>Banking, transactions and reconciliation</li>
+        <li>Tax &amp; fiscal reports (VAT/IGIC, modelos, corporate tax)</li>
+        <li>HR, payroll, time tracking and your team</li>
+        <li>POS, kitchen and stay/PMS operations</li>
+        <li>Gestoría, general-ledger entries and portal settings</li>`;
+  const consentScopeNote = openAIProfile
+    ? `This ChatGPT connector does not expose government identifiers,
+        banking, payroll or HR, POS, Kitchen, Stay/PMS, webhook secrets,
+        e-invoicing, regulated filing, or fiscal export workflows.`
+    : `In short: near-complete access to your account. Not included:
+        e-invoicing submission (VeriFactu, TicketBAI, Facturae/FACe),
+        which requires a separate permission.`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -194,8 +225,7 @@ export function getLoginPage(opts: {
     </svg>
     <h1>Connect to Frihet</h1>
     <p class="subtitle">
-      An application wants full access to manage your Frihet account
-      via AI. This grants broad read and write access — review below.
+      ${consentSummary}
     </p>
 
     <div class="client-info">
@@ -205,19 +235,10 @@ export function getLoginPage(opts: {
     <div class="permissions">
       <h3>This will allow the application to view and manage:</h3>
       <ul>
-        <li>Invoices, quotes, recurring billing and deposits</li>
-        <li>Expenses and vendors</li>
-        <li>Clients, contacts and products</li>
-        <li>Banking, transactions and reconciliation</li>
-        <li>Tax &amp; fiscal reports (VAT/IGIC, modelos, corporate tax)</li>
-        <li>HR, payroll, time tracking and your team</li>
-        <li>POS, kitchen and stay/PMS operations</li>
-        <li>Gestoría, general-ledger entries and portal settings</li>
+        ${consentPermissions}
       </ul>
       <p class="scope-note">
-        In short: near-complete access to your account. Not included:
-        e-invoicing submission (VeriFactu, TicketBAI, Facturae/FACe),
-        which requires a separate permission.
+        ${consentScopeNote}
       </p>
     </div>
 
