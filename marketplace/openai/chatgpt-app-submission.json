@@ -689,10 +689,10 @@
       "expected_output": "A summary of the business profile showing the company name, plan type, and recent business activities without exposing any personal identifiers or tax IDs."
     },
     {
-      "description": "List recent invoices to check outstanding amounts.",
-      "user_prompt": "Show me my outstanding draft invoices.",
+      "description": "List draft invoices awaiting completion.",
+      "user_prompt": "Show me my draft invoices.",
       "tools_triggered": "list_invoices",
-      "expected_output": "A list of recent invoices currently in draft status, demonstrating correct formatting and ensuring no sensitive client identifiers (like taxId) are rendered."
+      "expected_output": "A list of draft invoices with client, issue date, currency, and total, without government identifiers."
     },
     {
       "description": "Create a draft invoice for consultation services.",
@@ -727,10 +727,10 @@
       "expected_output": "A message stating that e-invoice XML files containing government-issued identifiers are not accessible from the ChatGPT integration."
     },
     {
-      "description": "Attempting to delete a webhook configuration that does not exist.",
-      "user_prompt": "Delete webhook with ID non_existent_id.",
-      "tools_triggered": "delete_webhook",
-      "expected_output": "A clean error message from Frihet API indicating the webhook configuration was not found, handled gracefully."
+      "description": "Requesting banking transactions, which are outside the reviewed ChatGPT surface.",
+      "user_prompt": "Show my bank transactions from last week.",
+      "tools_triggered": null,
+      "expected_output": "Frihet should not be invoked because banking data is outside the reviewed ChatGPT integration surface."
     }
   ]
 }

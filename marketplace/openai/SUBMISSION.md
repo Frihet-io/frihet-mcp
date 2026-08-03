@@ -26,15 +26,15 @@
 | Field | Max | Value |
 |-------|-----|-------|
 | App name | 60 chars | `Frihet` |
-| Subtitle | 30 chars | `Manage invoices & expenses` |
+| Subtitle | 30 chars | `Manage business operations` |
 | Long description | 2,000 chars | See below |
-| Category | — | `Finance` |
+| Category | — | `Business & Operations` |
 | Developer Identity | — | `Individual — VICTOR BERTHELIUS PATO` |
 | Plugin Author | — | `VICTOR BERTHELIUS PATO` (must exactly match the selected verified identity) |
 | Website | — | `https://www.frihet.io` |
 | Privacy policy URL | — | `https://www.frihet.io/en/privacy` |
 | Terms of service URL | — | `https://www.frihet.io/en/terms` |
-| Support URL | — | `https://docs.frihet.io/desarrolladores/mcp-server` |
+| Support URL | — | `https://docs.frihet.io/en/desarrolladores/mcp-server` |
 | Demo Recording URL | — | `https://youtu.be/3_6mrhTvIEA` |
 
 **Long description (copy-paste ready):**
@@ -48,6 +48,25 @@ This ChatGPT integration uses a deliberately limited business-management surface
 
 Sign in with OAuth 2.0 using an existing Frihet account. No API key is required. Frihet is an AI-native business operating system for organizations that want to run a connected business without operational friction.
 ```
+
+**Public prompts configured in the portal:**
+
+1. `Show me my unpaid invoices.`
+2. `Summarize this month's revenue and expenses.`
+3. `Log a €49 software expense for today.`
+
+**Release notes:**
+
+```
+Initial release. 56 MCP tools for invoices, expenses, clients, contacts, products, quotes, vendors, webhooks, and business summaries. OAuth 2.0 sign-in; sensitive regulatory, banking, payroll, POS, accommodation, and secret-bearing workflows are excluded.
+```
+
+The Global section contains exactly 17 locales: English (US), Spanish (Spain),
+Portuguese (Brazil), French (France), German, Italian, Japanese, Swedish,
+Norwegian Bokmål, Danish, Finnish, Dutch, Turkish, Polish, Romanian, Greek, and
+Hungarian. Every translation describes the limited reviewed surface, its
+exclusions, and OAuth 2.0 sign-in; do not add a blank English duplicate or
+Portuguese (Portugal).
 
 ### Developer identity and ownership evidence
 
@@ -199,6 +218,8 @@ Before submitting:
 - [ ] Terms of service live at `https://www.frihet.io/en/terms`
 - [x] Dark directory icon (512×512 PNG) prepared with light-icon geometry parity
 - [x] Transparent composer icons (512×512 PNG) prepared separately for light and dark ChatGPT themes
+- [x] Exactly 17 intended locales configured, including Portuguese (Brazil)
+- [x] Three public prompts configured
 - [ ] Screenshots prepared (min 2)
 - [ ] Test account created and credentials ready
 - [ ] Worker deployed with domain verification token BEFORE clicking submit
