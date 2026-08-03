@@ -15,6 +15,18 @@
 | 6 | Commerce answer described off-platform SaaS sales | **DRAFT FIXED** | Existing-account access only; no pricing, upgrade, checkout, or purchase link in ChatGPT |
 | 7 | Live OpenAI MCP health | **BLOCKED** | `/health` must return 200/`ok` before submission |
 | 8 | Seven `fields` arguments flagged as unclear | **FIXED IN CANDIDATE** | Remove projection arguments from the reviewed ChatGPT surface; full MCP clients keep them |
+| 9 | Three intelligence tools had effectively empty output schemas | **FIXED IN CANDIDATE** | Declare concrete response properties for business context, monthly summary, and invoice duplication |
+| 10 | Sensitive descriptor redaction used obsolete Zod v3 internals | **FIXED IN CANDIDATE** | Use Zod v4 traversal and reject any sensitive schema path in the frozen-contract gate |
+
+---
+
+## Public listing language
+
+OpenAI currently exposes one public listing rather than per-locale name,
+subtitle, and description fields. The English review listing states that users
+can work with Frihet in all 17 product languages: Spanish, English, Brazilian
+Portuguese, French, German, Italian, Swedish, Norwegian, Danish, Finnish,
+Dutch, Turkish, Polish, Romanian, Greek, Hungarian, and Japanese.
 
 ---
 

@@ -294,23 +294,49 @@ export class DemoFrihetClient implements IFrihetClient {
   // ---------------------------------------------------------------- Intelligence
   async getBusinessContext(): Promise<Rec> {
     return {
-      businessName: "Demo Studio SL",
-      fiscalRegime: "autonomo",
-      currency: "EUR",
-      country: "ES",
-      metrics: { openInvoices: 4, overdueInvoices: 1, totalClients: demoClients.length, totalProducts: demoProducts.length },
+      business: {
+        name: "Demo Studio SL",
+        fiscalZone: "IVA",
+        currency: "EUR",
+        language: "es",
+        country: "ES",
+      },
+      defaults: { taxRate: 21, irpfRate: 15, dueDays: 30, currency: "EUR" },
+      plan: {
+        name: "free",
+        invoices: { used: 5, limit: 999 },
+        expenses: { used: demoExpenses.length, limit: 5 },
+        aiMessages: { used: 2, limit: 30 },
+      },
+      series: [{ id: "default", prefix: "F", current: 5, year: 2026 }],
+      recentActivity: {
+        lastInvoice: { number: "F-2026-005", date: "2026-07-18", client: "Acme Studio" },
+        lastExpense: { date: "2026-07-17", vendor: "Demo Supplies", amount: 405.6 },
+        overdueCount: 1,
+        overdueAmount: 640,
+        unpaidCount: 2,
+      },
+      topClients: [{ name: "Acme Studio", totalRevenue: 2200, invoiceCount: 2 }],
+      currentMonth: {
+        revenue: 3960.4,
+        expenses: 405.6,
+        profit: 3554.8,
+        invoiceCount: 5,
+        expenseCount: demoExpenses.length,
+      },
       ...READ_STAMP,
     };
   }
   async getMonthlySummary(month?: string): Promise<Rec> {
     return {
-      month: month ?? "2026-07",
-      revenue: 3960.4,
-      expenses: 405.6,
-      net: 3554.8,
-      invoiceCount: 5,
-      expenseCount: demoExpenses.length,
-      currency: "EUR",
+      period: month ?? "2026-07",
+      revenue: { total: 3960.4, taxBase: 3273.06, tax: 687.34, irpf: 0 },
+      expenses: { total: 405.6, deductible: 405.6, tax: 70.4 },
+      profit: { gross: 3554.8, net: 2937.86 },
+      invoices: { created: 5, sent: 1, paid: 3, overdue: 1 },
+      topClients: [{ name: "Acme Studio", totalRevenue: 2200, invoiceCount: 2 }],
+      byCategory: { supplies: 405.6 },
+      taxLiability: { vatPayable: 616.94, irpfRetained: 0, estimatedModel303: 616.94 },
       ...READ_STAMP,
     };
   }
