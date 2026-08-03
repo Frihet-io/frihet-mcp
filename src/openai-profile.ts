@@ -219,6 +219,17 @@ const PROFILE: OpenAIProfile = {
   // Government IDs (NIF/CIF/VAT), auth credentials, and unsolicited
   // email address collection removed from input schemas.
   stripInputFields: {
+    // Projection is useful to direct MCP clients, but unnecessary in the
+    // reviewed ChatGPT surface. OpenAI's scanner treats a comma-delimited
+    // free-form string as ambiguous (array vs JSON vs CSV), so omit it and
+    // return the full, redacted record shape instead.
+    list_invoices:  ["fields"],
+    search_invoices: ["fields"],
+    list_expenses:  ["fields"],
+    list_clients:   ["fields"],
+    list_products:  ["fields"],
+    list_quotes:    ["fields"],
+    list_vendors:   ["fields"],
     create_client:  ["taxId"],   // NIF/CIF/VAT — government-issued identifier
     update_client:  ["taxId"],
     create_vendor:  ["taxId"],

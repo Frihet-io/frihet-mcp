@@ -147,6 +147,20 @@ describe("OpenAI profile", () => {
       assert.ok(tool, `${name} should be visible`);
       assert.equal("secret" in (tool.config.inputSchema ?? {}), false);
     }
+
+    for (const name of [
+      "list_invoices",
+      "search_invoices",
+      "list_expenses",
+      "list_clients",
+      "list_products",
+      "list_quotes",
+      "list_vendors",
+    ]) {
+      const tool = server.tools.get(name);
+      assert.ok(tool, `${name} should be visible`);
+      assert.equal("fields" in (tool.config.inputSchema ?? {}), false);
+    }
   });
 
   test("every reviewed tool states an explicit openWorldHint rationale", () => {

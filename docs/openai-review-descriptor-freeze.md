@@ -92,3 +92,15 @@ the proposed surface is documented in that review. Then:
 
 Never deploy, publish, bump versions, change live OAuth metadata, or refresh the
 snapshot as part of the gate itself.
+
+## Approved resubmission delta — 2026-08-03
+
+The owner approved preparing a new OpenAI review after the previous submission
+was rejected. The current portal scan also flagged the optional `fields`
+argument as unclear on seven reviewed tools. The approved candidate removes
+that argument from `list_invoices`, `search_invoices`, `list_expenses`,
+`list_clients`, `list_products`, `list_quotes`, and `list_vendors` in OpenAI
+mode only. Direct MCP clients retain the existing comma-delimited projection.
+
+This is a subtractive input-schema change: tool names, counts, annotations,
+handlers, outputs, OAuth metadata, prompts, and resources remain unchanged.

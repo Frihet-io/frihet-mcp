@@ -14,6 +14,7 @@
 | 5 | Sensitive data collection | **DONE** | OpenAI allowlist enforced: 53 reviewed business tools + 3 read-only discovery meta-tools, prompts/resources hidden, restricted fields redacted |
 | 6 | Commerce answer described off-platform SaaS sales | **DRAFT FIXED** | Existing-account access only; no pricing, upgrade, checkout, or purchase link in ChatGPT |
 | 7 | Live OpenAI MCP health | **BLOCKED** | `/health` must return 200/`ok` before submission |
+| 8 | Seven `fields` arguments flagged as unclear | **FIXED IN CANDIDATE** | Remove projection arguments from the reviewed ChatGPT surface; full MCP clients keep them |
 
 ---
 
@@ -114,9 +115,10 @@ Hidden from OpenAI mode:
 - All MCP prompts and resources, because several prompt/resource templates reference tools, fields, or modules that are intentionally hidden from OpenAI mode.
 - `get_quarterly_taxes` and `get_invoice_einvoice`, retained as explicit exclusions for defense in depth.
 
-### Input fields removed (8 tools)
+### Input fields removed (15 tools)
 | Field | Tools | Reason |
 |-------|-------|--------|
+| `fields` | list/search invoices; list expenses, clients, products, quotes, vendors | Optional CSV projection is unnecessary in ChatGPT and was flagged as an ambiguous free-form argument |
 | `taxId` | create/update client, create/update vendor | Government-issued identifier |
 | `to` | send_invoice, send_quote | Don't solicit email — use stored |
 | `secret` | create/update webhook | Auth credential |
