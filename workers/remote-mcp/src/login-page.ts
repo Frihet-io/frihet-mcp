@@ -283,6 +283,7 @@ export function getLoginPage(opts: {
     clientId: opts.clientId,
     stateKey: opts.stateKey,
     firebaseProjectId: opts.firebaseProjectId,
+    useRedirectAuth: openAIProfile,
   })}<\/script>
   <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js"><\/script>
   <script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-auth-compat.js"><\/script>
@@ -314,6 +315,26 @@ export function getLoginPage(opts: {
       document.getElementById("loading").style.display = "none";
     }
 
+    async function completeFirebaseSignIn(user) {
+      var idToken = await user.getIdToken();
+      showLoading();
+      var response = await fetch("/callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stateKey: STATE_KEY,
+          idToken: idToken,
+          locale: navigator.language.startsWith("es") ? "es" : "en",
+        }),
+      });
+      if (!response.ok) {
+        var err = await response.json();
+        throw new Error(err.error || "Authentication failed");
+      }
+      var data = await response.json();
+      window.location.href = data.redirectTo;
+    }
+
     async function signInWithEmail() {
       document.getElementById("error").style.display = "none";
       var email = document.getElementById("email").value.trim();
@@ -324,23 +345,7 @@ export function getLoginPage(opts: {
       }
       try {
         var result = await firebase.auth().signInWithEmailAndPassword(email, password);
-        var idToken = await result.user.getIdToken();
-        showLoading();
-        var response = await fetch("/callback", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            stateKey: STATE_KEY,
-            idToken: idToken,
-            locale: navigator.language.startsWith("es") ? "es" : "en",
-          }),
-        });
-        if (!response.ok) {
-          var err = await response.json();
-          throw new Error(err.error || "Authentication failed");
-        }
-        var data = await response.json();
-        window.location.href = data.redirectTo;
+        await completeFirebaseSignIn(result.user);
       } catch (err) {
         hideLoading();
         showError(err.message || "Authentication failed. Please try again.");
@@ -364,32 +369,37 @@ export function getLoginPage(opts: {
       }
 
       try {
-        var result = await firebase.auth().signInWithPopup(authProvider);
-        var idToken = await result.user.getIdToken();
-
-        showLoading();
-
-        var response = await fetch("/callback", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            stateKey: STATE_KEY,
-            idToken: idToken,
-            locale: navigator.language.startsWith("es") ? "es" : "en",
-          }),
-        });
-
-        if (!response.ok) {
-          var err = await response.json();
-          throw new Error(err.error || "Authentication failed");
+        // OpenAI's review/scanner browser may block or detach popup windows.
+        // Use Firebase's documented redirect flow for that deployment and
+        // resume it on page load below. The full MCP deployment keeps its
+        // existing popup flow unchanged.
+        if (SERVER_DATA.useRedirectAuth) {
+          showLoading();
+          await firebase.auth().signInWithRedirect(authProvider);
+          return;
         }
 
-        var data = await response.json();
-        window.location.href = data.redirectTo;
+        var result = await firebase.auth().signInWithPopup(authProvider);
+        await completeFirebaseSignIn(result.user);
       } catch (err) {
         hideLoading();
         showError(err.message || "Authentication failed. Please try again.");
       }
+    }
+
+    if (SERVER_DATA.useRedirectAuth) {
+      showLoading();
+      firebase.auth().getRedirectResult()
+        .then(function(result) {
+          if (result && result.user) {
+            return completeFirebaseSignIn(result.user);
+          }
+          hideLoading();
+        })
+        .catch(function(err) {
+          hideLoading();
+          showError(err.message || "Authentication failed. Please try again.");
+        });
     }
   <\/script>
 </body>
