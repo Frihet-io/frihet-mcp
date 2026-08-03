@@ -1,7 +1,9 @@
 # OpenAI ChatGPT Apps Marketplace — Submission Package
 
-> **DO NOT SUBMIT — awaiting Viktor final OK.**
-> Review this document fully, verify all checklist items (especially domain verification), then submit manually via ChatGPT Developer Mode.
+> **DO NOT SUBMIT — draft correction in progress.**
+> The 2026-07-28 rejection was caused by a mismatch between the selected verified
+> individual and the Plugin Author field. The corrected draft must also pass the
+> live runtime preflight below before the owner submits it.
 
 ---
 
@@ -24,32 +26,51 @@
 | Field | Max | Value |
 |-------|-----|-------|
 | App name | 60 chars | `Frihet` |
-| Short description (tagline) | 120 chars | `Manage invoices, expenses, clients, products, quotes, and webhooks through ChatGPT.` |
+| Subtitle | 30 chars | `Manage invoices & expenses` |
 | Long description | 2,000 chars | See below |
-| Category | — | `Finance & Accounting` |
-| App icon URL | — | `https://frihet.io/favicon.svg` |
-| Homepage | — | `https://frihet.io/?utm_source=openai&utm_medium=mcp_directory&utm_campaign=mcp_landgrab` |
-| Developer name | — | `BRTHLS / Viktor` |
-| Developer email | — | `hola@frihet.io` |
+| Category | — | `Finance` |
+| Developer Identity | — | `Individual — VICTOR BERTHELIUS PATO` |
+| Plugin Author | — | `VICTOR BERTHELIUS PATO` (must exactly match the selected verified identity) |
+| Website | — | `https://www.frihet.io` |
 | Privacy policy URL | — | `https://www.frihet.io/en/privacy` |
 | Terms of service URL | — | `https://www.frihet.io/en/terms` |
 | Support URL | — | `https://docs.frihet.io/desarrolladores/mcp-server` |
+| Demo Recording URL | — | `https://youtu.be/3_6mrhTvIEA` |
 
-**Long description (copy-paste ready, 790 chars):**
+**Long description (copy-paste ready):**
 
 ```
-Frihet connects ChatGPT directly to your business workspace.
+Frihet connects ChatGPT to your business workspace. Create and update invoices, log expenses, manage clients, contacts, products, quotes, vendors, and webhooks, and review monthly business summaries without switching tabs.
 
-Create invoices by describing what you sold. Log expenses in plain language. Look up clients, products, vendors, quotes, and monthly business summaries. Keep routine admin moving from inside ChatGPT without switching tabs.
+Ask in plain language to find records, prepare draft invoices and quotes, mark invoices paid, or send documents to a client's saved email address. Mutating and external actions remain explicit and reviewable.
 
-The ChatGPT app exposes a reviewed OpenAI-safe surface for invoices, expenses, clients, CRM contacts/activities/notes, products, quotes, vendors, monthly summaries, and webhook management. It includes 53 reviewed business tools plus 3 read-only discovery tools (`list_tool_groups`, `search_tools`, `describe_tool`) that help ChatGPT select the right capability without exposing hidden product modules.
+This ChatGPT integration uses a deliberately limited business-management surface. It does not expose government identifiers, banking data, payroll or HR records, accommodation or POS data, webhook secrets, or regulated filing and export workflows.
 
-Regulated identifiers, banking identifiers, webhook signing secrets, recipient override emails, payroll/HR, lodging/POS, banking, and regulated filing/export workflows are outside the ChatGPT surface.
-
-Connect via OAuth 2.0 in seconds. No API key required.
-
-Frihet is built for freelancers and small businesses that want AI-native business management.
+Sign in with OAuth 2.0 using an existing Frihet account. No API key is required. Frihet is an AI-native business operating system for organizations that want to run a connected business without operational friction.
 ```
+
+### Developer identity and ownership evidence
+
+- Select the already verified individual shown by OpenAI as
+  `Individual — VICTOR BERTHELIUS PATO`.
+- Set `Plugin Author` to `VICTOR BERTHELIUS PATO`, character-for-character.
+- Keep `Frihet` as the app name/brand; do not use it as the legal author unless a
+  business named Frihet is separately verified in the same OpenAI organization.
+- Before submission, confirm the public Privacy and Terms pages identify the same
+  legal owner. Do not assert a different business entity in the form.
+
+### Commerce & Purchasing
+
+| Field | Answer |
+|-------|--------|
+| Links or directs users out of ChatGPT to make purchases | **No** |
+| Facilitates purchases of digital goods, services, or subscriptions | **No** |
+| Shows pricing, upgrade prompts, checkout links, or payment instructions | **No** |
+
+The app authenticates an existing Frihet account. It does not sell or promote a
+Frihet subscription, initiate checkout, or direct users to upgrade from ChatGPT.
+Do not enter SaaS plans in the “products you intend to sell” field; that field is
+only applicable when the first commerce checkbox is selected.
 
 ---
 
@@ -160,7 +181,12 @@ OpenAI reviewers will test the app end-to-end using OAuth flow:
 
 Before submitting:
 
+- [ ] Developer Identity is `Individual — VICTOR BERTHELIUS PATO`
+- [ ] Plugin Author is exactly `VICTOR BERTHELIUS PATO`
+- [ ] Website, Privacy, Terms, and Support URLs return 200 to the reviewer
+- [ ] Commerce purchase-link checkbox is **not** selected
 - [ ] `https://openai-mcp.frihet.io/mcp` is reachable with valid MCP response
+- [ ] `https://openai-mcp.frihet.io/health` returns HTTP 200 with `status: ok`
 - [ ] OAuth metadata at `https://openai-mcp.frihet.io/.well-known/oauth-authorization-server` includes `code_challenge_methods_supported: ["S256"]`
 - [ ] `FRIHET_OPENAI_MODE=true` is active and exposes 53 reviewed business tools + 3 read-only discovery meta-tools
 - [ ] MCP prompts and resources are hidden in OpenAI mode
@@ -188,8 +214,9 @@ Test the full flow in ChatGPT before submitting:
 
 ---
 
-## Submission Order Recommendation
+## Submission stop condition
 
-Submit OpenAI **second** — after Cursor (faster, lower bar) but before Anthropic (longest review). OAuth domain verification adds complexity; allow 1–2 days for preparation.
-
-See `../README.md` for full submission sequencing.
+Do not click Submit while any required URL is non-2xx, OAuth/test-account flows
+have not passed, identity and author differ, or the commerce answers describe a
+digital subscription purchase. A rejected version is evidence, not a template to
+resubmit unchanged.

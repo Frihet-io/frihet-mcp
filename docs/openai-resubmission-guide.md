@@ -1,27 +1,53 @@
 # OpenAI App Re-Submission Guide
 
-> Addresses all 5 rejection points from the OpenAI review email.
+> Canonical remediation for the 2026-07-28 rejection, while retaining the
+> technical fixes from the earlier 2026-03-27 review.
 
 ## Status Summary
 
 | # | Issue | Status | Action |
 |---|-------|--------|--------|
-| 1 | Developer name mismatch | **MANUAL** | Viktor: platform.openai.com/settings |
+| 1 | Verified owner could not be confirmed | **DRAFT FIXED** | Select the verified individual and use the exact same legal name as Plugin Author |
 | 2 | openWorldHint wrong | **DONE** | 4 tools corrected + justifications |
 | 3 | Test cases failing | **READY** | 15 test cases documented |
 | 4 | Privacy policy gaps | **DONE** | Section 10 added (11 sections, 17 langs) |
 | 5 | Sensitive data collection | **DONE** | OpenAI allowlist enforced: 53 reviewed business tools + 3 read-only discovery meta-tools, prompts/resources hidden, restricted fields redacted |
+| 6 | Commerce answer described off-platform SaaS sales | **DRAFT FIXED** | Existing-account access only; no pricing, upgrade, checkout, or purchase link in ChatGPT |
+| 7 | Live OpenAI MCP health | **BLOCKED** | `/health` must return 200/`ok` before submission |
 
 ---
 
-## Issue 1: Developer Name
+## Issue 1: Verified owner and Plugin Author
 
-**What to do:** Go to https://platform.openai.com/settings
+The rejected form selected `Individual — VICTOR BERTHELIUS PATO` but used
+`Frihet` as Plugin Author. OpenAI requires the author to exactly match the
+verified legal individual or business.
 
-- If publishing as individual: verify name matches "Victor Berthelius Pato"
-- If publishing as business: complete business verification for "Frihet"
+Fastest valid correction with the identity already available in the organization:
 
-**Note:** Only organization owners can complete verification.
+1. Select `Individual — VICTOR BERTHELIUS PATO`.
+2. Enter `VICTOR BERTHELIUS PATO` as Plugin Author.
+3. Keep `Frihet` as the app name/brand.
+4. Confirm the Website, Privacy, and Terms pages identify that same person as
+   the owner/operator of Frihet before clicking Submit.
+
+Do not enter `Frihet`, `BRTHLS / Viktor`, or a shortened personal name as Plugin
+Author. If the intended publisher is instead a legal business, complete OpenAI
+business verification first and then use that business name exactly.
+
+## Issue 1B: Commerce declaration
+
+The rejected form selected “links or directs users out of ChatGPT to make
+purchases” and then described monthly/annual SaaS subscriptions. Public ChatGPT
+apps may connect an existing paid account, but this app must not sell, promote,
+or initiate a digital subscription from ChatGPT.
+
+For the current product behavior:
+
+- purchase-link checkbox: **No**;
+- digital-goods/subscription facilitation: **No**;
+- no pricing, upgrade prompts, checkout links, or payment instructions in tool
+  descriptions, tool output, components, or submission copy.
 
 ---
 
