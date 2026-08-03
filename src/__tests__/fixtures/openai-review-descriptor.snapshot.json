@@ -2647,10 +2647,6 @@
             "description": "Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor",
             "type": "string"
           },
-          "fields": {
-            "description": "Comma-separated field names to return (e.g. 'id,name,email') / Campos a devolver",
-            "type": "string"
-          },
           "limit": {
             "description": "Max results (1-100) / Resultados maximos",
             "maximum": 100,
@@ -2783,10 +2779,6 @@
             "description": "Filter by expense category (e.g. 'office', 'travel') / Filtrar por categoria",
             "type": "string"
           },
-          "fields": {
-            "description": "Comma-separated field names to return (e.g. 'id,description,amount') / Campos a devolver",
-            "type": "string"
-          },
           "from": {
             "description": "Start date filter (YYYY-MM-DD) / Fecha inicio",
             "type": "string"
@@ -2898,10 +2890,6 @@
           },
           "clientId": {
             "description": "Filter by client ID / Filtrar por ID de cliente",
-            "type": "string"
-          },
-          "fields": {
-            "description": "Comma-separated field names to return (e.g. 'id,clientName,total') / Campos a devolver",
             "type": "string"
           },
           "from": {
@@ -3057,10 +3045,6 @@
             "description": "Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor",
             "type": "string"
           },
-          "fields": {
-            "description": "Comma-separated field names to return (e.g. 'id,name,unitPrice') / Campos a devolver",
-            "type": "string"
-          },
           "isActive": {
             "description": "Filter by active status / Filtrar por estado activo",
             "type": "boolean"
@@ -3162,10 +3146,6 @@
           },
           "clientId": {
             "description": "Filter by client ID / Filtrar por ID de cliente",
-            "type": "string"
-          },
-          "fields": {
-            "description": "Comma-separated field names to return (e.g. 'id,clientName,total') / Campos a devolver",
             "type": "string"
           },
           "from": {
@@ -3339,10 +3319,6 @@
         "properties": {
           "after": {
             "description": "Cursor for pagination / Cursor de paginacion",
-            "type": "string"
-          },
-          "fields": {
-            "description": "Comma-separated fields to return / Campos a devolver separados por coma",
             "type": "string"
           },
           "limit": {
@@ -3691,10 +3667,6 @@
         "properties": {
           "after": {
             "description": "Cursor for cursor-based pagination (document ID) / Cursor para paginacion",
-            "type": "string"
-          },
-          "fields": {
-            "description": "Comma-separated field names to return / Campos a devolver",
             "type": "string"
           },
           "from": {
