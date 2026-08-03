@@ -145,7 +145,8 @@ OpenAI enforces strict OAuth 2.1 compliance. Verify before submitting:
 | Asset | Path | Notes |
 |-------|------|-------|
 | Directory icon — dark (512×512 PNG) | `marketplace/openai/frihet-directory-dark.png` | White Frihet disc with the same optical padding as the light icon |
-| Composer icon (512×512 PNG) | `marketplace/openai/frihet-composer.png` | Theme-safe black tile with the white Frihet disc |
+| Composer icon — light (512×512 PNG) | `marketplace/openai/frihet-composer.png` | Black Frihet disc on a transparent canvas |
+| Composer icon — dark (512×512 PNG) | `marketplace/openai/frihet-composer-dark.png` | White Frihet disc on a transparent canvas |
 | Hero image (1280×720) | `~/Documents/Frihet-Saas-Website/public/banners/frihet-banner-business-og.png` | Business-focused |
 | LinkedIn banner | `~/Documents/Frihet-Saas-Website/public/banners/frihet-banner-business-linkedin.png` | Business audience |
 
@@ -197,7 +198,7 @@ Before submitting:
 - [ ] Privacy policy live at `https://www.frihet.io/en/privacy`
 - [ ] Terms of service live at `https://www.frihet.io/en/terms`
 - [x] Dark directory icon (512×512 PNG) prepared with light-icon geometry parity
-- [x] Composer icon (512×512 PNG) prepared for light and dark ChatGPT themes
+- [x] Transparent composer icons (512×512 PNG) prepared separately for light and dark ChatGPT themes
 - [ ] Screenshots prepared (min 2)
 - [ ] Test account created and credentials ready
 - [ ] Worker deployed with domain verification token BEFORE clicking submit
