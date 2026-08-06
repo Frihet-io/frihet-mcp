@@ -4,6 +4,13 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [1.16.6] — 2026-08-06
+
+### Fixed
+
+- **Every MCP-originated request is now attributable.** The client sends two source markers (#115): `X-Frihet-Source: mcp` (explicit, survives direct Cloud Function access) and a `frihet-mcp/<version>` `User-Agent` (survives the `api.frihet.io` edge proxy, whose request-header allowlist forwards `user-agent` but strips `x-frihet-source`). The backend classifier (`detectApiInvoiceSource`) tags these creates as `source: 'mcp'` instead of `'api'`, making MCP adoption measurable in analytics. Pinned by `src/__tests__/source-header-contract.test.ts`.
+- `package-lock.json` refreshed — it had drifted to 1.16.0 while `package.json` advanced to 1.16.5 (#116).
+
 ## [1.16.5] — 2026-07-29
 
 ### Fixed
