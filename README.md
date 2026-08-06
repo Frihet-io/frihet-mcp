@@ -47,7 +47,7 @@
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
 
-> **Tool count:** the package (1.16.5) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
+> **Tool count:** the package (1.16.6) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
 
 ---
 
