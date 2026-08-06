@@ -39,6 +39,7 @@ import {
   OPENAI_CSP,
 } from "../../../src/openai-profile.js";
 import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
+import { applyFiscalAliases } from "../../../src/fiscal-aliases.js";
 import { log } from "../../../src/logger.js";
 import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
@@ -155,6 +156,11 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     }
 
     registerAllTools(server, client);
+
+    // Fiscal modelo prefix aliases (issue #50) — frihet_modelo_303/130/390/180/347
+    // resolve to the existing get_modelo_* tools, same handler, zero duplication.
+    applyFiscalAliases(server);
+
     registerAllResources(server);
     registerAllPrompts(server);
   }
