@@ -56,6 +56,35 @@ const CANONICAL_URL =
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
+/**
+ * Distinguishes "origin unreachable" from every other failure this script
+ * reports (drift, malformed spec, missing endpoint) so a transient 503 never
+ * masquerades as a content problem in the freshness gate.
+ */
+class OriginUnavailableError extends Error {}
+
+/**
+ * Retry ONLY transient failures — network errors (DNS, timeout, reset) and
+ * 5xx responses. A 4xx means the request itself is wrong; retrying it would
+ * not help and would hide a real problem behind a slow-looking origin.
+ */
+async function fetchWithRetry(url, options, attempts = 3, delaysMs = [2000, 8000]) {
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.status < 500) return res;
+      lastErr = new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      lastErr = err;
+    }
+    if (attempt < attempts) {
+      await new Promise((r) => setTimeout(r, delaysMs[attempt - 1] ?? delaysMs.at(-1)));
+    }
+  }
+  throw new OriginUnavailableError(lastErr.message);
+}
+
 /** The derived artifact this repo owns. public-openai/ is produced from it. */
 const FULL_ASSET = join(root, "workers/remote-mcp/public/openapi.json");
 const SCOPED_ASSET = join(root, "workers/remote-mcp/public-openai/openapi.json");
@@ -83,7 +112,7 @@ const CHECK = args.has("--check");
 const LIVE = args.has("--live");
 
 async function fetchSpec(url) {
-  const res = await fetch(`${url}?cb=${Date.now()}`, {
+  const res = await fetchWithRetry(`${url}?cb=${Date.now()}`, {
     headers: { "User-Agent": UA, Accept: "application/json" },
     // Without a signal, undici waits 300 000 ms on a blackholed host — six
     // hosts is a half-hour hang instead of a red gate. 30 s covers a Cloud
@@ -154,9 +183,19 @@ function creditNoteContract(spec) {
 }
 
 const fail = [];
+const outages = [];
 const note = (m) => console.log(m);
 
-const canonical = await fetchSpec(CANONICAL_URL);
+let canonical;
+try {
+  canonical = await fetchSpec(CANONICAL_URL);
+} catch (err) {
+  if (err instanceof OriginUnavailableError) {
+    console.error(`\nORIGIN_UNAVAILABLE: canonical spec unreachable after retries — ${err.message}`);
+    process.exit(2);
+  }
+  throw err;
+}
 const canonicalBytes = `${JSON.stringify(canonical, null, 2)}\n`;
 const cn = creditNoteContract(canonical);
 
@@ -277,7 +316,11 @@ if (LIVE) {
     try {
       served = await fetchSpec(host.url);
     } catch (err) {
-      fail.push(`${host.url}: ${err.message}`);
+      if (err instanceof OriginUnavailableError) {
+        outages.push(`${host.url}: ${err.message} — owner: ${host.owner}`);
+      } else {
+        fail.push(`${host.url}: ${err.message}`);
+      }
       continue;
     }
     const c = creditNoteContract(served);
@@ -311,6 +354,15 @@ if (LIVE) {
 if (fail.length) {
   console.error(`\nFAIL (${fail.length}):`);
   for (const f of fail) console.error(`  - ${f}`);
+  if (outages.length) {
+    console.error(`\nAlso unreachable (${outages.length}, not counted as drift):`);
+    for (const o of outages) console.error(`  - ${o}`);
+  }
   process.exit(1);
+}
+if (outages.length) {
+  console.error(`\nORIGIN_UNAVAILABLE (${outages.length}):`);
+  for (const o of outages) console.error(`  - ${o}`);
+  process.exit(2);
 }
 note("\nOK");

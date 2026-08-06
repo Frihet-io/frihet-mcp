@@ -46,10 +46,16 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          node scripts/sync-openapi.mjs --check --live 2>&1 | tee /tmp/openapi-freshness.log
+          if node scripts/sync-openapi.mjs --check --live 2>&1 | tee /tmp/openapi-freshness.log; then
+            status=0
+          else
+            status=$?
+          fi
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
 
       - name: Open or update drift issue
-        if: failure()
+        if: failure() && steps.check.outputs.exit_code != '2'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -74,3 +80,9 @@ jobs:
           else
             gh issue create --title "$TITLE" --body-file "$BODY_FILE" --label bug
           fi
+
+      - name: Note origin outage (no drift issue opened)
+        if: failure() && steps.check.outputs.exit_code == '2'
+        run: |
+          echo "::warning::sync-openapi.mjs could not reach the origin after 3 retries — treating as a transient outage, not drift. No issue opened."
+          cat /tmp/openapi-freshness.log || true
