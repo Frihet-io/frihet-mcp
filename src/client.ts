@@ -31,6 +31,35 @@ const REQUEST_TIMEOUT_MS = 30000;
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /**
+ * Origin marker sent on every request so the backend can tell an MCP-driven
+ * create apart from a direct-API one.
+ *
+ * The backend classifier (`detectApiInvoiceSource`, Frihet-ERP
+ * functions/src/publicApi.ts) matches `mcp` / `frihet-mcp` / `@frihet/mcp`
+ * across three headers: `x-frihet-source`, `x-frihet-client` and `user-agent`.
+ * We send TWO markers because they survive different network paths:
+ *
+ *  - `X-Frihet-Source: mcp` is the explicit, documented marker. It reaches the
+ *    backend when the client talks to the Cloud Function directly (custom
+ *    `baseUrl`, self-hosted proxy).
+ *  - `User-Agent` is what actually reaches the backend on the DEFAULT baseUrl:
+ *    `api.frihet.io` is fronted by workers/api-proxy/worker.js, whose
+ *    `ALLOWED_REQUEST_HEADERS` allowlist forwards `user-agent` but drops
+ *    `x-frihet-source` (verified live: /agents.json answers 200 at
+ *    api.frihet.io and 401 at the Cloud Function, so the Worker is in path).
+ *    Without the UA the source header is a phantom — set, then stripped at the
+ *    edge, and every MCP invoice still lands as `source: 'api'`.
+ *
+ * Deliberately carries no version: the version lives in package.json only
+ * (see src/index.ts PKG_VERSION) and a second hardcoded copy is exactly the
+ * drift `scripts/audit-mcp-refs.mjs` exists to catch.
+ *
+ * Pinned on the wire by src/__tests__/source-header-contract.test.ts.
+ */
+const SOURCE_MARKER = "mcp";
+const SOURCE_USER_AGENT = "frihet-mcp-server";
+
+/**
  * Fresh idempotency key, always a syntactically valid UUID v4.
  *
  * `crypto.randomUUID` is a global on the Cloudflare Workers runtime and on
@@ -135,6 +164,8 @@ export class FrihetClient {
       "X-API-Key": this.apiKey,
       "Content-Type": "application/json",
       Accept: "application/json",
+      "X-Frihet-Source": SOURCE_MARKER,
+      "User-Agent": SOURCE_USER_AGENT,
     };
 
     if (resolvedIdempotencyKey) {
