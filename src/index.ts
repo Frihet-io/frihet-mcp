@@ -38,6 +38,7 @@ import { registerAllResources } from "./resources/register-all.js";
 import { registerAllPrompts } from "./prompts/register-all.js";
 import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT, OPENAI_REVIEWED_TOOL_ALLOWLIST } from "./openai-profile.js";
 import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "./tool-exposure.js";
+import { applyFiscalAliases } from "./fiscal-aliases.js";
 import { log } from "./logger.js";
 import { registerShutdownHook } from "./metrics.js";
 import { setTraceContext } from "./observability.js";
@@ -167,6 +168,10 @@ function main(): void {
 
   // Register tools (62 full / 60 in OpenAI mode)
   registerAllTools(server, client);
+
+  // Fiscal modelo prefix aliases (issue #50) — frihet_modelo_303/130/390/180/347
+  // resolve to the existing get_modelo_* tools, same handler, zero duplication.
+  applyFiscalAliases(server);
 
   // Register 11 resources (7 static + 4 dynamic via API)
   registerAllResources(server, client);
