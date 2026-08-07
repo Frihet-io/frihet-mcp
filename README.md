@@ -21,7 +21,7 @@
   <a href="https://smithery.ai/servers/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
-  <img src="https://img.shields.io/badge/tools-157-18181b?style=flat&labelColor=09090b" alt="157 tools">
+  <img src="https://img.shields.io/badge/tools-157-18181b?style=flat&labelColor=09090b" alt="157 tools (+5 fiscal aliases)">
   <img src="https://img.shields.io/badge/node-%3E%3D18-18181b?style=flat&labelColor=09090b" alt="node >=18">
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
@@ -47,7 +47,7 @@
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
 
-> **Tool count:** the package (1.16.6) ships all 157 tools, same as the remote endpoint (`mcp.frihet.io`).
+> **Tool count:** the package (1.16.6) ships all 157 tools (+5 fiscal aliases), same as the remote endpoint (`mcp.frihet.io`).
 
 ---
 
@@ -60,7 +60,7 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-157 tools. 11 resources. 10 prompts. Structured output on every tool. Zero boilerplate.
+157 tools (+5 fiscal aliases). 11 resources. 10 prompts. Structured output on every tool. Zero boilerplate.
 
 <!-- v1.12.0-beta.1 — D4-B megasprint: HR (9), payroll (2), onboarding (2), permissions (2), period close (3), webhook test (1) = +19 = 157 tools total -->
 
@@ -222,7 +222,7 @@ Talk to your ERP. These are real prompts, not marketing copy.
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. Most of the 157 tools are CRUD operations over the REST API; the rest are read-only summaries and fiscal/e-invoice actions.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. Most of the 157 tools (+5 fiscal aliases) are CRUD operations over the REST API; the rest are read-only summaries and fiscal/e-invoice actions.
 
 **Works great:**
 
@@ -574,7 +574,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `period_close` | Close an accounting period (gestor/admin only — TRUST AREA) |
 | `period_reopen` | Reopen a closed period with a mandatory reason (TRUST AREA) |
 
-All 157 tools return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
+All 157 tools (+5 fiscal aliases) return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
 
 ---
 
@@ -797,7 +797,7 @@ npm run build   # must pass before submitting
 
 | Package | What it is |
 |---------|-----------|
-| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (157 tools, 11 resources, 10 prompts) |
+| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (157 tools + 5 fiscal aliases, 11 resources, 10 prompts) |
 | [`@frihet/sdk`](https://github.com/Frihet-io/frihet-sdk) | TypeScript SDK (`frihet.invoices.create()`) |
 | [`frihet`](https://www.npmjs.com/package/frihet) | CLI (`frihet invoices list --status overdue`) |
 | [`n8n-nodes-frihet`](https://www.npmjs.com/package/n8n-nodes-frihet) | n8n community node for workflow automation |
