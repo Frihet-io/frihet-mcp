@@ -28,6 +28,13 @@ jobs:
       - name: No public leak (competitor comparison / business secret)
         run: bash scripts/no-public-leak.sh
 
+      # Tripwire: this repo has NO analytics contract. Any PostHog/ingest
+      # emitter reference in src/ or workers/ turns CI red until the emitter
+      # is registered in the Frihet-ERP contract (surface mcp) with its own
+      # snapshot+gate, like Frihet-Saas-Website.
+      - name: Analytics tripwire (no unregistered emitters)
+        run: bash scripts/analytics-tripwire.sh
+
       - name: Build
         run: npm run build
 
