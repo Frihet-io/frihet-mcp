@@ -13,6 +13,8 @@
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
+import { parityPayload } from "./schema-parity.gate.js";
+
 // ── Minimal McpServer stub ───────────────────────────────────────────────────
 
 interface ToolConfig {
@@ -35,11 +37,37 @@ interface RegisteredTool {
   handler: ToolHandler;
 }
 
+/**
+ * The stub used to register real tool modules against a mock client.
+ *
+ * IT VALIDATES. Wrapping every handler so its `structuredContent` is parsed by
+ * the tool's OWN declared `outputSchema` is the whole reason this suite is
+ * trustworthy now: previously it only stubbed the client layer, so a mock could
+ * assert a field the schema did not declare (and the backend never sent) and the
+ * suite stayed green while the tool was unusable in production. With this
+ * wrapper, a mock that lies about the contract fails HERE, next to the mock.
+ */
 class StubMcpServer {
   tools: Map<string, RegisteredTool> = new Map();
 
   registerTool(name: string, config: ToolConfig, handler: ToolHandler): void {
-    this.tools.set(name, { name, config, handler });
+    const validating: ToolHandler = async (args) => {
+      const result = await handler(args);
+      const schema = config.outputSchema as
+        | { safeParse: (v: unknown) => { success: boolean; error?: unknown } }
+        | undefined;
+      if (!result.isError && result.structuredContent && schema?.safeParse) {
+        const parsed = schema.safeParse(result.structuredContent);
+        assert.ok(
+          parsed.success,
+          `${name}: the mock's structuredContent violates the tool's own outputSchema — ` +
+            `fix the MOCK to match the backend, never the schema to match the mock. ` +
+            JSON.stringify(parsed.error),
+        );
+      }
+      return result;
+    };
+    this.tools.set(name, { name, config, handler: validating });
   }
 }
 
@@ -66,13 +94,11 @@ const MOCK_ATTENDANCE = {
   status: "open",
 };
 
-const MOCK_OVERTIME = {
-  period: "2026-05",
-  totalRegularHours: 160,
-  totalOvertimeHours: 12,
-  estimatedCostEur: 480,
-  byEmployee: [],
-};
+// Sourced from the backend-parity corpus, NOT hand-typed. The previous literal
+// declared totalRegularHours / totalOvertimeHours / estimatedCostEur / byEmployee
+// — four fields the endpoint has never returned (`grep -rn estimatedCostEur` over
+// erp-main = 0 hits). The engine reports MINUTES.
+const MOCK_OVERTIME = parityPayload("overtime_report", "GET /time-entries/overtime");
 
 const MOCK_ANOMALY = {
   id: "anom_001",
@@ -94,22 +120,12 @@ const MOCK_WEBHOOK_TEST = {
   attemptedAt: "2026-05-16T10:30:00Z",
 };
 
-const MOCK_PAYROLL_EXPORT = {
-  format: "a3" as const,
-  month: "2026-05",
-  fileUrl: "https://files.frihet.io/payroll/2026-05-a3.csv",
-  filename: "payroll-2026-05.csv",
-  rowCount: 12,
-  generatedAt: "2026-05-16T10:00:00Z",
-};
+// The endpoint returns STAGED ROWS as JSON and produces no file: fileUrl,
+// filename and rowCount were phantoms.
+const MOCK_PAYROLL_EXPORT = parityPayload("payroll_export", "GET /payroll/prep/export");
 
-const MOCK_PAYROLL_CHECKLIST = {
-  month: "2026-05",
-  totalEmployees: 12,
-  readyEmployees: 10,
-  missingEmployees: 2,
-  employees: [],
-};
+// Rows key on `id` (not employeeId); the counters live in `summary`.
+const MOCK_PAYROLL_CHECKLIST = parityPayload("payroll_checklist", "GET /payroll/prep/employees");
 
 const MOCK_ONBOARDING_STATUS = {
   workspaceId: "ws_001",
@@ -125,25 +141,18 @@ const MOCK_ONBOARDING_PERSONA_RESULT = {
   updatedAt: "2026-05-16T10:00:00Z",
 };
 
-const MOCK_PERMISSIONS_MATRIX = {
-  roles: [{ role: "admin", permissions: ["invoices.*", "expenses.*"] }],
-  resources: ["invoices", "expenses"],
-};
+// `roles` is a STRING array. The old `[{ role, permissions }]` literal is the
+// exact shape that makes permissions_matrix throw McpError in demo mode — it was
+// stubbed here, so this suite defended the broken contract instead of catching it.
+const MOCK_PERMISSIONS_MATRIX = parityPayload("permissions_matrix", "GET /permissions/matrix");
 
-const MOCK_PERMISSIONS_ME = {
-  userId: "user_001",
-  role: "admin",
-  permissions: ["invoices.read", "invoices.write"],
-  workspaceId: "ws_001",
-};
+// { role, isOwner, resources, scopes }. userId / permissions / workspaceId exist
+// at no level of the real payload.
+const MOCK_PERMISSIONS_ME = parityPayload("permissions_me", "GET /permissions/me");
 
-const MOCK_PERIOD = {
-  id: "period_2026_q2",
-  type: "quarterly" as const,
-  status: "open" as const,
-  startDate: "2026-04-01",
-  endDate: "2026-06-30",
-};
+// Periods key on fiscalYear and nest their dates in dateRange; there is no `id`,
+// no `type`, and no flat startDate/endDate.
+const MOCK_PERIOD = parityPayload("period_close_status", "GET /periods/current");
 
 const MOCK_PERIOD_CLOSED = { ...MOCK_PERIOD, status: "closed" as const, closedAt: "2026-05-16T10:00:00Z" };
 
@@ -163,6 +172,14 @@ function makeSuccessClient(): import("../client-interface.js").IFrihetClient {
     listAnomalies: async () => MOCK_ANOMALIES_LIST,
 
     // Webhook test (existing webhooks methods need stubs too for registerWebhookTools to call them)
+    // KNOWN LIE, held deliberately. GET /v1/webhooks emits `{ data, total, meta }`
+    // and NO limit/offset (erp-main publicApi.ts:5100-5116 hand-rolls its envelope
+    // instead of using the generic builder at :7560). This stub invents both keys.
+    // It stays only because it matches `paginatedOutput`, the schema this branch
+    // still declares: the webhook half of this PR was held back for the OpenAI
+    // review-descriptor decision (see _coverage.json `loweredFrom`). Fixing the
+    // stub without the schema would just move the contradiction, so BOTH change in
+    // the held patch, together, or neither.
     listWebhooks: async () => ({ data: [], total: 0, limit: 20, offset: 0 }),
     getWebhook: async () => ({ id: "wh_abc" }),
     createWebhook: async (d: Record<string, unknown>) => ({ id: "wh_new", ...d }),
@@ -352,10 +369,18 @@ describe("HR Tools — happy path", () => {
     assert.equal(r.structuredContent!["durationMinutes"], 480);
   });
 
-  test("overtime_report returns aggregated hours", async () => {
+  test("overtime_report returns the Art. 34/35 ET minute totals, not hours or cost", async () => {
     const r = await server.tools.get("overtime_report")!.handler({ period: "2026-05" });
     assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["totalOvertimeHours"], 12);
+    const sc = r.structuredContent!;
+    const monthly = sc["monthlyTotal"] as Record<string, unknown>;
+    assert.equal(monthly["overtimeMinutes"], (MOCK_OVERTIME["monthlyTotal"] as Record<string, unknown>)["overtimeMinutes"]);
+    assert.ok(Array.isArray(sc["dailyOvertime"]));
+    // Pin the phantoms as ABSENT: asserting them present is what kept this
+    // suite green while the tool shipped a contract the backend cannot satisfy.
+    for (const phantom of ["totalOvertimeHours", "totalRegularHours", "estimatedCostEur", "byEmployee"]) {
+      assert.equal(sc[phantom], undefined, `${phantom} is a phantom field — nothing in erp-main emits it`);
+    }
   });
 
   test("anomaly_list returns paginated anomalies", async () => {
@@ -386,20 +411,36 @@ describe("Webhook test_webhook", () => {
 // ── Payroll ──────────────────────────────────────────────────────────────────
 
 describe("Payroll Tools", () => {
-  test("payroll_export returns CSV URL for A3 format", async () => {
+  test("payroll_export returns staged ROWS for A3 — no file is produced", async () => {
     const server = await makePayrollServer(makeSuccessClient);
     const r = await server.tools.get("payroll_export")!.handler({ format: "a3", month: "2026-05" });
     assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["format"], "a3");
-    assert.equal(r.structuredContent!["rowCount"], 12);
+    const sc = r.structuredContent!;
+    assert.equal(sc["format"], "a3");
+    assert.ok(Array.isArray(sc["employees"]), "the export is the employee rows themselves");
+    assert.equal(
+      (sc["summary"] as Record<string, unknown>)["exportedCount"],
+      (MOCK_PAYROLL_EXPORT["summary"] as Record<string, unknown>)["exportedCount"],
+    );
+    for (const phantom of ["fileUrl", "filename", "rowCount"]) {
+      assert.equal(sc[phantom], undefined, `${phantom} is a phantom — the family produces no file`);
+    }
   });
 
-  test("payroll_checklist returns readiness counts", async () => {
+  test("payroll_checklist reports readiness in `ready`/`missingFields`, counters in `summary`", async () => {
     const server = await makePayrollServer(makeSuccessClient);
     const r = await server.tools.get("payroll_checklist")!.handler({ month: "2026-05" });
     assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["readyEmployees"], 10);
-    assert.equal(r.structuredContent!["missingEmployees"], 2);
+    const sc = r.structuredContent!;
+    const summary = sc["summary"] as Record<string, unknown>;
+    assert.equal(summary["ready"], (MOCK_PAYROLL_CHECKLIST["summary"] as Record<string, unknown>)["ready"]);
+    assert.equal(summary["notReady"], (MOCK_PAYROLL_CHECKLIST["summary"] as Record<string, unknown>)["notReady"]);
+    const rows = sc["employees"] as Array<Record<string, unknown>>;
+    assert.ok(rows[0]!["id"], "the row key is `id`, never `employeeId`");
+    assert.equal(rows[0]!["employeeId"], undefined);
+    for (const phantom of ["totalEmployees", "readyEmployees", "missingEmployees"]) {
+      assert.equal(sc[phantom], undefined, `${phantom} does not exist — counters live under summary`);
+    }
   });
 
   test("payroll_export 404 → isError", async () => {
@@ -431,29 +472,46 @@ describe("Onboarding Tools", () => {
 // ── Permissions ──────────────────────────────────────────────────────────────
 
 describe("Permissions Tools", () => {
-  test("permissions_matrix returns roles + resources", async () => {
+  test("permissions_matrix returns roles as STRINGS, not { role, permissions } objects", async () => {
     const server = await makePermissionsServer(makeSuccessClient);
     const r = await server.tools.get("permissions_matrix")!.handler({});
     assert.ok(!r.isError);
-    assert.ok(Array.isArray(r.structuredContent!["roles"]));
+    const roles = r.structuredContent!["roles"] as unknown[];
+    assert.ok(Array.isArray(roles));
+    for (const role of roles) {
+      assert.equal(typeof role, "string", "RBAC_ROLES is a string array — the object shape breaks demo mode");
+    }
   });
 
-  test("permissions_me returns caller role", async () => {
+  test("permissions_me returns the owner row — an API key is workspace-owner scoped", async () => {
     const server = await makePermissionsServer(makeSuccessClient);
     const r = await server.tools.get("permissions_me")!.handler({});
     assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["role"], "admin");
+    const sc = r.structuredContent!;
+    assert.equal(sc["role"], "owner");
+    assert.equal(sc["isOwner"], true);
+    // `resources` is an OBJECT of resource → actions[], never an array.
+    assert.ok(sc["resources"] && !Array.isArray(sc["resources"]));
+    for (const phantom of ["userId", "permissions", "workspaceId"]) {
+      assert.equal(sc[phantom], undefined, `${phantom} exists at no level of /v1/permissions/me`);
+    }
   });
 });
 
 // ── Period close (TRUST AREA) ────────────────────────────────────────────────
 
 describe("Period Close Tools", () => {
-  test("period_close_status returns open period", async () => {
+  test("period_close_status keys on fiscalYear with dates nested in dateRange", async () => {
     const server = await makeAccountingCloseServer(makeSuccessClient);
     const r = await server.tools.get("period_close_status")!.handler({});
     assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["status"], "open");
+    const sc = r.structuredContent!;
+    assert.equal(sc["status"], "open");
+    assert.ok(sc["fiscalYear"], "periods are identified by fiscal year");
+    assert.ok((sc["dateRange"] as Record<string, unknown>)["from"]);
+    for (const phantom of ["type", "startDate", "endDate"]) {
+      assert.equal(sc[phantom], undefined, `${phantom} is a phantom — nothing in periods.ts sets it`);
+    }
   });
 
   test("period_close confirm=false returns isError without calling API", async () => {

@@ -609,8 +609,23 @@ export class DemoFrihetClient implements IFrihetClient {
   async attendanceClockOut(entryId: string): Promise<Rec> {
     return simulateAction(entryId, { status: "closed", clockOutAt: DEMO_NOW });
   }
+  // Shape mirrors erp-main@568b0d29d timeEntries.ts:608-611 — { period, employeeId,
+  // recordCount, ...OvertimeResult }, where OvertimeResult (overtimeCompute.ts:60-66)
+  // is { dailyOvertime, weeklyOvertime, monthlyTotal, annualOvertimeHours, alerts }.
+  // MINUTES, never hours; no per-employee breakdown and no cost estimate exist.
   async getOvertimeReport(params: { period: string; employeeId?: string }): Promise<Rec> {
-    return { period: params.period, totalRegularHours: 0, totalOvertimeHours: 0, byEmployee: [], generatedAt: DEMO_NOW, ...READ_STAMP };
+    return {
+      period: params.period,
+      employeeId: params.employeeId ?? null,
+      recordCount: 2,
+      dailyOvertime: [{ date: "2026-07-14", minutes: 45, exceedsDaily: false }],
+      weeklyOvertime: [{ weekStart: "2026-07-13", totalMinutes: 2445, overtimeMinutes: 45 }],
+      monthlyTotal: { workedMinutes: 9645, overtimeMinutes: 45, regularMinutes: 9600 },
+      annualOvertimeHours: 0.75,
+      // The engine emits i18n KEYS, never display text (overtimeCompute.ts:36-40).
+      alerts: [],
+      ...READ_STAMP,
+    };
   }
   async listAnomalies(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
     return demoEmptyPage(params);
@@ -622,11 +637,64 @@ export class DemoFrihetClient implements IFrihetClient {
   }
 
   // ---------------------------------------------------------------- Payroll (simulated fiscal)
-  async exportPayroll(params: { format: "a3" | "contasol" | "sage" | "holded" | "siltra"; month: string }): Promise<Rec> {
-    return { format: params.format, month: params.month, fileUrl: "https://app.frihet.io/demo/payroll.txt", filename: "demo-payroll.txt", rowCount: 0, generatedAt: DEMO_NOW, ...FISCAL_STAMP };
+  // erp-main@568b0d29d payroll.ts:195-209 — { month, format, employees, summary }.
+  // The endpoint returns STAGED ROWS as JSON; it produces no file, so there is no
+  // fileUrl/filename/rowCount. Row shape: payroll.ts:180-192.
+  async exportPayroll(params: { format: "a3" | "contasol" | "sage" | "siltra"; month: string }): Promise<Rec> {
+    return {
+      month: params.month,
+      format: params.format,
+      employees: [
+        {
+          id: "demo_emp_001",
+          name: "Ana Demo",
+          nss: null,
+          irpfPct: 15,
+          salaryGrossAnnual: 32000,
+          convenioColectivo: null,
+          categoriaProfesional: null,
+          prorrateoPagasExtras: null,
+          formaPago: null,
+          iban: null,
+        },
+      ],
+      summary: { exportedCount: 1, skippedNotReady: 1, totalGrossAnnual: 32000 },
+      ...FISCAL_STAMP,
+    };
   }
+  // erp-main@568b0d29d payroll.ts:120-160 — { month, employees, summary }. The row
+  // key is `id` (NOT employeeId) and `status` is the EMPLOYMENT status; readiness
+  // lives in `ready` + `missingFields` (payroll.ts:126-136).
   async getPayrollChecklist(params: { month: string }): Promise<Rec> {
-    return { month: params.month, totalEmployees: 0, readyEmployees: 0, missingEmployees: 0, employees: [], generatedAt: DEMO_NOW, ...FISCAL_STAMP };
+    return {
+      month: params.month,
+      employees: [
+        {
+          id: "demo_emp_001",
+          name: "Ana Demo",
+          status: "active",
+          hasPayrollProfile: true,
+          ready: true,
+          missingFields: [],
+          reviewedForMonth: params.month,
+          reviewedThisMonth: true,
+          reviewedAt: DEMO_NOW,
+        },
+        {
+          id: "demo_emp_002",
+          name: "Luis Demo",
+          status: "onLeave",
+          hasPayrollProfile: false,
+          ready: false,
+          missingFields: ["nss", "iban"],
+          reviewedForMonth: null,
+          reviewedThisMonth: false,
+          reviewedAt: null,
+        },
+      ],
+      summary: { total: 2, ready: 1, notReady: 1, reviewedThisMonth: 1 },
+      ...FISCAL_STAMP,
+    };
   }
 
   // ---------------------------------------------------------------- Onboarding
@@ -638,16 +706,76 @@ export class DemoFrihetClient implements IFrihetClient {
   }
 
   // ---------------------------------------------------------------- Permissions
+  // erp-main@568b0d29d permissions.ts:57-73 — { roles, resources, actions,
+  // legacyAliases, matrix, source }. `roles` is RBAC_ROLES, a STRING array
+  // (permissionMatrix.ts:46); the `[{ role, permissions }]` object array this used
+  // to return is a shape the backend has never emitted and the outputSchema now
+  // rejects outright — it made permissions_matrix throw McpError in demo mode.
   async getPermissionsMatrix(): Promise<Rec> {
-    return { roles: [{ role: "owner", permissions: ["*"] }], resources: ["invoices", "expenses", "clients"], generatedAt: DEMO_NOW, ...READ_STAMP };
+    return {
+      roles: ["owner", "admin", "manager", "sales", "accountant", "employee", "viewer"],
+      resources: [
+        "workspace", "invoices", "quotes", "expenses", "clients", "products", "accounting",
+        "people", "payroll", "integrations", "banking", "settings", "audit_log", "billing",
+      ],
+      actions: ["read", "create", "update", "delete", "bulk_delete", "export"],
+      legacyAliases: { editor: "sales" },
+      matrix: {
+        owner: {
+          workspace: ["read", "update", "export"],
+          invoices: ["read", "create", "update", "delete", "bulk_delete", "export"],
+          billing: ["read", "create", "update", "delete", "export"],
+        },
+        viewer: { workspace: ["read", "export"], invoices: ["read", "export"] },
+      },
+      // Verbatim from permissions.ts:69. It is deliberately NOT a claim about
+      // firestore.rules: roleAllows() was deleted 2026-08-04 (#1327) and never
+      // gated an `allow`.
+      source:
+        "hand-maintained snapshot (2026-06-22) of the Frihet RBAC model; " +
+        "not derived from firestore.rules and not verified against it",
+      ...READ_STAMP,
+    };
   }
+  // erp-main@568b0d29d permissions.ts:75-88 — { role, isOwner, resources, scopes }.
+  // A public-API key is workspace-owner scoped, so the owner row comes back.
+  // `resources` is an OBJECT (resource → actions[]); userId/permissions/workspaceId
+  // exist at no level.
   async getMyPermissions(): Promise<Rec> {
-    return { userId: "demo_user_001", role: "owner", permissions: ["*"], workspaceId: "demo_ws_001", ...READ_STAMP };
+    return {
+      role: "owner",
+      isOwner: true,
+      resources: {
+        workspace: ["read", "update", "export"],
+        invoices: ["read", "create", "update", "delete", "bulk_delete", "export"],
+        billing: ["read", "create", "update", "delete", "export"],
+      },
+      scopes: [
+        "billing:create", "billing:delete", "billing:export", "billing:read", "billing:update",
+        "invoices:bulk_delete", "invoices:create", "invoices:delete", "invoices:export",
+        "invoices:read", "invoices:update",
+        "workspace:export", "workspace:read", "workspace:update",
+      ],
+      ...READ_STAMP,
+    };
   }
 
   // ---------------------------------------------------------------- Period close
+  // erp-main@568b0d29d periods.ts:114-127 — { fiscalYear, fiscalYearStart, status,
+  // dateRange, closing }. Periods are keyed by FISCAL YEAR, so `/periods/{id}`
+  // resolves on the year (periods.ts:160-163); there is no `id`, no `type`, and the
+  // dates are nested in dateRange, never flat startDate/endDate.
   async getCurrentPeriod(params?: { periodId?: string }): Promise<Rec> {
-    return { id: params?.periodId ?? "demo_period_2026_07", type: "monthly", status: "open", startDate: "2026-07-01", endDate: "2026-07-31", ...READ_STAMP };
+    const fiscalYear = params?.periodId ?? "2026";
+    return {
+      fiscalYear,
+      fiscalYearStart: "01-01",
+      status: "open",
+      dateRange: { from: `${fiscalYear}-01-01`, to: `${fiscalYear}-12-31` },
+      // null while the period is open (periods.ts:114).
+      closing: null,
+      ...READ_STAMP,
+    };
   }
   async closePeriod(data: { type: "monthly" | "quarterly" }): Promise<Rec> {
     return simulateWrite("demo_period", { type: data.type }, { status: "closed", closedAt: DEMO_NOW });

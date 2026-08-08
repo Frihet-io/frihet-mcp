@@ -85,7 +85,24 @@ export type ParityFailureKind =
   | "schema-rejected-real-response"
   | "unrouted-request"
   | "undocumented-phantom-key"
+  | "unpinned-provenance"
   | "coverage-floor";
+
+/**
+ * Every fixture must name the exact erp-main commit its bodies were derived
+ * from: `erp-main@<40-hex>`.
+ *
+ * WHY THIS IS A GATE AND NOT A CONVENTION. The permissions_matrix fixture
+ * originally asserted `source: "firestore.rules roleAllows()"` and a matrix the
+ * ERP does not publish, because it was transcribed from a local erp-main
+ * checkout that was 5 commits behind origin/main — and the commit it was missing
+ * (568b0d29d) is precisely the one that deleted that claim. A fixture corpus is
+ * ground truth for every future comparison, so a stale one does not merely fail:
+ * it silently re-asserts something the backend already retracted. A bare
+ * `file:line` cannot express which revision it was read at, so it cannot be
+ * audited later; a commit SHA can.
+ */
+const PROVENANCE_COMMIT = /\berp-main@[0-9a-f]{40}\b/;
 
 export interface ParityFailure {
   kind: ParityFailureKind;
@@ -104,6 +121,14 @@ export interface ParityReport {
   uncovered: string[];
   /** Keys real responses carry that the schema does not declare (info only). */
   undeclaredObservedKeys: Record<string, string[]>;
+  /**
+   * Of those, the tools whose schema STRIPS them instead of keeping them —
+   * measured, not assumed: the key survives `safeParse` under `.passthrough()`
+   * and vanishes under a strict object. A stripped key is also published as
+   * `additionalProperties: false` in `tools/list`, so a client that validates
+   * `structuredContent` against the declared outputSchema rejects the response.
+   */
+  strictToolsWithUndeclaredKeys: string[];
   failures: ParityFailure[];
   coverageFloor: number;
 }
@@ -113,7 +138,7 @@ export interface ParityReport {
 /* ------------------------------------------------------------------ */
 
 interface ZodLike {
-  safeParse: (value: unknown) => { success: boolean; error?: unknown };
+  safeParse: (value: unknown) => { success: boolean; data?: unknown; error?: unknown };
   shape?: Record<string, unknown>;
 }
 
@@ -218,11 +243,61 @@ export function loadFixtures(dir = fixturesDir()): ParityFixture[] {
     .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as ParityFixture);
 }
 
+/**
+ * The UNWRAPPED payload a fixture's route returns — i.e. what a correct client
+ * method hands to the tool handler after stripping the `{ data, meta }` envelope.
+ *
+ * Exported so unit suites stop hand-typing mocks. Every mock in
+ * `d4b-hr-payroll-onboarding-tools.test.ts` was typed from the SCHEMA's
+ * assumption rather than the backend's behaviour, which is why that suite stayed
+ * green through the entire outage: it asserted `totalOvertimeHours === 12` and
+ * `rowCount === 12` for fields no response has ever carried, and stubbed
+ * `MOCK_PERMISSIONS_MATRIX` in the exact object-array shape that hard-fails in
+ * demo mode. Sourcing both the gate and the unit suite from ONE corpus means a
+ * fixture correction cannot leave a contradictory mock behind.
+ */
+export function parityPayload(tool: string, route: string, caseIndex = 0): Record<string, unknown> {
+  const fixture = loadFixtures().find((f) => f.tool === tool);
+  if (!fixture) throw new Error(`parityPayload: no backend-parity fixture for tool "${tool}"`);
+  const testCase = fixture.cases[caseIndex];
+  if (!testCase) throw new Error(`parityPayload: ${tool} has no case at index ${caseIndex}`);
+  if (!(route in testCase.routes)) {
+    throw new Error(
+      `parityPayload: ${tool} case "${testCase.name}" has no route "${route}" ` +
+        `(has: ${Object.keys(testCase.routes).join(", ")})`,
+    );
+  }
+  const body = testCase.routes[route] as Record<string, unknown>;
+  // Single-object envelope → the payload is `data`. A list envelope
+  // (`data` is an array) IS the payload, so it is returned whole.
+  const data = body["data"];
+  if (data !== null && typeof data === "object" && !Array.isArray(data)) {
+    return data as Record<string, unknown>;
+  }
+  return body;
+}
+
 export function loadCoverageFloor(dir = fixturesDir()): number {
   const path = join(dir, "_coverage.json");
   if (!existsSync(path)) return 0;
   const parsed = JSON.parse(readFileSync(path, "utf8")) as { minimumCoveredTools?: number };
   return typeof parsed.minimumCoveredTools === "number" ? parsed.minimumCoveredTools : 0;
+}
+
+/**
+ * Committed floor for LEGACY-shaped cases.
+ *
+ * Legacy cases are the ones that matter most — a schema that rejects data still
+ * live in production is the bug, and only a fixture reproducing that old shape
+ * can prove it does not. Tracking the count as its own ratchet means losing
+ * legacy coverage requires editing this number in the same diff, exactly like
+ * losing tool coverage does.
+ */
+export function loadLegacyFloor(dir = fixturesDir()): number {
+  const path = join(dir, "_coverage.json");
+  if (!existsSync(path)) return 0;
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as { minimumLegacyCases?: number };
+  return typeof parsed.minimumLegacyCases === "number" ? parsed.minimumLegacyCases : 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -234,11 +309,14 @@ export interface RunOptions {
   fixtures?: ParityFixture[];
   /** Coverage floor override — used by the gate's own selftest. */
   coverageFloor?: number;
+  /** Legacy-case floor override — used by the gate's own selftest. */
+  legacyFloor?: number;
 }
 
 export async function runSchemaParityGate(opts: RunOptions = {}): Promise<ParityReport> {
   const fixtures = opts.fixtures ?? loadFixtures();
   const coverageFloor = opts.coverageFloor ?? loadCoverageFloor();
+  const legacyFloor = opts.legacyFloor ?? (opts.fixtures ? 0 : loadLegacyFloor());
 
   let routes: Record<string, unknown> = {};
   const unrouted: string[] = [];
@@ -276,6 +354,7 @@ export async function runSchemaParityGate(opts: RunOptions = {}): Promise<Parity
   const covered = new Set<string>();
   const failures: ParityFailure[] = [];
   const undeclaredObservedKeys: Record<string, string[]> = {};
+  const strictTools = new Set<string>();
   let casesChecked = 0;
   let legacyCasesChecked = 0;
 
@@ -300,6 +379,18 @@ export async function runSchemaParityGate(opts: RunOptions = {}): Promise<Parity
         continue;
       }
       covered.add(fixture.tool);
+
+      if (!PROVENANCE_COMMIT.test(fixture.provenance ?? "")) {
+        failures.push({
+          kind: "unpinned-provenance",
+          tool: fixture.tool,
+          detail:
+            `provenance does not name the erp-main commit it was derived from ` +
+            `(expected a literal \`erp-main@<40-hex-sha>\`). Without it nobody can tell ` +
+            `whether these bodies still describe the deployed backend, and a fixture ` +
+            `copied from a stale checkout becomes permanent false ground truth.`,
+        });
+      }
 
       const observed = new Set<string>();
 
@@ -387,6 +478,12 @@ export async function runSchemaParityGate(opts: RunOptions = {}): Promise<Parity
               `outputSchema REJECTS the real backend response (${fixture.provenance}): ` +
               JSON.stringify(parsed.error, null, 2),
           });
+        } else if (parsed.data && typeof parsed.data === "object") {
+          // Behavioural probe, not a zod-internals guess: any key that entered
+          // the parse and did not come out was STRIPPED, which means the schema
+          // is strict and publishes additionalProperties:false.
+          const kept = new Set(Object.keys(parsed.data as Record<string, unknown>));
+          if (Object.keys(structured).some((k) => !kept.has(k))) strictTools.add(fixture.tool);
         }
       }
 
@@ -423,6 +520,17 @@ export async function runSchemaParityGate(opts: RunOptions = {}): Promise<Parity
     });
   }
 
+  if (legacyCasesChecked < legacyFloor) {
+    failures.push({
+      kind: "coverage-floor",
+      tool: "(corpus)",
+      detail:
+        `only ${legacyCasesChecked} LEGACY-shaped cases were replayed, below the committed floor of ${legacyFloor}. ` +
+        `A schema that rejects data still live in production is the bug, and only a legacy fixture proves it does not — ` +
+        `restore it, or lower minimumLegacyCases in _coverage.json in the same diff, with the reason.`,
+    });
+  }
+
   return {
     toolsRegistered: capture.tools.size,
     toolsWithOutputSchema: withSchema.length,
@@ -431,6 +539,9 @@ export async function runSchemaParityGate(opts: RunOptions = {}): Promise<Parity
     legacyCasesChecked,
     uncovered,
     undeclaredObservedKeys,
+    strictToolsWithUndeclaredKeys: [...strictTools]
+      .filter((t) => t in undeclaredObservedKeys)
+      .sort(),
     failures,
     coverageFloor,
   };
@@ -452,9 +563,17 @@ export function formatReport(report: ParityReport): string {
 
   if (Object.keys(report.undeclaredObservedKeys).length > 0) {
     lines.push("");
-    lines.push("INFO — keys the backend sends that the schema does not declare (passthrough absorbs them):");
+    lines.push(
+      "INFO — keys the backend sends that the schema does not declare. " +
+        "Each is tagged with what the schema ACTUALLY does with it:",
+    );
+    lines.push(
+      "  passthrough = kept; strict = STRIPPED by zod AND published as " +
+        "additionalProperties:false, so a validating MCP client rejects the response.",
+    );
     for (const [tool, keys] of Object.entries(report.undeclaredObservedKeys)) {
-      lines.push(`  ${tool}: ${keys.join(", ")}`);
+      const mode = report.strictToolsWithUndeclaredKeys.includes(tool) ? "strict" : "passthrough";
+      lines.push(`  ${tool} [${mode}]: ${keys.join(", ")}`);
     }
   }
 

@@ -240,7 +240,7 @@ export interface IFrihetClient {
   testWebhook(id: string, data?: { eventType?: string }): Promise<Record<string, unknown>>;
 
   // Payroll endpoints (/v1/payroll/prep/*) — D4-B megasprint.
-  exportPayroll(params: { format: "a3" | "contasol" | "sage" | "holded" | "siltra"; month: string }): Promise<Record<string, unknown>>;
+  exportPayroll(params: { format: "a3" | "contasol" | "sage" | "siltra"; month: string }): Promise<Record<string, unknown>>;
   getPayrollChecklist(params: { month: string }): Promise<Record<string, unknown>>;
 
   // Onboarding endpoints (/v1/onboarding/*) — D4-B megasprint.

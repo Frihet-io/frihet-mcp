@@ -1467,7 +1467,7 @@ export class FrihetClient {
   // NOTE: /v1/payroll/prep/* — D4-A parallel deploy. 404 propagates until backend ships.
 
   async exportPayroll(
-    params: { format: "a3" | "contasol" | "sage" | "holded" | "siltra"; month: string },
+    params: { format: "a3" | "contasol" | "sage" | "siltra"; month: string },
   ): Promise<Record<string, unknown>> {
     return this.requestUnwrapped("GET", "/payroll/prep/export", undefined, {
       format: params.format,
@@ -1482,7 +1482,18 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Onboarding
-  // NOTE: /v1/onboarding/* — D4-A parallel deploy. 404 propagates until backend ships.
+  // DEAD TOOLS — /v1/onboarding/* DOES NOT EXIST. Verified 2026-08-08 against
+  // erp-main@568b0d29d: `families/_registry.ts:109-130` registers kitchen, stay,
+  // pos, leaves, tax, time-entries, anomalies, portal, permissions, gl, payroll
+  // and periods — there is no `onboarding` family — and grepping `onboarding` in
+  // `functions/src/publicApi.ts` on that commit returns nothing. Both calls below
+  // 404 today; this is the ONLY route family in this file still waiting on the
+  // backend (permissions and periods have since shipped — see below).
+  //
+  // DELIBERATELY NOT COVERED by the schema-parity corpus: a fixture labelled
+  // "live backend body" for an endpoint that does not exist would be fabricated
+  // ground truth, which poisons every future comparison. Tracked as an issue
+  // instead. Do not add `backend-parity/onboarding_*.json`.
 
   async getOnboardingStatus(): Promise<Record<string, unknown>> {
     return this.request("GET", "/onboarding/status");
@@ -1495,7 +1506,10 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Permissions
-  // NOTE: /v1/permissions/* — D4-A parallel deploy. 404 propagates until backend ships.
+  // /v1/permissions/* HAS shipped — the stale "404 until backend ships" note that
+  // used to sit here was wrong. The family is registered (erp-main@568b0d29d
+  // `families/_registry.ts` `permissions: permissionsFamily`) and both GETs
+  // return 200 from PERMISSION_MATRIX; no Firestore is touched.
 
   async getPermissionsMatrix(): Promise<Record<string, unknown>> {
     return this.requestUnwrapped("GET", "/permissions/matrix");

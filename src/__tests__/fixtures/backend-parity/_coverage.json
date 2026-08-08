@@ -1,5 +1,14 @@
 {
-  "minimumCoveredTools": 11,
-  "why": "Ratchet. The gate fails if fewer tools carry a backend-response fixture than this floor — deleting or renaming a fixture can no longer shrink the scanned surface in silence. Raise it (never lower it) as fixtures are added; lowering it must be a deliberate edit in the same diff as the removal, with the reason in the PR body.",
-  "seededBy": "PR fix/mcp-output-contract-parity — the 11 tools on the surfaces proven broken against the deployed backend (C8, C9, C10, C11, C12, C13, C14, C-EXTRA-envelope, GAP-10)."
+  "minimumCoveredTools": 6,
+  "minimumLegacyCases": 0,
+  "why": "Ratchet. The gate fails if fewer tools carry a backend-response fixture than minimumCoveredTools, or fewer LEGACY-shaped cases than minimumLegacyCases — deleting or renaming a fixture can no longer shrink the scanned surface in silence. Raise them (never lower them) as fixtures are added; lowering either must be a deliberate edit in the same diff as the removal, with the reason recorded here.",
+  "seededBy": "PR fix/mcp-output-contract-parity — the payroll / permissions / periods / overtime surfaces proven broken against the deployed backend (C8, C9, C10, C11, C12, C-EXTRA-envelope, GAP-10).",
+  "loweredFrom": {
+    "minimumCoveredTools": 11,
+    "minimumLegacyCases": 4,
+    "when": "2026-08-08, in the same diff as the removal — not a silent shrink.",
+    "why": "This PR was SPLIT. The client/vendor/webhook half (create_webhook, get_webhook, list_webhooks, get_vendor, list_vendors) changes the emitted JSON Schema of 12 tools inside the frozen OpenAI review descriptor, and docs/openai-review-descriptor-freeze.md § 'Refresh policy' permits a refresh ONLY after the owner approves a new OpenAI app review. Rather than refreeze a fail-closed governance artifact without that approval, the frozen-surface half was held back for a follow-up PR that carries the refresh decision.",
+    "cost": "All FOUR legacy-shaped cases lived in those five fixtures (a legacy STRING address on get_vendor/list_vendors, pre-`name` webhook docs on get_webhook/list_webhooks), so this branch's corpus exercises no legacy shape at all. That is why minimumLegacyCases is 0 here and NOT because legacy coverage stopped mattering. Inventing a legacy case for the payroll/permissions/periods surfaces to keep the number up would be fabricated ground truth — the exact defect this corpus exists to prevent.",
+    "restoredBy": "The held patch restores both numbers to 11 / 4 in the same diff that restores the fixtures."
+  }
 }

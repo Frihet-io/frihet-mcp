@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 
 import { DemoFrihetClient } from "../demo-client.js";
 import * as fixtures from "../demo-fixtures.js";
+import { captureRegisteredTools } from "./schema-parity.gate.js";
 
 describe("DemoFrihetClient — reads", () => {
   test("listInvoices returns a non-empty stamped PaginatedResponse", async () => {
@@ -159,5 +160,142 @@ describe("demo fixtures — PII safety", () => {
     assert.equal(fixtures.DEMO_TEST_IBAN, "ES9121000418450200051332");
     const account = fixtures.demoBankAccounts[0]!;
     assert.equal(account.iban, fixtures.DEMO_TEST_IBAN);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Demo ⇄ outputSchema parity                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * THE REGRESSION THIS EXISTS TO CATCH.
+ *
+ * `demo-client.ts` is a second, hand-written implementation of the same wire
+ * contract the real `FrihetClient` speaks — and NOTHING connected the two. When
+ * `permissionsMatrixOutput` was corrected to the backend's real payload
+ * (`roles: string[]`), demo-client kept returning `roles: [{ role, permissions }]`.
+ * The MCP SDK validates `structuredContent` against the declared `outputSchema`
+ * before it leaves the server, so `permissions_matrix` began throwing
+ * `McpError: InvalidParams` for every demo user — on the zero-install onboarding
+ * surface, the first thing a new user touches. The schema-parity gate did not see
+ * it because that gate drives the REAL client against HTTP fixtures.
+ *
+ * So: drive every registered tool through `DemoFrihetClient` and validate the
+ * result against that tool's own `outputSchema`.
+ *
+ * WHY A BASELINE INSTEAD OF A BLANKET ASSERT. 27 tools already fail, all of the
+ * same pre-existing kind: generic demo stubs (`findOrStub` returns `{ id }`) that
+ * omit fields the schema requires. Fixing those is a demo-fixtures change, not a
+ * contract change, and a gate that ships red gets switched off. The baseline is
+ * therefore EXPLICIT and NAMED: a tool not listed here must pass. Removing a name
+ * (fixing a stub) needs no ceremony; ADDING one is a deliberate, reviewable act in
+ * the same diff as whatever broke it.
+ */
+const DEMO_PARITY_KNOWN_FAILURES = new Set([
+  // Generic `findOrStub` / `simulateWrite` stubs that omit required fields.
+  "get_expense", "update_expense", "get_client", "update_client",
+  "get_product", "update_product", "get_vendor", "update_vendor",
+  "get_webhook", "update_webhook", "get_deposit", "update_deposit",
+  "get_deposit", "get_time_entry", "update_time_entry",
+  "get_reservation", "sync_channel", "refund_sale",
+  "categorize_transaction", "match_transaction_to_invoice",
+  "gestoria_message_send",
+  // Fiscal/e-invoice simulations that intentionally return a notice, not a payload.
+  "einvoice_export", "face_submit", "face_status",
+  "ticketbai_submit", "ticketbai_status", "verifactu_resubmit",
+  // Deliberately unavailable in demo mode (returns isError by design).
+  "ksef_submit",
+]);
+
+/** Tools whose required inputs cannot be synthesized generically (nested objects). */
+const DEMO_PARITY_UNSYNTHESIZABLE = new Set([
+  "create_invoice", "create_quote", "invite_team_member", "frihet_bank_rule_create",
+]);
+
+const ARG_CANDIDATES: unknown[] = [
+  "2026-07", "2026", "2026-07-15", "demo_001", "https://example.com/hook", "a3",
+  1, 10, true, [], ["invoice.created"], {}, "test", "2026-07-15T10:00:00Z",
+];
+
+interface ZodField {
+  safeParse: (v: unknown) => { success: boolean; error?: unknown };
+  options?: unknown;
+  def?: { entries?: unknown };
+}
+
+/** First value that satisfies a required input field, or undefined if none does. */
+function synthesizeArg(field: ZodField): unknown {
+  const opts = field.options ?? field.def?.entries;
+  if (opts) {
+    const first = Array.isArray(opts) ? opts[0] : Object.values(opts as object)[0];
+    if (field.safeParse(first).success) return first;
+  }
+  for (const candidate of ARG_CANDIDATES) {
+    if (field.safeParse(candidate).success) return candidate;
+  }
+  return undefined;
+}
+
+describe("DemoFrihetClient ⇄ declared outputSchemas", () => {
+  test("every tool outside the named baseline validates against its own outputSchema", async () => {
+    const tools = captureRegisteredTools(new DemoFrihetClient());
+    const unexpected: string[] = [];
+    const nowPassing: string[] = [];
+    let checked = 0;
+
+    for (const [name, entry] of tools) {
+      const schema = entry.config.outputSchema as ZodField | undefined;
+      if (typeof schema?.safeParse !== "function") continue;
+      if (DEMO_PARITY_UNSYNTHESIZABLE.has(name)) continue;
+
+      const shape = (entry.config.inputSchema ?? {}) as Record<string, ZodField>;
+      const args: Record<string, unknown> = {};
+      let synthesizable = true;
+      for (const [key, field] of Object.entries(shape)) {
+        if (typeof field?.safeParse !== "function") continue;
+        if (field.safeParse(undefined).success) continue; // optional
+        const value = synthesizeArg(field);
+        if (value === undefined) { synthesizable = false; break; }
+        args[key] = value;
+      }
+      if (!synthesizable) continue;
+
+      checked += 1;
+      let failed: string | undefined;
+      try {
+        const result = await entry.handler(args);
+        if (result.isError) {
+          failed = `isError: ${(result.content?.[0]?.text ?? "").slice(0, 120)}`;
+        } else if (result.structuredContent) {
+          const parsed = schema.safeParse(result.structuredContent);
+          if (!parsed.success) failed = JSON.stringify(parsed.error).slice(0, 300);
+        }
+      } catch (error) {
+        failed = `threw: ${(error as Error).message}`;
+      }
+
+      if (failed && !DEMO_PARITY_KNOWN_FAILURES.has(name)) {
+        unexpected.push(`${name} → ${failed}`);
+      }
+      if (!failed && DEMO_PARITY_KNOWN_FAILURES.has(name)) nowPassing.push(name);
+    }
+
+    // Name the scan scope: a gate that asserts an invariant over a silent subset
+    // is a green that lies.
+    assert.ok(checked > 100, `demo parity scanned only ${checked} tools — expected >100`);
+    assert.deepEqual(
+      unexpected,
+      [],
+      `demo-client returns a shape its tool's outputSchema REJECTS. The MCP SDK ` +
+        `validates structuredContent, so each of these throws McpError for every ` +
+        `demo user. Fix demo-client.ts to match the backend — never widen the schema.`,
+    );
+    assert.deepEqual(
+      nowPassing,
+      [],
+      `these tools now PASS demo parity but are still listed in ` +
+        `DEMO_PARITY_KNOWN_FAILURES — delete them from the baseline so it cannot rot ` +
+        `into cover for a future regression.`,
+    );
   });
 });

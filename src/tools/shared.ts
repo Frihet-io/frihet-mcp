@@ -359,40 +359,6 @@ export function paginatedOutput<T extends z.ZodObject>(
   });
 }
 
-/**
- * `{ data, total }`-only list envelope — for the ONE backend list endpoint that
- * does not emit `limit`/`offset`.
- *
- * GET /v1/webhooks is hand-rolled inline (erp-main publicApi.ts:5100-5116) and
- * is the only list route that bypasses the generic builder at publicApi.ts:7560
- * (`return { data, total, limit, offset, nextCursor };`). Its response is
- * literally `{ data, total, meta }`, which the shared `paginatedOutput()`
- * envelope rejects on two required keys — so list_webhooks failed output
- * validation on every call. The canonical OpenAPI spec generated from the
- * DEPLOYED function agrees with the backend (`{ data, total }`), so the MCP
- * schema was the wrong side.
- *
- * DO NOT reuse this for any other list. `paginatedOutput` stays strict on
- * purpose: ~30 list tools whose backends DO send all four keys rely on it to
- * catch a real API regression. This relaxation is scoped to the one endpoint
- * that is genuinely different, and keeps `limit`/`offset` OPTIONAL rather than
- * absent so it keeps validating the day the backend routes webhooks through the
- * generic builder.
- *
- * The right long-term fix is in erp-main (parse limit/offset from req.query and
- * slice, using the `parseNonNegativeInt` helper already used at publicApi.ts:4432),
- * which would also fix the phantom pagination on the input side.
- */
-export function unpaginatedListOutput<T extends z.ZodObject>(itemSchema: T) {
-  return z.object({
-    data: z.array(itemSchema),
-    total: z.number(),
-    limit: z.number().optional(),
-    offset: z.number().optional(),
-    nextCursor: z.string().optional(),
-  });
-}
-
 /** Schema for delete operation results. */
 export const deleteResultOutput = z.object({
   success: z.boolean(),
@@ -451,41 +417,13 @@ export const expenseItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/**
- * Address as the API ACTUALLY returns it — `string | StructuredAddress`.
- *
- * The backend's own write contract is a union (erp-main publicApi.ts:873
- * `address: z.union([z.string().max(10000), addressSchema]).optional()`) and the
- * domain type says so out loud (erp-main apps/erp/types.ts:315-316
- * `/** Address can be legacy string or structured object *\/ address: string |
- * StructuredAddress`). Reads return the stored document verbatim — there is no
- * read-path coercion (normalizeAddressFields runs only on create/update, and
- * normalizeAddress bails on non-objects) — so a plain string reaches the wire.
- *
- * Declaring object-only made ONE legacy vendor poison an entire list_vendors
- * call (the row schema sits inside `z.array()`), and `{ projectable: true }`
- * did not save it: `.partial()` relaxes required-ness, never the value TYPE.
- *
- * Canonical stored keys are `zip`/`province` (erp-main publicApi.ts:940-951
- * normalizeAddress maps postalCode→zip and state→province BEFORE storage); the
- * v1 aliases are kept because pre-normalization documents still carry them, and
- * `.passthrough()` keeps any other stored key instead of silently stripping it.
- */
-const addressOutputSchema = z.union([
-  z.string(),
-  z.object({
-    street: z.string().optional(),
-    city: z.string().optional(),
-    // Canonical (post-normalizeAddress) keys.
-    province: z.string().optional(),
-    zip: z.string().optional(),
-    country: z.string().optional(),
-    countryCode: z.string().optional(),
-    // API v1 aliases — still present on documents written before normalization.
-    state: z.string().optional(),
-    postalCode: z.string().optional(),
-  }).passthrough(),
-]).optional();
+const addressOutputSchema = z.object({
+  street: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
+}).optional();
 
 export const clientItemOutput = z.object({
   id: z.string(),
@@ -532,23 +470,11 @@ export const vendorItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/**
- * Webhook row as `sanitizeWebhookDoc` emits it (erp-main
- * functions/src/webhookSanitize.ts:22-29): the stored document minus `secret`,
- * plus a derived `hasSecret`. The stored key is `status`, never `active` —
- * `active` was a phantom no response has ever carried. `secret` stays because
- * POST /v1/webhooks echoes it EXACTLY once (erp-main publicApi.ts:5179-5188);
- * read endpoints never return it.
- */
 export const webhookItemOutput = z.object({
   id: z.string(),
   url: z.string(),
   events: z.array(z.string()),
-  /** Absent on documents created before the field existed. */
-  name: z.string().optional(),
-  status: z.string().optional().describe("active | inactive | paused"),
-  hasSecret: z.boolean().optional(),
-  /** One-time echo on create only — never returned by a read. */
+  active: z.boolean().optional(),
   secret: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),

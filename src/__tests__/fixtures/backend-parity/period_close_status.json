@@ -1,6 +1,6 @@
 {
   "tool": "period_close_status",
-  "provenance": "erp-main/functions/src/publicApi/families/periods.ts:114-127 getPeriod → { statusCode: 200, result: { data: { fiscalYear, fiscalYearStart, status, dateRange, closing } } }. The payload has NO `id` key — periods are keyed by fiscalYear (periods.ts:160-163 resolves /periods/current and /periods/{id} on it). Dates live inside dateRange.from/.to (periods.ts:78-86), never as flat startDate/endDate. The family IS registered (families/_registry.ts:128 `periods: periodsFamily`), so this 200 path is live. Envelope: publicApi.ts:2508-2516 → { data: {...}, meta }.",
+  "provenance": "erp-main@568b0d29d0dc28fc8b291e9e7f71a9556c005d0d functions/src/publicApi/families/periods.ts:114-127 getPeriod → { statusCode: 200, result: { data: { fiscalYear, fiscalYearStart, status, dateRange, closing } } }. The payload has NO `id` key — periods are keyed by fiscalYear (periods.ts:160-163 resolves /periods/current and /periods/{id} on it). Dates live inside dateRange.from/.to (periods.ts:78-86), never as flat startDate/endDate. The family IS registered (families/_registry.ts:128 `periods: periodsFamily`), so this 200 path is live. Envelope: publicApi.ts:2508-2516 → { data: {...}, meta }.",
   "declaredKeysNotInFixtures": {
     "id": "The backend never emits `id` — periods are keyed by fiscalYear. Kept declared-but-optional ONLY so period_close/period_reopen, which share this schema and today return 501 (periods.ts:138-147), are not silently weakened when they ship. Every other never-emitted key (type, startDate, endDate, closedAt, closedBy, reopenedAt, reopenReason, createdAt, updatedAt) was deleted from the schema rather than parked here."
   },
@@ -14,23 +14,34 @@
             "fiscalYear": "2026",
             "fiscalYearStart": "01-01",
             "status": "open",
-            "dateRange": { "from": "2026-01-01", "to": "2026-12-31" },
+            "dateRange": {
+              "from": "2026-01-01",
+              "to": "2026-12-31"
+            },
             "closing": null
           },
-          "meta": { "requestId": "req_parity_20", "timestamp": "2026-08-08T10:00:19.000Z" }
+          "meta": {
+            "requestId": "req_parity_20",
+            "timestamp": "2026-08-08T10:00:19.000Z"
+          }
         }
       }
     },
     {
       "name": "live backend body — CLOSED fiscal year fetched by id",
-      "args": { "periodId": "2025" },
+      "args": {
+        "periodId": "2025"
+      },
       "routes": {
         "GET /periods/2025": {
           "data": {
             "fiscalYear": "2025",
             "fiscalYearStart": "01-01",
             "status": "closed",
-            "dateRange": { "from": "2025-01-01", "to": "2025-12-31" },
+            "dateRange": {
+              "from": "2025-01-01",
+              "to": "2025-12-31"
+            },
             "closing": {
               "status": "closed",
               "closedAt": "2026-01-31T12:00:00.000Z",
@@ -40,7 +51,10 @@
               "journalEntries": 412
             }
           },
-          "meta": { "requestId": "req_parity_21", "timestamp": "2026-08-08T10:00:20.000Z" }
+          "meta": {
+            "requestId": "req_parity_21",
+            "timestamp": "2026-08-08T10:00:20.000Z"
+          }
         }
       }
     }

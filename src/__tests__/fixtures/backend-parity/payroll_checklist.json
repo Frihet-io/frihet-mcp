@@ -1,11 +1,13 @@
 {
   "tool": "payroll_checklist",
-  "provenance": "erp-main/functions/src/publicApi/families/payroll.ts:120-160 getChecklist → { statusCode: 200, result: { data: { month, employees, summary } } }; rows are { id, name, status, hasPayrollProfile, ready, missingFields, reviewedForMonth, reviewedThisMonth, reviewedAt } (payroll.ts:126-136 — the key is `id`, NOT `employeeId`, and `status` is the EMPLOYMENT status, `doc.status ?? 'active'`). The family mount spreads the result at publicApi.ts:2508-2516, so the wire body is { data: {...}, meta }.",
+  "provenance": "erp-main@568b0d29d0dc28fc8b291e9e7f71a9556c005d0d functions/src/publicApi/families/payroll.ts:120-160 getChecklist → { statusCode: 200, result: { data: { month, employees, summary } } }; rows are { id, name, status, hasPayrollProfile, ready, missingFields, reviewedForMonth, reviewedThisMonth, reviewedAt } (payroll.ts:126-136 — the key is `id`, NOT `employeeId`, and `status` is the EMPLOYMENT status, `doc.status ?? 'active'`). The family mount spreads the result at publicApi.ts:2508-2516, so the wire body is { data: {...}, meta }.",
   "declaredKeysNotInFixtures": {},
   "cases": [
     {
       "name": "live backend body — mixed ready / not-ready employees",
-      "args": { "month": "2026-08" },
+      "args": {
+        "month": "2026-08"
+      },
       "routes": {
         "GET /payroll/prep/employees": {
           "data": {
@@ -28,29 +30,51 @@
                 "status": "onLeave",
                 "hasPayrollProfile": false,
                 "ready": false,
-                "missingFields": ["nss", "iban", "salaryGrossAnnual"],
+                "missingFields": [
+                  "nss",
+                  "iban",
+                  "salaryGrossAnnual"
+                ],
                 "reviewedForMonth": null,
                 "reviewedThisMonth": false,
                 "reviewedAt": null
               }
             ],
-            "summary": { "total": 2, "ready": 1, "notReady": 1, "reviewedThisMonth": 1 }
+            "summary": {
+              "total": 2,
+              "ready": 1,
+              "notReady": 1,
+              "reviewedThisMonth": 1
+            }
           },
-          "meta": { "requestId": "req_parity_14", "timestamp": "2026-08-08T10:00:13.000Z" }
+          "meta": {
+            "requestId": "req_parity_14",
+            "timestamp": "2026-08-08T10:00:13.000Z"
+          }
         }
       }
     },
     {
       "name": "workspace with no employees",
-      "args": { "month": "2026-07" },
+      "args": {
+        "month": "2026-07"
+      },
       "routes": {
         "GET /payroll/prep/employees": {
           "data": {
             "month": "2026-07",
             "employees": [],
-            "summary": { "total": 0, "ready": 0, "notReady": 0, "reviewedThisMonth": 0 }
+            "summary": {
+              "total": 0,
+              "ready": 0,
+              "notReady": 0,
+              "reviewedThisMonth": 0
+            }
           },
-          "meta": { "requestId": "req_parity_15", "timestamp": "2026-08-08T10:00:14.000Z" }
+          "meta": {
+            "requestId": "req_parity_15",
+            "timestamp": "2026-08-08T10:00:14.000Z"
+          }
         }
       }
     }

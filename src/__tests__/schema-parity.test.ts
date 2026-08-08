@@ -25,6 +25,7 @@ import {
   formatReport,
   loadFixtures,
   loadCoverageFloor,
+  loadLegacyFloor,
   type ParityFixture,
 } from "./schema-parity.gate.js";
 
@@ -61,11 +62,21 @@ describe("schema parity — real backend responses vs declared MCP outputSchemas
     assert.equal(report.toolsCovered, loadFixtures().length, "one fixture file per covered tool");
   });
 
-  test("at least one LEGACY-shaped fixture is exercised", async () => {
+  test("legacy-shaped coverage meets its committed floor", async () => {
+    // Was `> 0`. It is now the committed number, because this branch legitimately
+    // has ZERO: all four legacy cases lived in the client/vendor/webhook fixtures
+    // held back for the OpenAI-descriptor decision (see _coverage.json
+    // `loweredFrom`). A hardcoded `> 0` would have forced either deleting the
+    // assertion or inventing a legacy case for a surface that has none — and an
+    // invented fixture is fabricated ground truth, the exact defect this corpus
+    // exists to prevent. Tracking the number instead makes the loss visible and
+    // makes restoring it a one-line diff.
     const report = await runSchemaParityGate();
+    const floor = loadLegacyFloor();
     assert.ok(
-      report.legacyCasesChecked > 0,
-      "a schema that rejects live legacy production data is the bug — keep legacy fixtures",
+      report.legacyCasesChecked >= floor,
+      `legacy coverage ${report.legacyCasesChecked} is below the committed floor ${floor} — ` +
+        `a schema that rejects live legacy production data is the bug, so keep legacy fixtures`,
     );
   });
 });
@@ -73,7 +84,10 @@ describe("schema parity — real backend responses vs declared MCP outputSchemas
 describe("schema parity gate SELFTEST — injected drift must turn it red", () => {
   const vendorFixture = (): ParityFixture => ({
     tool: "get_vendor",
-    provenance: "selftest",
+    // Selftest fixtures must satisfy the same provenance rule as the corpus,
+    // otherwise every selftest case would also trip `unpinned-provenance` and the
+    // assertions below could not tell the injected defect from the missing SHA.
+    provenance: "selftest erp-main@0000000000000000000000000000000000000000",
     cases: [
       {
         name: "injected",
@@ -140,8 +154,30 @@ describe("schema parity gate SELFTEST — injected drift must turn it red", () =
     );
   });
 
+  test("a fixture that does not name the erp-main commit it came from is reported", async () => {
+    // The permissions_matrix fixture originally asserted `source: "firestore.rules
+    // roleAllows()"` — a claim erp-main had already DELETED — because it was
+    // transcribed from a local checkout 5 commits behind origin/main. Ground truth
+    // that cannot state its revision cannot be audited, so it is a gate failure.
+    const unpinned = vendorFixture();
+    unpinned.provenance = "erp-main/functions/src/publicApi.ts:7030 — no commit named";
+    const report = await runSchemaParityGate({ fixtures: [unpinned], coverageFloor: 0 });
+    const kinds = report.failures.map((f) => f.kind);
+    assert.ok(kinds.includes("unpinned-provenance"), formatReport(report));
+  });
+
+  test("every committed fixture names its erp-main commit", async () => {
+    for (const fixture of loadFixtures()) {
+      assert.match(
+        fixture.provenance,
+        /\berp-main@[0-9a-f]{40}\b/,
+        `${fixture.tool} fixture does not pin the erp-main commit it was derived from`,
+      );
+    }
+  });
+
   test("a fixture naming an unregistered tool is reported", async () => {
-    const ghost: ParityFixture = { tool: "no_such_tool", provenance: "selftest", cases: [] };
+    const ghost: ParityFixture = { tool: "no_such_tool", provenance: "selftest erp-main@0000000000000000000000000000000000000000", cases: [] };
     const report = await runSchemaParityGate({ fixtures: [ghost], coverageFloor: 0 });
     assert.equal(report.failures[0]!.kind, "unknown-tool");
   });

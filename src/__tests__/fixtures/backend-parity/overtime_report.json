@@ -1,11 +1,13 @@
 {
   "tool": "overtime_report",
-  "provenance": "erp-main/functions/src/publicApi/families/timeEntries.ts:608-611 overtimeReport → { statusCode: 200, result: { data: { period, employeeId, recordCount, ...calculateOvertime(...) } } }. The spread is OvertimeResult (functions/src/publicApi/families/overtimeCompute.ts:60-66) = { dailyOvertime, weeklyOvertime, monthlyTotal, annualOvertimeHours, alerts }. There is NO cost field anywhere in the product (`grep -rn estimatedCostEur` in erp-main = 0 hits) and no per-employee aggregate. Period is validated by /^\\d{4}(-\\d{2})?$/ at timeEntries.ts:583-585 — 'YYYY-QN' 400s. Envelope: publicApi.ts:2508-2516 → { data: {...}, meta }.",
+  "provenance": "erp-main@568b0d29d0dc28fc8b291e9e7f71a9556c005d0d functions/src/publicApi/families/timeEntries.ts:608-611 overtimeReport → { statusCode: 200, result: { data: { period, employeeId, recordCount, ...calculateOvertime(...) } } }. The spread is OvertimeResult (functions/src/publicApi/families/overtimeCompute.ts:60-66) = { dailyOvertime, weeklyOvertime, monthlyTotal, annualOvertimeHours, alerts }. There is NO cost field anywhere in the product (`grep -rn estimatedCostEur` in erp-main = 0 hits) and no per-employee aggregate. Period is validated by /^\\d{4}(-\\d{2})?$/ at timeEntries.ts:583-585 — 'YYYY-QN' 400s. Envelope: publicApi.ts:2508-2516 → { data: {...}, meta }.",
   "declaredKeysNotInFixtures": {},
   "cases": [
     {
       "name": "live backend body — monthly period with a daily-limit alert",
-      "args": { "period": "2026-07" },
+      "args": {
+        "period": "2026-07"
+      },
       "routes": {
         "GET /time-entries/overtime": {
           "data": {
@@ -13,23 +15,52 @@
             "employeeId": null,
             "recordCount": 21,
             "dailyOvertime": [
-              { "date": "2026-07-14", "minutes": 95, "exceedsDaily": true },
-              { "date": "2026-07-15", "minutes": 30, "exceedsDaily": false }
+              {
+                "date": "2026-07-14",
+                "minutes": 95,
+                "exceedsDaily": true
+              },
+              {
+                "date": "2026-07-15",
+                "minutes": 30,
+                "exceedsDaily": false
+              }
             ],
-            "weeklyOvertime": [{ "weekStart": "2026-07-13", "totalMinutes": 2525, "overtimeMinutes": 125 }],
-            "monthlyTotal": { "workedMinutes": 10125, "overtimeMinutes": 125, "regularMinutes": 10000 },
+            "weeklyOvertime": [
+              {
+                "weekStart": "2026-07-13",
+                "totalMinutes": 2525,
+                "overtimeMinutes": 125
+              }
+            ],
+            "monthlyTotal": {
+              "workedMinutes": 10125,
+              "overtimeMinutes": 125,
+              "regularMinutes": 10000
+            },
             "annualOvertimeHours": 12.5,
             "alerts": [
-              { "type": "daily_exceeded", "severity": "critical", "message": "overtime.alert.dailyExceeded", "date": "2026-07-14" }
+              {
+                "type": "daily_exceeded",
+                "severity": "critical",
+                "message": "overtime.alert.dailyExceeded",
+                "date": "2026-07-14"
+              }
             ]
           },
-          "meta": { "requestId": "req_parity_18", "timestamp": "2026-08-08T10:00:17.000Z" }
+          "meta": {
+            "requestId": "req_parity_18",
+            "timestamp": "2026-08-08T10:00:17.000Z"
+          }
         }
       }
     },
     {
       "name": "annual period filtered by employee — no overtime at all",
-      "args": { "period": "2026", "employeeId": "emp_1" },
+      "args": {
+        "period": "2026",
+        "employeeId": "emp_1"
+      },
       "routes": {
         "GET /time-entries/overtime": {
           "data": {
@@ -38,11 +69,18 @@
             "recordCount": 0,
             "dailyOvertime": [],
             "weeklyOvertime": [],
-            "monthlyTotal": { "workedMinutes": 0, "overtimeMinutes": 0, "regularMinutes": 0 },
+            "monthlyTotal": {
+              "workedMinutes": 0,
+              "overtimeMinutes": 0,
+              "regularMinutes": 0
+            },
             "annualOvertimeHours": 0,
             "alerts": []
           },
-          "meta": { "requestId": "req_parity_19", "timestamp": "2026-08-08T10:00:18.000Z" }
+          "meta": {
+            "requestId": "req_parity_19",
+            "timestamp": "2026-08-08T10:00:18.000Z"
+          }
         }
       }
     }

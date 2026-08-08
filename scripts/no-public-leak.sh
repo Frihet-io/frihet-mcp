@@ -10,9 +10,16 @@
 # This gate makes that class of leak fail CI instead of shipping silently.
 #
 # Scope: marketing/strategy PROSE surfaces (markdown + Worker descriptions),
-# NOT functional interop code. The payroll export format value "holded" (an
-# enum alongside a3/contasol/sage/siltra in src/) is lawful referential/interop
-# use and is intentionally NOT scanned here.
+# PLUS the restricted-brand blocklist over src/ and the published type
+# declarations (check 6).
+#
+# NOTE — this exclusion is RETIRED (2026-08-08). It used to read: 'the payroll
+# export format value "holded" ... is lawful referential/interop use and is
+# intentionally NOT scanned here'. The interop premise died: the backend's
+# EXPORT_FORMATS is ['a3','contasol','sage','siltra'] (erp-main@568b0d29d
+# functions/src/publicApi/families/payroll.ts:47) and anything else 400s at
+# payroll.ts:160-166. So the literal was not interop — it advertised a format
+# the platform rejects, AND shipped the brand to npm inside dist/*.d.ts.
 #
 # Exit 0 = clean. Exit 1 = leak found.
 # =============================================================================
@@ -52,6 +59,29 @@ fi
 # 5. Strategy/secret-named files must never be tracked (recurrence guard).
 if git ls-files | grep -inE "strategy|roadmap|secrets?\.md$|decision_spec" ; then
   note "Strategy/secrets-named file tracked in public repo — keep these in a private repo."
+fi
+
+# 6. Restricted brands must not reach SOURCE or the PUBLISHED type declarations.
+#
+#    WHY THIS CHECK EXISTS AND WHY IT IS NOT NARROWER: erp-main's
+#    scripts/gate-brand-blocklist.ts records that the "holded" ban has regressed
+#    THREE times, each on a surface the previous guard did not watch — the third
+#    being `EXPORT_FORMATS` in functions/src/publicApi/families/payroll.ts, the
+#    very array this repo mirrors. Here the brand survived in three TypeScript
+#    unions (client.ts, client-interface.ts, demo-client.ts) after being removed
+#    from the tool enum, and package.json#files publishes `dist` (excluding only
+#    __tests__ and *.map), so `npm i @frihet/mcp-server` shipped it in
+#    dist/client.d.ts, dist/client-interface.d.ts and dist/demo-client.d.ts.
+#    Check 1 above only ever scanned workers/.
+#
+#    dist/ is scanned when present so a stale build cannot ship what src/ no
+#    longer contains; it is skipped when absent (fresh clone, pre-build CI).
+RESTRICTED_BRANDS="holded"
+if grep -rinE "$RESTRICTED_BRANDS" src/ 2>/dev/null; then
+  note "Restricted brand found in src/ — it reaches npm through dist/*.d.ts. Remove the literal."
+fi
+if [ -d dist ] && grep -rinE "$RESTRICTED_BRANDS" dist --include="*.d.ts" --include="*.js" 2>/dev/null; then
+  note "Restricted brand found in a BUILT artifact under dist/ — rebuild after removing it from src/."
 fi
 
 if [ "$fail" -eq 0 ]; then

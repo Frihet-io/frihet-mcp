@@ -35,11 +35,23 @@ jobs:
       - name: Analytics tripwire (no unregistered emitters)
         run: bash scripts/analytics-tripwire.sh
 
+      # `id` is load-bearing: the gates below key their `if:` on this step's
+      # outcome, so a compile error skips them instead of reporting a misleading
+      # gate failure that is really just a broken build.
       - name: Build
+        id: build
         run: npm run build
 
-      - name: Test
-        run: npm test
+      # ORDER MATTERS, AND IT IS DELIBERATE. A step that exits non-zero aborts the
+      # job, so every gate placed after `npm test` only ever runs when the suite is
+      # already green — i.e. exactly never on the PRs that need it most. The schema
+      # parity gate was originally added AFTER Test and therefore never executed a
+      # single time on the branch that introduced it. Independent gates now run
+      # BEFORE the suite, and each carries `if: always()` so one red gate cannot
+      # mask the verdict of the others: a PR gets the FULL list of what is broken
+      # in one run instead of discovering it one CI round-trip at a time.
+      #
+      # Do not "simplify" this by dropping the `if: always()` guards.
 
       # Output-contract drift gate: replays checked-in REAL backend response
       # bodies through a real FrihetClient + the real tool handlers and validates
@@ -47,10 +59,16 @@ jobs:
       # (node:http on 127.0.0.1) — no credentials, no network, PR-blocking.
       # Its PASS line names how many tools it scanned and how many are UNCOVERED.
       - name: Schema parity (MCP outputSchemas vs real backend responses)
+        if: always() && steps.build.outcome == 'success'
         run: node scripts/schema-parity-gate.mjs
 
       - name: OpenAI review descriptor freeze
+        if: always() && steps.build.outcome == 'success'
         run: npm run gate:openai-review-descriptor
+
+      - name: Test
+        if: always() && steps.build.outcome == 'success'
+        run: npm test
 
       # Version/tool-count drift gate. Scoped to this repo: sister repos
       # (Frihet-ERP/Saas/docs) aren't checked out in CI, so we only assert the
