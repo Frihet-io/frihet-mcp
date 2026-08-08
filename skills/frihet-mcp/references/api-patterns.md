@@ -12,7 +12,7 @@ Technical reference for working with the Frihet MCP server tools. Covers rate li
 | `get_invoice` | `id` (required) | Returns full invoice with line items |
 | `create_invoice` | `clientId`, `items[]`, `notes`, `dueDate`, `series` | Items: `{productId?, description, quantity, price, taxRate}` |
 | `update_invoice` | `id` (required), partial fields | Cannot update if status is `paid` or `cancelled` |
-| `delete_invoice` | `id` (required) | Only `draft` invoices can be deleted. Others must be cancelled. |
+| `delete_invoice` | `id` (required), `confirm` (required, must be `true`) | Only a `draft` invoice is destroyed. A sent/paid one is CANCELLED (`status=cancelled`), not deleted — VeriFactu forbids breaking the hash chain. Response reports `outcome`. |
 | `search_invoices` | `query`, `offset`, `limit` | Searches across number, client name, notes |
 
 ### Expenses (5 tools)
@@ -53,7 +53,7 @@ Technical reference for working with the Frihet MCP server tools. Covers rate li
 | `get_quote` | `id` (required) | |
 | `create_quote` | `clientId`, `items[]`, `notes`, `validUntil` | Same items format as invoices |
 | `update_quote` | `id` (required), partial fields | |
-| `delete_quote` | `id` (required) | Only draft quotes |
+| `delete_quote` | `id` (required), `confirm` (required, must be `true`) | Only a draft quote is destroyed. A sent/accepted one is CANCELLED (`status=cancelled`), not deleted. Response reports `outcome`. |
 
 ### Webhooks (5 tools)
 

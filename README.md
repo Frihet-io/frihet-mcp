@@ -259,9 +259,9 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_invoice` | Get full invoice details by ID |
 | `create_invoice` | Create a new invoice with line items |
 | `update_invoice` | Update any invoice field |
-| `delete_invoice` | Permanently delete an invoice |
+| `delete_invoice` | Delete a draft invoice; a sent/paid one is cancelled, not destroyed (`confirm=true` required) |
 | `search_invoices` | Find invoices by client name, date, or status |
-| `send_invoice` | Email invoice to client (PDF attachment) |
+| `send_invoice` | Email invoice to client (PDF attachment) — reaches a third party, `confirm=true` required |
 | `mark_invoice_paid` | Mark an invoice as paid with optional payment date |
 | `get_invoice_pdf` | Get a download URL for the invoice PDF |
 | `get_invoice_einvoice` | Get the e-invoice XML for a given invoice ID |
@@ -329,7 +329,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_quote` | Get quote details |
 | `create_quote` | Draft a new quote |
 | `update_quote` | Modify a quote |
-| `delete_quote` | Delete a quote |
+| `delete_quote` | Delete a draft quote; a sent/accepted one is cancelled, not destroyed (`confirm=true` required) |
 | `send_quote` | Email quote to client for acceptance |
 
 ### Webhooks (6)

@@ -261,6 +261,33 @@ function firstSentence(desc: string): string {
   return sentence.length > 160 ? sentence.slice(0, 157).trimEnd() + "…" : sentence;
 }
 
+/**
+ * Does this tool declare `confirm` as a REQUIRED input?
+ *
+ * Duck-typed against the zod shape (`safeParse(undefined)` fails ⇒ required) so
+ * this module needs no zod import — zod is a PEER dependency here and the
+ * runtime surface stays dependency-free.
+ *
+ * ── Why this exists ──────────────────────────────────────────────────
+ * `firstSentence` keeps only the opening sentence, so a confirm requirement
+ * stated in sentence two vanished from every collapsed listing: all 12
+ * confirm-gated tools shipped a description that never mentioned the input the
+ * SDK rejects the call for. The agent then reads "Delete an invoice by its ID",
+ * calls `{id}`, and gets an input-validation error with no prose basis to
+ * recover. Deriving the marker here fixes every present AND future guarded tool
+ * at once — the alternative (editing 12 first sentences by hand) is the same
+ * enumerate-instead-of-derive mistake GAP-04 was raised for.
+ */
+function requiresConfirm(inputSchema: unknown): boolean {
+  const shape = inputSchema as Record<string, unknown> | undefined;
+  if (!shape || typeof shape !== "object") return false;
+  const field = shape["confirm"] as
+    | { safeParse?: (v: unknown) => { success: boolean } }
+    | undefined;
+  if (typeof field?.safeParse !== "function") return false;
+  return field.safeParse(undefined).success === false;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Profile applicator                                                 */
 /* ------------------------------------------------------------------ */
@@ -400,8 +427,21 @@ export function applyToolExposureProfile(
     // rationale be lost when we overwrite config.description. Only appended in
     // allow-list (composition) mode; the open mcp.frihet.io surface keeps its
     // pure terse line (no OpenAI review constraint there).
+    // A required `confirm` is the single most consequential thing an agent can
+    // miss: omit it and the call dies on schema validation with no prose basis
+    // to recover. firstSentence() keeps only the first English sentence, so a
+    // "Requires confirm=true." written into sentence 2 of a tool description is
+    // invisible on the surface the agent actually loads. Derive the marker from
+    // the SCHEMA instead of trusting prose — it then covers every confirm-gated
+    // tool, including ones added after this line was written.
+    //
+    // In OpenAI mode this never fires: applyOpenAIProfile is the OUTERMOST
+    // wrapper (applyOpenAIReviewProfiles applies it last, so it runs first) and
+    // has already stripped `confirm` from the reviewed schemas — see the frozen
+    // -descriptor divergence documented in docs/openai-review-descriptor-freeze.md.
     let collapsed =
       `[${group}] ${entry.summary} ` +
+      (requiresConfirm(config?.inputSchema) ? "Requires confirm=true. " : "") +
       `— full schema via describe_tool('${name}').`;
     if (allowlist) {
       const ow = config?.annotations?.openWorldHint;

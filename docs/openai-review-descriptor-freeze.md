@@ -93,6 +93,74 @@ the proposed surface is documented in that review. Then:
 Never deploy, publish, bump versions, change live OAuth metadata, or refresh the
 snapshot as part of the gate itself.
 
+## Deliberate divergence — truth-in-descriptions (2026-08-08)
+
+**This is not a refresh. The fixture was not touched and the gate is green.**
+
+An audit (GAP-04, GAP-12) found that `delete_invoice` and `delete_quote`
+promised *"Permanently delete … This action cannot be undone"* while the backend
+only destroys a **draft**; anything already issued is **cancelled**
+(`status=cancelled`) because VeriFactu forbids breaking the invoice hash chain.
+The same audit found `delete_invoice`, `delete_quote`, `refund_deposit` and
+`send_invoice` shipping with no confirmation guard.
+
+Fixing that on the base tools changes the description *and* adds a required
+`confirm` input. All three of the reviewed tools
+(`delete_invoice` = `$.tools[15]`, `delete_quote` = `$.tools[17]`,
+`send_invoice` = `$.tools[47]`) sit inside the frozen descriptor, and an app
+review has been in flight since July. Refreshing the snapshot needs owner
+approval; shipping nothing leaves the false prose live on every surface.
+
+The resolution keeps both invariants:
+
+| Surface | Description | `confirm` |
+|---------|-------------|-----------|
+| Direct MCP (Claude, Cursor, Cline, npm, `mcp.frihet.io`) | corrected | **required** |
+| Reviewed ChatGPT (`tools/list`) | byte-identical to the fixture | absent from the schema |
+| Reviewed ChatGPT (`describe_tool`) | **corrected** | n/a |
+
+How it works — all in `src/openai-profile.ts`:
+
+1. **`descriptionOverrides`** for the three tools pin the **first sentence**
+   byte-identical to the approved text. In grouped mode `tools/list` emits only
+   `[group] firstSentence(description) — full schema via describe_tool(…)`, so
+   everything after that first sentence never reaches the frozen surface. The
+   correction lives in those later sentences and is served by `describe_tool`,
+   which the model calls before invoking and which the freeze does not cover.
+2. **`stripInputFields`** removes `confirm` from the three reviewed schemas.
+3. **`impliedInputValues`** supplies `confirm: true` to the handler on the
+   reviewed surface. Without it, stripping a *required* field would make each
+   tool a permanent input-validation error in ChatGPT.
+4. **`outputSchemaOverrides`** holds `delete_invoice` / `delete_quote` at the
+   approved `deleteResultOutput` shape; the base tools widened to
+   `documentDeleteResultOutput` (which carries `outcome: deleted | cancelled`).
+
+Why the reviewed surface is not left unprotected: `delete_invoice` and
+`delete_quote` carry `destructiveHint: true`, so ChatGPT prompts the user before
+invoking them. `confirm` exists for direct MCP clients, which have no such UI.
+
+### Still open after this divergence
+
+- **`send_invoice` has `destructiveHint: false` and `openWorldHint: true`.**
+  ChatGPT does **not** prompt for it, and `confirm` is stripped there, so on the
+  reviewed surface a send can be triggered with no confirmation at any layer.
+  Correcting the annotation would itself drift the frozen descriptor. This gap
+  is **not** closed by this divergence.
+- Eleven other risky tools ship with no confirm guard; six of them are inside
+  the frozen descriptor. They are enumerated in `UNGATED_RISK_DEBT` in
+  `src/__tests__/truth-in-descriptions.test.ts`, which fails if the list grows.
+
+### Closing conditions
+
+When the current review completes, the owner should approve a delta that folds
+the corrected prose and the `confirm` input into the reviewed descriptor, then
+delete all four mechanisms above along with `FROZEN_DIVERGENCE` in
+`src/__tests__/truth-in-descriptions.test.ts`. Until then the divergence is
+pinned by that test block: the composed description is compared to the fixture,
+`confirm` is asserted required on the base surface and absent on the reviewed
+one, and the reviewed tools are invoked with only their advertised inputs to
+prove `impliedInputValues` keeps them working.
+
 ## Approved resubmission delta — 2026-08-03
 
 The owner approved preparing a new OpenAI review after the previous submission
