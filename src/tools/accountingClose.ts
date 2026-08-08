@@ -8,11 +8,20 @@
  *
  * REST surface: /v1/periods/current, /v1/periods/{id}, /v1/periods/close, /v1/periods/{id}/reopen
  *
- * Closing a period freezes invoices/expenses/journal entries. Reopening requires a
- * compliance reason logged for audit. These are TRUST AREA operations.
+ * STATE OF THE WORLD (verified against erp-main functions/src/publicApi/families/
+ * periods.ts): only the READ route is implemented. Both WRITE routes answer
+ * HTTP 501 NOT_IMPLEMENTED — "deferred to the upcoming fiscal-write wave (Trust,
+ * serialized). Use year-end closing in the app for now." Nothing is frozen, and
+ * there is no idempotent no-op to rely on, because there is no handler at all.
  *
- * NOTE: ERP backend endpoints land in parallel D4-A wave. 404s propagate as isError
- * until backend ships. TODO: confirm callable boundary vs REST shell for closePeriod.
+ * The descriptions below therefore state the 501 in the present tense. Do not
+ * restore aspirational prose about freezing or idempotency until a handler exists
+ * — GAP-13 was exactly that: an agent planning a year-end close read a mechanism
+ * the backend never had.
+ *
+ * `withBackendGuard` converts 404 only (backend-availability.ts isBackendNotFound),
+ * so a 501 surfaces through the generic error path as isError with the backend's
+ * own NOT_IMPLEMENTED message — an honest failure, not a fake success.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -63,12 +72,15 @@ export function registerAccountingCloseTools(server: McpServer, client: IFrihetC
     {
       title: "Close Accounting Period",
       description:
-        "TRUST AREA — FISCAL CLOSE. Close a monthly or quarterly accounting period. " +
-        "Freezes invoices, expenses, journal entries and bank reconciliations for the period. " +
-        "Requires confirm=true. Idempotent: re-closing an already closed period is a no-op. " +
-        "Closed periods can be reopened with period_reopen + audit reason. " +
-        "/ AREA DE CONFIANZA — CIERRE FISCAL. Cierra un periodo contable mensual o trimestral. " +
-        "Congela facturas, gastos, asientos. Requiere confirm=true.",
+        "TRUST AREA — FISCAL CLOSE. NOT IMPLEMENTED SERVER-SIDE TODAY: the backend answers " +
+        "HTTP 501 NOT_IMPLEMENTED to POST /v1/periods/close, so calling this tool closes nothing. " +
+        "No invoices, expenses, journal entries or bank reconciliations are frozen, and there is no " +
+        "idempotent no-op to rely on. Close the period in the Frihet app instead. " +
+        "The call is still gated behind confirm=true and will surface the 501 as an error. " +
+        "Use period_close_status (implemented) to read the current period state. " +
+        "/ AREA DE CONFIANZA — CIERRE FISCAL. HOY NO IMPLEMENTADO EN EL SERVIDOR: el backend responde " +
+        "HTTP 501 a POST /v1/periods/close, asi que esta herramienta no cierra nada ni congela nada. " +
+        "El cierre debe hacerse en la app de Frihet.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
       inputSchema: {
         type: z
@@ -112,10 +124,12 @@ export function registerAccountingCloseTools(server: McpServer, client: IFrihetC
     {
       title: "Reopen Accounting Period",
       description:
-        "TRUST AREA — FISCAL REOPEN. Reopen a closed accounting period. " +
-        "Requires a compliance reason (audit log) and confirm=true. " +
-        "Reopening allows backdated edits to invoices/expenses — use with extreme caution. " +
-        "/ AREA DE CONFIANZA — REAPERTURA FISCAL. Reabre un periodo cerrado. Requiere motivo (auditoria) y confirm=true.",
+        "TRUST AREA — FISCAL REOPEN. NOT IMPLEMENTED SERVER-SIDE TODAY: the backend answers " +
+        "HTTP 501 NOT_IMPLEMENTED to POST /v1/periods/{id}/reopen, so calling this tool reopens nothing " +
+        "and writes no audit entry. Reopen the period in the Frihet app instead. " +
+        "The call is still gated behind confirm=true plus a reason, and will surface the 501 as an error. " +
+        "/ AREA DE CONFIANZA — REAPERTURA FISCAL. HOY NO IMPLEMENTADO EN EL SERVIDOR: el backend responde " +
+        "HTTP 501, asi que no se reabre nada ni se registra auditoria. Hazlo en la app de Frihet.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
       inputSchema: {
         periodId: z.string().describe("Closed period ID to reopen / ID del periodo cerrado"),

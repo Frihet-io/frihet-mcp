@@ -290,10 +290,15 @@ export class FrihetClient {
    * output schema (id/clientName/items/success all read as `undefined`). This
    * unwraps to `body.data`. Every create/update/action mutation routes through
    * here for exactly this reason; single-object reads (`getInvoice`/…) have since
-   * #64. `deleteX` methods deliberately keep `request` (they return `void` — the
-   * tool discards the body and synthesizes `{ success, id }`, so there is nothing
-   * to unwrap). Only unwraps a non-array-object `data` (see guard below), so an
+   * #64. Most `deleteX` methods keep `request` (they return `void` — the tool
+   * discards the body and synthesizes `{ success, id }`, so there is nothing to
+   * unwrap). `deleteInvoice`/`deleteQuote` are the EXCEPTION and route through
+   * here: their backend answers 204 for a real delete but 200 + `{ data, meta }`
+   * when it soft-CANCELS a non-draft document instead (see those methods).
+   * Only unwraps a non-array-object `data` (see guard below), so an
    * array-`data` list envelope and any non-enveloped body pass through unchanged.
+   * A 204 yields `undefined` from `request`, which falls through untouched — that
+   * `undefined` is what tells the delete tools "destroyed, not cancelled".
    *
    * Only unwraps when the body is an object carrying a `data` property that is
    * itself a (non-array) object — i.e. a genuine single-object envelope. It is
@@ -386,8 +391,22 @@ export class FrihetClient {
     return this.requestUnwrapped("PATCH", `/invoices/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteInvoice(id: string): Promise<void> {
-    return this.request("DELETE", `/invoices/${encodeURIComponent(id)}`);
+  /**
+   * DELETE /invoices/{id} — NOT an unconditional destroy.
+   *
+   * The backend refuses to destroy a non-draft invoice (VeriFactu hash-chain
+   * integrity) and soft-CANCELS it instead, and it distinguishes the two
+   * outcomes on the wire (`publicApi.ts` DELETE branch):
+   *   - 204 No Content            → the draft row was really removed
+   *   - 200 + `{ data: { id, status: 'cancelled', previousStatus,
+   *     cancelledVia }, meta }` → the document still exists, now cancelled
+   *
+   * This used to be typed `Promise<void>` and the body was thrown away, so the
+   * tool reported "deleted successfully" for a document that was still there.
+   * Resolves to the unwrapped soft-cancel payload on 200, `undefined` on 204.
+   */
+  async deleteInvoice(id: string): Promise<Record<string, unknown> | undefined> {
+    return this.requestUnwrapped("DELETE", `/invoices/${encodeURIComponent(id)}`);
   }
 
   async searchInvoices(
@@ -547,8 +566,14 @@ export class FrihetClient {
     return this.requestUnwrapped("PATCH", `/quotes/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteQuote(id: string): Promise<void> {
-    return this.request("DELETE", `/quotes/${encodeURIComponent(id)}`);
+  /**
+   * DELETE /quotes/{id} — same two-outcome contract as {@link deleteInvoice}:
+   * the backend soft-CANCELS a non-draft quote (200 + body) and only destroys a
+   * draft (204). See `publicApi.ts` `deleteResource`, which takes the identical
+   * branch for `invoices` and `quotes`.
+   */
+  async deleteQuote(id: string): Promise<Record<string, unknown> | undefined> {
+    return this.requestUnwrapped("DELETE", `/quotes/${encodeURIComponent(id)}`);
   }
 
   // ---------------------------------------------------------------- Vendors

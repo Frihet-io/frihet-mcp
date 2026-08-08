@@ -82,7 +82,11 @@ export const GROUPS: Record<ToolGroupId, GroupMeta> = {
   },
   expenses: {
     label: "Expenses & vendors / Gastos y proveedores",
-    blurb: "Expenses (with OCR) and vendor/supplier records.",
+    // C38: this used to read "Expenses (with OCR)". No OCR tool exists — the
+    // expenses family is list/get/create/update/delete plus vendor CRUD, and
+    // create_expense takes no file, image or URL. Do NOT re-add a capability
+    // token here that search_tools cannot resolve to a real tool.
+    blurb: "Expenses and vendor/supplier records.",
   },
   fiscal: {
     label: "Fiscal & compliance / Fiscal y cumplimiento",
