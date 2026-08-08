@@ -1,0 +1,50 @@
+{
+  "tool": "payroll_export",
+  "provenance": "erp-main/functions/src/publicApi/families/payroll.ts:195-209 getExport → { statusCode: 200, result: { data: { month, format, employees, summary } } }; rows at payroll.ts:180-192 are { id, name, nss, irpfPct, salaryGrossAnnual, convenioColectivo, categoriaProfesional, prorrateoPagasExtras, formaPago, iban }. NO file is produced — there is no fileUrl/filename/rowCount anywhere in the family. Accepted formats: payroll.ts:47 EXPORT_FORMATS = ['a3','contasol','sage','siltra'] (anything else 400s at payroll.ts:160-166). Envelope: publicApi.ts:2508-2516 → { data: {...}, meta }.",
+  "declaredKeysNotInFixtures": {},
+  "cases": [
+    {
+      "name": "live backend body — a3, one exported employee, one skipped",
+      "args": { "format": "a3", "month": "2026-08" },
+      "routes": {
+        "GET /payroll/prep/export": {
+          "data": {
+            "month": "2026-08",
+            "format": "a3",
+            "employees": [
+              {
+                "id": "emp_1",
+                "name": "Ana Rodriguez",
+                "nss": "281234567840",
+                "irpfPct": 15,
+                "salaryGrossAnnual": 34000,
+                "convenioColectivo": "Oficinas y despachos",
+                "categoriaProfesional": "Tecnico",
+                "prorrateoPagasExtras": true,
+                "formaPago": "transferencia",
+                "iban": "ES9121000418450200051332"
+              }
+            ],
+            "summary": { "exportedCount": 1, "skippedNotReady": 1, "totalGrossAnnual": 34000 }
+          },
+          "meta": { "requestId": "req_parity_16", "timestamp": "2026-08-08T10:00:15.000Z" }
+        }
+      }
+    },
+    {
+      "name": "siltra, nothing ready to export",
+      "args": { "format": "siltra", "month": "2026-07" },
+      "routes": {
+        "GET /payroll/prep/export": {
+          "data": {
+            "month": "2026-07",
+            "format": "siltra",
+            "employees": [],
+            "summary": { "exportedCount": 0, "skippedNotReady": 0, "totalGrossAnnual": 0 }
+          },
+          "meta": { "requestId": "req_parity_17", "timestamp": "2026-08-08T10:00:16.000Z" }
+        }
+      }
+    }
+  ]
+}

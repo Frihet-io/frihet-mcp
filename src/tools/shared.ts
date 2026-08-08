@@ -359,6 +359,40 @@ export function paginatedOutput<T extends z.ZodObject>(
   });
 }
 
+/**
+ * `{ data, total }`-only list envelope — for the ONE backend list endpoint that
+ * does not emit `limit`/`offset`.
+ *
+ * GET /v1/webhooks is hand-rolled inline (erp-main publicApi.ts:5100-5116) and
+ * is the only list route that bypasses the generic builder at publicApi.ts:7560
+ * (`return { data, total, limit, offset, nextCursor };`). Its response is
+ * literally `{ data, total, meta }`, which the shared `paginatedOutput()`
+ * envelope rejects on two required keys — so list_webhooks failed output
+ * validation on every call. The canonical OpenAPI spec generated from the
+ * DEPLOYED function agrees with the backend (`{ data, total }`), so the MCP
+ * schema was the wrong side.
+ *
+ * DO NOT reuse this for any other list. `paginatedOutput` stays strict on
+ * purpose: ~30 list tools whose backends DO send all four keys rely on it to
+ * catch a real API regression. This relaxation is scoped to the one endpoint
+ * that is genuinely different, and keeps `limit`/`offset` OPTIONAL rather than
+ * absent so it keeps validating the day the backend routes webhooks through the
+ * generic builder.
+ *
+ * The right long-term fix is in erp-main (parse limit/offset from req.query and
+ * slice, using the `parseNonNegativeInt` helper already used at publicApi.ts:4432),
+ * which would also fix the phantom pagination on the input side.
+ */
+export function unpaginatedListOutput<T extends z.ZodObject>(itemSchema: T) {
+  return z.object({
+    data: z.array(itemSchema),
+    total: z.number(),
+    limit: z.number().optional(),
+    offset: z.number().optional(),
+    nextCursor: z.string().optional(),
+  });
+}
+
 /** Schema for delete operation results. */
 export const deleteResultOutput = z.object({
   success: z.boolean(),
@@ -417,13 +451,41 @@ export const expenseItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-const addressOutputSchema = z.object({
-  street: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  postalCode: z.string().optional(),
-  country: z.string().optional(),
-}).optional();
+/**
+ * Address as the API ACTUALLY returns it — `string | StructuredAddress`.
+ *
+ * The backend's own write contract is a union (erp-main publicApi.ts:873
+ * `address: z.union([z.string().max(10000), addressSchema]).optional()`) and the
+ * domain type says so out loud (erp-main apps/erp/types.ts:315-316
+ * `/** Address can be legacy string or structured object *\/ address: string |
+ * StructuredAddress`). Reads return the stored document verbatim — there is no
+ * read-path coercion (normalizeAddressFields runs only on create/update, and
+ * normalizeAddress bails on non-objects) — so a plain string reaches the wire.
+ *
+ * Declaring object-only made ONE legacy vendor poison an entire list_vendors
+ * call (the row schema sits inside `z.array()`), and `{ projectable: true }`
+ * did not save it: `.partial()` relaxes required-ness, never the value TYPE.
+ *
+ * Canonical stored keys are `zip`/`province` (erp-main publicApi.ts:940-951
+ * normalizeAddress maps postalCode→zip and state→province BEFORE storage); the
+ * v1 aliases are kept because pre-normalization documents still carry them, and
+ * `.passthrough()` keeps any other stored key instead of silently stripping it.
+ */
+const addressOutputSchema = z.union([
+  z.string(),
+  z.object({
+    street: z.string().optional(),
+    city: z.string().optional(),
+    // Canonical (post-normalizeAddress) keys.
+    province: z.string().optional(),
+    zip: z.string().optional(),
+    country: z.string().optional(),
+    countryCode: z.string().optional(),
+    // API v1 aliases — still present on documents written before normalization.
+    state: z.string().optional(),
+    postalCode: z.string().optional(),
+  }).passthrough(),
+]).optional();
 
 export const clientItemOutput = z.object({
   id: z.string(),
@@ -470,11 +532,23 @@ export const vendorItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
+/**
+ * Webhook row as `sanitizeWebhookDoc` emits it (erp-main
+ * functions/src/webhookSanitize.ts:22-29): the stored document minus `secret`,
+ * plus a derived `hasSecret`. The stored key is `status`, never `active` —
+ * `active` was a phantom no response has ever carried. `secret` stays because
+ * POST /v1/webhooks echoes it EXACTLY once (erp-main publicApi.ts:5179-5188);
+ * read endpoints never return it.
+ */
 export const webhookItemOutput = z.object({
   id: z.string(),
   url: z.string(),
   events: z.array(z.string()),
-  active: z.boolean().optional(),
+  /** Absent on documents created before the field existed. */
+  name: z.string().optional(),
+  status: z.string().optional().describe("active | inactive | paused"),
+  hasSecret: z.boolean().optional(),
+  /** One-time echo on create only — never returned by a read. */
   secret: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
@@ -1029,19 +1103,47 @@ export const attendanceEntryItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/** Overtime aggregated report. */
+/**
+ * Overtime report — backend `/v1/time-entries/overtime`.
+ *
+ * Mirrors what the endpoint really returns: erp-main
+ * functions/src/publicApi/families/timeEntries.ts:608-611 spreads
+ * `calculateOvertime(...)` (an `OvertimeResult`, overtimeCompute.ts:60-66 =
+ * `{ dailyOvertime, weeklyOvertime, monthlyTotal, annualOvertimeHours, alerts }`)
+ * next to `period`, `employeeId` and `recordCount`.
+ *
+ * REMOVED as phantoms: `totalRegularHours`, `totalOvertimeHours`,
+ * `estimatedCostEur` and `byEmployee[]`. Nothing in the product computes a cost
+ * (`grep -rn estimatedCostEur` over erp-main = 0 hits) and there is no
+ * per-employee breakdown — the endpoint filters BY employee instead.
+ * Minutes, not hours, are what the engine emits (Art. 34/35 ET math).
+ */
 export const overtimeReportOutput = z.object({
   period: z.string(),
-  totalRegularHours: z.number().optional(),
-  totalOvertimeHours: z.number().optional(),
-  estimatedCostEur: z.number().optional(),
-  byEmployee: z.array(z.object({
-    employeeId: z.string(),
-    employeeName: z.string().optional(),
-    regularHours: z.number().optional(),
-    overtimeHours: z.number().optional(),
+  employeeId: z.string().nullable().optional(),
+  recordCount: z.number().int().optional(),
+  dailyOvertime: z.array(z.object({
+    date: z.string(),
+    minutes: z.number(),
+    exceedsDaily: z.boolean().optional(),
   }).passthrough()).optional(),
-  generatedAt: z.string().optional(),
+  weeklyOvertime: z.array(z.object({
+    weekStart: z.string(),
+    totalMinutes: z.number().optional(),
+    overtimeMinutes: z.number().optional(),
+  }).passthrough()).optional(),
+  monthlyTotal: z.object({
+    workedMinutes: z.number().optional(),
+    overtimeMinutes: z.number().optional(),
+    regularMinutes: z.number().optional(),
+  }).passthrough().optional(),
+  annualOvertimeHours: z.number().optional(),
+  alerts: z.array(z.object({
+    type: z.string().optional(),
+    severity: z.string().optional(),
+    message: z.string().optional().describe("i18n key, not display text"),
+    date: z.string().optional(),
+  }).passthrough()).optional(),
 }).passthrough();
 
 /** Anomaly detection record — backend `/v1/anomalies`. */
@@ -1069,29 +1171,59 @@ export const webhookTestResultOutput = z.object({
   error: z.string().optional(),
 }).passthrough();
 
-/** Payroll export result — backend `/v1/payroll/prep/export`. */
+/**
+ * Payroll export result — backend `/v1/payroll/prep/export`.
+ *
+ * The endpoint returns STAGED ROWS, not a file: erp-main
+ * functions/src/publicApi/families/payroll.ts:195-209 returns
+ * `{ month, format, employees[], summary }`. `fileUrl`/`filename`/`rowCount`
+ * were phantoms — nothing in the family produces a file or a URL.
+ *
+ * The format enum tracks `EXPORT_FORMATS` (payroll.ts:47); a value outside it
+ * is rejected with 400 VALIDATION_ERROR at payroll.ts:160-166.
+ */
 export const payrollExportOutput = z.object({
-  format: z.enum(["a3", "contasol", "sage", "holded", "siltra"]),
+  format: z.enum(["a3", "contasol", "sage", "siltra"]),
   month: z.string(),
-  fileUrl: z.string().optional(),
-  filename: z.string().optional(),
-  rowCount: z.number().int().optional(),
-  generatedAt: z.string().optional(),
+  employees: z.array(z.object({}).passthrough()).optional()
+    .describe("Staged payroll rows in the requested gestoria layout"),
+  summary: z.object({
+    exportedCount: z.number().int().optional(),
+    skippedNotReady: z.number().int().optional(),
+    totalGrossAnnual: z.number().optional(),
+  }).passthrough().optional(),
 }).passthrough();
 
-/** Payroll checklist — backend `/v1/payroll/prep/employees`. */
+/**
+ * Payroll checklist — backend `/v1/payroll/prep/employees`.
+ *
+ * Rows come from erp-main functions/src/publicApi/families/payroll.ts:126-136.
+ * Two corrections against what shipped: the row key is `id` (NOT `employeeId`),
+ * and `status` is the EMPLOYMENT status (`doc.status ?? 'active'`, e.g.
+ * 'active' | 'onLeave') — never the readiness enum the schema used to demand.
+ * Readiness lives in `ready` + `missingFields[]`. The counters the schema
+ * declared (totalEmployees/readyEmployees/missingEmployees) do not exist; the
+ * backend sends a `summary` object instead.
+ */
 export const payrollChecklistOutput = z.object({
   month: z.string(),
-  totalEmployees: z.number().int().optional(),
-  readyEmployees: z.number().int().optional(),
-  missingEmployees: z.number().int().optional(),
   employees: z.array(z.object({
-    employeeId: z.string(),
-    employeeName: z.string().optional(),
-    status: z.enum(["ready", "missing_data", "blocked"]).optional(),
+    id: z.string(),
+    name: z.string().optional(),
+    status: z.string().optional().describe("Employment status, e.g. active | onLeave"),
+    hasPayrollProfile: z.boolean().optional(),
+    ready: z.boolean().optional().describe("True when missingFields is empty"),
     missingFields: z.array(z.string()).optional(),
+    reviewedForMonth: z.string().nullable().optional(),
+    reviewedThisMonth: z.boolean().optional(),
+    reviewedAt: z.string().nullable().optional(),
   }).passthrough()).optional(),
-  generatedAt: z.string().optional(),
+  summary: z.object({
+    total: z.number().int().optional(),
+    ready: z.number().int().optional(),
+    notReady: z.number().int().optional(),
+    reviewedThisMonth: z.number().int().optional(),
+  }).passthrough().optional(),
 }).passthrough();
 
 /** Onboarding workspace state — backend `/v1/onboarding/status`. */
@@ -1112,37 +1244,86 @@ export const onboardingPersonaResultOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/** Permissions matrix — backend `/v1/permissions/matrix`. */
+/**
+ * Permissions matrix — backend `/v1/permissions/matrix`.
+ *
+ * Real payload: erp-main functions/src/publicApi/families/permissions.ts:32-45
+ * → `{ roles, resources, actions, legacyAliases, matrix, source }`. `roles` is
+ * `RBAC_ROLES`, a STRING array (families/core/permissionMatrix.ts:18) — never
+ * objects carrying a `permissions` field — and there is no `generatedAt`.
+ */
 export const permissionsMatrixOutput = z.object({
-  roles: z.array(z.object({
-    role: z.string(),
-    permissions: z.array(z.string()),
-  }).passthrough()).optional(),
+  roles: z.array(z.string()).optional(),
   resources: z.array(z.string()).optional(),
-  generatedAt: z.string().optional(),
+  actions: z.array(z.string()).optional(),
+  legacyAliases: z.record(z.string(), z.string()).optional(),
+  matrix: z.record(z.string(), z.record(z.string(), z.array(z.string()))).optional()
+    .describe("matrix[role][resource] = granted actions; a missing resource means no access"),
+  source: z.string().optional(),
+  // Anti-envelope tripwire — see actionResultOutput. Every field above is
+  // optional under passthrough, so a raw {data, meta} envelope would otherwise
+  // validate VACUOUSLY and hide a client method that forgot requestUnwrapped.
+  // That is exactly how this tool shipped returning nothing an agent could read.
+  data: z.never().optional(),
+  meta: z.never().optional(),
 }).passthrough();
 
-/** Caller's own permissions — backend `/v1/permissions/me`. */
+/**
+ * Caller's own permissions — backend `/v1/permissions/me`.
+ *
+ * Real payload: erp-main functions/src/publicApi/families/permissions.ts:47-59
+ * → `{ role, isOwner, resources, scopes }`. A public-API key is workspace-owner
+ * scoped, so the owner row is what comes back. `resources` is an OBJECT of
+ * resource → actions[] (PERMISSION_MATRIX[role]); `scopes` are sorted
+ * `resource:action` strings (permissionMatrix.ts:103-110). The previously
+ * declared `userId`, `permissions` and `workspaceId` exist at NO level.
+ */
 export const permissionsMeOutput = z.object({
-  userId: z.string().optional(),
   role: z.string().optional(),
-  permissions: z.array(z.string()).optional(),
-  workspaceId: z.string().optional(),
+  isOwner: z.boolean().optional(),
+  resources: z.record(z.string(), z.array(z.string())).optional(),
+  scopes: z.array(z.string()).optional(),
+  // Anti-envelope tripwire — see permissionsMatrixOutput.
+  data: z.never().optional(),
+  meta: z.never().optional(),
 }).passthrough();
 
-/** Accounting period state — backend `/v1/periods/*`. */
+/**
+ * Accounting period state — backend `/v1/periods/*`.
+ *
+ * Real payload: erp-main functions/src/publicApi/families/periods.ts:114-127 →
+ * `{ fiscalYear, fiscalYearStart, status, dateRange, closing }`. Periods are
+ * keyed by FISCAL YEAR — there is no `id` key at all (`/v1/periods/{id}`
+ * resolves on the fiscal year, periods.ts:160-163) — and the dates are nested
+ * in `dateRange.from`/`.to`, never flat `startDate`/`endDate`.
+ *
+ * `id` stays declared-but-optional so `period_close`/`period_reopen`, which
+ * share this schema and today return 501 (periods.ts:138-147), are not silently
+ * weakened when they ship. `type`, `startDate`, `endDate`, `closedAt`,
+ * `closedBy`, `reopenedAt`, `reopenReason`, `createdAt` and `updatedAt` are
+ * gone: nothing has ever set them, and `.passthrough()` accepts them anyway if
+ * the close/reopen payloads eventually do.
+ */
 export const periodStatusOutput = z.object({
-  id: z.string(),
-  type: z.enum(["monthly", "quarterly"]).optional(),
+  id: z.string().optional(),
+  fiscalYear: z.string().optional().describe("The period identifier, e.g. '2026'"),
+  fiscalYearStart: z.string().optional().describe("MM-DD the fiscal year opens on"),
   status: z.enum(["open", "closing", "closed", "reopened"]).optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  closedAt: z.string().optional(),
-  closedBy: z.string().optional(),
-  reopenedAt: z.string().optional(),
-  reopenReason: z.string().optional(),
-  createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
+  dateRange: z.object({
+    from: z.string().optional(),
+    to: z.string().optional(),
+  }).passthrough().optional(),
+  closing: z.object({
+    status: z.string().optional(),
+    closedAt: z.string().nullable().optional(),
+    netIncome: z.number().nullable().optional(),
+    totalIncome: z.number().nullable().optional(),
+    totalExpenses: z.number().nullable().optional(),
+    journalEntries: z.number().nullable().optional(),
+  }).passthrough().nullable().optional().describe("null while the period is open"),
+  // Anti-envelope tripwire — see permissionsMatrixOutput.
+  data: z.never().optional(),
+  meta: z.never().optional(),
 }).passthrough();
 
 /* ------------------------------------------------------------------ */

@@ -1,0 +1,58 @@
+{
+  "tool": "payroll_checklist",
+  "provenance": "erp-main/functions/src/publicApi/families/payroll.ts:120-160 getChecklist → { statusCode: 200, result: { data: { month, employees, summary } } }; rows are { id, name, status, hasPayrollProfile, ready, missingFields, reviewedForMonth, reviewedThisMonth, reviewedAt } (payroll.ts:126-136 — the key is `id`, NOT `employeeId`, and `status` is the EMPLOYMENT status, `doc.status ?? 'active'`). The family mount spreads the result at publicApi.ts:2508-2516, so the wire body is { data: {...}, meta }.",
+  "declaredKeysNotInFixtures": {},
+  "cases": [
+    {
+      "name": "live backend body — mixed ready / not-ready employees",
+      "args": { "month": "2026-08" },
+      "routes": {
+        "GET /payroll/prep/employees": {
+          "data": {
+            "month": "2026-08",
+            "employees": [
+              {
+                "id": "emp_1",
+                "name": "Ana Rodriguez",
+                "status": "active",
+                "hasPayrollProfile": true,
+                "ready": true,
+                "missingFields": [],
+                "reviewedForMonth": "2026-08",
+                "reviewedThisMonth": true,
+                "reviewedAt": "2026-08-01T08:00:00.000Z"
+              },
+              {
+                "id": "emp_2",
+                "name": "Luis Fernandez",
+                "status": "onLeave",
+                "hasPayrollProfile": false,
+                "ready": false,
+                "missingFields": ["nss", "iban", "salaryGrossAnnual"],
+                "reviewedForMonth": null,
+                "reviewedThisMonth": false,
+                "reviewedAt": null
+              }
+            ],
+            "summary": { "total": 2, "ready": 1, "notReady": 1, "reviewedThisMonth": 1 }
+          },
+          "meta": { "requestId": "req_parity_14", "timestamp": "2026-08-08T10:00:13.000Z" }
+        }
+      }
+    },
+    {
+      "name": "workspace with no employees",
+      "args": { "month": "2026-07" },
+      "routes": {
+        "GET /payroll/prep/employees": {
+          "data": {
+            "month": "2026-07",
+            "employees": [],
+            "summary": { "total": 0, "ready": 0, "notReady": 0, "reviewedThisMonth": 0 }
+          },
+          "meta": { "requestId": "req_parity_15", "timestamp": "2026-08-08T10:00:14.000Z" }
+        }
+      }
+    }
+  ]
+}

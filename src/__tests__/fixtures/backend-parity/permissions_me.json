@@ -1,0 +1,26 @@
+{
+  "tool": "permissions_me",
+  "provenance": "erp-main/functions/src/publicApi/families/permissions.ts:47-59 getMe → { statusCode: 200, result: { data: { role, isOwner, resources, scopes } } }. A public-API key is workspace-owner-scoped, so the owner row is always reported. `resources` is PERMISSION_MATRIX.owner — an OBJECT of resource → actions[] (families/core/permissionMatrix.ts:38-50), not an array of strings. `scopes` is roleScopes('owner') — sorted 'resource:action' strings (permissionMatrix.ts:103-110). There is no userId and no workspaceId in the payload. Envelope: publicApi.ts:2508-2516 → { data: {...}, meta }.",
+  "declaredKeysNotInFixtures": {},
+  "cases": [
+    {
+      "name": "live backend body — owner row",
+      "args": {},
+      "routes": {
+        "GET /permissions/me": {
+          "data": {
+            "role": "owner",
+            "isOwner": true,
+            "resources": {
+              "workspace": ["read", "update", "export"],
+              "invoices": ["read", "create", "update", "delete", "bulk_delete", "export"],
+              "billing": ["read", "create", "update", "delete", "export"]
+            },
+            "scopes": ["billing:create", "billing:read", "invoices:export", "invoices:read", "workspace:read"]
+          },
+          "meta": { "requestId": "req_parity_22", "timestamp": "2026-08-08T10:00:21.000Z" }
+        }
+      }
+    }
+  ]
+}

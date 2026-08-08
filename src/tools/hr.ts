@@ -258,13 +258,21 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
     {
       title: "Overtime Report",
       description:
-        "Generate an overtime report for a period. Aggregates regular vs overtime hours " +
-        "per employee + total estimated cost in EUR. Useful for payroll prep and labor-law audits. " +
-        "Period format: 'YYYY-MM' (monthly) or 'YYYY-QN' (quarterly) or 'YYYY' (annual). " +
-        "/ Informe de horas extra por periodo. Agrega horas regulares vs extra por empleado + coste estimado.",
+        "Generate an overtime report for a period. Returns daily and weekly overtime, the monthly " +
+        "worked/regular/overtime split in MINUTES, annual overtime hours, and Art. 34/35 ET alerts. " +
+        "Useful for payroll prep and labor-law audits. Optionally filter by a single employee — " +
+        "there is no per-employee breakdown and no cost estimate. " +
+        "Period format: 'YYYY-MM' (monthly) or 'YYYY' (annual). " +
+        "/ Informe de horas extra por periodo: diario, semanal, total mensual en minutos y alertas Art. 34/35 ET.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
-        period: z.string().describe("Period (YYYY-MM, YYYY-QN, or YYYY) / Periodo"),
+        // The backend validates /^\d{4}(-\d{2})?$/ (erp-main
+        // functions/src/publicApi/families/timeEntries.ts:583-585) and 400s
+        // INVALID_PERIOD on anything else — 'YYYY-QN' was never supported.
+        period: z
+          .string()
+          .regex(/^\d{4}(-\d{2})?$/)
+          .describe("Period: 'YYYY-MM' or 'YYYY' / Periodo"),
         employeeId: z.string().optional().describe("Optional filter by employee / Filtrar por empleado opcional"),
       },
       outputSchema: overtimeReportOutput,

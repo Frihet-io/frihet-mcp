@@ -1,0 +1,46 @@
+{
+  "tool": "get_webhook",
+  "provenance": "erp-main/functions/src/publicApi.ts:5138 — res.status(200).json({ data: single, meta: webhookMeta }); row via sanitizeWebhookDoc (functions/src/webhookSanitize.ts:22-29), which strips `secret` and adds `hasSecret`.",
+  "declaredKeysNotInFixtures": {
+    "secret": "Read endpoints NEVER return the HMAC secret (publicApi.ts:5096-5099 security note). It is echoed ONCE by POST /v1/webhooks — see the create_webhook fixture, which does exercise this key."
+  },
+  "cases": [
+    {
+      "name": "live backend body — sanitized webhook doc",
+      "args": { "id": "wh_2ZqL8x" },
+      "routes": {
+        "GET /webhooks/wh_2ZqL8x": {
+          "data": {
+            "id": "wh_2ZqL8x",
+            "name": "Billing notifications",
+            "url": "https://example.com/hooks/billing",
+            "events": ["invoice.paid", "invoice.overdue"],
+            "status": "active",
+            "userId": "usr_1",
+            "createdAt": "2026-07-01T09:15:00.000Z",
+            "updatedAt": "2026-07-02T11:00:00.000Z",
+            "hasSecret": true
+          },
+          "meta": { "requestId": "req_parity_4", "timestamp": "2026-08-08T10:00:03.000Z" }
+        }
+      }
+    },
+    {
+      "name": "LEGACY doc — no name, no status, no updatedAt",
+      "legacy": true,
+      "args": { "id": "wh_legacy" },
+      "routes": {
+        "GET /webhooks/wh_legacy": {
+          "data": {
+            "id": "wh_legacy",
+            "url": "https://legacy.example.com/hook",
+            "events": ["invoice.created"],
+            "createdAt": "2025-11-02T12:00:00.000Z",
+            "hasSecret": false
+          },
+          "meta": { "requestId": "req_parity_5", "timestamp": "2026-08-08T10:00:04.000Z" }
+        }
+      }
+    }
+  ]
+}

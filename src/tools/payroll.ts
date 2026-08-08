@@ -2,8 +2,8 @@
  * Payroll preparation tools for the Frihet MCP server — D4-B megasprint (2 tools).
  *
  * Tools:
- *   1. payroll_export    — export payroll for a month in gestoria format (A3, Contasol, Sage, Holded, Siltra)
- *   2. payroll_checklist — list employees with status (ready / missing_data / blocked) for a month
+ *   1. payroll_export    — export payroll rows for a month in gestoria format (A3, Contasol, Sage, Siltra)
+ *   2. payroll_checklist — list employees with their readiness (ready + missingFields) for a month
  *
  * REST surface: /v1/payroll/prep/export, /v1/payroll/prep/employees
  *
@@ -36,21 +36,25 @@ export function registerPayrollTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Export Payroll (Gestoria Format)",
       description:
-        "Export payroll data for a month in gestoria-compatible format. " +
+        "Export payroll data for a month in a gestoria-compatible layout. " +
+        "Returns the staged employee ROWS plus a summary as JSON — it does not produce a file. " +
         "Supported formats:\n" +
-        "  - 'a3'       — Wolters Kluwer A3 (CSV with Spanish payroll columns)\n" +
+        "  - 'a3'       — Wolters Kluwer A3 column layout\n" +
         "  - 'contasol' — Sage Contasol\n" +
         "  - 'sage'     — Sage 50/200\n" +
-        "  - 'holded'   — Holded import format\n" +
-        "  - 'siltra'   — SILTRA Seguridad Social XML\n" +
+        "  - 'siltra'   — SILTRA Seguridad Social\n" +
         "\n" +
         "Frihet does NOT calculate payroll — it exports staged data for the gestoria. " +
         "Month format: 'YYYY-MM'. " +
-        "/ Exporta datos de nominas en formato compatible con gestoria. Mes en formato 'YYYY-MM'.",
+        "/ Exporta las filas de nomina preparadas en el formato de la gestoria (JSON, no genera fichero). " +
+        "Mes en formato 'YYYY-MM'.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
+        // Mirrors EXPORT_FORMATS in erp-main
+        // functions/src/publicApi/families/payroll.ts:47 — any other value is
+        // rejected with 400 VALIDATION_ERROR at payroll.ts:160-166.
         format: z
-          .enum(["a3", "contasol", "sage", "holded", "siltra"])
+          .enum(["a3", "contasol", "sage", "siltra"])
           .describe("Gestoria payroll software format / Formato del software de gestoria"),
         month: z.string().regex(/^\d{4}-\d{2}$/).describe("Month in 'YYYY-MM' format / Mes formato 'YYYY-MM'"),
       },
@@ -74,11 +78,11 @@ export function registerPayrollTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Payroll Readiness Checklist",
       description:
-        "List all employees for a given month with their payroll readiness status. " +
-        "Status values:\n" +
-        "  - 'ready'         — all required data present, ready to export\n" +
-        "  - 'missing_data'  — some required fields missing (see missingFields[])\n" +
-        "  - 'blocked'       — manually blocked or data inconsistency detected\n" +
+        "List all employees for a given month with their payroll readiness. " +
+        "Each row carries:\n" +
+        "  - ready         — true when nothing is missing and the row will be exported\n" +
+        "  - missingFields — the required payroll-profile fields still empty\n" +
+        "  - status        — the EMPLOYMENT status (e.g. 'active', 'onLeave'), not a readiness flag\n" +
         "\n" +
         "Use BEFORE payroll_export to identify gaps. Month format: 'YYYY-MM'. " +
         "/ Lista empleados con estado de preparacion para nomina. Usar antes de payroll_export.",

@@ -1437,7 +1437,7 @@ export class FrihetClient {
   async getOvertimeReport(
     params: { period: string; employeeId?: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("GET", "/time-entries/overtime", undefined, {
+    return this.requestUnwrapped("GET", "/time-entries/overtime", undefined, {
       period: params.period,
       employeeId: params.employeeId,
     });
@@ -1469,14 +1469,14 @@ export class FrihetClient {
   async exportPayroll(
     params: { format: "a3" | "contasol" | "sage" | "holded" | "siltra"; month: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("GET", "/payroll/prep/export", undefined, {
+    return this.requestUnwrapped("GET", "/payroll/prep/export", undefined, {
       format: params.format,
       month: params.month,
     });
   }
 
   async getPayrollChecklist(params: { month: string }): Promise<Record<string, unknown>> {
-    return this.request("GET", "/payroll/prep/employees", undefined, {
+    return this.requestUnwrapped("GET", "/payroll/prep/employees", undefined, {
       month: params.month,
     });
   }
@@ -1498,21 +1498,23 @@ export class FrihetClient {
   // NOTE: /v1/permissions/* — D4-A parallel deploy. 404 propagates until backend ships.
 
   async getPermissionsMatrix(): Promise<Record<string, unknown>> {
-    return this.request("GET", "/permissions/matrix");
+    return this.requestUnwrapped("GET", "/permissions/matrix");
   }
 
   async getMyPermissions(): Promise<Record<string, unknown>> {
-    return this.request("GET", "/permissions/me");
+    return this.requestUnwrapped("GET", "/permissions/me");
   }
 
   // ---------------------------------------------------------------- Period Close
-  // NOTE: /v1/periods/* — D4-A parallel deploy. 404 propagates until backend ships.
+  // /v1/periods/* HAS shipped: the family is registered (erp-main
+  // functions/src/publicApi/families/_registry.ts `periods: periodsFamily`) and the
+  // GET reads return 200. Only POST close/reopen still answer 501 NOT_IMPLEMENTED.
 
   async getCurrentPeriod(params?: { periodId?: string }): Promise<Record<string, unknown>> {
     if (params?.periodId) {
-      return this.request("GET", `/periods/${encodeURIComponent(params.periodId)}`);
+      return this.requestUnwrapped("GET", `/periods/${encodeURIComponent(params.periodId)}`);
     }
-    return this.request("GET", "/periods/current");
+    return this.requestUnwrapped("GET", "/periods/current");
   }
 
   async closePeriod(data: { type: "monthly" | "quarterly" }): Promise<Record<string, unknown>> {

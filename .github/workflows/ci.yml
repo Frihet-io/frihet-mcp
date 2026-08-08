@@ -41,6 +41,14 @@ jobs:
       - name: Test
         run: npm test
 
+      # Output-contract drift gate: replays checked-in REAL backend response
+      # bodies through a real FrihetClient + the real tool handlers and validates
+      # each tool's structuredContent against its declared outputSchema. Offline
+      # (node:http on 127.0.0.1) — no credentials, no network, PR-blocking.
+      # Its PASS line names how many tools it scanned and how many are UNCOVERED.
+      - name: Schema parity (MCP outputSchemas vs real backend responses)
+        run: node scripts/schema-parity-gate.mjs
+
       - name: OpenAI review descriptor freeze
         run: npm run gate:openai-review-descriptor
 

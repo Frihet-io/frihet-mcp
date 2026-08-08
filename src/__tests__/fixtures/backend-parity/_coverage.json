@@ -1,0 +1,5 @@
+{
+  "minimumCoveredTools": 11,
+  "why": "Ratchet. The gate fails if fewer tools carry a backend-response fixture than this floor — deleting or renaming a fixture can no longer shrink the scanned surface in silence. Raise it (never lower it) as fixtures are added; lowering it must be a deliberate edit in the same diff as the removal, with the reason in the PR body.",
+  "seededBy": "PR fix/mcp-output-contract-parity — the 11 tools on the surfaces proven broken against the deployed backend (C8, C9, C10, C11, C12, C13, C14, C-EXTRA-envelope, GAP-10)."
+}
