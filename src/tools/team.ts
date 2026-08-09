@@ -39,15 +39,17 @@ export function registerTeamTools(server: McpServer, client: IFrihetClient): voi
       title: "List Team Members",
       description:
         "List all members in the workspace. " +
-        "Returns member ID, name, email, role, and invite status (pending/active). " +
+        "Returns active members + pending invites. The workspace owner is NOT a member row and is excluded. " +
+        "Each row carries member ID, name, email, role, and invite status (pending/active). " +
         "Useful for access management and auditing who has access to the account. " +
         "/ Lista todos los miembros del espacio de trabajo. " +
-        "Devuelve ID, nombre, email, rol y estado de invitacion (pendiente/activo). " +
+        "Devuelve miembros activos + invitaciones pendientes. El propietario del espacio NO aparece como miembro y queda excluido. " +
+        "Cada fila lleva ID, nombre, email, rol y estado de invitacion (pendiente/activo). " +
         "Util para gestion de accesos y auditoria de quien tiene acceso a la cuenta.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         role: z
-          .enum(["owner", "admin", "member", "viewer"])
+          .enum(["owner", "admin", "editor", "accountant", "viewer"])
           .optional()
           .describe("Filter by role / Filtrar por rol"),
         status: z
@@ -78,16 +80,18 @@ export function registerTeamTools(server: McpServer, client: IFrihetClient): voi
       description:
         "Invite a new member to the workspace by email address. " +
         "An invitation email is sent — the member must accept before gaining access. " +
-        "Roles: owner (full access), admin (manage account, no billing), member (operational access), viewer (read-only). " +
-        "Example: email='ana@example.com', role='member' " +
+        "Roles: admin (manage account, no billing), editor (operational access, no billing), accountant (read all financial data, no edits), viewer (read-only). " +
+        "Owner is excluded from invitations and must be transferred via a dedicated flow. " +
+        "Example: email='ana@example.com', role='accountant' " +
         "/ Invita a un nuevo miembro al espacio de trabajo por correo electronico. " +
         "Se envia un email de invitacion — el miembro debe aceptar antes de acceder. " +
-        "Roles: owner (acceso total), admin (gestion sin facturacion), member (acceso operativo), viewer (solo lectura).",
+        "Roles: admin (gestion sin facturacion), editor (acceso operativo sin facturacion), accountant (lectura de datos financieros sin edicion), viewer (solo lectura). " +
+        "Owner queda excluido de las invitaciones y debe transferirse por un flujo dedicado.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
         email: z.string().email().describe("Email address of the invitee / Email del invitado"),
         role: z
-          .enum(["admin", "member", "viewer"])
+          .enum(["admin", "editor", "accountant", "viewer"])
           .describe("Role to assign (owner cannot be invited, must be transferred) / Rol a asignar (owner no se puede invitar, debe transferirse)"),
         name: z
           .string()
@@ -116,15 +120,17 @@ export function registerTeamTools(server: McpServer, client: IFrihetClient): voi
         "Change the role of an existing team member. " +
         "Only workspace admins or owners can change roles. " +
         "Cannot change the owner's role — use a dedicated ownership transfer flow. " +
-        "Example: memberId='mbr_abc123', role='admin' " +
+        "Allowed roles: admin, editor, accountant, viewer. " +
+        "Example: memberId='mbr_abc123', role='accountant' " +
         "/ Cambia el rol de un miembro existente del espacio de trabajo. " +
         "Solo administradores o propietarios pueden cambiar roles. " +
-        "No se puede cambiar el rol del propietario — usa el flujo de transferencia de propiedad.",
+        "No se puede cambiar el rol del propietario — usa el flujo de transferencia de propiedad. " +
+        "Roles permitidos: admin, editor, accountant, viewer.",
       annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         memberId: z.string().describe("Team member ID / ID del miembro del equipo"),
         role: z
-          .enum(["admin", "member", "viewer"])
+          .enum(["admin", "editor", "accountant", "viewer"])
           .describe("New role to assign / Nuevo rol a asignar"),
       },
       outputSchema: actionResultOutput,

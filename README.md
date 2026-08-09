@@ -395,9 +395,9 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 | Tool | What it does |
 |------|-------------|
-| `list_team_members` | List all workspace members with role and invite status |
-| `invite_team_member` | Invite a new member by email with role (admin/member/viewer) |
-| `update_team_member_role` | Change an existing member's role |
+| `list_team_members` | List active members + pending invites (owner excluded) |
+| `invite_team_member` | Invite a new member by email with role (admin/editor/accountant/viewer) |
+| `update_team_member_role` | Change an existing member's role (admin/editor/accountant/viewer) |
 | `remove_team_member` | Remove a member from the workspace (confirm=true required) |
 
 ### Gestoria — Accountants (5)

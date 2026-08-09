@@ -15,3 +15,4 @@ SOUL.md
 # Local tooling / build cache (accidentally committed in #82)
 .wrangler/
 .serena/
+node_modules/
