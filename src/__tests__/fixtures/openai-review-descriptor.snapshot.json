@@ -2337,11 +2337,19 @@
         "$schema": "http://json-schema.org/draft-07/schema#",
         "additionalProperties": {},
         "properties": {
+          "base64": {
+            "type": "string"
+          },
           "contentType": {
             "type": "string"
           },
           "id": {
             "type": "string"
+          },
+          "sizeBytes": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           },
           "url": {
             "type": "string"

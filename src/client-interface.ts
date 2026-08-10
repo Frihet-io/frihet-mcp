@@ -55,8 +55,12 @@ export interface IFrihetClient {
   // Invoice actions
   sendInvoice(id: string, to?: string): Promise<Record<string, unknown>>;
   markInvoicePaid(id: string, paidDate?: string): Promise<Record<string, unknown>>;
-  getInvoicePdf(id: string): Promise<Record<string, unknown>>;
-  getInvoiceEInvoice(invoiceId: string): Promise<any>;
+  // #1393: PDF / e-invoice document responses — content-type-aware. Returns
+  // base64 bytes + size + contentType for raw document bodies, or a flat
+  // `{ id, url?, contentType }` for the legacy JSON envelope (whichever the
+  // server sends). Size-capped at MAX_PDF_BYTES / MAX_XML_BYTES respectively.
+  getInvoicePdf(id: string): Promise<import("./client.js").BinaryDocument>;
+  getInvoiceEInvoice(invoiceId: string): Promise<import("./client.js").XmlDocument>;
   createCreditNote(invoiceId: string, data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string }, idempotencyKey?: string): Promise<Record<string, unknown>>;
   applyLateFee(invoiceId: string, data?: { amount?: number; daysOverdue?: number }): Promise<any>;
 

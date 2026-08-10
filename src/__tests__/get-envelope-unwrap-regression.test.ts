@@ -275,7 +275,7 @@ describe("client.ts single-object get_* reads unwrap the { data, meta } envelope
   });
 
   test("getInvoiceEInvoice unwraps the object-data envelope", async () => {
-    const result = (await makeClient().getInvoiceEInvoice("inv_1")) as Record<string, unknown>;
+    const result = await makeClient().getInvoiceEInvoice("inv_1");
     assert.equal("data" in result, false);
     assert.equal("meta" in result, false);
     assert.equal(result.xml, "<Invoice/>");
@@ -287,7 +287,12 @@ describe("client.ts single-object get_* reads unwrap the { data, meta } envelope
     // `data` is itself a non-array OBJECT. A bare-string `data` (not an envelope,
     // just a coincidentally-named field) must pass through untouched.
     const result = await makeClient().getInvoiceEInvoice("plain-xml");
-    assert.deepEqual(result, { data: "<Invoice/>", meta: {} });
+    assert.deepEqual(result, {
+      id: "plain-xml",
+      xml: "<Invoice/>",
+      contentType: "application/xml",
+      sizeBytes: "<Invoice/>".length,
+    });
   });
 
   test("listInvoices is unaffected — keeps the raw { data: [...], total, ... } envelope", async () => {

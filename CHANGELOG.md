@@ -4,6 +4,10 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`get_invoice_pdf` / `get_invoice_einvoice` died on every real call (#1393).** `FrihetClient.request<T>()` called `response.json()` unconditionally on every 2xx body, but the live `/invoices/:id/pdf` endpoint returns raw `application/pdf` bytes and `/invoices/:id/xml` returns raw `application/xml` text — `response.json()` on either threw a SyntaxError that surfaced to the MCP client as an opaque fetch error. The generic JSON `request<T>` codepath is unchanged; two new private helpers (`requestBinary`, `requestXml`) handle document responses only, branching on `Content-Type` after the existing 429 / error / 204 guards. Both enforce a hard size cap (PDF 25 MiB, XML 5 MiB) as a `Content-Length` precheck AND a post-stream byte-count check, so a missing or lying `Content-Length` still can't trigger an unbounded `arrayBuffer()`. Legacy JSON envelope contract (`{ id, url, contentType }` for PDF, `{ xml, filename, format }` for XML) is preserved. Schemas (`pdfResultOutput`, new `einvoiceResultOutput`), `IFrihetClient` signatures, and demo fixtures updated. Pinned by `src/__tests__/binary-content-types.test.ts`.
+
 ## [1.16.6] — 2026-08-06
 
 ### Fixed

@@ -857,11 +857,46 @@ export const recurringInvoiceItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/** Schema for PDF results */
+/**
+ * Schema for `get_invoice_einvoice` XML results (#1393 — content-type-aware).
+ *
+ * The backend serves either:
+ *   - raw `application/xml` text (new contract) → `{ id, contentType, sizeBytes, xml }`
+ *   - a legacy JSON envelope `{ xml, filename, format }` (old contract) →
+ *     same shape plus `filename` / `format` when present.
+ *
+ * `xml` is always present on a 2xx — it's the empty string ONLY when the
+ * server explicitly returned no body, which never happens in practice.
+ */
+export const einvoiceResultOutput = z.object({
+  xml: z.string(),
+  contentType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  filename: z.string().optional(),
+  format: z.string().optional(),
+}).passthrough();
+
+/**
+ * Schema for `get_invoice_pdf` results (#1393 — content-type-aware).
+ *
+ * The backend serves either:
+ *   - raw `application/pdf` bytes (new contract) → `{ id, contentType, sizeBytes, base64 }`
+ *   - a legacy JSON envelope `{ id, url, contentType }` (old contract) →
+ *     same fields minus `sizeBytes` / `base64` — these stay OPTIONAL so
+ *     the legacy contract keeps validating end-to-end. Per ERP#1393
+ *     acceptance criteria, only `id` is REQUIRED.
+ *
+ * `url` is reserved for the legacy pre-signed URL path; new responses leave
+ * it `undefined`. MCP `structuredContent` is JSON-only, so the bytes arrive
+ * base64-encoded — clients decode them with `Buffer.from(b64, 'base64')` or
+ * their host's equivalent.
+ */
 export const pdfResultOutput = z.object({
   id: z.string(),
   url: z.string().optional(),
   contentType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
+  base64: z.string().optional(),
 }).passthrough();
 
 /* --- Time summary schema --------------------------------------------------- */
