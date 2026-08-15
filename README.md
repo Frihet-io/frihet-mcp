@@ -263,8 +263,8 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `search_invoices` | Find invoices by client name, date, or status |
 | `send_invoice` | Email invoice to client (PDF attachment) |
 | `mark_invoice_paid` | Mark an invoice as paid with optional payment date |
-| `get_invoice_pdf` | Get a download URL for the invoice PDF |
-| `get_invoice_einvoice` | Get the e-invoice XML for a given invoice ID |
+| `get_invoice_pdf` | Get bounded invoice PDF bytes as base64 |
+| `get_invoice_einvoice` | Get bounded XML or Factur-X PDF bytes for an invoice |
 | `create_credit_note` | Create a credit note linked to an existing invoice |
 | `apply_late_fee` | Apply a late payment fee to an overdue invoice |
 
@@ -563,8 +563,8 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 | Tool | What it does |
 |------|-------------|
-| `permissions_matrix` | Get the full permissions matrix for all roles in the workspace |
-| `permissions_me` | Get the current API key's effective permissions |
+| `permissions_matrix` | Get the documented RBAC-model snapshot (not a runtime authorization guarantee) |
+| `permissions_me` | Compare RBAC-model fields with actual API-key scopes and known scope denials (non-exhaustive) |
 
 ### Period Close (3)
 

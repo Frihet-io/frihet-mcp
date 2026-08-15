@@ -12,6 +12,7 @@ import { z } from "zod/v4";
 import type { PaginatedResponse } from "../types.js";
 import { log, logToolCall } from "../logger.js";
 import { recordToolCall } from "../metrics.js";
+import { sanitizeServerRemediation } from "../redaction.js";
 
 /* ------------------------------------------------------------------ */
 /*  Safety annotations for MCP tool registrations                      */
@@ -77,6 +78,7 @@ interface FrihetApiErrorLike {
   statusCode: number;
   errorCode: string;
   message: string;
+  detail?: unknown;
 }
 
 function isFrihetApiError(error: unknown): error is FrihetApiErrorLike {
@@ -85,9 +87,14 @@ function isFrihetApiError(error: unknown): error is FrihetApiErrorLike {
     error !== null &&
     "statusCode" in error &&
     "errorCode" in error &&
-    typeof (error as FrihetApiErrorLike).statusCode === "number"
+    typeof (error as FrihetApiErrorLike).statusCode === "number" &&
+    typeof (error as FrihetApiErrorLike).errorCode === "string" &&
+    typeof (error as FrihetApiErrorLike).message === "string"
   );
 }
+
+const FORBIDDEN_FRIENDLY_MESSAGE =
+  "Access denied. Your API key does not have permission for this action. / Acceso denegado.";
 
 /**
  * Maps an error to a user-friendly MCP tool response with error annotations.
@@ -98,14 +105,16 @@ export function handleToolError(error: unknown, toolName?: string): {
   isError: true;
 } {
   if (isFrihetApiError(error)) {
+    const loggedMessage = error.statusCode === 403 ? "Forbidden" : error.message;
+    const loggedCode = error.statusCode === 403 ? "forbidden" : error.errorCode;
     log({
       level: "error",
-      message: `API error: ${error.statusCode} ${error.errorCode}: ${error.message}`,
+      message: `API error: ${error.statusCode} ${loggedCode}: ${loggedMessage}`,
       tool: toolName,
       operation: "tool_error",
       error: {
-        message: error.message,
-        code: error.errorCode,
+        message: loggedMessage,
+        code: loggedCode,
         statusCode: error.statusCode,
       },
     });
@@ -113,7 +122,7 @@ export function handleToolError(error: unknown, toolName?: string): {
     const messages: Record<number, string> = {
       400: "Bad request. Check your input parameters. / Solicitud incorrecta. Revisa los parametros.",
       401: "Authentication failed. Check your API key. / Autenticacion fallida. Revisa tu API key.",
-      403: "Access denied. Your API key does not have permission for this action. / Acceso denegado.",
+      403: FORBIDDEN_FRIENDLY_MESSAGE,
       404: "Resource not found. / Recurso no encontrado.",
       405: "Method not allowed. / Metodo no permitido.",
       413: "Request body too large (max 1MB). / Cuerpo de la solicitud demasiado grande (max 1MB).",
@@ -121,8 +130,19 @@ export function handleToolError(error: unknown, toolName?: string): {
       500: "Internal server error. Try again later. / Error interno del servidor.",
     };
 
-    const friendlyMessage =
-      messages[error.statusCode] ?? `API error ${error.statusCode}. Contact support if this persists.`;
+    let friendlyMessage: string;
+    if (error.statusCode === 413 && error.errorCode === "payload_too_large") {
+      friendlyMessage = `Document response too large: ${error.message} / Respuesta de documento demasiado grande.`;
+    } else if (error.statusCode === 403) {
+      const guidance = sanitizeServerRemediation(error.detail, error.errorCode)
+        ?? sanitizeServerRemediation(error.message, error.errorCode);
+      friendlyMessage = guidance
+        ? `${FORBIDDEN_FRIENDLY_MESSAGE} Server guidance: ${guidance}`
+        : FORBIDDEN_FRIENDLY_MESSAGE;
+    } else {
+      friendlyMessage = messages[error.statusCode]
+        ?? `API error ${error.statusCode}. Contact support if this persists.`;
+    }
 
     return {
       content: [
@@ -857,11 +877,36 @@ export const recurringInvoiceItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/** Schema for PDF results */
+/**
+ * Schema for the MIME-discriminated `get_invoice_einvoice` artifact.
+ *
+ * Stored UBL/Facturae artifacts return strict UTF-8 `xml`; Factur-X artifacts
+ * return PDF bytes as `base64`. Identity, MIME and byte size are always present.
+ */
+export const einvoiceResultOutput = z.object({
+  id: z.string(),
+  contentType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  xml: z.string().optional(),
+  base64: z.string().optional(),
+  filename: z.string().optional(),
+}).passthrough().refine(
+  (value) => (typeof value.xml === "string") !== (typeof value.base64 === "string"),
+  { message: "Exactly one of xml or base64 is required" },
+);
+
+/**
+ * Schema for `get_invoice_pdf` results (#1393 — content-type-aware).
+ *
+ * The backend serves raw `application/pdf` bytes. MCP `structuredContent` is
+ * JSON-only, so callers receive bounded base64 plus request identity and size.
+ */
 export const pdfResultOutput = z.object({
   id: z.string(),
-  url: z.string().optional(),
-  contentType: z.string().optional(),
+  contentType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  base64: z.string(),
+  filename: z.string().optional(),
 }).passthrough();
 
 /* --- Time summary schema --------------------------------------------------- */
@@ -1113,22 +1158,82 @@ export const onboardingPersonaResultOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/** Permissions matrix — backend `/v1/permissions/matrix`. */
+const rbacRoleOutput = z.enum(["owner", "admin", "manager", "sales", "accountant", "employee", "viewer"]);
+const rbacResourceOutput = z.enum([
+  "workspace", "invoices", "quotes", "expenses", "clients", "products", "accounting",
+  "people", "payroll", "integrations", "banking", "settings", "audit_log", "billing",
+]);
+const rbacActionOutput = z.enum(["read", "create", "update", "delete", "bulk_delete", "export"]);
+const rbacActionsOutput = z.array(rbacActionOutput);
+// Matrix rows intentionally omit denied resources. Keep every known resource
+// explicit and optional so sparse backend rows validate consistently.
+const rbacResourceGrantsOutput = z.object({
+  workspace: rbacActionsOutput.optional(),
+  invoices: rbacActionsOutput.optional(),
+  quotes: rbacActionsOutput.optional(),
+  expenses: rbacActionsOutput.optional(),
+  clients: rbacActionsOutput.optional(),
+  products: rbacActionsOutput.optional(),
+  accounting: rbacActionsOutput.optional(),
+  people: rbacActionsOutput.optional(),
+  payroll: rbacActionsOutput.optional(),
+  integrations: rbacActionsOutput.optional(),
+  banking: rbacActionsOutput.optional(),
+  settings: rbacActionsOutput.optional(),
+  audit_log: rbacActionsOutput.optional(),
+  billing: rbacActionsOutput.optional(),
+}).strict();
+const rbacMatrixOutput = z.object({
+  owner: rbacResourceGrantsOutput,
+  admin: rbacResourceGrantsOutput,
+  manager: rbacResourceGrantsOutput,
+  sales: rbacResourceGrantsOutput,
+  accountant: rbacResourceGrantsOutput,
+  employee: rbacResourceGrantsOutput,
+  viewer: rbacResourceGrantsOutput,
+}).strict();
+
+/**
+ * Documented RBAC-model snapshot — backend `/v1/permissions/matrix`.
+ * This is not an exhaustive report of runtime authorization or Firestore rules.
+ */
 export const permissionsMatrixOutput = z.object({
-  roles: z.array(z.object({
-    role: z.string(),
-    permissions: z.array(z.string()),
-  }).passthrough()).optional(),
-  resources: z.array(z.string()).optional(),
-  generatedAt: z.string().optional(),
+  roles: z.array(rbacRoleOutput).describe("Role names represented by this documented RBAC model"),
+  resources: z.array(rbacResourceOutput).describe("Resource names represented by this documented RBAC model"),
+  actions: z.array(rbacActionOutput).describe("Action names represented by this documented RBAC model"),
+  legacyAliases: z.record(z.string(), rbacRoleOutput).describe("Legacy role name to canonical RBAC-model role"),
+  matrix: rbacMatrixOutput
+    .describe("Documented role/resource/action grants; not a runtime authorization guarantee"),
+  source: z.string().describe("Backend explanation of the model's source and limitations"),
 }).passthrough();
 
-/** Caller's own permissions — backend `/v1/permissions/me`. */
+/**
+ * Caller's RBAC-model row and API-key scope state — backend `/v1/permissions/me`.
+ * Known denials are intentionally non-exhaustive; a backend 403 is authoritative.
+ */
 export const permissionsMeOutput = z.object({
-  userId: z.string().optional(),
-  role: z.string().optional(),
-  permissions: z.array(z.string()).optional(),
-  workspaceId: z.string().optional(),
+  role: rbacRoleOutput.describe("Backwards-compatible RBAC-model role"),
+  isOwner: z.boolean().describe("Backwards-compatible RBAC-model owner flag"),
+  resources: rbacResourceGrantsOutput.describe("Backwards-compatible RBAC-model resource grants"),
+  scopes: z.array(z.string()).describe("Backwards-compatible RBAC capabilities; not API-key scopes"),
+  legacyFieldSemantics: z.object({
+    resources: z.literal("rbacResources"),
+    scopes: z.literal("rbacCapabilities"),
+  }).describe("Explicit meaning of the backwards-compatible resources/scopes fields"),
+  rbac: z.object({
+    role: rbacRoleOutput,
+    isOwner: z.boolean(),
+    resources: rbacResourceGrantsOutput,
+    capabilities: z.array(z.string()),
+  }).describe("Documented RBAC-model view; not an exhaustive authorization prediction"),
+  apiKeyScopes: z.array(z.string()).describe("Actual scopes stored for this API key"),
+  apiKeyUnrestricted: z.boolean().describe("Whether empty/absent stored scopes use unrestricted-key semantics"),
+  denied: z.object({
+    einvoice: z.boolean(),
+  }).describe("Known API-key-scope denials only"),
+  deniedSemantics: z.string().describe("Backend limitation statement for denied"),
+  notIncluded: z.array(z.enum(["featureFlags", "deployedEndpoints"]))
+    .describe("Authorization surfaces this endpoint cannot truthfully report"),
 }).passthrough();
 
 /** Accounting period state — backend `/v1/periods/*`. */
@@ -1183,7 +1288,12 @@ export async function withToolLogging(
     return result;
   } catch (error) {
     const durationMs = Math.round(Date.now() - startTime);
-    logToolCall(toolName, startTime, false, error instanceof Error ? error as Error & { statusCode?: number; errorCode?: string } : new Error(String(error)));
+    const errorForLog = isFrihetApiError(error) && error.statusCode === 403
+      ? Object.assign(new Error("Forbidden"), { statusCode: 403, errorCode: "forbidden" })
+      : error instanceof Error
+        ? error as Error & { statusCode?: number; errorCode?: string }
+        : new Error(String(error));
+    logToolCall(toolName, startTime, false, errorForLog);
     recordToolCall(toolName, durationMs, false);
     return handleToolError(error, toolName);
   }

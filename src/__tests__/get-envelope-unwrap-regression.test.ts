@@ -46,7 +46,10 @@ import {
   timeEntryItemOutput,
   timeSummaryOutput,
   recurringInvoiceItemOutput,
+  einvoiceResultOutput,
   pdfResultOutput,
+  permissionsMatrixOutput,
+  permissionsMeOutput,
 } from "../tools/shared.js";
 import { eInvoiceStatusOutput } from "../tools/einvoice.js";
 
@@ -75,7 +78,40 @@ const FIXTURES = {
   bankAccount: { id: "acct_1", alias: "Main", ibanLast4: "4321" },
   timeEntry: { id: "te_1", userId: "u_1", hours: 3.5 },
   recurringInvoice: { id: "rec_1", templateName: "Monthly retainer", frequency: "monthly", status: "active" },
-  invoicePdf: { id: "inv_1", url: "https://cdn.example.com/inv_1.pdf", contentType: "application/pdf" },
+  permissionsMatrix: {
+    roles: ["owner", "admin", "manager", "sales", "accountant", "employee", "viewer"],
+    resources: ["workspace", "invoices", "quotes", "expenses", "clients", "products", "accounting", "people", "payroll", "integrations", "banking", "settings", "audit_log", "billing"],
+    actions: ["read", "create", "update", "delete", "bulk_delete", "export"],
+    legacyAliases: { editor: "sales" },
+    matrix: {
+      owner: { workspace: ["read", "update", "export"], billing: ["read", "create", "update", "delete", "export"] },
+      admin: { workspace: ["read", "update", "export"] },
+      manager: { workspace: ["read"] },
+      sales: { workspace: ["read"] },
+      accountant: { workspace: ["read"] },
+      employee: { workspace: ["read"] },
+      viewer: { workspace: ["read", "export"] },
+    },
+    source: "hand-maintained snapshot (2026-06-22) of the Frihet RBAC model; not derived from firestore.rules and not verified against it",
+  },
+  permissionsMe: {
+    role: "owner",
+    isOwner: true,
+    resources: { workspace: ["read", "update", "export"], billing: ["read", "create", "update", "delete", "export"] },
+    scopes: ["billing:read", "workspace:read"],
+    legacyFieldSemantics: { resources: "rbacResources", scopes: "rbacCapabilities" },
+    rbac: {
+      role: "owner",
+      isOwner: true,
+      resources: { workspace: ["read", "update", "export"], billing: ["read", "create", "update", "delete", "export"] },
+      capabilities: ["billing:read", "workspace:read"],
+    },
+    apiKeyScopes: ["read", "write"],
+    apiKeyUnrestricted: false,
+    denied: { einvoice: true },
+    deniedSemantics: "Known API-key scope denials only; not an exhaustive effective-authorization report.",
+    notIncluded: ["featureFlags", "deployedEndpoints"],
+  },
   timeSummary: { from: "2026-06-01", to: "2026-06-30", totalHours: 40, billableHours: 32, nonBillableHours: 8 },
   einvoiceStatus: { status: "succeeded" as const, step: "delivered", ackId: "ack_123" },
   businessContext: {
@@ -107,22 +143,24 @@ const FIXTURES = {
 before(async () => {
   server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
-    res.setHeader("Content-Type", "application/json");
-
-    const send = (body: unknown) => res.end(JSON.stringify(body));
+    const send = (body: unknown) => {
+      res.setHeader("Content-Type", "application/json");
+      return res.end(JSON.stringify(body));
+    };
 
     if (url.pathname === "/invoices" && req.method === "GET") {
       // List path — must stay as the RAW paginated envelope (requestPaginated).
       return send({ data: [FIXTURES.invoice], total: 1, limit: 20, offset: 0 });
     }
     if (url.pathname === "/invoices/inv_1" && req.method === "GET") return send(envelope(FIXTURES.invoice));
-    if (url.pathname === "/invoices/inv_1/pdf" && req.method === "GET") return send(envelope(FIXTURES.invoicePdf));
-    if (url.pathname === "/invoices/inv_1/xml" && req.method === "GET") {
-      return send(envelope({ xml: "<Invoice/>", filename: "inv_1.xml", format: "ubl" }));
+    if (url.pathname === "/invoices/inv_1/pdf" && req.method === "GET") {
+      res.setHeader("Content-Type", "application/pdf");
+      return res.end(Buffer.from("%PDF-1.4\n%%EOF\n", "utf8"));
     }
-    if (url.pathname === "/invoices/plain-xml/xml" && req.method === "GET") {
-      // `data` present but NOT an object (a bare string) — must NOT be unwrapped.
-      return send({ data: "<Invoice/>", meta: {} });
+    if (url.pathname === "/invoices/inv_1/xml" && req.method === "GET") {
+      res.setHeader("Content-Type", "application/xml");
+      res.setHeader("Content-Disposition", 'attachment; filename="inv_1.xml"');
+      return res.end("<Invoice/>");
     }
     if (url.pathname === "/expenses/exp_1" && req.method === "GET") return send(envelope(FIXTURES.expense));
     if (url.pathname === "/clients/cli_1" && req.method === "GET") return send(envelope(FIXTURES.client));
@@ -138,6 +176,8 @@ before(async () => {
     if (url.pathname === "/time/entries/te_1" && req.method === "GET") return send(envelope(FIXTURES.timeEntry));
     if (url.pathname === "/time/summary" && req.method === "GET") return send(envelope(FIXTURES.timeSummary));
     if (url.pathname === "/recurring/invoices/rec_1" && req.method === "GET") return send(envelope(FIXTURES.recurringInvoice));
+    if (url.pathname === "/permissions/matrix" && req.method === "GET") return send(envelope(FIXTURES.permissionsMatrix));
+    if (url.pathname === "/permissions/me" && req.method === "GET") return send(envelope(FIXTURES.permissionsMe));
     if (url.pathname === "/einvoice/status/wf_1" && req.method === "GET") return send(envelope(FIXTURES.einvoiceStatus));
     if (url.pathname === "/context" && req.method === "GET") return send(envelope(FIXTURES.businessContext));
     if (url.pathname === "/monthly" && req.method === "GET") return send(envelope(FIXTURES.monthlySummary));
@@ -248,7 +288,19 @@ describe("client.ts single-object get_* reads unwrap the { data, meta } envelope
     assertUnwrappedAndValid(result, recurringInvoiceItemOutput);
   });
 
-  test("getInvoicePdf unwraps + validates against pdfResultOutput", async () => {
+  test("getPermissionsMatrix unwraps the real ERP family envelope exactly once", async () => {
+    const result = await makeClient().getPermissionsMatrix();
+    assertUnwrappedAndValid(result, permissionsMatrixOutput);
+    assert.deepEqual((result as typeof FIXTURES.permissionsMatrix).roles, FIXTURES.permissionsMatrix.roles);
+  });
+
+  test("getMyPermissions unwraps the real ERP family envelope exactly once", async () => {
+    const result = await makeClient().getMyPermissions();
+    assertUnwrappedAndValid(result, permissionsMeOutput);
+    assert.deepEqual((result as typeof FIXTURES.permissionsMe).denied, { einvoice: true });
+  });
+
+  test("getInvoicePdf returns bounded raw bytes + validates against pdfResultOutput", async () => {
     const result = await makeClient().getInvoicePdf("inv_1");
     assertUnwrappedAndValid(result, pdfResultOutput);
   });
@@ -274,20 +326,12 @@ describe("client.ts single-object get_* reads unwrap the { data, meta } envelope
     assert.equal(result.period, "2026-07");
   });
 
-  test("getInvoiceEInvoice unwraps the object-data envelope", async () => {
-    const result = (await makeClient().getInvoiceEInvoice("inv_1")) as Record<string, unknown>;
-    assert.equal("data" in result, false);
-    assert.equal("meta" in result, false);
+  test("getInvoiceEInvoice returns bounded XML + validates against einvoiceResultOutput", async () => {
+    const result = await makeClient().getInvoiceEInvoice("inv_1");
+    assert.ok("xml" in result);
     assert.equal(result.xml, "<Invoice/>");
     assert.equal(result.filename, "inv_1.xml");
-  });
-
-  test("getInvoiceEInvoice does NOT false-unwrap a non-object 'data' value", async () => {
-    // Guards the adversarial-review concern: requestUnwrapped only unwraps when
-    // `data` is itself a non-array OBJECT. A bare-string `data` (not an envelope,
-    // just a coincidentally-named field) must pass through untouched.
-    const result = await makeClient().getInvoiceEInvoice("plain-xml");
-    assert.deepEqual(result, { data: "<Invoice/>", meta: {} });
+    assert.equal(einvoiceResultOutput.safeParse(result).success, true);
   });
 
   test("listInvoices is unaffected — keeps the raw { data: [...], total, ... } envelope", async () => {

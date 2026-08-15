@@ -4,6 +4,10 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`get_invoice_pdf` / `get_invoice_einvoice` died on real document bodies (#1393).** The generic client JSON-parsed raw PDF/XML success bodies. Document reads now perform one fetch per successful attempt, keep timeout and cancellation active through a bounded stream, and preserve 429/error handling without an unbounded body read. Invoice PDFs return request identity plus base64 bytes; stored e-invoices dispatch honestly between strict UTF-8 XML (5 MiB cap) and Factur-X PDF (25 MiB cap), including `Content-Disposition` filenames. Unexpected MIME, malformed bytes, and empty artifacts fail closed. The generic JSON request path is unchanged. Schemas, interface signatures, descriptions, demo fixtures, and adversarial transport tests are aligned with the live ERP response contract.
+
 ## [1.16.6] — 2026-08-06
 
 ### Fixed

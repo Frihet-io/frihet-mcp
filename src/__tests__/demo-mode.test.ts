@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 
 import { DemoFrihetClient } from "../demo-client.js";
 import * as fixtures from "../demo-fixtures.js";
+import { permissionsMatrixOutput, permissionsMeOutput } from "../tools/shared.js";
 
 describe("DemoFrihetClient — reads", () => {
   test("listInvoices returns a non-empty stamped PaginatedResponse", async () => {
@@ -32,6 +33,20 @@ describe("DemoFrihetClient — reads", () => {
     assert.equal(res.id, firstId);
     assert.equal(res._demo, true);
     assert.ok(res._demoNotice, "_demoNotice present");
+  });
+
+  test("permission reads use the same truthful payload contracts as live ERP", async () => {
+    const client = new DemoFrihetClient();
+    const matrix = await client.getPermissionsMatrix();
+    const me = await client.getMyPermissions();
+    const roles = matrix.roles;
+
+    assert.equal(permissionsMatrixOutput.safeParse(matrix).success, true);
+    assert.equal(permissionsMeOutput.safeParse(me).success, true);
+    assert.ok(Array.isArray(roles));
+    assert.equal(typeof roles[0], "string", "matrix roles are role names, not fabricated role objects");
+    assert.deepEqual(me.denied, { einvoice: false });
+    assert.deepEqual(me.notIncluded, ["featureFlags", "deployedEndpoints"]);
   });
 });
 

@@ -2,16 +2,13 @@
  * Permissions tools for the Frihet MCP server — D4-B megasprint (2 tools).
  *
  * Tools:
- *   1. permissions_matrix — full role/permission matrix for the workspace
- *   2. permissions_me     — caller's own role + permissions
+ *   1. permissions_matrix — documented RBAC-model snapshot
+ *   2. permissions_me     — RBAC model + actual API-key scope reporting
  *
  * REST surface: /v1/permissions/matrix, /v1/permissions/me
  *
- * Permissions are derived from role + workspace overrides. Tools are read-only —
- * mutating roles is done via team_invite / team_role_update (existing).
- *
- * NOTE: ERP backend endpoints land in parallel D4-A wave. 404s propagate as isError
- * until backend ships.
+ * These read-only reports are useful for discovery, but neither is an exhaustive
+ * runtime-authorization prediction. A backend 403 remains authoritative.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -34,10 +31,9 @@ export function registerPermissionsTools(server: McpServer, client: IFrihetClien
     {
       title: "Permissions Matrix",
       description:
-        "Return the full role-to-permission matrix for the workspace. " +
-        "Lists every role with the permissions it grants and every protected resource. " +
-        "Useful for security audits, role design, and compliance reporting. " +
-        "/ Devuelve la matriz completa de roles y permisos del workspace.",
+        "Return the backend's documented RBAC-model snapshot by role, resource, and action. " +
+        "It is not derived from Firestore rules and is not a runtime authorization guarantee; " +
+        "a backend 403 is authoritative. / Devuelve el modelo RBAC documentado, no una garantia exhaustiva de autorizacion.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {},
       outputSchema: permissionsMatrixOutput,
@@ -60,9 +56,10 @@ export function registerPermissionsTools(server: McpServer, client: IFrihetClien
     {
       title: "My Permissions",
       description:
-        "Return the caller's effective role + permissions in the current workspace. " +
-        "Useful for client-side UI gating, debugging access errors, and capability discovery. " +
-        "/ Devuelve el rol efectivo y los permisos del llamante en el workspace actual.",
+        "Return the caller's backwards-compatible RBAC-model fields separately from actual API-key scopes, " +
+        "unrestricted-key semantics, known e-invoice scope denial, and surfaces not reported here. " +
+        "This is non-exhaustive; use the exact backend 403 as authority. " +
+        "/ Separa el modelo RBAC de los scopes reales de la API key; no es una autorizacion exhaustiva.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {},
       outputSchema: permissionsMeOutput,

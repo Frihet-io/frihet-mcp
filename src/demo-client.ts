@@ -20,6 +20,8 @@
 
 import type { IFrihetClient } from "./client-interface.js";
 import type { PaginatedResponse } from "./types.js";
+import type { BinaryDocument, EInvoiceDocument } from "./client.js";
+import { Buffer } from "node:buffer";
 import {
   READ_STAMP,
   FISCAL_STAMP,
@@ -41,6 +43,62 @@ import {
 } from "./demo-fixtures.js";
 
 type Rec = Record<string, unknown>;
+
+const DEMO_RBAC_ROLES = ["owner", "admin", "manager", "sales", "accountant", "employee", "viewer"];
+const DEMO_RBAC_RESOURCES = [
+  "workspace", "invoices", "quotes", "expenses", "clients", "products", "accounting",
+  "people", "payroll", "integrations", "banking", "settings", "audit_log", "billing",
+];
+const DEMO_RBAC_ACTIONS = ["read", "create", "update", "delete", "bulk_delete", "export"];
+const DEMO_FULL_ACTIONS = [...DEMO_RBAC_ACTIONS];
+const DEMO_PERMISSION_MATRIX: Record<string, Record<string, string[]>> = {
+  owner: {
+    workspace: ["read", "update", "export"],
+    invoices: DEMO_FULL_ACTIONS, quotes: DEMO_FULL_ACTIONS, expenses: DEMO_FULL_ACTIONS,
+    clients: DEMO_FULL_ACTIONS, products: DEMO_FULL_ACTIONS, accounting: DEMO_FULL_ACTIONS,
+    people: DEMO_FULL_ACTIONS, payroll: DEMO_FULL_ACTIONS, integrations: DEMO_FULL_ACTIONS,
+    banking: ["read", "create", "update", "delete", "export"],
+    settings: ["read", "update"], audit_log: ["read", "export"],
+    billing: ["read", "create", "update", "delete", "export"],
+  },
+  admin: {
+    workspace: ["read", "update", "export"],
+    invoices: DEMO_FULL_ACTIONS, quotes: DEMO_FULL_ACTIONS, expenses: DEMO_FULL_ACTIONS,
+    clients: DEMO_FULL_ACTIONS, products: DEMO_FULL_ACTIONS, accounting: DEMO_FULL_ACTIONS,
+    people: DEMO_FULL_ACTIONS, payroll: DEMO_FULL_ACTIONS, integrations: DEMO_FULL_ACTIONS,
+    banking: ["read", "create", "update", "delete", "export"],
+    settings: ["read", "update"], audit_log: ["read", "export"],
+  },
+  manager: {
+    workspace: ["read"], invoices: ["read", "export"], quotes: ["read", "export"],
+    clients: ["read", "export"], products: ["read", "export"], expenses: ["read", "export"],
+    banking: ["read"], people: DEMO_FULL_ACTIONS, payroll: ["read", "export"],
+    settings: ["read"], integrations: ["read"], audit_log: ["read"],
+  },
+  sales: {
+    workspace: ["read"], invoices: ["read", "create", "update", "export"],
+    quotes: ["read", "create", "update", "export"], clients: ["read", "create", "update", "export"],
+    products: ["read", "export"], expenses: ["read", "export"],
+  },
+  accountant: {
+    workspace: ["read"], invoices: ["read", "create", "update", "export"],
+    quotes: ["read", "export"], expenses: ["read", "create", "update", "export"],
+    clients: ["read", "export"], products: ["read", "export"],
+    banking: ["read", "create", "update", "export"], accounting: ["read", "create", "update", "export"],
+    people: ["read"], audit_log: ["read", "export"],
+  },
+  employee: { workspace: ["read"] },
+  viewer: {
+    workspace: ["read", "export"], invoices: ["read", "export"], quotes: ["read", "export"],
+    expenses: ["read", "export"], clients: ["read", "export"], products: ["read", "export"],
+    banking: ["read"], accounting: ["read", "export"], people: ["read"], payroll: ["read"],
+    settings: ["read"], integrations: ["read"], audit_log: ["read"],
+  },
+};
+
+const DEMO_OWNER_CAPABILITIES = Object.entries(DEMO_PERMISSION_MATRIX.owner!)
+  .flatMap(([resource, actions]) => actions.map((action) => `${resource}:${action}`))
+  .sort();
 
 export class DemoFrihetClient implements IFrihetClient {
   // ---------------------------------------------------------------- Invoices
@@ -168,14 +226,28 @@ export class DemoFrihetClient implements IFrihetClient {
   async markInvoicePaid(id: string, paidDate?: string): Promise<Rec> {
     return simulateAction(id, { status: "paid", paidAt: paidDate ?? DEMO_NOW });
   }
-  async getInvoicePdf(id: string): Promise<Rec> {
-    return { id, url: "https://app.frihet.io/demo/invoice.pdf", contentType: "application/pdf", ...READ_STAMP };
-  }
-  async getInvoiceEInvoice(invoiceId: string): Promise<Rec> {
+  async getInvoicePdf(id: string): Promise<BinaryDocument> {
+    // #1393: shape mirrors the live BinaryDocument contract (id,
+    // contentType, sizeBytes, base64) so demo-mode outputSchema validation
+    // runs against the same fields as the live path.
+    const demoPdfBytes = Buffer.from("%PDF-1.4\n%%DEMO e-invoice for " + id + "\n%%EOF\n", "utf8");
     return {
-      xml: `<?xml version="1.0" encoding="UTF-8"?>\n<Invoice><!-- DEMO example e-invoice for ${invoiceId} --></Invoice>`,
+      id,
+      contentType: "application/pdf",
+      sizeBytes: demoPdfBytes.byteLength,
+      base64: demoPdfBytes.toString("base64"),
+      ...READ_STAMP,
+    };
+  }
+  async getInvoiceEInvoice(invoiceId: string): Promise<EInvoiceDocument> {
+    // #1393: mirrors the live XML arm of the MIME-discriminated contract.
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Invoice><!-- DEMO example e-invoice for ${invoiceId} --></Invoice>`;
+    return {
+      id: invoiceId,
+      xml,
+      contentType: "application/xml; charset=utf-8",
+      sizeBytes: Buffer.byteLength(xml, "utf8"),
       filename: `${invoiceId}.xml`,
-      format: "facturae",
       ...FISCAL_STAMP,
     };
   }
@@ -639,10 +711,36 @@ export class DemoFrihetClient implements IFrihetClient {
 
   // ---------------------------------------------------------------- Permissions
   async getPermissionsMatrix(): Promise<Rec> {
-    return { roles: [{ role: "owner", permissions: ["*"] }], resources: ["invoices", "expenses", "clients"], generatedAt: DEMO_NOW, ...READ_STAMP };
+    return {
+      roles: DEMO_RBAC_ROLES,
+      resources: DEMO_RBAC_RESOURCES,
+      actions: DEMO_RBAC_ACTIONS,
+      legacyAliases: { editor: "sales" },
+      matrix: DEMO_PERMISSION_MATRIX,
+      source: "hand-maintained demo snapshot of the Frihet RBAC model; not derived from firestore.rules and not verified against it",
+      ...READ_STAMP,
+    };
   }
   async getMyPermissions(): Promise<Rec> {
-    return { userId: "demo_user_001", role: "owner", permissions: ["*"], workspaceId: "demo_ws_001", ...READ_STAMP };
+    return {
+      role: "owner",
+      isOwner: true,
+      resources: DEMO_PERMISSION_MATRIX.owner,
+      scopes: DEMO_OWNER_CAPABILITIES,
+      legacyFieldSemantics: { resources: "rbacResources", scopes: "rbacCapabilities" },
+      rbac: {
+        role: "owner",
+        isOwner: true,
+        resources: DEMO_PERMISSION_MATRIX.owner,
+        capabilities: DEMO_OWNER_CAPABILITIES,
+      },
+      apiKeyScopes: [],
+      apiKeyUnrestricted: true,
+      denied: { einvoice: false },
+      deniedSemantics: "Known API-key scope denials only; not an exhaustive effective-authorization report.",
+      notIncluded: ["featureFlags", "deployedEndpoints"],
+      ...READ_STAMP,
+    };
   }
 
   // ---------------------------------------------------------------- Period close

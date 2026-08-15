@@ -13,6 +13,7 @@
  */
 
 import type { PaginatedResponse, ApiError } from "./types.js";
+import { sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
@@ -20,6 +21,62 @@ const BASE_URL = "https://api.frihet.io/v1";
 const MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 const REQUEST_TIMEOUT_MS = 30000;
+
+/**
+ * Hard size caps for document responses. Enforced TWICE: precheck on
+ * `Content-Length` (so an honest server doesn't waste bandwidth) and after
+ * streaming (so a missing/lying `Content-Length` still can't trigger an
+ * unbounded allocation).
+ *
+ *  - PDF: 25 MiB — generous for any ERP-issued invoice PDF, including
+ *    embedded logos, Facturae XML attachments, and stamp signatures.
+ *  - XML:  5 MiB — UBL / Facturae / PEPPOL documents stay well under 1 MiB
+ *    in practice; 5 MiB absorbs any historical / annex-laden outlier.
+ *
+ * Anything larger is rejected with `413 payload_too_large` BEFORE we allocate
+ * — the user sees a clean error, the worker doesn't OOM.
+ */
+export const MAX_PDF_BYTES = 25 * 1024 * 1024;
+export const MAX_XML_BYTES = 5 * 1024 * 1024;
+const MAX_ERROR_BYTES = 64 * 1024;
+
+/**
+ * Bounded binary document response. Always base64-encoded because MCP
+ * `structuredContent` is JSON-only — raw `Uint8Array` would coerce to a
+ * sparse object on the wire.
+ */
+export interface BinaryDocument {
+  /** Echoed id from the request (invoice id), so callers can correlate. */
+  id: string;
+  /** Verbatim `Content-Type` from the response (e.g. `application/pdf`). */
+  contentType: string;
+  /** Byte length of the decoded body. Equal to `Buffer.byteLength(base64)` after round-trip. */
+  sizeBytes: number;
+  /** Base64-encoded bytes. Round-trip via `Buffer.from(b64, 'base64')`. */
+  base64: string;
+  /** Filename hint parsed from `Content-Disposition`, when present. */
+  filename?: string;
+}
+
+/**
+ * Bounded XML document response (UBL / CII / Facturae / PEPPOL / FatturaPA /
+ * XRechnung — anything declared `application/xml` or `text/xml`).
+ */
+export interface XmlDocument {
+  /** Echoed id from the request (invoice id). */
+  id: string;
+  /** Strictly decoded UTF-8 XML text. */
+  xml: string;
+  /** Verbatim `Content-Type` from the response. */
+  contentType: string;
+  /** Byte length of the decoded UTF-8 body. */
+  sizeBytes: number;
+  /** Filename hint parsed from `Content-Disposition`, when present. */
+  filename?: string;
+}
+
+/** `/invoices/:id/xml` serves XML or a Factur-X PDF, depending on storage MIME. */
+export type EInvoiceDocument = XmlDocument | BinaryDocument;
 
 /**
  * HTTP methods for which the backend treats the request as a mutation and
@@ -95,15 +152,86 @@ function normalizeIdempotencyKey(key: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function normalizedContentType(contentType: string): string {
+  return contentType.split(";", 1)[0]!.trim().toLowerCase();
+}
+
+function isXmlContentType(contentType: string): boolean {
+  const normalized = normalizedContentType(contentType);
+  return normalized === "application/xml" || normalized === "text/xml" || normalized.endsWith("+xml");
+}
+
+function hasPdfSignature(bytes: Uint8Array): boolean {
+  return bytes.byteLength >= 5 &&
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46 &&
+    bytes[4] === 0x2d;
+}
+
+function attachmentFilename(contentDisposition: string | null): string | undefined {
+  if (!contentDisposition) return undefined;
+  const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const quoted = contentDisposition.match(/filename="([^"]+)"/i)?.[1];
+  const plain = contentDisposition.match(/filename=([^;]+)/i)?.[1];
+  const candidate = (encoded ?? quoted ?? plain)?.trim();
+  if (!candidate) return undefined;
+  try {
+    return decodeURIComponent(candidate).split(/[\\/]/).pop();
+  } catch {
+    return candidate.split(/[\\/]/).pop();
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function decodeUtf8(bytes: Uint8Array, label: string): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new FrihetApiError(200, "invalid_response", `${label} is not valid UTF-8`);
+  }
+}
+
 export class FrihetApiError extends Error {
   constructor(
     public readonly statusCode: number,
     public readonly errorCode: string,
     message?: string,
+    public readonly detail?: string,
   ) {
-    super(message ?? errorCode);
+    super(
+      statusCode === 403
+        ? sanitizeServerRemediation(message, errorCode) ?? errorCode
+        : message ?? errorCode,
+    );
     this.name = "FrihetApiError";
   }
+}
+
+function normalizeApiError(
+  value: unknown,
+  statusCode: number,
+  statusText: string,
+): ApiError {
+  const fallbackError = `http_${statusCode}`;
+  const record = typeof value === "object" && value !== null
+    ? value as Record<string, unknown>
+    : undefined;
+  const error = typeof record?.error === "string" && record.error.trim()
+    ? record.error
+    : fallbackError;
+  const message = typeof record?.message === "string"
+    ? record.message
+    : (error !== fallbackError ? error : statusText || fallbackError);
+  return {
+    error,
+    message,
+    ...(typeof record?.detail === "string" ? { detail: record.detail } : {}),
+  };
 }
 
 export interface FrihetClientOptions {
@@ -236,17 +364,19 @@ export class FrihetClient {
       logApiCall(method, path, response.status, durationMs);
       let errorBody: ApiError;
       try {
-        errorBody = (await response.json()) as ApiError;
+        errorBody = normalizeApiError(
+          await response.json(),
+          response.status,
+          response.statusText,
+        );
       } catch {
-        errorBody = {
-          error: `http_${response.status}`,
-          message: response.statusText,
-        };
+        errorBody = normalizeApiError(undefined, response.status, response.statusText);
       }
       throw new FrihetApiError(
         response.status,
         errorBody.error,
         errorBody.message ?? errorBody.error,
+        typeof errorBody.detail === "string" ? errorBody.detail : undefined,
       );
     }
 
@@ -269,6 +399,223 @@ export class FrihetClient {
     }
 
     return data as T;
+  }
+
+  /** Fetch a raw response. The caller owns timeout and body consumption. */
+  private async fetchRaw(
+    method: string,
+    path: string,
+    body?: unknown,
+    query?: Record<string, string | number | undefined>,
+    idempotencyKey?: string,
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    const resolvedIdempotencyKey =
+      normalizeIdempotencyKey(idempotencyKey) ??
+      (MUTATING_METHODS.has(method) ? newIdempotencyKey() : undefined);
+
+    const url = new URL(`${this.baseUrl}${path}`);
+    if (query) {
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined) url.searchParams.set(key, String(value));
+      }
+    }
+
+    const headers: Record<string, string> = {
+      "X-API-Key": this.apiKey,
+      "Content-Type": "application/json",
+      // CRITICAL: do NOT set `Accept: application/json` here. The PDF / XML
+      // endpoints must be allowed to return their native content type;
+      // forcing `Accept: application/json` would make the server negotiate
+      // an error envelope instead of the document bytes.
+      Accept: "*/*",
+      "X-Frihet-Source": SOURCE_MARKER,
+      "User-Agent": SOURCE_USER_AGENT,
+    };
+    if (resolvedIdempotencyKey) {
+      headers["Idempotency-Key"] = resolvedIdempotencyKey;
+    }
+
+    return fetch(url.toString(), {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal,
+    });
+  }
+
+  /** Consume one response body without ever retaining more than `maxBytes`. */
+  private async readBoundedBody(
+    response: Response,
+    maxBytes: number,
+    controller: AbortController,
+  ): Promise<Uint8Array> {
+    const declaredLengthRaw = response.headers.get("content-length")?.trim();
+    const declaredLength = declaredLengthRaw && /^\d+$/.test(declaredLengthRaw)
+      ? Number(declaredLengthRaw)
+      : Number.NaN;
+
+    if (Number.isSafeInteger(declaredLength) && declaredLength > maxBytes) {
+      controller.abort();
+      try { await response.body?.cancel(); } catch { /* best effort */ }
+      throw new FrihetApiError(
+        413,
+        "payload_too_large",
+        `Document response exceeds ${maxBytes} bytes (Content-Length: ${declaredLength})`,
+      );
+    }
+
+    if (!response.body) {
+      throw new FrihetApiError(response.status, "invalid_response", "Response body is null");
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          controller.abort();
+          try { await reader.cancel("document response exceeded size limit"); } catch { /* best effort */ }
+          throw new FrihetApiError(
+            413,
+            "payload_too_large",
+            `Document response exceeds ${maxBytes} bytes during streaming`,
+          );
+        }
+        chunks.push(value);
+      }
+    } catch (error) {
+      if (error instanceof FrihetApiError || isAbortError(error)) throw error;
+      try { await reader.cancel("document stream failed"); } catch { /* best effort */ }
+      controller.abort();
+      throw new FrihetApiError(
+        response.status,
+        "stream_failed",
+        `Failed while reading document response: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      reader.releaseLock();
+    }
+
+    const flat = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      flat.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return flat;
+  }
+
+  /**
+   * Bounded document fetch — ONE call, ONE Response, dispatch on Content-Type.
+   *
+   * Success and error bodies use the same bounded reader. The abort timer stays
+   * active until the body is complete, and a normal success performs one GET.
+   * A 429 may retry, matching the generic JSON client path.
+   */
+  private async requestDocument(
+    method: string,
+    path: string,
+    body: unknown,
+    query: Record<string, string | number | undefined> | undefined,
+    idempotencyKey: string | undefined,
+    maxBytesForContentType: (contentType: string) => number,
+    retryCount = 0,
+  ): Promise<{ contentType: string; bytes: Uint8Array; sizeBytes: number; filename?: string }> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+    const startedAt = Date.now();
+
+    try {
+      const response = await this.fetchRaw(
+        method,
+        path,
+        body,
+        query,
+        idempotencyKey,
+        controller.signal,
+      );
+      const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+      const maxBytes = response.ok ? maxBytesForContentType(contentType) : MAX_ERROR_BYTES;
+      const bytes = await this.readBoundedBody(response, maxBytes, controller);
+      const durationMs = Math.round(Date.now() - startedAt);
+
+      if (response.status === 429) {
+        logApiCall(method, path, 429, durationMs);
+        if (retryCount >= MAX_RETRIES) {
+          throw new FrihetApiError(
+            429,
+            "rate_limit_exceeded",
+            "Rate limit exceeded after multiple retries. Please try again later.",
+          );
+        }
+        const retryAfter = response.headers.get("Retry-After");
+        const parsedRetryAfter = retryAfter ? Number.parseInt(retryAfter, 10) : Number.NaN;
+        const delayMs = Number.isFinite(parsedRetryAfter)
+          ? parsedRetryAfter * 1000
+          : DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
+        logRetry(method, path, retryCount, delayMs);
+        clearTimeout(timeoutId);
+        await this.sleep(delayMs);
+        return this.requestDocument(
+          method,
+          path,
+          body,
+          query,
+          idempotencyKey,
+          maxBytesForContentType,
+          retryCount + 1,
+        );
+      }
+
+      if (!response.ok) {
+        logApiCall(method, path, response.status, durationMs);
+        let errorBody = normalizeApiError(undefined, response.status, response.statusText);
+        try {
+          errorBody = normalizeApiError(
+            JSON.parse(decodeUtf8(bytes, "API error response")),
+            response.status,
+            response.statusText,
+          );
+        } catch (error) {
+          if (error instanceof FrihetApiError && error.errorCode !== "invalid_response") throw error;
+        }
+        throw new FrihetApiError(
+          response.status,
+          errorBody.error,
+          errorBody.message ?? errorBody.error,
+          typeof errorBody.detail === "string" ? errorBody.detail : undefined,
+        );
+      }
+
+      logApiCall(method, path, response.status, durationMs);
+      const filename = attachmentFilename(response.headers.get("content-disposition"));
+      return {
+        contentType,
+        bytes,
+        sizeBytes: bytes.byteLength,
+        ...(filename ? { filename } : {}),
+      };
+    } catch (error) {
+      if (isAbortError(error)) {
+        const durationMs = Math.round(Date.now() - startedAt);
+        logApiCall(method, path, 408, durationMs);
+        throw new FrihetApiError(
+          408,
+          "request_timeout",
+          `Request timed out after ${this.timeoutMs / 1000} seconds`,
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   private sleep(ms: number): Promise<void> {
@@ -596,17 +943,91 @@ export class FrihetClient {
     return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(id)}/paid`, paidDate ? { paidDate } : undefined);
   }
 
-  async getInvoicePdf(id: string): Promise<Record<string, unknown>> {
-    // get_invoice_pdf's outputSchema (pdfResultOutput) expects the flat
-    // { id, url?, contentType? } item, same as every other single-object read.
-    return this.requestUnwrapped("GET", `/invoices/${encodeURIComponent(id)}/pdf`);
+  async getInvoicePdf(id: string): Promise<BinaryDocument> {
+    // One fetch, one Response: validate MIME and signature only after the
+    // bounded stream completes. The ERP endpoint has always returned bytes;
+    // there is no pre-signed-URL JSON success contract to emulate.
+    const url = `/invoices/${encodeURIComponent(id)}/pdf`;
+    const doc = await this.requestDocument(
+      "GET",
+      url,
+      undefined,
+      undefined,
+      undefined,
+      (contentType) => normalizedContentType(contentType) === "application/pdf"
+        ? MAX_PDF_BYTES
+        : MAX_ERROR_BYTES,
+    );
+    if (normalizedContentType(doc.contentType) !== "application/pdf") {
+      throw new FrihetApiError(
+        200,
+        "invalid_response",
+        `Invoice PDF endpoint returned unexpected Content-Type: ${doc.contentType}`,
+      );
+    }
+    if (!hasPdfSignature(doc.bytes)) {
+      throw new FrihetApiError(200, "invalid_response", "Invoice PDF response is malformed");
+    }
+
+    return {
+      id,
+      contentType: doc.contentType,
+      sizeBytes: doc.sizeBytes,
+      base64: Buffer.from(doc.bytes.buffer, doc.bytes.byteOffset, doc.bytes.byteLength).toString("base64"),
+      ...(doc.filename ? { filename: doc.filename } : {}),
+    };
   }
 
-  async getInvoiceEInvoice(invoiceId: string): Promise<any> {
-    // get_invoice_einvoice's outputSchema expects the flat { xml, filename, format }
-    // item. requestUnwrapped is a no-op if the body isn't an object envelope
-    // (e.g. a bare XML string), so this is safe either way.
-    return this.requestUnwrapped("GET", `/invoices/${encodeURIComponent(invoiceId)}/xml`);
+  async getInvoiceEInvoice(invoiceId: string): Promise<EInvoiceDocument> {
+    // Stored e-invoices are either XML or Factur-X PDF. Select the size cap
+    // from the actual MIME before reading and preserve the request identity.
+    const url = `/invoices/${encodeURIComponent(invoiceId)}/xml`;
+    const doc = await this.requestDocument(
+      "GET",
+      url,
+      undefined,
+      undefined,
+      undefined,
+      (contentType) => {
+        const normalized = normalizedContentType(contentType);
+        if (normalized === "application/pdf") return MAX_PDF_BYTES;
+        if (isXmlContentType(contentType)) return MAX_XML_BYTES;
+        return MAX_ERROR_BYTES;
+      },
+    );
+    const normalized = normalizedContentType(doc.contentType);
+
+    if (normalized === "application/pdf") {
+      if (!hasPdfSignature(doc.bytes)) {
+        throw new FrihetApiError(200, "invalid_response", "Factur-X PDF response is malformed");
+      }
+      return {
+        id: invoiceId,
+        contentType: doc.contentType,
+        sizeBytes: doc.sizeBytes,
+        base64: Buffer.from(doc.bytes.buffer, doc.bytes.byteOffset, doc.bytes.byteLength).toString("base64"),
+        ...(doc.filename ? { filename: doc.filename } : {}),
+      };
+    }
+
+    if (!isXmlContentType(doc.contentType)) {
+      throw new FrihetApiError(
+        200,
+        "invalid_response",
+        `E-invoice endpoint returned unexpected Content-Type: ${doc.contentType}`,
+      );
+    }
+    const xmlText = decodeUtf8(doc.bytes, "E-invoice XML response");
+    if (!xmlText.trimStart().startsWith("<")) {
+      throw new FrihetApiError(200, "invalid_response", "E-invoice XML response is malformed");
+    }
+    return {
+      id: invoiceId,
+      contentType: doc.contentType,
+      xml: xmlText,
+      sizeBytes: doc.sizeBytes,
+      ...(doc.filename ? { filename: doc.filename } : {}),
+    };
   }
 
   /**
@@ -1495,14 +1916,15 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Permissions
-  // NOTE: /v1/permissions/* — D4-A parallel deploy. 404 propagates until backend ships.
+  // These are standard ERP family responses: unwrap their single-object
+  // `{ data, meta }` envelope before handing the payload to MCP output schemas.
 
   async getPermissionsMatrix(): Promise<Record<string, unknown>> {
-    return this.request("GET", "/permissions/matrix");
+    return this.requestUnwrapped("GET", "/permissions/matrix");
   }
 
   async getMyPermissions(): Promise<Record<string, unknown>> {
-    return this.request("GET", "/permissions/me");
+    return this.requestUnwrapped("GET", "/permissions/me");
   }
 
   // ---------------------------------------------------------------- Period Close

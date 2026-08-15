@@ -7,7 +7,7 @@ Guidance for AI coding assistants working on this repository. See `AGENTS.md` fo
 MCP server that connects AI assistants (Claude · ChatGPT · Cursor · Windsurf · Cline · Antigravity · Codex · Copilot · Gemini CLI) to Frihet ERP. Natural language → invoices, expenses, clients, fiscal reports.
 
 **Live:**
-- npm: https://www.npmjs.com/package/@frihet/mcp-server (v1.16.1, 157 tools)
+- npm: https://www.npmjs.com/package/@frihet/mcp-server — version: see `package.json`; tool count pinned in `src/__tests__/tool-exposure.test.ts` (157 + fiscal aliases)
 - MCP remote: https://mcp.frihet.io (Cloudflare Worker)
 - Smithery: https://smithery.ai/servers/frihet/frihet-mcp
 - Anthropic registry: https://registry.modelcontextprotocol.io/?q=io.frihet
@@ -41,18 +41,10 @@ src/
   metrics.ts           — Tool call metrics
   openai-profile.ts    — OpenAI compatibility profile
   tools/
-    register-all.ts    — Tool registration entry
-    invoices.ts        — invoice tools
-    expenses.ts        — expense tools
-    clients.ts         — client tools
-    products.ts        — product tools
-    quotes.ts          — quote tools
-    crm.ts             — CRM tools
-    deposits.ts        — deposit tools
-    vendors.ts         — vendor tools
-    webhooks.ts        — webhook tools
-    einvoice.ts        — e-invoice tools
-    intelligence.ts    — AI insights tools
+    register-all.ts    — authoritative tool registry (SoT — do not hand-count)
+    <domain>.ts        — one module per domain (invoices, expenses, clients,
+                         quotes, CRM, banking, fiscal/compliance, webhooks,
+                         intelligence, …). `ls src/tools/` for the current list.
     shared.ts          — Cross-tool helpers
   resources/
     register-all.ts    — MCP resources (read-only context)
