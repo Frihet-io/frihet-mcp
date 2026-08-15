@@ -934,14 +934,15 @@ export const timeSummaryOutput = z.object({
 
 export const teamMemberItemOutput = z.object({
   id: z.string(),
-  name: z.string().optional(),
-  email: z.string(),
-  role: z.enum(["owner", "admin", "member", "viewer"]).optional(),
+  name: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  role: z.enum(["owner", "admin", "editor", "accountant", "viewer"]).optional(),
   status: z.enum(["active", "pending"]).optional(),
-  invitedAt: z.string().optional(),
-  joinedAt: z.string().optional(),
-  createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
+  invitedAt: z.string().nullable().optional(),
+  joinedAt: z.string().nullable().optional(),
+  createdAt: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+  expiresAt: z.string().nullable().optional(),
 }).passthrough();
 
 /* --- Gestoria item schemas ------------------------------------------------- */

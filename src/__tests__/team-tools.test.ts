@@ -54,7 +54,7 @@ const MOCK_MEMBER = {
   id: "mbr_abc123",
   name: "Ana Aurora",
   email: "ana@example.com",
-  role: "member",
+  role: "accountant",
   status: "active",
   joinedAt: "2026-01-15T10:00:00Z",
   createdAt: "2026-01-15T10:00:00Z",
@@ -172,7 +172,7 @@ describe("list_team_members — success path", () => {
     const first = (result.structuredContent!["data"] as Record<string, unknown>[])[0]!;
     assert.equal(first["id"], "mbr_abc123");
     assert.equal(first["email"], "ana@example.com");
-    assert.equal(first["role"], "member");
+    assert.equal(first["role"], "accountant");
     assert.equal(first["status"], "active");
   });
 
@@ -223,7 +223,7 @@ describe("invite_team_member — success path", () => {
   test("content block mentions invited", async () => {
     const server = await makeServer(makeSuccessClient);
     const tool = server.tools.get("invite_team_member")!;
-    const result = await tool.handler({ email: "test@example.com", role: "member" });
+    const result = await tool.handler({ email: "test@example.com", role: "accountant" });
     assert.ok(result.content[0]!.text.includes("invited"));
   });
 
@@ -237,7 +237,7 @@ describe("invite_team_member — success path", () => {
   test("404 propagates as isError=true", async () => {
     const server = await makeServer(make404Client);
     const tool = server.tools.get("invite_team_member")!;
-    const result = await tool.handler({ email: "test@example.com", role: "member" });
+    const result = await tool.handler({ email: "test@example.com", role: "accountant" });
     assert.ok(result.isError);
   });
 });
@@ -265,7 +265,7 @@ describe("update_team_member_role — success path", () => {
   test("404 propagates as isError=true", async () => {
     const server = await makeServer(make404Client);
     const tool = server.tools.get("update_team_member_role")!;
-    const result = await tool.handler({ memberId: "mbr_missing", role: "member" });
+    const result = await tool.handler({ memberId: "mbr_missing", role: "accountant" });
     assert.ok(result.isError);
   });
 });
