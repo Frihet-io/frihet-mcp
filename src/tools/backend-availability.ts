@@ -4,7 +4,7 @@
  * PROBLEM (the bug this prevents): several tool families are wired here AHEAD of
  * their Frihet-ERP backend Cloud Functions shipping (fiscal `/v1/fiscal/*`, bank
  * rules `/v1/banking/rules`, gestoria `/v1/gestoria/*`, GL audit `/v1/gl/*`,
- * portal domain/onboard, IGIC, IS, VIES onboarding, payroll prep, permissions,
+ * portal domain/onboard, IGIC, IS, VIES onboarding, payroll prep,
  * HR leaves/anomalies, accounting periods, webhook test). Until the CF deploys,
  * the API returns a genuine HTTP 404.
  *

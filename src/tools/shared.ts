@@ -1138,22 +1138,82 @@ export const onboardingPersonaResultOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/** Permissions matrix — backend `/v1/permissions/matrix`. */
+const rbacRoleOutput = z.enum(["owner", "admin", "manager", "sales", "accountant", "employee", "viewer"]);
+const rbacResourceOutput = z.enum([
+  "workspace", "invoices", "quotes", "expenses", "clients", "products", "accounting",
+  "people", "payroll", "integrations", "banking", "settings", "audit_log", "billing",
+]);
+const rbacActionOutput = z.enum(["read", "create", "update", "delete", "bulk_delete", "export"]);
+const rbacActionsOutput = z.array(rbacActionOutput);
+// Matrix rows intentionally omit denied resources. Keep every known resource
+// explicit and optional so sparse backend rows validate consistently.
+const rbacResourceGrantsOutput = z.object({
+  workspace: rbacActionsOutput.optional(),
+  invoices: rbacActionsOutput.optional(),
+  quotes: rbacActionsOutput.optional(),
+  expenses: rbacActionsOutput.optional(),
+  clients: rbacActionsOutput.optional(),
+  products: rbacActionsOutput.optional(),
+  accounting: rbacActionsOutput.optional(),
+  people: rbacActionsOutput.optional(),
+  payroll: rbacActionsOutput.optional(),
+  integrations: rbacActionsOutput.optional(),
+  banking: rbacActionsOutput.optional(),
+  settings: rbacActionsOutput.optional(),
+  audit_log: rbacActionsOutput.optional(),
+  billing: rbacActionsOutput.optional(),
+}).strict();
+const rbacMatrixOutput = z.object({
+  owner: rbacResourceGrantsOutput,
+  admin: rbacResourceGrantsOutput,
+  manager: rbacResourceGrantsOutput,
+  sales: rbacResourceGrantsOutput,
+  accountant: rbacResourceGrantsOutput,
+  employee: rbacResourceGrantsOutput,
+  viewer: rbacResourceGrantsOutput,
+}).strict();
+
+/**
+ * Documented RBAC-model snapshot — backend `/v1/permissions/matrix`.
+ * This is not an exhaustive report of runtime authorization or Firestore rules.
+ */
 export const permissionsMatrixOutput = z.object({
-  roles: z.array(z.object({
-    role: z.string(),
-    permissions: z.array(z.string()),
-  }).passthrough()).optional(),
-  resources: z.array(z.string()).optional(),
-  generatedAt: z.string().optional(),
+  roles: z.array(rbacRoleOutput).describe("Role names represented by this documented RBAC model"),
+  resources: z.array(rbacResourceOutput).describe("Resource names represented by this documented RBAC model"),
+  actions: z.array(rbacActionOutput).describe("Action names represented by this documented RBAC model"),
+  legacyAliases: z.record(z.string(), rbacRoleOutput).describe("Legacy role name to canonical RBAC-model role"),
+  matrix: rbacMatrixOutput
+    .describe("Documented role/resource/action grants; not a runtime authorization guarantee"),
+  source: z.string().describe("Backend explanation of the model's source and limitations"),
 }).passthrough();
 
-/** Caller's own permissions — backend `/v1/permissions/me`. */
+/**
+ * Caller's RBAC-model row and API-key scope state — backend `/v1/permissions/me`.
+ * Known denials are intentionally non-exhaustive; a backend 403 is authoritative.
+ */
 export const permissionsMeOutput = z.object({
-  userId: z.string().optional(),
-  role: z.string().optional(),
-  permissions: z.array(z.string()).optional(),
-  workspaceId: z.string().optional(),
+  role: rbacRoleOutput.describe("Backwards-compatible RBAC-model role"),
+  isOwner: z.boolean().describe("Backwards-compatible RBAC-model owner flag"),
+  resources: rbacResourceGrantsOutput.describe("Backwards-compatible RBAC-model resource grants"),
+  scopes: z.array(z.string()).describe("Backwards-compatible RBAC capabilities; not API-key scopes"),
+  legacyFieldSemantics: z.object({
+    resources: z.literal("rbacResources"),
+    scopes: z.literal("rbacCapabilities"),
+  }).describe("Explicit meaning of the backwards-compatible resources/scopes fields"),
+  rbac: z.object({
+    role: rbacRoleOutput,
+    isOwner: z.boolean(),
+    resources: rbacResourceGrantsOutput,
+    capabilities: z.array(z.string()),
+  }).describe("Documented RBAC-model view; not an exhaustive authorization prediction"),
+  apiKeyScopes: z.array(z.string()).describe("Actual scopes stored for this API key"),
+  apiKeyUnrestricted: z.boolean().describe("Whether empty/absent stored scopes use unrestricted-key semantics"),
+  denied: z.object({
+    einvoice: z.boolean(),
+  }).describe("Known API-key-scope denials only"),
+  deniedSemantics: z.string().describe("Backend limitation statement for denied"),
+  notIncluded: z.array(z.enum(["featureFlags", "deployedEndpoints"]))
+    .describe("Authorization surfaces this endpoint cannot truthfully report"),
 }).passthrough();
 
 /** Accounting period state — backend `/v1/periods/*`. */

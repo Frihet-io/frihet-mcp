@@ -563,8 +563,8 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 | Tool | What it does |
 |------|-------------|
-| `permissions_matrix` | Get the full permissions matrix for all roles in the workspace |
-| `permissions_me` | Get the current API key's effective permissions |
+| `permissions_matrix` | Get the documented RBAC-model snapshot (not a runtime authorization guarantee) |
+| `permissions_me` | Compare RBAC-model fields with actual API-key scopes and known scope denials (non-exhaustive) |
 
 ### Period Close (3)
 
