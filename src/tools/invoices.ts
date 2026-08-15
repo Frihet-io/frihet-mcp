@@ -5,13 +5,27 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, invoiceItemOutput, actionResultOutput, creditNoteResultOutput, pdfResultOutput } from "./shared.js";
+import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, invoiceItemOutput, actionResultOutput, creditNoteResultOutput, pdfResultOutput, einvoiceResultOutput } from "./shared.js";
 
 const invoiceItemSchema = z.object({
   description: z.string().describe("Description of the line item / Descripcion del concepto"),
   quantity: z.number().describe("Quantity / Cantidad"),
   unitPrice: z.number().describe("Unit price in EUR / Precio unitario en EUR"),
 });
+
+function documentResultMetadata(result: {
+  id: string;
+  contentType: string;
+  sizeBytes: number;
+  filename?: string;
+}): Record<string, unknown> {
+  return {
+    id: result.id,
+    contentType: result.contentType,
+    sizeBytes: result.sizeBytes,
+    ...(result.filename ? { filename: result.filename } : {}),
+  };
+}
 
 // Optional client-identity fields the Frihet API accepts on invoice/quote
 // create+update. When clientId is supplied the server back-fills taxId/address
@@ -411,8 +425,10 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Get Invoice PDF",
       description:
-        "Get the PDF for an invoice. Returns a URL to download the PDF or binary info. " +
-        "/ Obtiene el PDF de una factura. Devuelve una URL de descarga o informacion del binario.",
+        "Get the PDF for an invoice. The body is served as raw `application/pdf` bytes, base64-encoded in `base64` " +
+        "with `sizeBytes` and `contentType`. PDFs larger than 25 MiB are rejected with `413 payload_too_large`. " +
+        "/ Obtiene el PDF de una factura. El cuerpo se sirve como bytes `application/pdf` en bruto, codificados en base64 " +
+        "en `base64`, con `sizeBytes` y `contentType`. PDFs mayores de 25 MiB se rechazan con `413 payload_too_large`.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Invoice ID / ID de la factura"),
@@ -422,7 +438,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     async ({ id }) => withToolLogging("get_invoice_pdf", async () => {
       const result = await client.getInvoicePdf(id);
       return {
-        content: [getContent(formatRecord("Invoice PDF", result))],
+        content: [getContent(formatRecord("Invoice PDF", documentResultMetadata(result)))],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }),
@@ -433,29 +449,27 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
   server.registerTool(
     "get_invoice_einvoice",
     {
-      title: "Get Invoice E-Invoice XML",
+      title: "Get Invoice E-Invoice Artifact",
       description:
-        "Download the e-invoice XML for an invoice. Returns EN16931-compliant XML in the auto-detected format " +
-        "(UBL, CII, XRechnung, Factur-X, FatturaPA, PEPPOL). " +
+        "Download the stored e-invoice artifact for an invoice. XML formats return strict UTF-8 text in `xml`; " +
+        "Factur-X returns `application/pdf` bytes encoded in `base64`. Both include `id`, `contentType`, and `sizeBytes`. " +
+        "XML larger than 5 MiB or PDF larger than 25 MiB is rejected with `413 payload_too_large`. " +
         "Only available after the invoice has been saved/sent. " +
-        "/ Descarga el XML de factura electronica para una factura. Devuelve XML conforme a EN16931 en el formato " +
-        "auto-detectado (UBL, CII, XRechnung, Factur-X, FatturaPA, PEPPOL). " +
+        "/ Descarga el artefacto de factura electronica guardado. Los formatos XML devuelven texto UTF-8 estricto en `xml`; " +
+        "Factur-X devuelve bytes `application/pdf` codificados en `base64`. Ambos incluyen `id`, `contentType` y `sizeBytes`. " +
+        "XML mayor de 5 MiB o PDF mayor de 25 MiB se rechaza con `413 payload_too_large`. " +
         "Solo disponible despues de guardar o enviar la factura.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Invoice ID / ID de la factura"),
       },
-      outputSchema: z.object({
-        xml: z.string().optional(),
-        filename: z.string().optional(),
-        format: z.string().optional(),
-      }).passthrough(),
+      outputSchema: einvoiceResultOutput,
     },
     async ({ id }) => withToolLogging("get_invoice_einvoice", async () => {
       const result = await client.getInvoiceEInvoice(id);
       return {
-        content: [{ type: "text" as const, text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }],
-        structuredContent: (typeof result === "object" && result !== null ? result : { xml: result }) as Record<string, unknown>,
+        content: [getContent(formatRecord("E-invoice artifact", documentResultMetadata(result)))],
+        structuredContent: result as unknown as Record<string, unknown>,
       };
     }),
   );

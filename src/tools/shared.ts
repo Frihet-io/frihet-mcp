@@ -121,8 +121,9 @@ export function handleToolError(error: unknown, toolName?: string): {
       500: "Internal server error. Try again later. / Error interno del servidor.",
     };
 
-    const friendlyMessage =
-      messages[error.statusCode] ?? `API error ${error.statusCode}. Contact support if this persists.`;
+    const friendlyMessage = error.statusCode === 413 && error.errorCode === "payload_too_large"
+      ? `Document response too large: ${error.message} / Respuesta de documento demasiado grande.`
+      : messages[error.statusCode] ?? `API error ${error.statusCode}. Contact support if this persists.`;
 
     return {
       content: [
@@ -857,11 +858,36 @@ export const recurringInvoiceItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/** Schema for PDF results */
+/**
+ * Schema for the MIME-discriminated `get_invoice_einvoice` artifact.
+ *
+ * Stored UBL/Facturae artifacts return strict UTF-8 `xml`; Factur-X artifacts
+ * return PDF bytes as `base64`. Identity, MIME and byte size are always present.
+ */
+export const einvoiceResultOutput = z.object({
+  id: z.string(),
+  contentType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  xml: z.string().optional(),
+  base64: z.string().optional(),
+  filename: z.string().optional(),
+}).passthrough().refine(
+  (value) => (typeof value.xml === "string") !== (typeof value.base64 === "string"),
+  { message: "Exactly one of xml or base64 is required" },
+);
+
+/**
+ * Schema for `get_invoice_pdf` results (#1393 — content-type-aware).
+ *
+ * The backend serves raw `application/pdf` bytes. MCP `structuredContent` is
+ * JSON-only, so callers receive bounded base64 plus request identity and size.
+ */
 export const pdfResultOutput = z.object({
   id: z.string(),
-  url: z.string().optional(),
-  contentType: z.string().optional(),
+  contentType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  base64: z.string(),
+  filename: z.string().optional(),
 }).passthrough();
 
 /* --- Time summary schema --------------------------------------------------- */

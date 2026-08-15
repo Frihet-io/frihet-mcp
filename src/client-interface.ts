@@ -55,8 +55,10 @@ export interface IFrihetClient {
   // Invoice actions
   sendInvoice(id: string, to?: string): Promise<Record<string, unknown>>;
   markInvoicePaid(id: string, paidDate?: string): Promise<Record<string, unknown>>;
-  getInvoicePdf(id: string): Promise<Record<string, unknown>>;
-  getInvoiceEInvoice(invoiceId: string): Promise<any>;
+  // #1393: bounded, content-type-aware document responses. Invoice PDFs and
+  // Factur-X are base64; XML is strict UTF-8 text. Request identity is echoed.
+  getInvoicePdf(id: string): Promise<import("./client.js").BinaryDocument>;
+  getInvoiceEInvoice(invoiceId: string): Promise<import("./client.js").EInvoiceDocument>;
   createCreditNote(invoiceId: string, data: { reason: string; reasonDescription?: string; fullCredit?: boolean; issueDate?: string }, idempotencyKey?: string): Promise<Record<string, unknown>>;
   applyLateFee(invoiceId: string, data?: { amount?: number; daysOverdue?: number }): Promise<any>;
 

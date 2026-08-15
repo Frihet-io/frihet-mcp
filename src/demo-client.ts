@@ -20,6 +20,8 @@
 
 import type { IFrihetClient } from "./client-interface.js";
 import type { PaginatedResponse } from "./types.js";
+import type { BinaryDocument, EInvoiceDocument } from "./client.js";
+import { Buffer } from "node:buffer";
 import {
   READ_STAMP,
   FISCAL_STAMP,
@@ -168,14 +170,28 @@ export class DemoFrihetClient implements IFrihetClient {
   async markInvoicePaid(id: string, paidDate?: string): Promise<Rec> {
     return simulateAction(id, { status: "paid", paidAt: paidDate ?? DEMO_NOW });
   }
-  async getInvoicePdf(id: string): Promise<Rec> {
-    return { id, url: "https://app.frihet.io/demo/invoice.pdf", contentType: "application/pdf", ...READ_STAMP };
-  }
-  async getInvoiceEInvoice(invoiceId: string): Promise<Rec> {
+  async getInvoicePdf(id: string): Promise<BinaryDocument> {
+    // #1393: shape mirrors the live BinaryDocument contract (id,
+    // contentType, sizeBytes, base64) so demo-mode outputSchema validation
+    // runs against the same fields as the live path.
+    const demoPdfBytes = Buffer.from("%PDF-1.4\n%%DEMO e-invoice for " + id + "\n%%EOF\n", "utf8");
     return {
-      xml: `<?xml version="1.0" encoding="UTF-8"?>\n<Invoice><!-- DEMO example e-invoice for ${invoiceId} --></Invoice>`,
+      id,
+      contentType: "application/pdf",
+      sizeBytes: demoPdfBytes.byteLength,
+      base64: demoPdfBytes.toString("base64"),
+      ...READ_STAMP,
+    };
+  }
+  async getInvoiceEInvoice(invoiceId: string): Promise<EInvoiceDocument> {
+    // #1393: mirrors the live XML arm of the MIME-discriminated contract.
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Invoice><!-- DEMO example e-invoice for ${invoiceId} --></Invoice>`;
+    return {
+      id: invoiceId,
+      xml,
+      contentType: "application/xml; charset=utf-8",
+      sizeBytes: Buffer.byteLength(xml, "utf8"),
       filename: `${invoiceId}.xml`,
-      format: "facturae",
       ...FISCAL_STAMP,
     };
   }
