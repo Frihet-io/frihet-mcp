@@ -13,6 +13,7 @@
  */
 
 import type { PaginatedResponse, ApiError } from "./types.js";
+import { sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
@@ -200,10 +201,37 @@ export class FrihetApiError extends Error {
     public readonly statusCode: number,
     public readonly errorCode: string,
     message?: string,
+    public readonly detail?: string,
   ) {
-    super(message ?? errorCode);
+    super(
+      statusCode === 403
+        ? sanitizeServerRemediation(message, errorCode) ?? errorCode
+        : message ?? errorCode,
+    );
     this.name = "FrihetApiError";
   }
+}
+
+function normalizeApiError(
+  value: unknown,
+  statusCode: number,
+  statusText: string,
+): ApiError {
+  const fallbackError = `http_${statusCode}`;
+  const record = typeof value === "object" && value !== null
+    ? value as Record<string, unknown>
+    : undefined;
+  const error = typeof record?.error === "string" && record.error.trim()
+    ? record.error
+    : fallbackError;
+  const message = typeof record?.message === "string"
+    ? record.message
+    : (error !== fallbackError ? error : statusText || fallbackError);
+  return {
+    error,
+    message,
+    ...(typeof record?.detail === "string" ? { detail: record.detail } : {}),
+  };
 }
 
 export interface FrihetClientOptions {
@@ -336,17 +364,19 @@ export class FrihetClient {
       logApiCall(method, path, response.status, durationMs);
       let errorBody: ApiError;
       try {
-        errorBody = (await response.json()) as ApiError;
+        errorBody = normalizeApiError(
+          await response.json(),
+          response.status,
+          response.statusText,
+        );
       } catch {
-        errorBody = {
-          error: `http_${response.status}`,
-          message: response.statusText,
-        };
+        errorBody = normalizeApiError(undefined, response.status, response.statusText);
       }
       throw new FrihetApiError(
         response.status,
         errorBody.error,
         errorBody.message ?? errorBody.error,
+        typeof errorBody.detail === "string" ? errorBody.detail : undefined,
       );
     }
 
@@ -546,18 +576,13 @@ export class FrihetClient {
 
       if (!response.ok) {
         logApiCall(method, path, response.status, durationMs);
-        let errorBody: ApiError = {
-          error: `http_${response.status}`,
-          message: response.statusText,
-        };
+        let errorBody = normalizeApiError(undefined, response.status, response.statusText);
         try {
-          const parsed = JSON.parse(decodeUtf8(bytes, "API error response")) as Partial<ApiError>;
-          if (typeof parsed.error === "string") {
-            errorBody = {
-              error: parsed.error,
-              ...(typeof parsed.message === "string" ? { message: parsed.message } : {}),
-            };
-          }
+          errorBody = normalizeApiError(
+            JSON.parse(decodeUtf8(bytes, "API error response")),
+            response.status,
+            response.statusText,
+          );
         } catch (error) {
           if (error instanceof FrihetApiError && error.errorCode !== "invalid_response") throw error;
         }
@@ -565,6 +590,7 @@ export class FrihetClient {
           response.status,
           errorBody.error,
           errorBody.message ?? errorBody.error,
+          typeof errorBody.detail === "string" ? errorBody.detail : undefined,
         );
       }
 

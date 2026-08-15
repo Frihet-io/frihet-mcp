@@ -12,6 +12,7 @@ import { z } from "zod/v4";
 import type { PaginatedResponse } from "../types.js";
 import { log, logToolCall } from "../logger.js";
 import { recordToolCall } from "../metrics.js";
+import { sanitizeServerRemediation } from "../redaction.js";
 
 /* ------------------------------------------------------------------ */
 /*  Safety annotations for MCP tool registrations                      */
@@ -77,6 +78,7 @@ interface FrihetApiErrorLike {
   statusCode: number;
   errorCode: string;
   message: string;
+  detail?: unknown;
 }
 
 function isFrihetApiError(error: unknown): error is FrihetApiErrorLike {
@@ -85,9 +87,14 @@ function isFrihetApiError(error: unknown): error is FrihetApiErrorLike {
     error !== null &&
     "statusCode" in error &&
     "errorCode" in error &&
-    typeof (error as FrihetApiErrorLike).statusCode === "number"
+    typeof (error as FrihetApiErrorLike).statusCode === "number" &&
+    typeof (error as FrihetApiErrorLike).errorCode === "string" &&
+    typeof (error as FrihetApiErrorLike).message === "string"
   );
 }
+
+const FORBIDDEN_FRIENDLY_MESSAGE =
+  "Access denied. Your API key does not have permission for this action. / Acceso denegado.";
 
 /**
  * Maps an error to a user-friendly MCP tool response with error annotations.
@@ -98,14 +105,16 @@ export function handleToolError(error: unknown, toolName?: string): {
   isError: true;
 } {
   if (isFrihetApiError(error)) {
+    const loggedMessage = error.statusCode === 403 ? "Forbidden" : error.message;
+    const loggedCode = error.statusCode === 403 ? "forbidden" : error.errorCode;
     log({
       level: "error",
-      message: `API error: ${error.statusCode} ${error.errorCode}: ${error.message}`,
+      message: `API error: ${error.statusCode} ${loggedCode}: ${loggedMessage}`,
       tool: toolName,
       operation: "tool_error",
       error: {
-        message: error.message,
-        code: error.errorCode,
+        message: loggedMessage,
+        code: loggedCode,
         statusCode: error.statusCode,
       },
     });
@@ -113,7 +122,7 @@ export function handleToolError(error: unknown, toolName?: string): {
     const messages: Record<number, string> = {
       400: "Bad request. Check your input parameters. / Solicitud incorrecta. Revisa los parametros.",
       401: "Authentication failed. Check your API key. / Autenticacion fallida. Revisa tu API key.",
-      403: "Access denied. Your API key does not have permission for this action. / Acceso denegado.",
+      403: FORBIDDEN_FRIENDLY_MESSAGE,
       404: "Resource not found. / Recurso no encontrado.",
       405: "Method not allowed. / Metodo no permitido.",
       413: "Request body too large (max 1MB). / Cuerpo de la solicitud demasiado grande (max 1MB).",
@@ -121,9 +130,19 @@ export function handleToolError(error: unknown, toolName?: string): {
       500: "Internal server error. Try again later. / Error interno del servidor.",
     };
 
-    const friendlyMessage = error.statusCode === 413 && error.errorCode === "payload_too_large"
-      ? `Document response too large: ${error.message} / Respuesta de documento demasiado grande.`
-      : messages[error.statusCode] ?? `API error ${error.statusCode}. Contact support if this persists.`;
+    let friendlyMessage: string;
+    if (error.statusCode === 413 && error.errorCode === "payload_too_large") {
+      friendlyMessage = `Document response too large: ${error.message} / Respuesta de documento demasiado grande.`;
+    } else if (error.statusCode === 403) {
+      const guidance = sanitizeServerRemediation(error.detail, error.errorCode)
+        ?? sanitizeServerRemediation(error.message, error.errorCode);
+      friendlyMessage = guidance
+        ? `${FORBIDDEN_FRIENDLY_MESSAGE} Server guidance: ${guidance}`
+        : FORBIDDEN_FRIENDLY_MESSAGE;
+    } else {
+      friendlyMessage = messages[error.statusCode]
+        ?? `API error ${error.statusCode}. Contact support if this persists.`;
+    }
 
     return {
       content: [
@@ -1268,7 +1287,12 @@ export async function withToolLogging(
     return result;
   } catch (error) {
     const durationMs = Math.round(Date.now() - startTime);
-    logToolCall(toolName, startTime, false, error instanceof Error ? error as Error & { statusCode?: number; errorCode?: string } : new Error(String(error)));
+    const errorForLog = isFrihetApiError(error) && error.statusCode === 403
+      ? Object.assign(new Error("Forbidden"), { statusCode: 403, errorCode: "forbidden" })
+      : error instanceof Error
+        ? error as Error & { statusCode?: number; errorCode?: string }
+        : new Error(String(error));
+    logToolCall(toolName, startTime, false, errorForLog);
     recordToolCall(toolName, durationMs, false);
     return handleToolError(error, toolName);
   }
