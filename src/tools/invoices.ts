@@ -13,6 +13,20 @@ const invoiceItemSchema = z.object({
   unitPrice: z.number().describe("Unit price in EUR / Precio unitario en EUR"),
 });
 
+function documentResultMetadata(result: {
+  id: string;
+  contentType: string;
+  sizeBytes: number;
+  filename?: string;
+}): Record<string, unknown> {
+  return {
+    id: result.id,
+    contentType: result.contentType,
+    sizeBytes: result.sizeBytes,
+    ...(result.filename ? { filename: result.filename } : {}),
+  };
+}
+
 // Optional client-identity fields the Frihet API accepts on invoice/quote
 // create+update. When clientId is supplied the server back-fills taxId/address
 // from the stored client; clientTaxId/clientAddress override per-document.
@@ -424,7 +438,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     async ({ id }) => withToolLogging("get_invoice_pdf", async () => {
       const result = await client.getInvoicePdf(id);
       return {
-        content: [getContent(formatRecord("Invoice PDF", result as unknown as Record<string, unknown>))],
+        content: [getContent(formatRecord("Invoice PDF", documentResultMetadata(result)))],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }),
@@ -435,15 +449,15 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
   server.registerTool(
     "get_invoice_einvoice",
     {
-      title: "Get Invoice E-Invoice XML",
+      title: "Get Invoice E-Invoice Artifact",
       description:
-        "Download the e-invoice XML for an invoice. Returns EN16931-compliant XML in the auto-detected format " +
-        "(UBL, CII, XRechnung, Factur-X, FatturaPA, PEPPOL). The body is served as raw `application/xml` text in `xml` " +
-        "with `contentType` and `sizeBytes`. XML larger than 5 MiB is rejected with `413 payload_too_large`. " +
+        "Download the stored e-invoice artifact for an invoice. XML formats return strict UTF-8 text in `xml`; " +
+        "Factur-X returns `application/pdf` bytes encoded in `base64`. Both include `id`, `contentType`, and `sizeBytes`. " +
+        "XML larger than 5 MiB or PDF larger than 25 MiB is rejected with `413 payload_too_large`. " +
         "Only available after the invoice has been saved/sent. " +
-        "/ Descarga el XML de factura electronica para una factura. Devuelve XML conforme a EN16931 en el formato " +
-        "auto-detectado (UBL, CII, XRechnung, Factur-X, FatturaPA, PEPPOL). El cuerpo se sirve como texto `application/xml` " +
-        "en `xml`, con `contentType` y `sizeBytes`. XML mayor de 5 MiB se rechaza con `413 payload_too_large`. " +
+        "/ Descarga el artefacto de factura electronica guardado. Los formatos XML devuelven texto UTF-8 estricto en `xml`; " +
+        "Factur-X devuelve bytes `application/pdf` codificados en `base64`. Ambos incluyen `id`, `contentType` y `sizeBytes`. " +
+        "XML mayor de 5 MiB o PDF mayor de 25 MiB se rechaza con `413 payload_too_large`. " +
         "Solo disponible despues de guardar o enviar la factura.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
@@ -454,7 +468,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     async ({ id }) => withToolLogging("get_invoice_einvoice", async () => {
       const result = await client.getInvoiceEInvoice(id);
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        content: [getContent(formatRecord("E-invoice artifact", documentResultMetadata(result)))],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }),

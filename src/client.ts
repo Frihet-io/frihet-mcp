@@ -37,10 +37,10 @@ const REQUEST_TIMEOUT_MS = 30000;
  */
 export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 export const MAX_XML_BYTES = 5 * 1024 * 1024;
+const MAX_ERROR_BYTES = 64 * 1024;
 
 /**
- * Bounded binary document response (PDF and any other non-JSON, non-XML body
- * served as a downloadable artifact). Always base64-encoded because MCP
+ * Bounded binary document response. Always base64-encoded because MCP
  * `structuredContent` is JSON-only — raw `Uint8Array` would coerce to a
  * sparse object on the wire.
  */
@@ -53,12 +53,8 @@ export interface BinaryDocument {
   sizeBytes: number;
   /** Base64-encoded bytes. Round-trip via `Buffer.from(b64, 'base64')`. */
   base64: string;
-  /**
-   * Optional pre-signed URL — present only when the backend returned a JSON
-   * envelope (legacy contract: `{ data: { id, url, contentType }, meta }`).
-   * New raw-bytes contract returns `undefined` here.
-   */
-  url?: string;
+  /** Filename hint parsed from `Content-Disposition`, when present. */
+  filename?: string;
 }
 
 /**
@@ -68,17 +64,18 @@ export interface BinaryDocument {
 export interface XmlDocument {
   /** Echoed id from the request (invoice id). */
   id: string;
-  /** Decoded XML text. UTF-8; charset is taken from the `Content-Type` header when present. */
+  /** Strictly decoded UTF-8 XML text. */
   xml: string;
   /** Verbatim `Content-Type` from the response. */
   contentType: string;
   /** Byte length of the decoded UTF-8 body. */
   sizeBytes: number;
-  /** Filename hint — present when the backend sent `Content-Disposition` or the JSON envelope includes it. */
+  /** Filename hint parsed from `Content-Disposition`, when present. */
   filename?: string;
-  /** E-invoice format tag (`ubl`, `cii`, `facturae`, `xrechnung`, `fatturapa`, `peppol`) — present only with the JSON envelope. */
-  format?: string;
 }
+
+/** `/invoices/:id/xml` serves XML or a Factur-X PDF, depending on storage MIME. */
+export type EInvoiceDocument = XmlDocument | BinaryDocument;
 
 /**
  * HTTP methods for which the backend treats the request as a mutation and
@@ -154,26 +151,48 @@ function normalizeIdempotencyKey(key: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-/**
- * Peel a `{ data: <object>, meta: {...} }` envelope off a JSON body. Returns
- * the inner object when `data` is a non-array object; otherwise returns the
- * body untouched (legacy endpoints that return the item directly). Returns
- * `null` when the input isn't an object at all.
- *
- * Shared by the JSON-envelope branches of `getInvoicePdf` and
- * `getInvoiceEInvoice` so both document reads apply the same envelope rule
- * the rest of the JSON codepath already enforces in `requestUnwrapped`.
- */
-function unwrapSingleObjectEnvelope(body: unknown): Record<string, unknown> | null {
-  if (body === null || typeof body !== "object" || Array.isArray(body)) return null;
-  const obj = body as Record<string, unknown>;
-  if ("data" in obj) {
-    const inner = obj.data;
-    if (inner !== null && typeof inner === "object" && !Array.isArray(inner)) {
-      return inner as Record<string, unknown>;
-    }
+function normalizedContentType(contentType: string): string {
+  return contentType.split(";", 1)[0]!.trim().toLowerCase();
+}
+
+function isXmlContentType(contentType: string): boolean {
+  const normalized = normalizedContentType(contentType);
+  return normalized === "application/xml" || normalized === "text/xml" || normalized.endsWith("+xml");
+}
+
+function hasPdfSignature(bytes: Uint8Array): boolean {
+  return bytes.byteLength >= 5 &&
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46 &&
+    bytes[4] === 0x2d;
+}
+
+function attachmentFilename(contentDisposition: string | null): string | undefined {
+  if (!contentDisposition) return undefined;
+  const encoded = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const quoted = contentDisposition.match(/filename="([^"]+)"/i)?.[1];
+  const plain = contentDisposition.match(/filename=([^;]+)/i)?.[1];
+  const candidate = (encoded ?? quoted ?? plain)?.trim();
+  if (!candidate) return undefined;
+  try {
+    return decodeURIComponent(candidate).split(/[\\/]/).pop();
+  } catch {
+    return candidate.split(/[\\/]/).pop();
   }
-  return obj;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function decodeUtf8(bytes: Uint8Array, label: string): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new FrihetApiError(200, "invalid_response", `${label} is not valid UTF-8`);
+  }
 }
 
 export class FrihetApiError extends Error {
@@ -352,22 +371,14 @@ export class FrihetClient {
     return data as T;
   }
 
-  /**
-   * Internal: fetch a 2xx response object without consuming its body. Reused
-   * by `requestBinary` and `requestXml` so the 429-retry / idempotency /
-   * error-parse path stays in ONE place. Callers MUST eventually consume
-   * `response.body` (or call `.arrayBuffer()` / `.text()`) so the underlying
-   * socket can be released back to the pool.
-   *
-   * Errors are already mapped by `request`'s error branch; this helper does
-   * not re-throw on non-2xx because it bypasses that branch entirely.
-   */
+  /** Fetch a raw response. The caller owns timeout and body consumption. */
   private async fetchRaw(
     method: string,
     path: string,
     body?: unknown,
     query?: Record<string, string | number | undefined>,
     idempotencyKey?: string,
+    signal?: AbortSignal,
   ): Promise<Response> {
     const resolvedIdempotencyKey =
       normalizeIdempotencyKey(idempotencyKey) ??
@@ -395,81 +406,32 @@ export class FrihetClient {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      return await fetch(url.toString(), {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    return fetch(url.toString(), {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal,
+    });
   }
 
-  /**
-   * Bounded document fetch — ONE call, ONE Response, dispatch on Content-Type.
-   *
-   * Replaces the previous peek-then-refetch pattern (one `fetchRaw` to read
-   * Content-Type, then a second GET via `requestUnwrapped` / `requestBinary`
-   * / `requestXml`). The Response from this single fetch is used for
-   * everything: status check, Content-Length precheck, and streaming read.
-   *
-   * Discipline (no unbounded materialization — #1393):
-   *   1. ONE fetch via `fetchRaw` (the JSON-`Accept`-free helper). If the
-   *      response is non-2xx, parse the body as the legacy JSON error
-   *      envelope and throw — same path as `request`.
-   *   2. Read `Content-Length`. If it's set AND exceeds `maxBytes`, cancel
-   *      the body and throw `413 payload_too_large` BEFORE consuming bytes.
-   *   3. Stream via `response.body.getReader()`. Track `totalBytes` and
-   *      `void reader.cancel().catch(() => {})` as soon as the running
-   *      total crosses the cap. We never call `arrayBuffer()` / `text()`
-   *      with no cap — that's the very bug that let an honest server OOM
-   *      this client.
-   *   4. Flatten the bounded chunks into a single `Uint8Array`. Materialize
-   *      Buffer / text / JSON only here, AFTER every byte has cleared the
-   *      cap. The caller then inspects `contentType` to decide:
-   *        - `application/json` → JSON.parse the bytes, unwrap envelope.
-   *        - `application/pdf` (or any non-JSON, non-text binary) →
-   *          base64-encode the bytes.
-   *        - `application/xml` / `text/xml` → UTF-8 decode to string.
-   *
-   * Used by `getInvoicePdf` and `getInvoiceEInvoice` — both call this
-   * ONCE per document, no second GET.
-   */
-  private async requestDocument(
-    method: string,
-    path: string,
-    body: unknown,
-    query: Record<string, string | number | undefined> | undefined,
-    idempotencyKey: string | undefined,
+  /** Consume one response body without ever retaining more than `maxBytes`. */
+  private async readBoundedBody(
+    response: Response,
     maxBytes: number,
-  ): Promise<{ contentType: string; bytes: Uint8Array; sizeBytes: number }> {
-    const response = await this.fetchRaw(method, path, body, query, idempotencyKey);
+    controller: AbortController,
+  ): Promise<Uint8Array> {
+    const declaredLengthRaw = response.headers.get("content-length")?.trim();
+    const declaredLength = declaredLengthRaw && /^\d+$/.test(declaredLengthRaw)
+      ? Number(declaredLengthRaw)
+      : Number.NaN;
 
-    if (!response.ok) {
-      let errorBody: ApiError;
-      try {
-        errorBody = (await response.json()) as ApiError;
-      } catch {
-        errorBody = { error: `http_${response.status}`, message: response.statusText };
-      }
-      throw new FrihetApiError(response.status, errorBody.error, errorBody.message ?? errorBody.error);
-    }
-
-    const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-    const declaredLengthRaw = response.headers.get("content-length");
-    const declaredLength = declaredLengthRaw ? parseInt(declaredLengthRaw, 10) : NaN;
-
-    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-      try { await response.body?.cancel(); } catch { /* ignore */ }
+    if (Number.isSafeInteger(declaredLength) && declaredLength > maxBytes) {
+      controller.abort();
+      try { await response.body?.cancel(); } catch { /* best effort */ }
       throw new FrihetApiError(
         413,
         "payload_too_large",
-        `Document body exceeds ${maxBytes} bytes (Content-Length: ${declaredLength})`,
+        `Document response exceeds ${maxBytes} bytes (Content-Length: ${declaredLength})`,
       );
     }
 
@@ -485,39 +447,149 @@ export class FrihetClient {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
+        if (!value) continue;
         totalBytes += value.byteLength;
         if (totalBytes > maxBytes) {
-          // Cancel FIRST — any further reads throw AbortError, which the
-          // outer catch ignores so the 413 wins. This is the only way to
-          // guarantee no unbounded allocation when a server lies about
-          // Content-Length or streams past the cap.
-          void reader.cancel().catch(() => {});
+          controller.abort();
+          try { await reader.cancel("document response exceeded size limit"); } catch { /* best effort */ }
           throw new FrihetApiError(
             413,
             "payload_too_large",
-            `Document body exceeds ${maxBytes} bytes (received >${maxBytes} during streaming)`,
+            `Document response exceeds ${maxBytes} bytes during streaming`,
           );
         }
         chunks.push(value);
       }
-    } catch (err) {
-      if (err instanceof FrihetApiError) throw err;
+    } catch (error) {
+      if (error instanceof FrihetApiError || isAbortError(error)) throw error;
+      try { await reader.cancel("document stream failed"); } catch { /* best effort */ }
+      controller.abort();
       throw new FrihetApiError(
         response.status,
         "stream_failed",
-        `Failed while reading document body: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed while reading document response: ${error instanceof Error ? error.message : String(error)}`,
       );
+    } finally {
+      reader.releaseLock();
     }
 
-    // Flatten bounded chunks — every byte above has cleared the cap.
     const flat = new Uint8Array(totalBytes);
     let offset = 0;
     for (const chunk of chunks) {
       flat.set(chunk, offset);
       offset += chunk.byteLength;
     }
+    return flat;
+  }
 
-    return { contentType, bytes: flat, sizeBytes: totalBytes };
+  /**
+   * Bounded document fetch — ONE call, ONE Response, dispatch on Content-Type.
+   *
+   * Success and error bodies use the same bounded reader. The abort timer stays
+   * active until the body is complete, and a normal success performs one GET.
+   * A 429 may retry, matching the generic JSON client path.
+   */
+  private async requestDocument(
+    method: string,
+    path: string,
+    body: unknown,
+    query: Record<string, string | number | undefined> | undefined,
+    idempotencyKey: string | undefined,
+    maxBytesForContentType: (contentType: string) => number,
+    retryCount = 0,
+  ): Promise<{ contentType: string; bytes: Uint8Array; sizeBytes: number; filename?: string }> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+    const startedAt = Date.now();
+
+    try {
+      const response = await this.fetchRaw(
+        method,
+        path,
+        body,
+        query,
+        idempotencyKey,
+        controller.signal,
+      );
+      const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+      const maxBytes = response.ok ? maxBytesForContentType(contentType) : MAX_ERROR_BYTES;
+      const bytes = await this.readBoundedBody(response, maxBytes, controller);
+      const durationMs = Math.round(Date.now() - startedAt);
+
+      if (response.status === 429) {
+        logApiCall(method, path, 429, durationMs);
+        if (retryCount >= MAX_RETRIES) {
+          throw new FrihetApiError(
+            429,
+            "rate_limit_exceeded",
+            "Rate limit exceeded after multiple retries. Please try again later.",
+          );
+        }
+        const retryAfter = response.headers.get("Retry-After");
+        const parsedRetryAfter = retryAfter ? Number.parseInt(retryAfter, 10) : Number.NaN;
+        const delayMs = Number.isFinite(parsedRetryAfter)
+          ? parsedRetryAfter * 1000
+          : DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
+        logRetry(method, path, retryCount, delayMs);
+        clearTimeout(timeoutId);
+        await this.sleep(delayMs);
+        return this.requestDocument(
+          method,
+          path,
+          body,
+          query,
+          idempotencyKey,
+          maxBytesForContentType,
+          retryCount + 1,
+        );
+      }
+
+      if (!response.ok) {
+        logApiCall(method, path, response.status, durationMs);
+        let errorBody: ApiError = {
+          error: `http_${response.status}`,
+          message: response.statusText,
+        };
+        try {
+          const parsed = JSON.parse(decodeUtf8(bytes, "API error response")) as Partial<ApiError>;
+          if (typeof parsed.error === "string") {
+            errorBody = {
+              error: parsed.error,
+              ...(typeof parsed.message === "string" ? { message: parsed.message } : {}),
+            };
+          }
+        } catch (error) {
+          if (error instanceof FrihetApiError && error.errorCode !== "invalid_response") throw error;
+        }
+        throw new FrihetApiError(
+          response.status,
+          errorBody.error,
+          errorBody.message ?? errorBody.error,
+        );
+      }
+
+      logApiCall(method, path, response.status, durationMs);
+      const filename = attachmentFilename(response.headers.get("content-disposition"));
+      return {
+        contentType,
+        bytes,
+        sizeBytes: bytes.byteLength,
+        ...(filename ? { filename } : {}),
+      };
+    } catch (error) {
+      if (isAbortError(error)) {
+        const durationMs = Math.round(Date.now() - startedAt);
+        logApiCall(method, path, 408, durationMs);
+        throw new FrihetApiError(
+          408,
+          "request_timeout",
+          `Request timed out after ${this.timeoutMs / 1000} seconds`,
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   private sleep(ms: number): Promise<void> {
@@ -846,33 +918,29 @@ export class FrihetClient {
   }
 
   async getInvoicePdf(id: string): Promise<BinaryDocument> {
-    // #1393: ONE fetch (via `requestDocument`) returns the same Response
-    // for both status, Content-Type dispatch, and bounded streaming. The
-    // previous peek-then-refetch pattern made TWO GETs; the second was
-    // also a fresh response so the JSON envelope read it produced could
-    // diverge from the first (cap decision, headers, etc). One fetch,
-    // one Response, dispatch here on the SAME bytes:
-    //   - `application/json` → parse + unwrap legacy `{ data, meta }`
-    //                          envelope, return flat item.
-    //   - anything else      → base64-encode the bounded bytes.
+    // One fetch, one Response: validate MIME and signature only after the
+    // bounded stream completes. The ERP endpoint has always returned bytes;
+    // there is no pre-signed-URL JSON success contract to emulate.
     const url = `/invoices/${encodeURIComponent(id)}/pdf`;
-    const doc = await this.requestDocument("GET", url, undefined, undefined, undefined, MAX_PDF_BYTES);
-    const ct = doc.contentType.toLowerCase();
-
-    if (ct.includes("application/json")) {
-      let parsed: unknown = null;
-      try { parsed = JSON.parse(new TextDecoder("utf-8").decode(doc.bytes)); } catch { /* fall through */ }
-      const raw = unwrapSingleObjectEnvelope(parsed);
-      if (raw) {
-        return {
-          id: typeof raw.id === "string" ? raw.id : id,
-          contentType: typeof raw.contentType === "string" ? raw.contentType : "application/pdf",
-          sizeBytes: typeof raw.sizeBytes === "number" ? raw.sizeBytes : 0,
-          base64: typeof raw.base64 === "string" ? raw.base64 : "",
-          ...(typeof raw.url === "string" ? { url: raw.url } : {}),
-        };
-      }
-      return { id, contentType: "application/pdf", sizeBytes: 0, base64: "" };
+    const doc = await this.requestDocument(
+      "GET",
+      url,
+      undefined,
+      undefined,
+      undefined,
+      (contentType) => normalizedContentType(contentType) === "application/pdf"
+        ? MAX_PDF_BYTES
+        : MAX_ERROR_BYTES,
+    );
+    if (normalizedContentType(doc.contentType) !== "application/pdf") {
+      throw new FrihetApiError(
+        200,
+        "invalid_response",
+        `Invoice PDF endpoint returned unexpected Content-Type: ${doc.contentType}`,
+      );
+    }
+    if (!hasPdfSignature(doc.bytes)) {
+      throw new FrihetApiError(200, "invalid_response", "Invoice PDF response is malformed");
     }
 
     return {
@@ -880,56 +948,59 @@ export class FrihetClient {
       contentType: doc.contentType,
       sizeBytes: doc.sizeBytes,
       base64: Buffer.from(doc.bytes.buffer, doc.bytes.byteOffset, doc.bytes.byteLength).toString("base64"),
+      ...(doc.filename ? { filename: doc.filename } : {}),
     };
   }
 
-  async getInvoiceEInvoice(invoiceId: string): Promise<XmlDocument> {
-    // #1393: same ONE-fetch / SAME-Response dispatch as `getInvoicePdf`.
-    // JSON path normalizes the two legacy shapes the server has shipped:
-    //   - object envelope: `{ data: { xml, filename, format }, meta }` →
-    //     `unwrapSingleObjectEnvelope` peels it, `xml` is the payload.
-    //   - bare-string `data`: `{ data: "<xml/>", meta: {} }` → unwrap is a
-    //     no-op (string `data` is not an object envelope), so we pull the
-    //     string directly from the `data` key.
-    // Both normalize to `{ id, xml, contentType, sizeBytes, filename?, format? }`.
+  async getInvoiceEInvoice(invoiceId: string): Promise<EInvoiceDocument> {
+    // Stored e-invoices are either XML or Factur-X PDF. Select the size cap
+    // from the actual MIME before reading and preserve the request identity.
     const url = `/invoices/${encodeURIComponent(invoiceId)}/xml`;
-    const doc = await this.requestDocument("GET", url, undefined, undefined, undefined, MAX_XML_BYTES);
-    const ct = doc.contentType.toLowerCase();
+    const doc = await this.requestDocument(
+      "GET",
+      url,
+      undefined,
+      undefined,
+      undefined,
+      (contentType) => {
+        const normalized = normalizedContentType(contentType);
+        if (normalized === "application/pdf") return MAX_PDF_BYTES;
+        if (isXmlContentType(contentType)) return MAX_XML_BYTES;
+        return MAX_ERROR_BYTES;
+      },
+    );
+    const normalized = normalizedContentType(doc.contentType);
 
-    if (ct.includes("application/json")) {
-      let parsed: unknown = null;
-      try { parsed = JSON.parse(new TextDecoder("utf-8").decode(doc.bytes)); } catch { /* fall through */ }
-      let xmlText = "";
-      let raw: Record<string, unknown> | undefined;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        const obj = parsed as Record<string, unknown>;
-        if ("data" in obj) {
-          const d = obj.data;
-          if (typeof d === "string") {
-            xmlText = d;
-          } else if (d && typeof d === "object" && !Array.isArray(d)) {
-            raw = d as Record<string, unknown>;
-            if (typeof raw.xml === "string") xmlText = raw.xml;
-          }
-        }
+    if (normalized === "application/pdf") {
+      if (!hasPdfSignature(doc.bytes)) {
+        throw new FrihetApiError(200, "invalid_response", "Factur-X PDF response is malformed");
       }
-      const result: XmlDocument = {
+      return {
         id: invoiceId,
-        contentType: "application/xml",
-        xml: xmlText,
-        sizeBytes: Buffer.byteLength(xmlText, "utf8"),
+        contentType: doc.contentType,
+        sizeBytes: doc.sizeBytes,
+        base64: Buffer.from(doc.bytes.buffer, doc.bytes.byteOffset, doc.bytes.byteLength).toString("base64"),
+        ...(doc.filename ? { filename: doc.filename } : {}),
       };
-      if (raw && typeof raw.filename === "string") result.filename = raw.filename;
-      if (raw && typeof raw.format === "string") result.format = raw.format;
-      return result;
     }
 
-    const xmlText = new TextDecoder("utf-8").decode(doc.bytes);
+    if (!isXmlContentType(doc.contentType)) {
+      throw new FrihetApiError(
+        200,
+        "invalid_response",
+        `E-invoice endpoint returned unexpected Content-Type: ${doc.contentType}`,
+      );
+    }
+    const xmlText = decodeUtf8(doc.bytes, "E-invoice XML response");
+    if (!xmlText.trimStart().startsWith("<")) {
+      throw new FrihetApiError(200, "invalid_response", "E-invoice XML response is malformed");
+    }
     return {
       id: invoiceId,
       contentType: doc.contentType,
       xml: xmlText,
       sizeBytes: doc.sizeBytes,
+      ...(doc.filename ? { filename: doc.filename } : {}),
     };
   }
 

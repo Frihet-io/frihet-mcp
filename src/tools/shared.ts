@@ -121,8 +121,9 @@ export function handleToolError(error: unknown, toolName?: string): {
       500: "Internal server error. Try again later. / Error interno del servidor.",
     };
 
-    const friendlyMessage =
-      messages[error.statusCode] ?? `API error ${error.statusCode}. Contact support if this persists.`;
+    const friendlyMessage = error.statusCode === 413 && error.errorCode === "payload_too_large"
+      ? `Document response too large: ${error.message} / Respuesta de documento demasiado grande.`
+      : messages[error.statusCode] ?? `API error ${error.statusCode}. Contact support if this persists.`;
 
     return {
       content: [
@@ -858,45 +859,35 @@ export const recurringInvoiceItemOutput = z.object({
 }).passthrough();
 
 /**
- * Schema for `get_invoice_einvoice` XML results (#1393 — content-type-aware).
+ * Schema for the MIME-discriminated `get_invoice_einvoice` artifact.
  *
- * The backend serves either:
- *   - raw `application/xml` text (new contract) → `{ id, contentType, sizeBytes, xml }`
- *   - a legacy JSON envelope `{ xml, filename, format }` (old contract) →
- *     same shape plus `filename` / `format` when present.
- *
- * `xml` is always present on a 2xx — it's the empty string ONLY when the
- * server explicitly returned no body, which never happens in practice.
+ * Stored UBL/Facturae artifacts return strict UTF-8 `xml`; Factur-X artifacts
+ * return PDF bytes as `base64`. Identity, MIME and byte size are always present.
  */
 export const einvoiceResultOutput = z.object({
-  xml: z.string(),
+  id: z.string(),
   contentType: z.string(),
   sizeBytes: z.number().int().nonnegative(),
+  xml: z.string().optional(),
+  base64: z.string().optional(),
   filename: z.string().optional(),
-  format: z.string().optional(),
-}).passthrough();
+}).passthrough().refine(
+  (value) => (typeof value.xml === "string") !== (typeof value.base64 === "string"),
+  { message: "Exactly one of xml or base64 is required" },
+);
 
 /**
  * Schema for `get_invoice_pdf` results (#1393 — content-type-aware).
  *
- * The backend serves either:
- *   - raw `application/pdf` bytes (new contract) → `{ id, contentType, sizeBytes, base64 }`
- *   - a legacy JSON envelope `{ id, url, contentType }` (old contract) →
- *     same fields minus `sizeBytes` / `base64` — these stay OPTIONAL so
- *     the legacy contract keeps validating end-to-end. Per ERP#1393
- *     acceptance criteria, only `id` is REQUIRED.
- *
- * `url` is reserved for the legacy pre-signed URL path; new responses leave
- * it `undefined`. MCP `structuredContent` is JSON-only, so the bytes arrive
- * base64-encoded — clients decode them with `Buffer.from(b64, 'base64')` or
- * their host's equivalent.
+ * The backend serves raw `application/pdf` bytes. MCP `structuredContent` is
+ * JSON-only, so callers receive bounded base64 plus request identity and size.
  */
 export const pdfResultOutput = z.object({
   id: z.string(),
-  url: z.string().optional(),
-  contentType: z.string().optional(),
-  sizeBytes: z.number().int().nonnegative().optional(),
-  base64: z.string().optional(),
+  contentType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  base64: z.string(),
+  filename: z.string().optional(),
 }).passthrough();
 
 /* --- Time summary schema --------------------------------------------------- */

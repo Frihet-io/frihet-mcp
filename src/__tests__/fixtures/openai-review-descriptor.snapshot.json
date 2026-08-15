@@ -2343,6 +2343,9 @@
           "contentType": {
             "type": "string"
           },
+          "filename": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -2350,13 +2353,13 @@
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
-          },
-          "url": {
-            "type": "string"
           }
         },
         "required": [
-          "id"
+          "id",
+          "contentType",
+          "sizeBytes",
+          "base64"
         ],
         "type": "object"
       },

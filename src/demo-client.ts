@@ -20,7 +20,7 @@
 
 import type { IFrihetClient } from "./client-interface.js";
 import type { PaginatedResponse } from "./types.js";
-import type { BinaryDocument, XmlDocument } from "./client.js";
+import type { BinaryDocument, EInvoiceDocument } from "./client.js";
 import { Buffer } from "node:buffer";
 import {
   READ_STAMP,
@@ -173,8 +173,7 @@ export class DemoFrihetClient implements IFrihetClient {
   async getInvoicePdf(id: string): Promise<BinaryDocument> {
     // #1393: shape mirrors the live BinaryDocument contract (id,
     // contentType, sizeBytes, base64) so demo-mode outputSchema validation
-    // runs against the same fields as the live path. `url` left undefined —
-    // demo mode returns the actual bytes, not a pre-signed URL.
+    // runs against the same fields as the live path.
     const demoPdfBytes = Buffer.from("%PDF-1.4\n%%DEMO e-invoice for " + id + "\n%%EOF\n", "utf8");
     return {
       id,
@@ -184,11 +183,8 @@ export class DemoFrihetClient implements IFrihetClient {
       ...READ_STAMP,
     };
   }
-  async getInvoiceEInvoice(invoiceId: string): Promise<XmlDocument> {
-    // #1393: mirrors the live XmlDocument contract (id, xml, contentType,
-    // sizeBytes) plus the optional filename/format hints the JSON envelope
-    // legacy path still returns. Demo keeps both so demo consumers can pick
-    // the field they're built against.
+  async getInvoiceEInvoice(invoiceId: string): Promise<EInvoiceDocument> {
+    // #1393: mirrors the live XML arm of the MIME-discriminated contract.
     const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Invoice><!-- DEMO example e-invoice for ${invoiceId} --></Invoice>`;
     return {
       id: invoiceId,
@@ -196,7 +192,6 @@ export class DemoFrihetClient implements IFrihetClient {
       contentType: "application/xml; charset=utf-8",
       sizeBytes: Buffer.byteLength(xml, "utf8"),
       filename: `${invoiceId}.xml`,
-      format: "facturae",
       ...FISCAL_STAMP,
     };
   }
