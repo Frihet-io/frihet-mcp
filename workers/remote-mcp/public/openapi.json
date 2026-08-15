@@ -3,7 +3,7 @@
   "info": {
     "title": "Frihet API",
     "version": "2026-03-18",
-    "description": "The Frihet REST API provides programmatic access to your business data\nin Frihet, the AI-native business management platform for modern businesses.\n\n## Authentication\n\nAll API requests require an API key passed via the `X-API-Key` header.\nGenerate keys from **Settings > API Keys** in the Frihet app.\n\n```\nX-API-Key: fri_your_api_key_here\n```\n\n## Rate Limiting\n\nThe API enforces a rate limit of **100 requests per minute** per API key.\nWhen exceeded, the API returns `429 Too Many Requests` with a `retryAfter` field.\n\nEvery authenticated response includes rate limit headers:\n\n| Header | Description |\n|--------|-------------|\n| `X-RateLimit-Limit` | Maximum requests per window (100) |\n| `X-RateLimit-Remaining` | Remaining requests in current window |\n| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |\n\n## Idempotency\n\nPOST requests accept an `Idempotency-Key` header to prevent duplicate resource\ncreation from network retries. The key is reserved against the operation\n*before* the request is executed, and it stays reserved for 24 hours.\n\n```\nIdempotency-Key: 550e8400-e29b-41d4-a716-446655440000\n```\n\nKeys must be at most 64 characters. We recommend UUID v4.\n\nA retry of the same operation gets one of three answers:\n\n| Situation | Response |\n|---|---|\n| The first request finished | The **original status and body**, verbatim, with `X-Idempotent-Replayed: true` |\n| The first request is still running, or its outcome could not be recorded | `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` |\n| The key is live but was used for a **different** operation | `409 IDEMPOTENCY_KEY_REUSED` — the second operation is not executed |\n\nThe replayed status is the **stored** one. A `201` replays as `201`, not `200`.\nThis includes error responses: a request that answered `4xx` or `5xx` replays\nthat same status and body, it does not re-execute.\n\n### When a retry is refused\n\nA `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` after the first request already\nreturned means the outcome could not be recorded — the response was too large\nor unserializable, or the bookkeeping write failed. The API refuses rather than\nexecute a second time, because for a fiscal document a duplicate is not\nrecoverable.\n\n**Reconcile; do not simply retry with a fresh key.** Read the resource back\n(`GET` the collection, or look for the document the operation would have\ncreated) and decide from its actual state. A new key would happily create a\nsecond document, which is exactly what the first key existed to prevent.\n\nIdentity note: for `POST /v1/invoices/{invoiceId}/credit-note` the request body\nis part of the operation identity, so the same key with a different body is a\n`409 IDEMPOTENCY_KEY_REUSED`. For other endpoints the identity is the method\nand path only.\n\n## API Versioning\n\nEvery response includes an `X-API-Version` header (e.g., `2026-03-18`)\nindicating the current API version. Monitor this header to detect changes.\n\n## Pagination\n\nList endpoints support two pagination strategies:\n\n**Offset pagination:** Use `limit` and `offset` query parameters.\nDefault limit is 50, maximum is 100.\n\n**Cursor pagination:** Use `cursor` and `limit` query parameters.\nPass the `nextCursor` value from a previous response to fetch the next page.\nCursor pagination is more efficient for large datasets and avoids skipped/duplicated\nitems when data changes between requests. When `cursor` is provided, `offset` is ignored.\n\nResponses include `total`, `limit`, `offset`, and optionally `nextCursor`.\n\n## Filtering\n\nList endpoints support filtering by `status` (where applicable), date\nranges using `from` and `to` query parameters in ISO 8601 format (`YYYY-MM-DD`),\nand resource-specific filters like `clientId`, `seriesId`, `vendorId`,\n`category`, `isActive`, and `stage`.\n\n## Field Selection\n\nAll GET endpoints support a `fields` query parameter to select specific fields.\nPass a comma-separated list of field names: `?fields=id,name,total`.\nThe `id` field is always included.\n\n## Errors\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Human-readable error message\",\n  \"details\": [],\n  \"meta\": { \"requestId\": \"uuid\" }\n}\n```\n\nThe `details` array is only present on validation errors (Zod issues).\nThe `meta.requestId` is included on every error response for tracing.\n\n## Resources\n\n- [Documentation](https://docs.frihet.io/desarrolladores/api-rest)\n- [MCP Server](https://mcp.frihet.io)\n- [Status](https://status.frihet.io)\n",
+    "description": "The Frihet REST API provides programmatic access to your business data\nin Frihet, the AI-native business management platform for modern businesses.\n\n## Authentication\n\nAll API requests require an API key passed via the `X-API-Key` header.\nGenerate keys from **Settings > API Keys** in the Frihet app.\n\n```\nX-API-Key: fri_your_api_key_here\n```\n\n## Rate Limiting\n\nThe API enforces a rate limit of **100 requests per minute** per API key.\nWhen exceeded, the API returns `429 Too Many Requests` with an integer\ndelta-seconds `Retry-After` header and matching `retryAfter` JSON field.\n\nEvery authenticated response includes rate limit headers:\n\n| Header | Description |\n|--------|-------------|\n| `X-RateLimit-Limit` | Maximum requests per window (100) |\n| `X-RateLimit-Remaining` | Remaining requests in current window |\n| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |\n| `Retry-After` | Integer seconds until the window resets (429 responses) |\n\n## Idempotency\n\nMost POST requests accept an `Idempotency-Key` header to prevent duplicate\nresource creation from network retries. For protected routes, the key is\nreserved against the operation *before* the request is executed, and it stays\nreserved for 24 hours.\n\n```\nIdempotency-Key: 550e8400-e29b-41d4-a716-446655440000\n```\n\nKeys must be at most 64 characters. We recommend UUID v4.\n\nA retry of the same operation gets one of three answers:\n\n| Situation | Response |\n|---|---|\n| The first request finished | The **original status and body**, verbatim, with `X-Idempotent-Replayed: true` |\n| The first request is still running, or its outcome could not be recorded | `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` |\n| The key is live but was used for a **different** operation | `409 IDEMPOTENCY_KEY_REUSED` — the second operation is not executed |\n\nThe replayed status is the **stored** one. A `201` replays as `201`, not `200`.\nThis includes error responses: a request that answered `4xx` or `5xx` replays\nthat same status and body, it does not re-execute.\n\n### When a retry is refused\n\nA `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` after the first request already\nreturned means the outcome could not be recorded — the response was too large\nor unserializable, or the bookkeeping write failed. The API refuses rather than\nexecute a second time, because for a fiscal document a duplicate is not\nrecoverable.\n\n**Reconcile; do not simply retry with a fresh key.** Read the resource back\n(`GET` the collection, or look for the document the operation would have\ncreated) and decide from its actual state. A new key would happily create a\nsecond document, which is exactly what the first key existed to prevent.\n\nAuthentication, rate limiting, and the maximum-request-size check happen before\nthe idempotency gate. Their `401`, `429`, and `413` responses do not reserve a\nkey and are never idempotency replays. Fiscal-send scope authorization also\nhappens before replay for `einvoice/export`, `face/submit`, and\n`ticketbai/submit`; a current `403` does not reserve or alter the key. Authorized\nfiscal sends remain idempotency-protected.\n\nTwo current-state report/check routes deliberately bypass the idempotency gate:\n`POST /v1/gestoria/aging` and\n`POST /v1/portal/domain/{domain}/verify`. They ignore `Idempotency-Key` and\nalways re-evaluate current workspace membership or domain ownership/DNS/SSL.\n\nIdentity note: for every idempotency-protected `POST`, the complete received\nJSON request body and parsed query parameters are part of the operation\nidentity. Object-key order does not matter, including in nested objects, but\narray order does. The credit-note endpoint applies its documented defaults\nfirst, so omitting `fullCredit` is equivalent to sending `fullCredit: true`.\nReusing the same key and path with a different body or query returns\n`409 IDEMPOTENCY_KEY_REUSED` without executing the request.\n\n## API Versioning\n\nEvery response includes an `X-API-Version` header (e.g., `2026-03-18`)\nindicating the current API version. Monitor this header to detect changes.\n\n## Pagination\n\nList endpoints support two pagination strategies:\n\n**Offset pagination:** Use `limit` and `offset` query parameters.\nDefault limit is 50, maximum is 100.\n\n**Cursor pagination:** Use `cursor` and `limit` query parameters.\nPass the `nextCursor` value from a previous response to fetch the next page.\nCursor pagination is more efficient for large datasets and avoids skipped/duplicated\nitems when data changes between requests. When `cursor` is provided, `offset` is ignored.\n\nResponses include `total`, `limit`, `offset`, and optionally `nextCursor`.\n\n## Filtering\n\nList endpoints support filtering by `status` (where applicable), date\nranges using `from` and `to` query parameters in ISO 8601 format (`YYYY-MM-DD`),\nand resource-specific filters like `clientId`, `seriesId`, `vendorId`,\n`category`, `isActive`, and `stage`.\n\n## Field Selection\n\nAll GET endpoints support a `fields` query parameter to select specific fields.\nPass a comma-separated list of field names: `?fields=id,name,total`.\nThe `id` field is always included.\n\n## Errors\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Human-readable error message\",\n  \"details\": [],\n  \"meta\": { \"requestId\": \"uuid\" }\n}\n```\n\nThe `details` array is only present on validation errors (Zod issues).\nThe `meta.requestId` is included on every error response for tracing.\n\n## Resources\n\n- [Documentation](https://docs.frihet.io/desarrolladores/api-rest)\n- [MCP Server](https://mcp.frihet.io)\n- [Status](https://status.frihet.io)\n",
     "contact": {
       "name": "Frihet API Support",
       "url": "https://docs.frihet.io/desarrolladores/api-rest",
@@ -212,7 +212,7 @@
       "post": {
         "operationId": "gestoriaAgingConsolidated",
         "summary": "Consolidated AR aging across client workspaces",
-        "description": "For an accountant/gestor, returns accounts-receivable aging consolidated across the given client workspaces. Each workspaceId is authorised per-workspace: the caller must be an active accountant or owner member of that workspace, otherwise it is silently rejected and listed in rejectedWorkspaceIds (no data returned for it).\n",
+        "description": "For an accountant/gestor, returns accounts-receivable aging consolidated across the given client workspaces. Each workspaceId is authorised per-workspace: the caller must be an active accountant or owner member of that workspace, otherwise it is silently rejected and listed in rejectedWorkspaceIds (no data returned for it). This current-state report deliberately ignores Idempotency-Key and re-checks membership on every request; an old completed marker is never replayed.\n",
         "tags": [
           "Gestoria"
         ],
@@ -5959,6 +5959,7 @@
       "get": {
         "operationId": "listKitchenTickets",
         "summary": "List tickets",
+        "x-frihet-availability": "available",
         "tags": [
           "Kitchen"
         ],
@@ -5996,48 +5997,13 @@
             "$ref": "#/components/responses/RateLimited"
           }
         }
-      },
-      "post": {
-        "operationId": "createKitchenTickets",
-        "summary": "Create tickets",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Tickets created"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
       }
     },
     "/v1/kitchen/tickets/{id}": {
       "get": {
         "operationId": "getKitchenTickets",
         "summary": "Get tickets by ID",
+        "x-frihet-availability": "available",
         "tags": [
           "Kitchen"
         ],
@@ -6074,12 +6040,23 @@
       "patch": {
         "operationId": "updateKitchenTickets",
         "summary": "Update tickets",
+        "x-frihet-availability": "available",
         "tags": [
           "Kitchen"
         ],
         "security": [
           {
             "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -6109,402 +6086,13 @@
             "$ref": "#/components/responses/RateLimited"
           }
         }
-      },
-      "delete": {
-        "operationId": "deleteKitchenTickets",
-        "summary": "Delete tickets",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Tickets deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/kitchen/ticketItems": {
-      "get": {
-        "operationId": "listKitchenTicketItems",
-        "summary": "List ticketItems",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Limit"
-          },
-          {
-            "$ref": "#/components/parameters/Offset"
-          },
-          {
-            "$ref": "#/components/parameters/Fields"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paginated list of ticketItems",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaginatedResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "post": {
-        "operationId": "createKitchenTicketItems",
-        "summary": "Create ticketItems",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "TicketItems created"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/kitchen/ticketItems/{id}": {
-      "get": {
-        "operationId": "getKitchenTicketItems",
-        "summary": "Get ticketItems by ID",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "TicketItems details"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateKitchenTicketItems",
-        "summary": "Update ticketItems",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "TicketItems updated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteKitchenTicketItems",
-        "summary": "Delete ticketItems",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "TicketItems deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/kitchen/menuItems": {
-      "get": {
-        "operationId": "listKitchenMenuItems",
-        "summary": "List menuItems",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Limit"
-          },
-          {
-            "$ref": "#/components/parameters/Offset"
-          },
-          {
-            "$ref": "#/components/parameters/Fields"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paginated list of menuItems",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaginatedResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "post": {
-        "operationId": "createKitchenMenuItems",
-        "summary": "Create menuItems",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "MenuItems created"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/kitchen/menuItems/{id}": {
-      "get": {
-        "operationId": "getKitchenMenuItems",
-        "summary": "Get menuItems by ID",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "MenuItems details"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateKitchenMenuItems",
-        "summary": "Update menuItems",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "MenuItems updated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteKitchenMenuItems",
-        "summary": "Delete menuItems",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "MenuItems deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
       }
     },
     "/v1/kitchen/stations": {
       "get": {
         "operationId": "listKitchenStations",
         "summary": "List stations",
+        "x-frihet-availability": "available",
         "tags": [
           "Kitchen"
         ],
@@ -6542,48 +6130,13 @@
             "$ref": "#/components/responses/RateLimited"
           }
         }
-      },
-      "post": {
-        "operationId": "createKitchenStations",
-        "summary": "Create stations",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Stations created"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
       }
     },
-    "/v1/kitchen/stations/{id}": {
+    "/v1/kitchen/menuItems": {
       "get": {
-        "operationId": "getKitchenStations",
-        "summary": "Get stations by ID",
+        "operationId": "listKitchenMenuItems",
+        "summary": "List menuItems",
+        "x-frihet-availability": "available",
         "tags": [
           "Kitchen"
         ],
@@ -6594,71 +6147,41 @@
         ],
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
           }
         ],
         "responses": {
           "200": {
-            "description": "Stations details"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateKitchenStations",
-        "summary": "Update stations",
-        "tags": [
-          "Kitchen"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
+            "description": "Paginated list of menuItems",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
               }
             }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Stations updated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           }
         }
-      },
-      "delete": {
-        "operationId": "deleteKitchenStations",
-        "summary": "Delete stations",
+      }
+    },
+    "/v1/kitchen/menu-items": {
+      "get": {
+        "operationId": "listKitchenMenuItemsAlias",
+        "summary": "List menu items (compatibility alias)",
+        "deprecated": true,
+        "x-frihet-availability": "available",
         "tags": [
           "Kitchen"
         ],
@@ -6667,15 +6190,30 @@
             "ApiKeyAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
         "responses": {
-          "204": {
-            "description": "Stations deleted"
+          "200": {
+            "description": "Paginated list of menuItems",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -6810,6 +6348,16 @@
             "ApiKeyAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -6847,6 +6395,16 @@
         "security": [
           {
             "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -6992,6 +6550,16 @@
             "ApiKeyAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -7029,6 +6597,16 @@
         "security": [
           {
             "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -7174,6 +6752,16 @@
             "ApiKeyAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -7211,6 +6799,16 @@
         "security": [
           {
             "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -7356,6 +6954,16 @@
             "ApiKeyAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -7395,113 +7003,6 @@
             "ApiKeyAuth": []
           }
         ],
-        "responses": {
-          "204": {
-            "description": "Cash sessions deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/stay/properties": {
-      "get": {
-        "operationId": "listStayProperties",
-        "summary": "List properties",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Limit"
-          },
-          {
-            "$ref": "#/components/parameters/Offset"
-          },
-          {
-            "$ref": "#/components/parameters/Fields"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paginated list of properties",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaginatedResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "post": {
-        "operationId": "createStayProperties",
-        "summary": "Create properties",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Properties created"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/stay/properties/{id}": {
-      "get": {
-        "operationId": "getStayProperties",
-        "summary": "Get properties by ID",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "id",
@@ -7513,73 +7014,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Properties details"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateStayProperties",
-        "summary": "Update properties",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Properties updated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteStayProperties",
-        "summary": "Delete properties",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
           "204": {
-            "description": "Properties deleted"
+            "description": "Cash sessions deleted"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -7597,6 +7033,7 @@
       "get": {
         "operationId": "listStayReservations",
         "summary": "List reservations",
+        "x-frihet-availability": "available",
         "tags": [
           "Stay"
         ],
@@ -7638,6 +7075,8 @@
       "post": {
         "operationId": "createStayReservations",
         "summary": "Create reservations",
+        "x-frihet-availability": "deferred",
+        "description": "Deferred: Reservation creation requires availability locking, channel propagation, and compliance workflows.",
         "tags": [
           "Stay"
         ],
@@ -7646,28 +7085,15 @@
             "ApiKeyAuth": []
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
         "responses": {
-          "201": {
-            "description": "Reservations created"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          },
+          "501": {
+            "description": "Reservation creation requires availability locking, channel propagation, and compliance workflows."
           }
         }
       }
@@ -7676,6 +7102,7 @@
       "get": {
         "operationId": "getStayReservations",
         "summary": "Get reservations by ID",
+        "x-frihet-availability": "available",
         "tags": [
           "Stay"
         ],
@@ -7708,77 +7135,13 @@
             "$ref": "#/components/responses/RateLimited"
           }
         }
-      },
-      "patch": {
-        "operationId": "updateStayReservations",
-        "summary": "Update reservations",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Reservations updated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteStayReservations",
-        "summary": "Delete reservations",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Reservations deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
       }
     },
-    "/v1/stay/expenses": {
+    "/v1/stay/properties": {
       "get": {
-        "operationId": "listStayExpenses",
-        "summary": "List expenses",
+        "operationId": "listStayProperties",
+        "summary": "List properties",
+        "x-frihet-availability": "available",
         "tags": [
           "Stay"
         ],
@@ -7800,7 +7163,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Paginated list of expenses",
+            "description": "Paginated list of properties",
             "content": {
               "application/json": {
                 "schema": {
@@ -7816,48 +7179,14 @@
             "$ref": "#/components/responses/RateLimited"
           }
         }
-      },
-      "post": {
-        "operationId": "createStayExpenses",
-        "summary": "Create expenses",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Expenses created"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
       }
     },
-    "/v1/stay/expenses/{id}": {
-      "get": {
-        "operationId": "getStayExpenses",
-        "summary": "Get expenses by ID",
+    "/v1/stay/channels/{id}/sync": {
+      "post": {
+        "operationId": "syncStayChannel",
+        "summary": "sync Stay Channel",
+        "x-frihet-availability": "deferred",
+        "description": "Deferred: Channel sync is not available in public API v1; scheduled iCal sync remains canonical.",
         "tags": [
           "Stay"
         ],
@@ -7877,628 +7206,14 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Expenses details"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateStayExpenses",
-        "summary": "Update expenses",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Expenses updated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteStayExpenses",
-        "summary": "Delete expenses",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Expenses deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/stay/cleaning_tasks": {
-      "get": {
-        "operationId": "listStayCleaningTasks",
-        "summary": "List cleaning tasks",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Limit"
-          },
-          {
-            "$ref": "#/components/parameters/Offset"
-          },
-          {
-            "$ref": "#/components/parameters/Fields"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paginated list of cleaning tasks",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaginatedResponse"
-                }
-              }
-            }
-          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "post": {
-        "operationId": "createStayCleaningTasks",
-        "summary": "Create cleaning tasks",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Cleaning tasks created"
           },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/stay/cleaning_tasks/{id}": {
-      "get": {
-        "operationId": "getStayCleaningTasks",
-        "summary": "Get cleaning tasks by ID",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Cleaning tasks details"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateStayCleaningTasks",
-        "summary": "Update cleaning tasks",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Cleaning tasks updated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteStayCleaningTasks",
-        "summary": "Delete cleaning tasks",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Cleaning tasks deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/stay/settlements": {
-      "get": {
-        "operationId": "listStaySettlements",
-        "summary": "List settlements",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Limit"
-          },
-          {
-            "$ref": "#/components/parameters/Offset"
-          },
-          {
-            "$ref": "#/components/parameters/Fields"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paginated list of settlements",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaginatedResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "post": {
-        "operationId": "createStaySettlements",
-        "summary": "Create settlements",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Settlements created"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/stay/settlements/{id}": {
-      "get": {
-        "operationId": "getStaySettlements",
-        "summary": "Get settlements by ID",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Settlements details"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateStaySettlements",
-        "summary": "Update settlements",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Settlements updated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteStaySettlements",
-        "summary": "Delete settlements",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Settlements deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/stay/compliance": {
-      "get": {
-        "operationId": "listStayCompliance",
-        "summary": "List compliance",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Limit"
-          },
-          {
-            "$ref": "#/components/parameters/Offset"
-          },
-          {
-            "$ref": "#/components/parameters/Fields"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paginated list of compliance",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaginatedResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "post": {
-        "operationId": "createStayCompliance",
-        "summary": "Create compliance",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Compliance created"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
-    "/v1/stay/compliance/{id}": {
-      "get": {
-        "operationId": "getStayCompliance",
-        "summary": "Get compliance by ID",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Compliance details"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateStayCompliance",
-        "summary": "Update compliance",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Compliance updated"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteStayCompliance",
-        "summary": "Delete compliance",
-        "tags": [
-          "Stay"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Compliance deleted"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
+          "501": {
+            "description": "Channel sync is not available in public API v1; scheduled iCal sync remains canonical."
           }
         }
       }
@@ -9610,7 +8325,7 @@
         "name": "Idempotency-Key",
         "in": "header",
         "required": false,
-        "description": "Unique key to prevent duplicate resource creation from network retries.\nReserved against the operation (method + path) before the request runs, and\nheld for 24 hours.\n\nA retry of the same operation returns the ORIGINAL status and body, verbatim,\nwith an `X-Idempotent-Replayed: true` header — a `201` replays as `201`, and\na stored error replays as that same error rather than re-executing. The same\nkey used for a DIFFERENT operation gets `409 IDEMPOTENCY_KEY_REUSED` and the\nsecond operation is not executed; a request still in flight, or one whose\noutcome could not be recorded, gets `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`\n(reconcile the resource rather than retrying with a new key).\n\nMax 64 characters. UUID v4 recommended.\n",
+        "description": "Unique key to prevent duplicate resource creation from network retries on\nidempotency-protected POST routes. Reserved against the operation (method +\npath + complete received JSON request body + parsed query parameters) before\nthe request runs, and held for 24 hours. Object-key order does not matter,\nincluding in nested objects, but array order does. Only the credit-note\nendpoint applies its documented schema defaults before fingerprinting; all\nother protected POSTs use the received body.\n\nA retry of the same operation returns the ORIGINAL status and body, verbatim,\nwith an `X-Idempotent-Replayed: true` header — a `201` replays as `201`, and\na stored error replays as that same error rather than re-executing. The same\nkey used for a DIFFERENT operation gets `409 IDEMPOTENCY_KEY_REUSED` and the\nsecond operation is not executed; a request still in flight, or one whose\noutcome could not be recorded, gets `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`\n(reconcile the resource rather than retrying with a new key).\n\nAuthentication, rate limiting, maximum-request-size checks, and current\nfiscal-send scope authorization happen before this gate; those refusals do\nnot reserve or alter the key. `POST /v1/gestoria/aging` and\n`POST /v1/portal/domain/{domain}/verify` bypass this gate and ignore the\nheader so current membership, ownership, DNS, and SSL are always rechecked.\n\nMax 64 characters. UUID v4 recommended.\n",
         "schema": {
           "type": "string",
           "maxLength": 64,
@@ -12915,6 +11630,19 @@
       },
       "RateLimited": {
         "description": "Rate limit exceeded (100 requests per minute)",
+        "headers": {
+          "Retry-After": {
+            "description": "Integer seconds until the current rate-limit window resets",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "example": 60
+          },
+          "X-RateLimit-Reset": {
+            "$ref": "#/components/headers/X-RateLimit-Reset"
+          }
+        },
         "content": {
           "application/json": {
             "schema": {
