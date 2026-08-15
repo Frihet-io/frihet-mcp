@@ -249,7 +249,8 @@ export interface IFrihetClient {
   getOnboardingStatus(): Promise<Record<string, unknown>>;
   setOnboardingPersona(data: { persona: "autonomo" | "empresa" | "agencia" | "gestoria" }): Promise<Record<string, unknown>>;
 
-  // Permissions endpoints (/v1/permissions/*) — D4-B megasprint.
+  // Permissions reporting endpoints (/v1/permissions/*). These describe the
+  // RBAC model and API-key scope state; they are not exhaustive authorization.
   getPermissionsMatrix(): Promise<Record<string, unknown>>;
   getMyPermissions(): Promise<Record<string, unknown>>;
 

@@ -12,6 +12,7 @@
 
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { permissionsMatrixOutput, permissionsMeOutput } from "../tools/shared.js";
 
 // ── Minimal McpServer stub ───────────────────────────────────────────────────
 
@@ -126,15 +127,39 @@ const MOCK_ONBOARDING_PERSONA_RESULT = {
 };
 
 const MOCK_PERMISSIONS_MATRIX = {
-  roles: [{ role: "admin", permissions: ["invoices.*", "expenses.*"] }],
-  resources: ["invoices", "expenses"],
+  roles: ["owner", "admin", "manager", "sales", "accountant", "employee", "viewer"],
+  resources: ["workspace", "invoices", "quotes", "expenses", "clients", "products", "accounting", "people", "payroll", "integrations", "banking", "settings", "audit_log", "billing"],
+  actions: ["read", "create", "update", "delete", "bulk_delete", "export"],
+  legacyAliases: { editor: "sales" },
+  matrix: {
+    owner: { workspace: ["read", "update", "export"], billing: ["read", "create", "update", "delete", "export"] },
+    admin: { workspace: ["read", "update", "export"] },
+    manager: { workspace: ["read"] },
+    sales: { workspace: ["read"] },
+    accountant: { workspace: ["read"] },
+    employee: { workspace: ["read"] },
+    viewer: { workspace: ["read", "export"] },
+  },
+  source: "hand-maintained snapshot (2026-06-22) of the Frihet RBAC model; not derived from firestore.rules and not verified against it",
 };
 
 const MOCK_PERMISSIONS_ME = {
-  userId: "user_001",
-  role: "admin",
-  permissions: ["invoices.read", "invoices.write"],
-  workspaceId: "ws_001",
+  role: "owner",
+  isOwner: true,
+  resources: { workspace: ["read", "update", "export"], billing: ["read", "create", "update", "delete", "export"] },
+  scopes: ["billing:read", "workspace:read"],
+  legacyFieldSemantics: { resources: "rbacResources", scopes: "rbacCapabilities" },
+  rbac: {
+    role: "owner",
+    isOwner: true,
+    resources: { workspace: ["read", "update", "export"], billing: ["read", "create", "update", "delete", "export"] },
+    capabilities: ["billing:read", "workspace:read"],
+  },
+  apiKeyScopes: ["read", "write"],
+  apiKeyUnrestricted: false,
+  denied: { einvoice: true },
+  deniedSemantics: "Known API-key scope denials only; not an exhaustive effective-authorization report.",
+  notIncluded: ["featureFlags", "deployedEndpoints"],
 };
 
 const MOCK_PERIOD = {
@@ -431,18 +456,42 @@ describe("Onboarding Tools", () => {
 // ── Permissions ──────────────────────────────────────────────────────────────
 
 describe("Permissions Tools", () => {
-  test("permissions_matrix returns roles + resources", async () => {
+  test("permissions_matrix returns the real ERP matrix payload and satisfies its output schema", async () => {
     const server = await makePermissionsServer(makeSuccessClient);
-    const r = await server.tools.get("permissions_matrix")!.handler({});
+    const tool = server.tools.get("permissions_matrix")!;
+    const r = await tool.handler({});
     assert.ok(!r.isError);
-    assert.ok(Array.isArray(r.structuredContent!["roles"]));
+    assert.deepEqual(r.structuredContent, MOCK_PERMISSIONS_MATRIX);
+    assert.equal("data" in r.structuredContent!, false, "tool output must not advertise a second envelope");
+    assert.equal((tool.config.outputSchema as typeof permissionsMatrixOutput).safeParse(r.structuredContent).success, true);
+    assert.doesNotMatch(tool.config.description, /full role-to-permission/i);
+    assert.match(tool.config.description, /not a runtime authorization guarantee/i);
   });
 
-  test("permissions_me returns caller role", async () => {
+  test("permissions_me keeps RBAC model and API-key scope truth separate", async () => {
     const server = await makePermissionsServer(makeSuccessClient);
-    const r = await server.tools.get("permissions_me")!.handler({});
+    const tool = server.tools.get("permissions_me")!;
+    const r = await tool.handler({});
     assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["role"], "admin");
+    assert.deepEqual(r.structuredContent, MOCK_PERMISSIONS_ME);
+    assert.equal("data" in r.structuredContent!, false, "tool output must not advertise a second envelope");
+    assert.equal((tool.config.outputSchema as typeof permissionsMeOutput).safeParse(r.structuredContent).success, true);
+    assert.deepEqual(r.structuredContent!["denied"], { einvoice: true });
+    assert.doesNotMatch(tool.config.description, /effective role|UI gating/i);
+    assert.match(tool.config.description, /non-exhaustive/i);
+  });
+
+  test("permissions schemas reject the fabricated legacy payloads", () => {
+    assert.equal(permissionsMatrixOutput.safeParse({
+      roles: [{ role: "admin", permissions: ["invoices.*"] }],
+      resources: ["invoices"],
+    }).success, false);
+    assert.equal(permissionsMeOutput.safeParse({
+      userId: "user_001",
+      role: "admin",
+      permissions: ["invoices.read"],
+      workspaceId: "ws_001",
+    }).success, false);
   });
 });
 

@@ -1890,14 +1890,15 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Permissions
-  // NOTE: /v1/permissions/* — D4-A parallel deploy. 404 propagates until backend ships.
+  // These are standard ERP family responses: unwrap their single-object
+  // `{ data, meta }` envelope before handing the payload to MCP output schemas.
 
   async getPermissionsMatrix(): Promise<Record<string, unknown>> {
-    return this.request("GET", "/permissions/matrix");
+    return this.requestUnwrapped("GET", "/permissions/matrix");
   }
 
   async getMyPermissions(): Promise<Record<string, unknown>> {
-    return this.request("GET", "/permissions/me");
+    return this.requestUnwrapped("GET", "/permissions/me");
   }
 
   // ---------------------------------------------------------------- Period Close

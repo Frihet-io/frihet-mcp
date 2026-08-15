@@ -48,6 +48,8 @@ import {
   recurringInvoiceItemOutput,
   einvoiceResultOutput,
   pdfResultOutput,
+  permissionsMatrixOutput,
+  permissionsMeOutput,
 } from "../tools/shared.js";
 import { eInvoiceStatusOutput } from "../tools/einvoice.js";
 
@@ -76,6 +78,40 @@ const FIXTURES = {
   bankAccount: { id: "acct_1", alias: "Main", ibanLast4: "4321" },
   timeEntry: { id: "te_1", userId: "u_1", hours: 3.5 },
   recurringInvoice: { id: "rec_1", templateName: "Monthly retainer", frequency: "monthly", status: "active" },
+  permissionsMatrix: {
+    roles: ["owner", "admin", "manager", "sales", "accountant", "employee", "viewer"],
+    resources: ["workspace", "invoices", "quotes", "expenses", "clients", "products", "accounting", "people", "payroll", "integrations", "banking", "settings", "audit_log", "billing"],
+    actions: ["read", "create", "update", "delete", "bulk_delete", "export"],
+    legacyAliases: { editor: "sales" },
+    matrix: {
+      owner: { workspace: ["read", "update", "export"], billing: ["read", "create", "update", "delete", "export"] },
+      admin: { workspace: ["read", "update", "export"] },
+      manager: { workspace: ["read"] },
+      sales: { workspace: ["read"] },
+      accountant: { workspace: ["read"] },
+      employee: { workspace: ["read"] },
+      viewer: { workspace: ["read", "export"] },
+    },
+    source: "hand-maintained snapshot (2026-06-22) of the Frihet RBAC model; not derived from firestore.rules and not verified against it",
+  },
+  permissionsMe: {
+    role: "owner",
+    isOwner: true,
+    resources: { workspace: ["read", "update", "export"], billing: ["read", "create", "update", "delete", "export"] },
+    scopes: ["billing:read", "workspace:read"],
+    legacyFieldSemantics: { resources: "rbacResources", scopes: "rbacCapabilities" },
+    rbac: {
+      role: "owner",
+      isOwner: true,
+      resources: { workspace: ["read", "update", "export"], billing: ["read", "create", "update", "delete", "export"] },
+      capabilities: ["billing:read", "workspace:read"],
+    },
+    apiKeyScopes: ["read", "write"],
+    apiKeyUnrestricted: false,
+    denied: { einvoice: true },
+    deniedSemantics: "Known API-key scope denials only; not an exhaustive effective-authorization report.",
+    notIncluded: ["featureFlags", "deployedEndpoints"],
+  },
   timeSummary: { from: "2026-06-01", to: "2026-06-30", totalHours: 40, billableHours: 32, nonBillableHours: 8 },
   einvoiceStatus: { status: "succeeded" as const, step: "delivered", ackId: "ack_123" },
   businessContext: {
@@ -140,6 +176,8 @@ before(async () => {
     if (url.pathname === "/time/entries/te_1" && req.method === "GET") return send(envelope(FIXTURES.timeEntry));
     if (url.pathname === "/time/summary" && req.method === "GET") return send(envelope(FIXTURES.timeSummary));
     if (url.pathname === "/recurring/invoices/rec_1" && req.method === "GET") return send(envelope(FIXTURES.recurringInvoice));
+    if (url.pathname === "/permissions/matrix" && req.method === "GET") return send(envelope(FIXTURES.permissionsMatrix));
+    if (url.pathname === "/permissions/me" && req.method === "GET") return send(envelope(FIXTURES.permissionsMe));
     if (url.pathname === "/einvoice/status/wf_1" && req.method === "GET") return send(envelope(FIXTURES.einvoiceStatus));
     if (url.pathname === "/context" && req.method === "GET") return send(envelope(FIXTURES.businessContext));
     if (url.pathname === "/monthly" && req.method === "GET") return send(envelope(FIXTURES.monthlySummary));
@@ -248,6 +286,18 @@ describe("client.ts single-object get_* reads unwrap the { data, meta } envelope
   test("getRecurringInvoice unwraps + validates against recurringInvoiceItemOutput", async () => {
     const result = await makeClient().getRecurringInvoice("rec_1");
     assertUnwrappedAndValid(result, recurringInvoiceItemOutput);
+  });
+
+  test("getPermissionsMatrix unwraps the real ERP family envelope exactly once", async () => {
+    const result = await makeClient().getPermissionsMatrix();
+    assertUnwrappedAndValid(result, permissionsMatrixOutput);
+    assert.deepEqual((result as typeof FIXTURES.permissionsMatrix).roles, FIXTURES.permissionsMatrix.roles);
+  });
+
+  test("getMyPermissions unwraps the real ERP family envelope exactly once", async () => {
+    const result = await makeClient().getMyPermissions();
+    assertUnwrappedAndValid(result, permissionsMeOutput);
+    assert.deepEqual((result as typeof FIXTURES.permissionsMe).denied, { einvoice: true });
   });
 
   test("getInvoicePdf returns bounded raw bytes + validates against pdfResultOutput", async () => {
