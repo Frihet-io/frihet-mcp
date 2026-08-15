@@ -72,9 +72,22 @@ async function fetchWithRetry(url, options, attempts = 3, delaysMs = [2000, 8000
   let lastErr;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const res = await fetch(url, options);
-      if (res.status < 500) return res;
-      lastErr = new Error(`HTTP ${res.status}`);
+      // AbortSignal instances are single-use. A signal that timed out during a
+      // body read must never poison the next attempt before it starts.
+      const res = await fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.status >= 500) {
+        lastErr = new Error(`HTTP ${res.status}`);
+      } else if (!res.ok) {
+        // A completed 4xx is a semantic/request failure, not an outage.
+        return { res };
+      } else {
+        // The retry boundary includes the complete body transfer. Headers are
+        // not availability proof when the stream later stalls or resets.
+        return { res, body: await res.text() };
+      }
     } catch (err) {
       lastErr = err;
     }
@@ -82,7 +95,7 @@ async function fetchWithRetry(url, options, attempts = 3, delaysMs = [2000, 8000
       await new Promise((r) => setTimeout(r, delaysMs[attempt - 1] ?? delaysMs.at(-1)));
     }
   }
-  throw new OriginUnavailableError(lastErr.message);
+  throw new OriginUnavailableError(lastErr instanceof Error ? lastErr.message : String(lastErr));
 }
 
 /** The derived artifact this repo owns. public-openai/ is produced from it. */
@@ -101,7 +114,11 @@ const SCOPE_SCRIPT = join(root, "workers/remote-mcp/scripts/scope-openai-openapi
 const LIVE_HOSTS = [
   { url: "https://api.frihet.io/openapi.json", owner: "frihet-mcp (workers/api-proxy)" },
   { url: "https://mcp.frihet.io/openapi.json", owner: "frihet-mcp (workers/remote-mcp)" },
-  { url: "https://openai-mcp.frihet.io/openapi.json", owner: "frihet-mcp (workers/remote-mcp --env openai)" },
+  {
+    url: "https://openai-mcp.frihet.io/openapi.json",
+    owner: "frihet-mcp (workers/remote-mcp --env openai)",
+    profile: "openai",
+  },
   { url: "https://www.frihet.io/openapi.json", owner: "Frihet-Saas-Website (prebuild sync)" },
   { url: "https://docs.frihet.io/openapi.json", owner: "frihet-docs (vercel-build sync)" },
   { url: "https://app.frihet.io/openapi.json", owner: "Frihet-ERP (apps/erp/public, needs a frontend deploy)" },
@@ -112,15 +129,16 @@ const CHECK = args.has("--check");
 const LIVE = args.has("--live");
 
 async function fetchSpec(url) {
-  const res = await fetchWithRetry(`${url}?cb=${Date.now()}`, {
+  const { res, body } = await fetchWithRetry(`${url}?cb=${Date.now()}`, {
     headers: { "User-Agent": UA, Accept: "application/json" },
     // Without a signal, undici waits 300 000 ms on a blackholed host — six
     // hosts is a half-hour hang instead of a red gate. 30 s covers a Cloud
     // Function cold start on a 372 KB body (warm is ~1 s).
-    signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) throw new Error(`GET ${url} → HTTP ${res.status}`);
-  return assertIsSpec(JSON.parse(await res.text()), url);
+  // Parsing and semantic validation deliberately sit outside the retry
+  // boundary: a completed malformed/non-spec response is drift, not outage.
+  return assertIsSpec(JSON.parse(body), url);
 }
 
 /**
@@ -280,9 +298,12 @@ function checkScopedArtifacts() {
       note(`ok         workers/remote-mcp/public-openai/${name} matches canonical (regenerated)`);
     }
   }
+
+  return JSON.parse(readFileSync(join(out, "openapi.json"), "utf8"));
 }
 
 // ── committed artifacts ─────────────────────────────────────────────────────
+let canonicalScoped;
 if (CHECK) {
   if (!existsSync(FULL_ASSET)) {
     fail.push(`${relative(root, FULL_ASSET)} is missing`);
@@ -299,12 +320,13 @@ if (CHECK) {
       note(`ok         ${relative(root, FULL_ASSET)} matches canonical`);
     }
   }
-  checkScopedArtifacts();
+  canonicalScoped = checkScopedArtifacts();
 } else {
   writeFileSync(FULL_ASSET, canonicalBytes);
   note(`wrote      ${relative(root, FULL_ASSET)}`);
   execFileSync(process.execPath, [SCOPE_SCRIPT], { stdio: "inherit" });
   note(`wrote      ${relative(root, SCOPED_ASSET)} (via scope-openai-openapi.mjs)`);
+  canonicalScoped = JSON.parse(readFileSync(SCOPED_ASSET, "utf8"));
 }
 
 // ── what the hosts actually SERVE ───────────────────────────────────────────
@@ -323,30 +345,16 @@ if (LIVE) {
       }
       continue;
     }
-    const c = creditNoteContract(served);
-    if (!c) {
-      // This used to report `ok (no credit-note path — scoped surface)`. That
-      // justification is false: scope-openai-openapi.mjs lists the path in
-      // KEEP_PATHS_EXACT and openai-mcp.frihet.io does serve it (verified
-      // live). So the branch never fired for its stated reason — what it
-      // actually did was turn "the host is serving a spec without the endpoint
-      // this script polices" into a green line.
+    const expected = host.profile === "openai" ? canonicalScoped : canonical;
+    const expectedProfile = host.profile === "openai" ? "OpenAI-scoped canonical" : "full canonical";
+    if (fingerprint(served) !== fingerprint(expected)) {
       fail.push(
-        `${host.url} serves an OpenAPI document with NO */credit-note path while canonical has ` +
-          `${cn.path} — the endpoint was dropped, renamed, or this is not the Frihet spec` +
-          ` — owner: ${host.owner}`,
-      );
-      continue;
-    }
-    if (c.saysSent || c.responses !== cn.responses || c.requiresIdempotencyKey !== cn.requiresIdempotencyKey) {
-      fail.push(
-        `${host.url} serves a stale credit-note contract: responses ${c.responses} ` +
-          `(canonical ${cn.responses}), Idempotency-Key required ${c.requiresIdempotencyKey} ` +
-          `(canonical ${cn.requiresIdempotencyKey})${c.saysSent ? ', and still says "`sent` status"' : ""}` +
-          ` — owner: ${host.owner}`,
+        `${host.url} serves ${Object.keys(served.paths ?? {}).length} paths and does not match the ` +
+          `${expectedProfile} (${Object.keys(expected.paths ?? {}).length} paths) — a committed fix still ` +
+          `needs the owning surface to deploy — owner: ${host.owner}`,
       );
     } else {
-      note(`ok         ${host.url} matches the canonical credit-note contract`);
+      note(`ok         ${host.url} matches the ${expectedProfile}`);
     }
   }
 }

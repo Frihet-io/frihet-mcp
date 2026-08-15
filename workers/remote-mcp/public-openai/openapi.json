@@ -3619,6 +3619,13 @@
       }
     },
     "headers": {
+      "X-RateLimit-Reset": {
+        "description": "Unix timestamp (seconds) when the rate limit window resets",
+        "schema": {
+          "type": "integer",
+          "example": 1742310060
+        }
+      },
       "X-Idempotent-Replayed": {
         "description": "Present and set to \"true\" when this response is a stored replay of an earlier\nrequest with the same Idempotency-Key. The status and body are the ORIGINAL\nones; nothing was executed to produce this response.\n",
         "schema": {
@@ -5357,6 +5364,19 @@
       },
       "RateLimited": {
         "description": "Rate limit exceeded (100 requests per minute)",
+        "headers": {
+          "Retry-After": {
+            "description": "Integer seconds until the current rate-limit window resets",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "example": 60
+          },
+          "X-RateLimit-Reset": {
+            "$ref": "#/components/headers/X-RateLimit-Reset"
+          }
+        },
         "content": {
           "application/json": {
             "schema": {
