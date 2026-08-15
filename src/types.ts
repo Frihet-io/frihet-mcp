@@ -15,6 +15,7 @@ export interface PaginatedResponse<T> {
 export interface ApiError {
   error: string;
   message?: string;
+  detail?: string;
 }
 
 // -- Pagination params --
