@@ -20,7 +20,7 @@
  * Run: npm run build && node --test dist/__tests__/team-tools-real-sdk.test.js
  */
 
-import { test, describe, before, after } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -69,6 +69,7 @@ const PENDING_INVITE_NULL_DATES = {
   role: "viewer",
   status: "pending",
   invitedAt: null,
+  expiresAt: null,
   joinedAt: null,
   createdAt: null,
   updatedAt: null,
@@ -128,6 +129,10 @@ describe("Team Tools — real SDK (McpServer + Client + InMemoryTransport)", () 
         ["list_team_members", "invite_team_member", "update_team_member_role", "remove_team_member"].includes(t.name)
       );
       assert.equal(team.length, 4);
+      const list = team.find((t) => t.name === "list_team_members");
+      assert.ok(list?.description?.includes("pending invitations"));
+      assert.ok(list?.description?.includes("owner is NOT a member row"));
+      assert.equal(list?.description?.includes("List all members"), false);
     } finally {
       await dispose(h);
     }
@@ -183,7 +188,7 @@ describe("list_team_members — output contract (real SDK)", () => {
     }
   });
 
-  test("output accepts invitedAt/joinedAt/createdAt/updatedAt = null (nullable)", async () => {
+  test("output accepts invitedAt/expiresAt/joinedAt/createdAt/updatedAt = null (nullable)", async () => {
     const h = await makeHarness(makeClient());
     try {
       const res = await h.client.callTool({ name: "list_team_members", arguments: {} });

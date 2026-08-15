@@ -38,14 +38,12 @@ export function registerTeamTools(server: McpServer, client: IFrihetClient): voi
     {
       title: "List Team Members",
       description:
-        "List all members in the workspace. " +
-        "Returns active members + pending invites. The workspace owner is NOT a member row and is excluded. " +
+        "List active workspace team members and pending invitations. The workspace owner is NOT a member row and is excluded. " +
         "Each row carries member ID, name, email, role, and invite status (pending/active). " +
-        "Useful for access management and auditing who has access to the account. " +
-        "/ Lista todos los miembros del espacio de trabajo. " +
-        "Devuelve miembros activos + invitaciones pendientes. El propietario del espacio NO aparece como miembro y queda excluido. " +
+        "Useful for reviewing team access and outstanding invitations. " +
+        "/ Lista miembros activos del equipo e invitaciones pendientes. El propietario del espacio NO aparece como miembro y queda excluido. " +
         "Cada fila lleva ID, nombre, email, rol y estado de invitacion (pendiente/activo). " +
-        "Util para gestion de accesos y auditoria de quien tiene acceso a la cuenta.",
+        "Util para revisar el acceso del equipo y las invitaciones pendientes.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         role: z
@@ -80,12 +78,12 @@ export function registerTeamTools(server: McpServer, client: IFrihetClient): voi
       description:
         "Invite a new member to the workspace by email address. " +
         "An invitation email is sent — the member must accept before gaining access. " +
-        "Roles: admin (manage account, no billing), editor (operational access, no billing), accountant (read all financial data, no edits), viewer (read-only). " +
+        "Assignable roles: admin, editor, accountant, viewer. Exact access follows the workspace's current role policy. " +
         "Owner is excluded from invitations and must be transferred via a dedicated flow. " +
         "Example: email='ana@example.com', role='accountant' " +
         "/ Invita a un nuevo miembro al espacio de trabajo por correo electronico. " +
         "Se envia un email de invitacion — el miembro debe aceptar antes de acceder. " +
-        "Roles: admin (gestion sin facturacion), editor (acceso operativo sin facturacion), accountant (lectura de datos financieros sin edicion), viewer (solo lectura). " +
+        "Roles asignables: admin, editor, accountant, viewer. El acceso exacto depende de la politica de roles vigente del espacio. " +
         "Owner queda excluido de las invitaciones y debe transferirse por un flujo dedicado.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
