@@ -9,10 +9,9 @@
 # C&D claimant) and DISTRIBUTION-ROADMAP.md exposed competitive strategy.
 # This gate makes that class of leak fail CI instead of shipping silently.
 #
-# Scope: marketing/strategy PROSE surfaces (markdown + Worker descriptions),
-# NOT functional interop code. The payroll export format value "holded" (an
-# enum alongside a3/contasol/sage/siltra in src/) is lawful referential/interop
-# use and is intentionally NOT scanned here.
+# Scope: marketing/strategy prose surfaces plus public functional payroll
+# contracts. Unsupported provider labels must not survive in client, schema,
+# demo, or tool source after the ERP contract removes them.
 #
 # Exit 0 = clean. Exit 1 = leak found.
 # =============================================================================
@@ -25,6 +24,20 @@ note() { echo "  ✗ $1"; fail=1; }
 # 1. Worker descriptions must NEVER name a competitor (served live on mcp.frihet.io).
 if grep -rinE "holded" workers/ 2>/dev/null; then
   note "Competitor 'Holded' found in workers/ (public Worker description) — remove."
+fi
+
+# 1b. Payroll contract source must match the ERP's accepted format enum. Keep
+# this explicit list load-bearing: a stale label in any runtime/interface/schema
+# copy is a public phantom operation even if the tool description is clean.
+functional_payroll_contracts=(
+  src/client.ts
+  src/client-interface.ts
+  src/demo-client.ts
+  src/tools/payroll.ts
+  src/tools/shared.ts
+)
+if grep -inE "holded" "${functional_payroll_contracts[@]}" 2>/dev/null; then
+  note "Unsupported payroll provider label found in a public functional contract."
 fi
 
 # 2. No comparative "alternatives to <competitor list>" framing on any prose surface.

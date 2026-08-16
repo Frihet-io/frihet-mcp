@@ -682,7 +682,17 @@ export class DemoFrihetClient implements IFrihetClient {
     return simulateAction(entryId, { status: "closed", clockOutAt: DEMO_NOW });
   }
   async getOvertimeReport(params: { period: string; employeeId?: string }): Promise<Rec> {
-    return { period: params.period, totalRegularHours: 0, totalOvertimeHours: 0, byEmployee: [], generatedAt: DEMO_NOW, ...READ_STAMP };
+    return {
+      period: params.period,
+      employeeId: params.employeeId ?? null,
+      recordCount: 0,
+      dailyOvertime: [],
+      weeklyOvertime: [],
+      monthlyTotal: { workedMinutes: 0, overtimeMinutes: 0, regularMinutes: 0 },
+      annualOvertimeHours: 0,
+      alerts: [],
+      ...READ_STAMP,
+    };
   }
   async listAnomalies(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
     return demoEmptyPage(params);
@@ -693,12 +703,23 @@ export class DemoFrihetClient implements IFrihetClient {
     return { webhookId: id, delivered: true, statusCode: 200, responseTimeMs: 42, eventType: data?.eventType ?? "ping", attemptedAt: DEMO_NOW, ...FISCAL_STAMP };
   }
 
-  // ---------------------------------------------------------------- Payroll (simulated fiscal)
-  async exportPayroll(params: { format: "a3" | "contasol" | "sage" | "holded" | "siltra"; month: string }): Promise<Rec> {
-    return { format: params.format, month: params.month, fileUrl: "https://app.frihet.io/demo/payroll.txt", filename: "demo-payroll.txt", rowCount: 0, generatedAt: DEMO_NOW, ...FISCAL_STAMP };
+  // ---------------------------------------------------------------- Payroll (read-only demo)
+  async exportPayroll(params: { format: "a3" | "contasol" | "sage" | "siltra"; month: string }): Promise<Rec> {
+    return {
+      month: params.month,
+      format: params.format,
+      employees: [],
+      summary: { exportedCount: 0, skippedNotReady: 0, totalGrossAnnual: 0 },
+      ...READ_STAMP,
+    };
   }
   async getPayrollChecklist(params: { month: string }): Promise<Rec> {
-    return { month: params.month, totalEmployees: 0, readyEmployees: 0, missingEmployees: 0, employees: [], generatedAt: DEMO_NOW, ...FISCAL_STAMP };
+    return {
+      month: params.month,
+      employees: [],
+      summary: { total: 0, ready: 0, notReady: 0, reviewedThisMonth: 0 },
+      ...READ_STAMP,
+    };
   }
 
   // ---------------------------------------------------------------- Onboarding
@@ -744,8 +765,16 @@ export class DemoFrihetClient implements IFrihetClient {
   }
 
   // ---------------------------------------------------------------- Period close
-  async getCurrentPeriod(params?: { periodId?: string }): Promise<Rec> {
-    return { id: params?.periodId ?? "demo_period_2026_07", type: "monthly", status: "open", startDate: "2026-07-01", endDate: "2026-07-31", ...READ_STAMP };
+  async getCurrentPeriod(params?: { fiscalYear?: string }): Promise<Rec> {
+    const fiscalYear = params?.fiscalYear ?? "2026";
+    return {
+      fiscalYear,
+      fiscalYearStart: "01-01",
+      status: "open",
+      dateRange: { from: `${fiscalYear}-01-01`, to: `${fiscalYear}-12-31` },
+      closing: null,
+      ...READ_STAMP,
+    };
   }
   async closePeriod(data: { type: "monthly" | "quarterly" }): Promise<Rec> {
     return simulateWrite("demo_period", { type: data.type }, { status: "closed", closedAt: DEMO_NOW });

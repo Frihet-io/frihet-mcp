@@ -171,6 +171,11 @@ describe("tool-exposure: grouped mode", () => {
     }
   });
 
+  test("period status discovery advertises only its fiscal-year compatibility input", () => {
+    const { handle } = makeGroupedServer();
+    assert.deepEqual(handle.catalog.get("period_close_status")?.inputFields, ["periodId"]);
+  });
+
   test("does NOT change tool names, annotations, or input schemas", () => {
     const full = makeFullServer();
     const { server: grouped } = makeGroupedServer();
