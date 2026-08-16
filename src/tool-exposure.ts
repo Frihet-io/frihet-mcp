@@ -257,6 +257,16 @@ function firstSentence(desc: string): string {
   return sentence.length > 160 ? sentence.slice(0, 157).trimEnd() + "…" : sentence;
 }
 
+function inputSchemaFieldNames(schema: unknown): string[] {
+  if (schema instanceof z.ZodObject) {
+    return Object.keys(schema.shape);
+  }
+  if (schema !== null && typeof schema === "object" && !Array.isArray(schema)) {
+    return Object.keys(schema);
+  }
+  return [];
+}
+
 /* ------------------------------------------------------------------ */
 /*  Profile applicator                                                 */
 /* ------------------------------------------------------------------ */
@@ -363,9 +373,7 @@ export function applyToolExposureProfile(
 
     const fullDescription: string =
       typeof config?.description === "string" ? config.description : "";
-    const inputFields: string[] = config?.inputSchema
-      ? Object.keys(config.inputSchema)
-      : [];
+    const inputFields = inputSchemaFieldNames(config?.inputSchema);
     const readOnly = config?.annotations?.readOnlyHint === true;
 
     const entry: CatalogEntry = {

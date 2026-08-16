@@ -117,6 +117,14 @@ test("mutation selftest: sensitive schema field turns the checker red", () => {
   });
 });
 
+test("mutation selftest: clientTaxId reviewed input turns the checker red", () => {
+  expectMutationRejected((contract) => {
+    const inputSchema = asObject(findTool(contract, "create_invoice").inputSchema);
+    const properties = asObject(inputSchema.properties);
+    properties.clientTaxId = { type: "string" };
+  });
+});
+
 test("mutation selftest: hidden tool leak turns the checker red", () => {
   expectMutationRejected((contract) => {
     const leaked = structuredClone(findTool(contract, "list_invoices"));

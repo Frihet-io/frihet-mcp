@@ -575,10 +575,6 @@
             "description": "Client/customer name / Nombre del cliente",
             "type": "string"
           },
-          "clientTaxId": {
-            "description": "Client tax ID (NIF/CIF/VAT) shown on the invoice / NIF/CIF del cliente",
-            "type": "string"
-          },
           "discountRate": {
             "description": "Global discount % applied to the invoice / Descuento global %",
             "maximum": 100,
@@ -871,10 +867,6 @@
             "description": "Client name / Nombre del cliente",
             "type": "string"
           },
-          "clientTaxId": {
-            "description": "Client tax ID (NIF/CIF/VAT) / NIF/CIF del cliente",
-            "type": "string"
-          },
           "dueDate": {
             "description": "Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento",
             "type": "string"
@@ -1139,32 +1131,53 @@
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "[platform] Register a new webhook endpoint. — full schema via describe_tool('create_webhook'). [openWorldHint: true — contacts an entity outside Frihet (an email recipient or an external webhook URL).]",
+      "description": "[platform] Register a new named webhook endpoint. — full schema via describe_tool('create_webhook'). [openWorldHint: true — contacts an entity outside Frihet (an email recipient or an external webhook URL).]",
       "execution": {
         "taskSupport": "forbidden"
       },
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
         "properties": {
-          "active": {
-            "description": "Whether the webhook is active (default: true) / Si el webhook esta activo",
-            "type": "boolean"
-          },
           "events": {
             "description": "Events to subscribe to (e.g. ['invoice.created', 'invoice.paid']) / Eventos a suscribir",
             "items": {
+              "maxLength": 100,
               "type": "string"
             },
             "minItems": 1,
             "type": "array"
           },
+          "metadata": {
+            "additionalProperties": {},
+            "description": "Arbitrary webhook metadata / Metadatos del webhook",
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "name": {
+            "description": "Webhook name / Nombre del webhook",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "status": {
+            "description": "Webhook status (default: active) / Estado del webhook",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "type": "string"
+          },
           "url": {
             "description": "Webhook endpoint URL / URL del endpoint del webhook",
             "format": "uri",
+            "maxLength": 2000,
             "type": "string"
           }
         },
         "required": [
+          "name",
           "url",
           "events"
         ],
@@ -1173,10 +1186,14 @@
       "name": "create_webhook",
       "outputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "additionalProperties": {},
+        "additionalProperties": false,
         "properties": {
-          "active": {
+          "_demo": {
+            "const": true,
             "type": "boolean"
+          },
+          "_demoNotice": {
+            "type": "string"
           },
           "createdAt": {
             "type": "string"
@@ -1187,7 +1204,34 @@
             },
             "type": "array"
           },
+          "hasSecret": {
+            "type": "boolean"
+          },
           "id": {
+            "type": "string"
+          },
+          "lastTriggeredAt": {
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pausedReason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "paused"
+            ],
             "type": "string"
           },
           "updatedAt": {
@@ -1199,8 +1243,11 @@
         },
         "required": [
           "id",
+          "name",
           "url",
-          "events"
+          "events",
+          "status",
+          "hasSecret"
         ],
         "type": "object"
       },
@@ -2787,6 +2834,7 @@
       },
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
         "properties": {
           "id": {
             "description": "Webhook ID / ID del webhook",
@@ -2801,10 +2849,14 @@
       "name": "get_webhook",
       "outputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "additionalProperties": {},
+        "additionalProperties": false,
         "properties": {
-          "active": {
+          "_demo": {
+            "const": true,
             "type": "boolean"
+          },
+          "_demoNotice": {
+            "type": "string"
           },
           "createdAt": {
             "type": "string"
@@ -2815,7 +2867,34 @@
             },
             "type": "array"
           },
+          "hasSecret": {
+            "type": "boolean"
+          },
           "id": {
+            "type": "string"
+          },
+          "lastTriggeredAt": {
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pausedReason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "paused"
+            ],
             "type": "string"
           },
           "updatedAt": {
@@ -2827,8 +2906,11 @@
         },
         "required": [
           "id",
+          "name",
           "url",
-          "events"
+          "events",
+          "status",
+          "hasSecret"
         ],
         "type": "object"
       },
@@ -2877,18 +2959,41 @@
         "properties": {
           "data": {
             "items": {
-              "additionalProperties": {},
+              "additionalProperties": false,
               "properties": {
+                "_demo": {
+                  "const": true,
+                  "type": "boolean"
+                },
+                "_demoNotice": {
+                  "type": "string"
+                },
                 "createdAt": {
                   "type": "string"
                 },
-                "date": {
+                "createdBy": {
+                  "enum": [
+                    "system",
+                    "user"
+                  ],
                   "type": "string"
                 },
                 "description": {
                   "type": "string"
                 },
                 "id": {
+                  "type": "string"
+                },
+                "metadata": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "timestamp": {
                   "type": "string"
                 },
                 "title": {
@@ -2904,7 +3009,8 @@
               "required": [
                 "id",
                 "type",
-                "title"
+                "title",
+                "timestamp"
               ],
               "type": "object"
             },
@@ -3920,20 +4026,8 @@
       },
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "limit": {
-            "description": "Max results (1-100) / Resultados maximos",
-            "maximum": 100,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "offset": {
-            "description": "Offset / Desplazamiento",
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
+        "additionalProperties": false,
+        "properties": {},
         "type": "object"
       },
       "name": "list_webhooks",
@@ -3941,12 +4035,23 @@
         "$schema": "http://json-schema.org/draft-07/schema#",
         "additionalProperties": false,
         "properties": {
+          "_demo": {
+            "const": true,
+            "type": "boolean"
+          },
+          "_demoNotice": {
+            "type": "string"
+          },
           "data": {
             "items": {
-              "additionalProperties": {},
+              "additionalProperties": false,
               "properties": {
-                "active": {
+                "_demo": {
+                  "const": true,
                   "type": "boolean"
+                },
+                "_demoNotice": {
+                  "type": "string"
                 },
                 "createdAt": {
                   "type": "string"
@@ -3957,7 +4062,34 @@
                   },
                   "type": "array"
                 },
+                "hasSecret": {
+                  "type": "boolean"
+                },
                 "id": {
+                  "type": "string"
+                },
+                "lastTriggeredAt": {
+                  "type": "string"
+                },
+                "metadata": {
+                  "additionalProperties": {},
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "pausedReason": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "active",
+                    "inactive",
+                    "paused"
+                  ],
                   "type": "string"
                 },
                 "updatedAt": {
@@ -3969,21 +4101,15 @@
               },
               "required": [
                 "id",
+                "name",
                 "url",
-                "events"
+                "events",
+                "status",
+                "hasSecret"
               ],
               "type": "object"
             },
             "type": "array"
-          },
-          "limit": {
-            "type": "number"
-          },
-          "nextCursor": {
-            "type": "string"
-          },
-          "offset": {
-            "type": "number"
           },
           "total": {
             "type": "number"
@@ -3991,9 +4117,7 @@
         },
         "required": [
           "data",
-          "total",
-          "limit",
-          "offset"
+          "total"
         ],
         "type": "object"
       },
@@ -4012,21 +4136,20 @@
       },
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
         "properties": {
           "clientId": {
             "description": "Client ID / ID del cliente",
             "type": "string"
           },
-          "date": {
-            "description": "Activity date (ISO 8601, defaults to now) / Fecha de la actividad",
-            "type": "string"
-          },
           "description": {
             "description": "Detailed description / Descripcion detallada",
+            "maxLength": 5000,
             "type": "string"
           },
           "title": {
             "description": "Activity title / Titulo de la actividad",
+            "maxLength": 500,
             "type": "string"
           },
           "type": {
@@ -4050,18 +4173,41 @@
       "name": "log_client_activity",
       "outputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "additionalProperties": {},
+        "additionalProperties": false,
         "properties": {
+          "_demo": {
+            "const": true,
+            "type": "boolean"
+          },
+          "_demoNotice": {
+            "type": "string"
+          },
           "createdAt": {
             "type": "string"
           },
-          "date": {
+          "createdBy": {
+            "enum": [
+              "system",
+              "user"
+            ],
             "type": "string"
           },
           "description": {
             "type": "string"
           },
           "id": {
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "timestamp": {
             "type": "string"
           },
           "title": {
@@ -4077,7 +4223,8 @@
         "required": [
           "id",
           "type",
-          "title"
+          "title",
+          "timestamp"
         ],
         "type": "object"
       },
@@ -4683,10 +4830,6 @@
             "description": "Client name / Nombre del cliente",
             "type": "string"
           },
-          "clientTaxId": {
-            "description": "Client tax ID (NIF/CIF/VAT) shown on the invoice / NIF/CIF del cliente",
-            "type": "string"
-          },
           "discountRate": {
             "description": "Global discount % applied to the invoice / Descuento global %",
             "maximum": 100,
@@ -4985,10 +5128,6 @@
             "description": "Client name / Nombre del cliente",
             "type": "string"
           },
-          "clientTaxId": {
-            "description": "Client tax ID (NIF/CIF/VAT) / NIF/CIF del cliente",
-            "type": "string"
-          },
           "dueDate": {
             "description": "Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento",
             "type": "string"
@@ -5266,14 +5405,12 @@
       },
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
         "properties": {
-          "active": {
-            "description": "Active / Activo",
-            "type": "boolean"
-          },
           "events": {
             "description": "Events / Eventos",
             "items": {
+              "maxLength": 100,
               "type": "string"
             },
             "minItems": 1,
@@ -5283,9 +5420,32 @@
             "description": "Webhook ID / ID del webhook",
             "type": "string"
           },
+          "metadata": {
+            "additionalProperties": {},
+            "description": "Metadata / Metadatos",
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "name": {
+            "description": "Webhook name / Nombre del webhook",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "status": {
+            "description": "Status / Estado",
+            "enum": [
+              "active",
+              "inactive",
+              "paused"
+            ],
+            "type": "string"
+          },
           "url": {
             "description": "Endpoint URL / URL",
             "format": "uri",
+            "maxLength": 2000,
             "type": "string"
           }
         },
@@ -5297,10 +5457,14 @@
       "name": "update_webhook",
       "outputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "additionalProperties": {},
+        "additionalProperties": false,
         "properties": {
-          "active": {
+          "_demo": {
+            "const": true,
             "type": "boolean"
+          },
+          "_demoNotice": {
+            "type": "string"
           },
           "createdAt": {
             "type": "string"
@@ -5311,7 +5475,34 @@
             },
             "type": "array"
           },
+          "hasSecret": {
+            "type": "boolean"
+          },
           "id": {
+            "type": "string"
+          },
+          "lastTriggeredAt": {
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pausedReason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "paused"
+            ],
             "type": "string"
           },
           "updatedAt": {
@@ -5323,8 +5514,11 @@
         },
         "required": [
           "id",
+          "name",
           "url",
-          "events"
+          "events",
+          "status",
+          "hasSecret"
         ],
         "type": "object"
       },

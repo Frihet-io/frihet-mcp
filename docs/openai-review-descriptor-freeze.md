@@ -121,3 +121,25 @@ sensitive schema path instead of grandfathering paths from an old snapshot.
 The only contextual exception is `documentNumber` on create/update invoice
 inputs: there it is the business invoice sequence, not a government identity
 document. The exception is pinned to those two exact schema paths.
+
+## Approved #139 reviewed-contract correction — 2026-08-16
+
+The owner approved a subtractive correction to the already-reviewed business
+surface. `clientTaxId` is a per-document government tax identifier and is now
+removed from the reviewed input schemas at exactly these four paths:
+
+- `create_invoice.inputSchema.properties.clientTaxId`
+- `update_invoice.inputSchema.properties.clientTaxId`
+- `create_quote.inputSchema.properties.clientTaxId`
+- `update_quote.inputSchema.properties.clientTaxId`
+
+The same shared policy removes `clientTaxId` and `client_tax_id` from reviewed
+runtime structured/text output and redacts them unconditionally in external
+observability payloads. Direct MCP clients retain the existing declared input
+and forwarding behavior; this is not an ERP or fiscal-authorization change.
+
+The approved correction also aligns the already-reviewed webhook and CRM
+activity descriptors with current ERP request/response truth. It adds no tool,
+prompt, resource, OAuth, provider, or fiscal-send surface: the reviewed contract
+remains 53 business tools plus 3 discovery tools, 0 prompts, and 0 resources.
+Deployment and OpenAI re-review remain separate owner-controlled steps.
