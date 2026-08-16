@@ -145,15 +145,36 @@ export type UpdateQuoteInput = Partial<CreateQuoteInput>;
 
 export interface Webhook {
   id: string;
+  userId?: string;
+  name: string;
   url: string;
   events: string[];
-  active?: boolean;
-  secret?: string;
+  status: "active" | "inactive" | "paused";
+  metadata?: Record<string, unknown>;
+  hasSecret: boolean;
+  pausedReason?: string;
+  lastTriggeredAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export type CreateWebhookInput = Pick<Webhook, "url" | "events"> &
-  Partial<Pick<Webhook, "active" | "secret">>;
+export interface CreateWebhookInput {
+  name: string;
+  url: string;
+  events: string[];
+  status?: "active" | "inactive";
+  metadata?: Record<string, unknown>;
+  secret?: string;
+}
 
-export type UpdateWebhookInput = Partial<CreateWebhookInput>;
+export interface UpdateWebhookInput {
+  name?: string;
+  url?: string;
+  events?: string[];
+  status?: "active" | "inactive" | "paused";
+  metadata?: Record<string, unknown>;
+  secret?: string;
+}
+
+/** Create may echo only the caller-supplied signing secret, once. */
+export type CreateWebhookResult = Webhook & { secret?: string };

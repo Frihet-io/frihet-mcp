@@ -200,17 +200,17 @@ const PROFILE: OpenAIProfile = {
       "/ Envia un presupuesto al cliente por email usando el email almacenado del cliente.",
 
     create_webhook:
-      "Register a new webhook endpoint. Specify the URL and events to subscribe to. " +
-      "Available events: invoice.created, invoice.updated, invoice.paid, invoice.deleted, " +
-      "expense.created, expense.updated, expense.deleted, client.created, client.updated, " +
+      "Register a new named webhook endpoint. Specify the name, URL, and events to subscribe to. " +
+      "Available events: invoice.created, invoice.updated, invoice.paid, " +
+      "expense.created, expense.updated, client.created, client.updated, " +
       "quote.created, quote.updated, quote.accepted. " +
-      "Example: url='https://example.com/webhook', events=['invoice.created','invoice.paid'] " +
+      "Example: name='Invoice events', url='https://example.com/webhook', events=['invoice.created','invoice.paid'], status='active' " +
       "[openWorldHint: true — configures Frihet to POST event data to the specified external URL] " +
       "/ Registra un nuevo endpoint de webhook.",
 
     update_webhook:
       "Update an existing webhook configuration using PATCH semantics. " +
-      "Example: id='abc123', active=false to disable a webhook. " +
+      "Example: id='abc123', status='paused' to pause a webhook. " +
       "[openWorldHint: true — can modify the external URL that receives webhook notifications] " +
       "/ Actualiza la configuracion de un webhook.",
   },
@@ -230,6 +230,10 @@ const PROFILE: OpenAIProfile = {
     list_products:  ["fields"],
     list_quotes:    ["fields"],
     list_vendors:   ["fields"],
+    create_invoice: ["clientTaxId"],
+    update_invoice: ["clientTaxId"],
+    create_quote:   ["clientTaxId"],
+    update_quote:   ["clientTaxId"],
     create_client:  ["taxId"],   // NIF/CIF/VAT — government-issued identifier
     update_client:  ["taxId"],
     create_vendor:  ["taxId"],
@@ -331,6 +335,33 @@ function stripSensitiveOutputSchema(
   return schema;
 }
 
+/** Remove reviewed input fields while preserving a Zod object's strictness. */
+function stripReviewedInputFields(
+  schema: unknown,
+  fields: readonly string[],
+): unknown {
+  if (schema instanceof z.ZodObject) {
+    const shape = schema.shape as Record<string, z.ZodTypeAny>;
+    const filtered = Object.fromEntries(
+      Object.entries(shape).filter(([key]) => !fields.includes(key)),
+    ) as z.ZodRawShape;
+    const base = z.object(filtered);
+    const catchall = schema._def.catchall;
+    if (catchall instanceof z.ZodUnknown) return base.passthrough();
+    if (catchall instanceof z.ZodNever) return base.strict();
+    if (catchall) return base.catchall(catchall);
+    return base;
+  }
+
+  if (schema !== null && typeof schema === "object" && !Array.isArray(schema)) {
+    const filtered = { ...(schema as Record<string, unknown>) };
+    for (const field of fields) delete filtered[field];
+    return filtered;
+  }
+
+  return schema;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Resources excluded / redacted in OpenAI mode                       */
 /* ------------------------------------------------------------------ */
@@ -429,9 +460,7 @@ export function applyOpenAIProfile(server: any): void {
     // 4. Strip sensitive input fields
     const inputStrip = PROFILE.stripInputFields[name];
     if (inputStrip && config.inputSchema) {
-      for (const field of inputStrip) {
-        delete config.inputSchema[field];
-      }
+      config.inputSchema = stripReviewedInputFields(config.inputSchema, inputStrip);
     }
 
     // 4b. Strip sensitive fields from the OUTPUT schema descriptor too.

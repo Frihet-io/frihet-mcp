@@ -18,6 +18,8 @@ import { redactClone, SENSITIVE_FIELD_NAMES } from "../redaction.js";
 
 const SECRETS = {
   taxId: "B12345678",
+  clientTaxId: "CLIENT-TAX-ID-CAMEL",
+  client_tax_id: "CLIENT-TAX-ID-SNAKE",
   nif: "12345678Z",
   secret: "whsec_live_DEADBEEFCAFE",
   iban: "ES9121000418450200051332",
@@ -99,8 +101,27 @@ describe("observability redaction", () => {
   });
 
   test("the sensitive field set covers the critical Trust fields", () => {
-    for (const f of ["taxId", "secret", "iban", "apiKey", "accessToken", "password"]) {
+    for (const f of ["taxId", "clientTaxId", "client_tax_id", "secret", "iban", "apiKey", "accessToken", "password"]) {
       assert.ok(SENSITIVE_FIELD_NAMES.includes(f), `missing critical sensitive field: ${f}`);
     }
+  });
+
+  test("clientTaxId camel/snake variants redact without mutating the live payload", () => {
+    const original = {
+      nested: {
+        clientTaxId: SECRETS.clientTaxId,
+        client_tax_id: SECRETS.client_tax_id,
+        name: "Preserved",
+      },
+    };
+    const before = structuredClone(original);
+    const redacted = redactClone(original) as {
+      nested: Record<string, unknown>;
+    };
+
+    assert.deepEqual(original, before, "observability redaction must not mutate live output");
+    assert.equal(redacted.nested.clientTaxId, "[redacted]");
+    assert.equal(redacted.nested.client_tax_id, "[redacted]");
+    assert.equal(redacted.nested.name, "Preserved");
   });
 });

@@ -6,7 +6,13 @@
  * functions depend on this interface so they can work with either client.
  */
 
-import type { PaginatedResponse } from "./types.js";
+import type {
+  CreateWebhookInput,
+  CreateWebhookResult,
+  PaginatedResponse,
+  UpdateWebhookInput,
+  Webhook,
+} from "./types.js";
 
 export interface IFrihetClient {
   // Invoices
@@ -66,10 +72,15 @@ export interface IFrihetClient {
   sendQuote(id: string, to?: string): Promise<Record<string, unknown>>;
 
   // Webhooks
-  listWebhooks(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
-  getWebhook(id: string): Promise<Record<string, unknown>>;
-  createWebhook(data: Record<string, unknown>): Promise<Record<string, unknown>>;
-  updateWebhook(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
+  listWebhooks(): Promise<{
+    data: Webhook[];
+    total: number;
+    _demo?: true;
+    _demoNotice?: string;
+  }>;
+  getWebhook(id: string): Promise<Webhook>;
+  createWebhook(data: CreateWebhookInput): Promise<CreateWebhookResult>;
+  updateWebhook(id: string, data: UpdateWebhookInput): Promise<Webhook>;
   deleteWebhook(id: string): Promise<void>;
 
   // CRM: Contacts (subcollection of clients)

@@ -67,10 +67,12 @@ export interface AnnotatedTextContent {
 
 const MAX_RESPONSE_CHARS = 80_000; // ~20,000 tokens safety margin
 
-export function truncateResponse(text: string): string {
+export function truncateResponse(
+  text: string,
+  truncatedNotice = '\n\n[Response truncated. Use pagination (limit/offset) to retrieve smaller result sets.]',
+): string {
   if (text.length <= MAX_RESPONSE_CHARS) return text;
-  return text.slice(0, MAX_RESPONSE_CHARS) +
-    '\n\n[Response truncated. Use pagination (limit/offset) to retrieve smaller result sets.]';
+  return text.slice(0, MAX_RESPONSE_CHARS) + truncatedNotice;
 }
 
 /** Shape of errors thrown by any FrihetClient implementation. */
@@ -206,12 +208,25 @@ export function formatPaginatedResponse(
   return truncateResponse(lines.join("\n"));
 }
 
+/** Format an exhaustive list whose backend exposes no pagination controls. */
+export function formatUnpaginatedListResponse<T extends object>(
+  resourceName: string,
+  response: { data: T[]; total: number },
+): string {
+  const lines = [`Found ${response.total} ${resourceName}:`, ""];
+  for (const item of response.data) {
+    lines.push(JSON.stringify(item, null, 2));
+    lines.push("---");
+  }
+  return truncateResponse(lines.join("\n"), "\n\n[Response truncated.]");
+}
+
 /**
  * Formats a single record for display.
  */
 export function formatRecord(
   label: string,
-  record: Record<string, unknown>,
+  record: object,
 ): string {
   return truncateResponse(`${label}:\n${JSON.stringify(record, null, 2)}`);
 }
@@ -492,13 +507,33 @@ export const vendorItemOutput = z.object({
 
 export const webhookItemOutput = z.object({
   id: z.string(),
+  userId: z.string().optional(),
+  name: z.string(),
   url: z.string(),
   events: z.array(z.string()),
-  active: z.boolean().optional(),
-  secret: z.string().optional(),
+  status: z.enum(["active", "inactive", "paused"]),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  hasSecret: z.boolean(),
+  pausedReason: z.string().optional(),
+  lastTriggeredAt: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
-}).passthrough();
+  _demo: z.literal(true).optional(),
+  _demoNotice: z.string().optional(),
+}).strict();
+
+/** Create alone may echo the caller-supplied signing secret once. */
+export const webhookCreateOutput = webhookItemOutput.extend({
+  secret: z.string().optional(),
+}).strict();
+
+/** `/webhooks` has no backend pagination contract. */
+export const webhookListOutput = z.object({
+  data: z.array(webhookItemOutput),
+  total: z.number(),
+  _demo: z.literal(true).optional(),
+  _demoNotice: z.string().optional(),
+}).strict();
 
 /* --- CRM subcollection item schemas -------------------------------- */
 
@@ -518,10 +553,14 @@ export const activityItemOutput = z.object({
   type: z.string(),
   title: z.string(),
   description: z.string().optional(),
-  date: z.string().optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  timestamp: z.string(),
+  createdBy: z.enum(["system", "user"]).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
-}).passthrough();
+  _demo: z.literal(true).optional(),
+  _demoNotice: z.string().optional(),
+}).strict();
 
 export const noteItemOutput = z.object({
   id: z.string(),

@@ -12,7 +12,14 @@
  * is never sent on the wire. See src/__tests__/pagination-cursor-param.test.ts.
  */
 
-import type { PaginatedResponse, ApiError } from "./types.js";
+import type {
+  ApiError,
+  CreateWebhookInput,
+  CreateWebhookResult,
+  PaginatedResponse,
+  UpdateWebhookInput,
+  Webhook,
+} from "./types.js";
 import { sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
 
@@ -210,6 +217,54 @@ export class FrihetApiError extends Error {
     );
     this.name = "FrihetApiError";
   }
+}
+
+/**
+ * Enforce the webhook secret's one-time write echo and normalize the one
+ * Firestore Timestamp that the ERP webhook route currently emits without its
+ * usual serializer. Invalid timestamp objects are preserved so the strict MCP
+ * output schema fails closed instead of fabricating a value.
+ */
+function normalizeWebhookRecord(
+  webhook: Record<string, unknown>,
+  allowedSecret?: string,
+): Record<string, unknown> {
+  const normalized = { ...webhook };
+
+  if (
+    typeof allowedSecret !== "string" ||
+    typeof normalized.secret !== "string" ||
+    normalized.secret !== allowedSecret
+  ) {
+    delete normalized.secret;
+  }
+
+  const lastTriggeredAt = normalized.lastTriggeredAt;
+  if (
+    lastTriggeredAt !== null &&
+    typeof lastTriggeredAt === "object" &&
+    !Array.isArray(lastTriggeredAt)
+  ) {
+    const timestamp = lastTriggeredAt as Record<string, unknown>;
+    const seconds = timestamp._seconds;
+    const nanoseconds = timestamp._nanoseconds;
+    if (
+      typeof seconds === "number" &&
+      Number.isInteger(seconds) &&
+      Number.isFinite(seconds) &&
+      typeof nanoseconds === "number" &&
+      Number.isInteger(nanoseconds) &&
+      nanoseconds >= 0 &&
+      nanoseconds < 1_000_000_000
+    ) {
+      const date = new Date(seconds * 1000 + Math.floor(nanoseconds / 1_000_000));
+      if (Number.isFinite(date.getTime())) {
+        normalized.lastTriggeredAt = date.toISOString();
+      }
+    }
+  }
+
+  return normalized;
 }
 
 function normalizeApiError(
@@ -1070,28 +1125,63 @@ export class FrihetClient {
   // ---------------------------------------------------------------- Webhooks
   // ----------------------------------------------------------------
 
-  async listWebhooks(
-    params?: { limit?: number; offset?: number },
-  ): Promise<PaginatedResponse<Record<string, unknown>>> {
-    return this.requestPaginated("GET", "/webhooks", undefined, {
-      limit: params?.limit,
-      offset: params?.offset,
-    });
+  async listWebhooks(): Promise<{ data: Webhook[]; total: number }> {
+    const result = await this.request<unknown>("GET", "/webhooks");
+    if (
+      result === null ||
+      typeof result !== "object" ||
+      !("data" in result) ||
+      !("total" in result) ||
+      !Array.isArray((result as { data: unknown }).data) ||
+      typeof (result as { total: unknown }).total !== "number"
+    ) {
+      throw new FrihetApiError(
+        200,
+        "invalid_response",
+        "API returned invalid webhook list response",
+      );
+    }
+
+    // `/webhooks` is deliberately unpaginated. Keep its `{ data, total }`
+    // contract and discard only the transport-level `meta` sibling.
+    return {
+      data: (result as { data: Record<string, unknown>[] }).data.map((webhook) =>
+        normalizeWebhookRecord(webhook) as unknown as Webhook
+      ),
+      total: (result as { total: number }).total,
+    };
   }
 
-  async getWebhook(id: string): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("GET", `/webhooks/${encodeURIComponent(id)}`);
+  async getWebhook(id: string): Promise<Webhook> {
+    const result = await this.requestUnwrapped<Record<string, unknown>>(
+      "GET",
+      `/webhooks/${encodeURIComponent(id)}`,
+    );
+    return normalizeWebhookRecord(result) as unknown as Webhook;
   }
 
-  async createWebhook(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", "/webhooks", data);
+  async createWebhook(data: CreateWebhookInput): Promise<CreateWebhookResult> {
+    const result = await this.requestUnwrapped<Record<string, unknown>>(
+      "POST",
+      "/webhooks",
+      data,
+    );
+    return normalizeWebhookRecord(
+      result,
+      typeof data.secret === "string" ? data.secret : undefined,
+    ) as unknown as CreateWebhookResult;
   }
 
   async updateWebhook(
     id: string,
-    data: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("PATCH", `/webhooks/${encodeURIComponent(id)}`, data);
+    data: UpdateWebhookInput,
+  ): Promise<Webhook> {
+    const result = await this.requestUnwrapped<Record<string, unknown>>(
+      "PATCH",
+      `/webhooks/${encodeURIComponent(id)}`,
+      data,
+    );
+    return normalizeWebhookRecord(result) as unknown as Webhook;
   }
 
   async deleteWebhook(id: string): Promise<void> {

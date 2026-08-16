@@ -92,6 +92,7 @@ export function sanitizeServerRemediation(
  */
 export const SENSITIVE_FIELD_NAMES: readonly string[] = [
   "taxId", "tax_id",              // Primary field name + snake_case variant
+  "clientTaxId", "client_tax_id", // Per-document client government tax ID
   "nif", "cif", "vatNumber",      // Spanish/EU synonyms for government tax ID
   "vat_number", "vatId", "vat_id",
   "secret",                       // Webhook signing credential

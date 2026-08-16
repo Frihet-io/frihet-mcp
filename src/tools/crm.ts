@@ -155,15 +155,14 @@ export function registerCrmTools(server: McpServer, client: IFrihetClient): void
         "Example: clientId='abc123', type='call', title='Discussed Q2 proposal', description='Client interested in upgrade' " +
         "/ Registra una actividad CRM para un cliente. Usa para rastrear llamadas, emails, reuniones o tareas.",
       annotations: CREATE_ANNOTATIONS,
-      inputSchema: {
+      inputSchema: z.object({
         clientId: z.string().describe("Client ID / ID del cliente"),
         type: z
           .enum(["call", "email", "meeting", "task"])
           .describe("Activity type / Tipo de actividad"),
-        title: z.string().describe("Activity title / Titulo de la actividad"),
-        description: z.string().optional().describe("Detailed description / Descripcion detallada"),
-        date: z.string().optional().describe("Activity date (ISO 8601, defaults to now) / Fecha de la actividad"),
-      },
+        title: z.string().max(500).describe("Activity title / Titulo de la actividad"),
+        description: z.string().max(5000).optional().describe("Detailed description / Descripcion detallada"),
+      }).strict(),
       outputSchema: activityItemOutput,
     },
     async ({ clientId, ...data }) => withToolLogging("log_client_activity", async () => {

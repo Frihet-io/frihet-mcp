@@ -19,7 +19,13 @@
  */
 
 import type { IFrihetClient } from "./client-interface.js";
-import type { PaginatedResponse } from "./types.js";
+import type {
+  CreateWebhookInput,
+  CreateWebhookResult,
+  PaginatedResponse,
+  UpdateWebhookInput,
+  Webhook,
+} from "./types.js";
 import type { BinaryDocument, EInvoiceDocument } from "./client.js";
 import { Buffer } from "node:buffer";
 import {
@@ -294,17 +300,42 @@ export class DemoFrihetClient implements IFrihetClient {
   }
 
   // ---------------------------------------------------------------- Webhooks
-  async listWebhooks(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
-    return demoEmptyPage(params);
+  async listWebhooks(): Promise<{ data: Webhook[]; total: number; _demo?: true; _demoNotice?: string }> {
+    const { data, total, _demo, _demoNotice } = demoEmptyPage();
+    return { data: data as unknown as Webhook[], total, _demo, _demoNotice };
   }
-  async getWebhook(id: string): Promise<Rec> {
-    return { id, ...READ_STAMP };
+  async getWebhook(id: string): Promise<Webhook> {
+    return {
+      id,
+      name: "Demo webhook",
+      url: "https://example.com/webhooks/frihet",
+      events: ["invoice.paid"],
+      status: "active",
+      metadata: { demo: true },
+      hasSecret: false,
+      createdAt: DEMO_NOW,
+      updatedAt: DEMO_NOW,
+      ...READ_STAMP,
+    };
   }
-  async createWebhook(data: Rec): Promise<Rec> {
-    return simulateWrite("demo_wh", data, { active: data.active ?? true });
+  async createWebhook(data: CreateWebhookInput): Promise<CreateWebhookResult> {
+    return simulateWrite("demo_wh", { ...data }, {
+      status: data.status ?? "active",
+      hasSecret: typeof data.secret === "string" && data.secret.length > 0,
+    }) as unknown as CreateWebhookResult;
   }
-  async updateWebhook(id: string, data: Rec): Promise<Rec> {
-    return simulateAction(id, { ...data });
+  async updateWebhook(id: string, data: UpdateWebhookInput): Promise<Webhook> {
+    const { secret, ...fields } = data;
+    const { success: _success, ...result } = simulateAction(id, {
+      name: "Demo webhook",
+      url: "https://example.com/webhooks/frihet",
+      events: ["invoice.paid"],
+      status: "active",
+      metadata: { demo: true },
+      hasSecret: typeof secret === "string" && secret.length > 0,
+      ...fields,
+    });
+    return result as unknown as Webhook;
   }
   async deleteWebhook(_id: string): Promise<void> {
     return;
@@ -325,8 +356,13 @@ export class DemoFrihetClient implements IFrihetClient {
   async listClientActivities(_clientId: string, params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
     return demoEmptyPage(params);
   }
-  async logClientActivity(clientId: string, data: Rec): Promise<Rec> {
-    return simulateWrite("demo_act", data, { clientId });
+  async logClientActivity(_clientId: string, data: Rec): Promise<Rec> {
+    return simulateWrite("demo_act", data, {
+      type: data.type === "email" ? "email_sent" : data.type,
+      timestamp: DEMO_NOW,
+      createdBy: "user",
+      metadata: {},
+    });
   }
 
   // ---------------------------------------------------------------- CRM: Notes
