@@ -11,9 +11,10 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { resolveApiBaseUrl, resolveOAuthApiKeyUrl } from "../api-url.ts";
+import { provisionOAuthApiKey } from "../oauth-provisioning.ts";
 
 const EXPECTED = "https://api.frihet.io/oauth/api-key";
 
@@ -65,6 +66,9 @@ test("worker API base rejects host confusion, credentials, unsafe ports, and arb
     "https://user:password@api.frihet.io/v1",
     "http://api.frihet.io/v1",
     "https://api.frihet.io:444/v1",
+    "https://.frihet.io/v1",
+    "https://.api.frihet.io/v1",
+    "https://api..frihet.io/v1",
     "https://api.frihet.io./v1",
     "https://api.frihet.io/v1?redirect=evil",
     "https://api.frihet.io/v1#fragment",
@@ -79,13 +83,51 @@ test("worker API base rejects host confusion, credentials, unsafe ports, and arb
   }
 });
 
-test("OAuth provisioning disables redirects before the Firebase bearer token is sent", () => {
-  const source = readFileSync(
-    fileURLToPath(new URL("../auth-handler.ts", import.meta.url)),
-    "utf8",
-  );
-  assert.match(
-    source,
-    /fetch\(\s*resolveOAuthApiKeyUrl\([\s\S]*?method:\s*"POST",\s*redirect:\s*"error"/u,
-  );
+test("OAuth provisioning behavior blocks redirects before the bearer token reaches a sink", async () => {
+  const sinkRequests: Array<{ authorization: string | undefined }> = [];
+  const redirectRequests: Array<{ authorization: string | undefined }> = [];
+  const sink = createServer((req, res) => {
+    sinkRequests.push({ authorization: req.headers.authorization });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ apiKey: "unused" }));
+  });
+  await new Promise<void>((resolve) => sink.listen(0, "127.0.0.1", resolve));
+  const sinkPort = (sink.address() as AddressInfo).port;
+
+  const redirector = createServer((req, res) => {
+    redirectRequests.push({ authorization: req.headers.authorization });
+    res.writeHead(307, { location: `http://127.0.0.1:${sinkPort}/oauth-sink` });
+    res.end();
+  });
+  await new Promise<void>((resolve) => redirector.listen(0, "127.0.0.1", resolve));
+  const redirectPort = (redirector.address() as AddressInfo).port;
+
+  const remappedFetch = async (input: string | URL | Request, init?: RequestInit) => {
+    assert.equal(String(input), EXPECTED);
+    return globalThis.fetch(`http://127.0.0.1:${redirectPort}/oauth/api-key`, init);
+  };
+
+  try {
+    await assert.rejects(
+      () => provisionOAuthApiKey(
+        EXPECTED,
+        "test-id-token",
+        "uid-test",
+        remappedFetch,
+      ),
+      (error: Error) => {
+        assert.ok(!error.message.includes("test-id-token"));
+        return true;
+      },
+    );
+  } finally {
+    await Promise.all([
+      new Promise<void>((resolve, reject) => sink.close((error) => error ? reject(error) : resolve())),
+      new Promise<void>((resolve, reject) => redirector.close((error) => error ? reject(error) : resolve())),
+    ]);
+  }
+
+  assert.equal(redirectRequests.length, 1);
+  assert.equal(redirectRequests[0]?.authorization, "Bearer test-id-token");
+  assert.deepEqual(sinkRequests, []);
 });

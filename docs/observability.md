@@ -64,6 +64,9 @@ Add to the MCP server config in `mcpServers`:
 
 Langfuse keys are **optional** — omit them and the server runs with tracing disabled
 (fail-open). Client labels and user/workspace identity are intentionally omitted.
+`LANGFUSE_BASE_URL` is restricted to the exact documented
+`https://langfuse.frihet.io` origin because the ingestion request carries Basic
+Authorization; custom hosts, paths, ports, and redirects are not accepted.
 
 ---
 

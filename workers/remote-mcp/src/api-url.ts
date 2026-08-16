@@ -57,7 +57,7 @@ function parseApiBase(apiBase: string): ParsedApiBase {
   }
 
   const hostname = parsed.hostname.toLowerCase();
-  if (hostname.endsWith(".")) {
+  if (hostname.split(".").some((label) => label.length === 0)) {
     throw new Error("FRIHET_API_BASE hostname is not canonical");
   }
   const isFrihetHost = hostname === "frihet.io" || hostname.endsWith(".frihet.io");

@@ -10,6 +10,7 @@
 
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
+import { provisionOAuthApiKey } from "./oauth-provisioning.js";
 import { resolveOAuthApiKeyUrl } from "./api-url.js";
 import { getLoginPage } from "./login-page.js";
 import { log } from "../../../src/logger.js";
@@ -164,17 +165,10 @@ app.post("/callback", async (c) => {
   // resolveOAuthApiKeyUrl strips a trailing /v1 so a FRIHET_API_BASE configured
   // in either form (origin or /v1) resolves correctly. Passing the raw env var
   // with a /v1 suffix produced /v1/oauth/api-key → 401 → 500 for every OAuth grant.
-  const apiKeyResponse = await fetch(
+  const apiKeyResponse = await provisionOAuthApiKey(
     resolveOAuthApiKeyUrl(c.env.FRIHET_API_BASE),
-    {
-      method: "POST",
-      redirect: "error",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${body.idToken}`,
-      },
-      body: JSON.stringify({ uid: decoded.uid }),
-    },
+    body.idToken,
+    decoded.uid,
   );
 
   if (!apiKeyResponse.ok) {

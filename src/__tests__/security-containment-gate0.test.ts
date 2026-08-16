@@ -6,7 +6,12 @@ import { describe, test } from "node:test";
 import { normalizePublicApiBaseUrl } from "../api-origin.js";
 import { FrihetClient } from "../client.js";
 import { log } from "../logger.js";
-import { buildTracePayload, initLangfuse, traceMCPTool } from "../observability.js";
+import {
+  buildTracePayload,
+  initLangfuse,
+  normalizeLangfuseBaseUrl,
+  traceMCPTool,
+} from "../observability.js";
 
 const BUSINESS_DATA = {
   customerName: "Ada Lovelace",
@@ -29,6 +34,129 @@ function assertNoBusinessPayload(value: unknown): void {
 }
 
 describe("telemetry data minimization", () => {
+  test("Langfuse authority is the exact canonical HTTPS origin", () => {
+    assert.equal(
+      normalizeLangfuseBaseUrl("https://LANGFUSE.FRIHET.IO:443/"),
+      "https://langfuse.frihet.io",
+    );
+    for (const candidate of [
+      "http://langfuse.frihet.io",
+      "https://user:password@langfuse.frihet.io",
+      "https://langfuse.frihet.io:444",
+      "https://langfuse.frihet.io/path",
+      "https://langfuse.frihet.io?query=value",
+      "https://langfuse.frihet.io#fragment",
+      "https://other.frihet.io",
+      "https://.frihet.io",
+      "https://langfuse.frihet.io.",
+    ]) {
+      assert.throws(() => normalizeLangfuseBaseUrl(candidate), candidate);
+    }
+  });
+
+  test("Langfuse redirects cannot forward Basic authorization to a second origin", async () => {
+    const sinkRequests: Array<{ authorization: string | undefined }> = [];
+    const redirectRequests: Array<{ authorization: string | undefined }> = [];
+    const sink = createServer((req, res) => {
+      sinkRequests.push({ authorization: req.headers.authorization });
+      res.writeHead(204);
+      res.end();
+    });
+    await new Promise<void>((resolve) => sink.listen(0, "127.0.0.1", resolve));
+    const sinkPort = (sink.address() as AddressInfo).port;
+
+    const redirector = createServer((req, res) => {
+      redirectRequests.push({ authorization: req.headers.authorization });
+      res.writeHead(307, { location: `http://127.0.0.1:${sinkPort}/ingestion-sink` });
+      res.end();
+    });
+    await new Promise<void>((resolve) => redirector.listen(0, "127.0.0.1", resolve));
+    const redirectPort = (redirector.address() as AddressInfo).port;
+
+    const originalFetch = globalThis.fetch;
+    const originalConsoleError = console.error;
+    const logs: string[] = [];
+    let requestSettledResolve: (() => void) | undefined;
+    const requestSettled = new Promise<void>((resolve) => { requestSettledResolve = resolve; });
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      assert.equal(String(input), "https://langfuse.frihet.io/api/public/ingestion");
+      try {
+        return await originalFetch(`http://127.0.0.1:${redirectPort}/api/public/ingestion`, init);
+      } finally {
+        requestSettledResolve?.();
+      }
+    };
+    console.error = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+    initLangfuse({
+      publicKey: "pk_test_redirect",
+      secretKey: "sk_test_redirect",
+      baseUrl: "https://langfuse.frihet.io",
+    });
+
+    try {
+      await traceMCPTool("get_client", {}, async () => ({ ok: true }));
+      let settleTimeout: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        requestSettled,
+        new Promise<never>((_resolve, reject) => {
+          settleTimeout = setTimeout(
+            () => reject(new Error("Langfuse redirect request did not settle")),
+            2_000,
+          );
+        }),
+      ]);
+      if (settleTimeout) clearTimeout(settleTimeout);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    } finally {
+      globalThis.fetch = originalFetch;
+      console.error = originalConsoleError;
+      await Promise.all([
+        new Promise<void>((resolve, reject) => sink.close((error) => error ? reject(error) : resolve())),
+        new Promise<void>((resolve, reject) => redirector.close((error) => error ? reject(error) : resolve())),
+      ]);
+    }
+
+    assert.equal(redirectRequests.length, 1);
+    assert.match(redirectRequests[0]?.authorization ?? "", /^Basic /u);
+    assert.deepEqual(sinkRequests, []);
+    const parsedLogs = logs.map((entry) => JSON.parse(entry) as Record<string, unknown>);
+    for (const entry of parsedLogs) delete entry.timestamp;
+    assert.deepEqual(parsedLogs, [{
+      level: "warn",
+      message: "MCP telemetry trace event",
+      service: "frihet-mcp",
+      operation: "langfuse_trace",
+      error: { message: "MCP operation failed", code: "telemetry_error" },
+    }]);
+  });
+
+  test("invalid worker telemetry authority clears stale configuration and disables sending", async () => {
+    initLangfuse({
+      publicKey: "pk_stale",
+      secretKey: "sk_stale",
+      baseUrl: "https://langfuse.frihet.io",
+    });
+    initLangfuse({
+      publicKey: "pk_invalid",
+      secretKey: "sk_invalid",
+      baseUrl: "https://other.frihet.io",
+    });
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response(null, { status: 204 });
+    };
+    try {
+      const result = await traceMCPTool("get_client", {}, async () => ({ ok: true }));
+      assert.deepEqual(result, { ok: true });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    assert.equal(calls, 0);
+  });
+
   test("Langfuse payload is an operational allowlist, never a redacted business payload", () => {
     const now = new Date("2026-08-16T00:00:00.000Z");
     const untrustedParams = {
@@ -189,6 +317,9 @@ describe("public API origin boundary", () => {
       "https://user:password@api.frihet.io/v1",
       "http://api.frihet.io/v1",
       "https://api.frihet.io:444/v1",
+      "https://.frihet.io/v1",
+      "https://.api.frihet.io/v1",
+      "https://api..frihet.io/v1",
       "https://api.frihet.io./v1",
       "https://api.frihet.io/v1?forward=evil",
       "https://api.frihet.io/v1#fragment",

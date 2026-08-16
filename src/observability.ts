@@ -33,6 +33,56 @@ interface LangfuseConfig {
   baseUrl: string;
 }
 
+const CANONICAL_LANGFUSE_ORIGIN = "https://langfuse.frihet.io";
+
+/**
+ * Langfuse receives a Basic Authorization header, so its authority is exact.
+ * The current product contract documents one hosted origin; arbitrary Frihet
+ * subdomains and self-hosted overrides are intentionally not trusted here.
+ */
+export function normalizeLangfuseBaseUrl(value: string): string {
+  if (value !== value.trim()) {
+    throw new Error("LANGFUSE_BASE_URL must not contain surrounding whitespace");
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("LANGFUSE_BASE_URL must be a valid URL");
+  }
+
+  if (parsed.protocol !== "https:") throw new Error("LANGFUSE_BASE_URL must use HTTPS");
+  if (parsed.username || parsed.password) {
+    throw new Error("LANGFUSE_BASE_URL must not contain URL credentials");
+  }
+  if (parsed.port) throw new Error("LANGFUSE_BASE_URL must use the default HTTPS port");
+  if (parsed.search || parsed.hash) {
+    throw new Error("LANGFUSE_BASE_URL must not contain a query or fragment");
+  }
+  if (parsed.pathname !== "/") throw new Error("LANGFUSE_BASE_URL must use the origin root");
+  if (parsed.hostname.toLowerCase() !== "langfuse.frihet.io") {
+    throw new Error("LANGFUSE_BASE_URL hostname is not trusted");
+  }
+
+  return CANONICAL_LANGFUSE_ORIGIN;
+}
+
+function buildConfig(
+  publicKey: string | undefined,
+  secretKey: string | undefined,
+  baseUrl: string | undefined,
+): LangfuseConfig | null {
+  if (!publicKey || !secretKey || !baseUrl) return null;
+  try {
+    return { publicKey, secretKey, baseUrl: normalizeLangfuseBaseUrl(baseUrl) };
+  } catch {
+    // Telemetry is optional and fail-open for tools. An invalid authority
+    // disables telemetry rather than risking credentials or blocking MCP calls.
+    return null;
+  }
+}
+
 function getConfig(): LangfuseConfig | null {
   let publicKey: string | undefined;
   let secretKey: string | undefined;
@@ -45,9 +95,7 @@ function getConfig(): LangfuseConfig | null {
     baseUrl = process.env.LANGFUSE_BASE_URL;
   }
 
-  if (!publicKey || !secretKey || !baseUrl) return null;
-
-  return { publicKey, secretKey, baseUrl: baseUrl.replace(/\/$/, "") };
+  return buildConfig(publicKey, secretKey, baseUrl);
 }
 
 // ── Worker env injection (for Cloudflare Workers) ───────────────────────────
@@ -63,13 +111,7 @@ export function initLangfuse(config: {
   secretKey?: string;
   baseUrl?: string;
 }): void {
-  if (config.publicKey && config.secretKey && config.baseUrl) {
-    workerEnv = {
-      publicKey: config.publicKey,
-      secretKey: config.secretKey,
-      baseUrl: config.baseUrl.replace(/\/$/, ""),
-    };
-  }
+  workerEnv = buildConfig(config.publicKey, config.secretKey, config.baseUrl);
 }
 
 function resolveConfig(): LangfuseConfig | null {
@@ -158,6 +200,7 @@ async function sendBatch(config: LangfuseConfig, batch: IngestionBatch): Promise
 
   const resp = await fetch(`${config.baseUrl}/api/public/ingestion`, {
     method: "POST",
+    redirect: "error",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Basic ${credentials}`,
