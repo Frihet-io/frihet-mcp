@@ -23,6 +23,69 @@
 const DEFAULT_API_BASE =
   "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api";
 
+const TRUSTED_CLOUD_FUNCTION_HOST =
+  "europe-west1-gen-lang-client-0335716041.cloudfunctions.net";
+
+interface ParsedApiBase {
+  toolBase: string;
+  oauthRoot: string;
+}
+
+function parseApiBase(apiBase: string): ParsedApiBase {
+  if (apiBase !== apiBase.trim()) {
+    throw new Error("FRIHET_API_BASE must not contain surrounding whitespace");
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(apiBase);
+  } catch {
+    throw new Error("FRIHET_API_BASE must be a valid URL");
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new Error("FRIHET_API_BASE must use HTTPS");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("FRIHET_API_BASE must not contain URL credentials");
+  }
+  if (parsed.port) {
+    throw new Error("FRIHET_API_BASE must use the default HTTPS port");
+  }
+  if (parsed.search || parsed.hash) {
+    throw new Error("FRIHET_API_BASE must not contain a query or fragment");
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname.endsWith(".")) {
+    throw new Error("FRIHET_API_BASE hostname is not canonical");
+  }
+  const isFrihetHost = hostname === "frihet.io" || hostname.endsWith(".frihet.io");
+  if (isFrihetHost) {
+    if (parsed.pathname !== "/" && parsed.pathname !== "/v1" && parsed.pathname !== "/v1/") {
+      throw new Error("FRIHET_API_BASE Frihet path must be / or /v1");
+    }
+    const origin = `https://${hostname}`;
+    return { toolBase: `${origin}/v1`, oauthRoot: origin };
+  }
+
+  if (hostname === TRUSTED_CLOUD_FUNCTION_HOST) {
+    const allowed = new Set([
+      "/publicApi/api",
+      "/publicApi/api/",
+      "/publicApi/api/v1",
+      "/publicApi/api/v1/",
+    ]);
+    if (!allowed.has(parsed.pathname)) {
+      throw new Error("FRIHET_API_BASE Cloud Function path is not trusted");
+    }
+    const root = `https://${TRUSTED_CLOUD_FUNCTION_HOST}/publicApi/api`;
+    return { toolBase: `${root}/v1`, oauthRoot: root };
+  }
+
+  throw new Error("FRIHET_API_BASE hostname is not trusted");
+}
+
 /**
  * Normalize FRIHET_API_BASE into the /v1 base URL the request client expects.
  * Accepts both the origin form ("https://api.frihet.io") and the full
@@ -31,9 +94,7 @@ const DEFAULT_API_BASE =
  */
 export function resolveApiBaseUrl(apiBase?: string): string | undefined {
   if (!apiBase) return undefined;
-  const trimmed = apiBase.replace(/\/+$/, "");
-  if (trimmed === "") return undefined;
-  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
+  return parseApiBase(apiBase).toolBase;
 }
 
 /**
@@ -51,7 +112,6 @@ export function resolveApiBaseUrl(apiBase?: string): string | undefined {
  * Falls back to the production origin when the env var is absent.
  */
 export function resolveOAuthApiKeyUrl(apiBase?: string): string {
-  const trimmed = (apiBase || DEFAULT_API_BASE).replace(/\/+$/, "");
-  const origin = trimmed.replace(/\/v1$/, "");
-  return `${origin}/oauth/api-key`;
+  const { oauthRoot } = parseApiBase(apiBase || DEFAULT_API_BASE);
+  return `${oauthRoot}/oauth/api-key`;
 }

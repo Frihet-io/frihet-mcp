@@ -11,7 +11,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveOAuthApiKeyUrl } from "../api-url.ts";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { resolveApiBaseUrl, resolveOAuthApiKeyUrl } from "../api-url.ts";
 
 const EXPECTED = "https://api.frihet.io/oauth/api-key";
 
@@ -44,5 +46,46 @@ test("resolveOAuthApiKeyUrl only strips a /v1 SEGMENT, not substrings", () => {
   assert.equal(
     resolveOAuthApiKeyUrl("https://api-v1.frihet.io"),
     "https://api-v1.frihet.io/oauth/api-key",
+  );
+});
+
+test("tool and OAuth bases canonicalize trusted Frihet and exact Cloud Function origins", () => {
+  assert.equal(resolveApiBaseUrl("https://API.FRIHET.IO:443/"), "https://api.frihet.io/v1");
+  assert.equal(resolveApiBaseUrl("https://mcp.frihet.io/v1/"), "https://mcp.frihet.io/v1");
+  assert.equal(
+    resolveApiBaseUrl("https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/"),
+    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1",
+  );
+});
+
+test("worker API base rejects host confusion, credentials, unsafe ports, and arbitrary CF origins", () => {
+  const rejected = [
+    "https://evilfrihet.io/v1",
+    "https://frihet.io.evil.example/v1",
+    "https://user:password@api.frihet.io/v1",
+    "http://api.frihet.io/v1",
+    "https://api.frihet.io:444/v1",
+    "https://api.frihet.io./v1",
+    "https://api.frihet.io/v1?redirect=evil",
+    "https://api.frihet.io/v1#fragment",
+    "https://api.frihet.io/arbitrary",
+    "https://attacker-project.cloudfunctions.net/publicApi/api",
+    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/other/path",
+  ];
+
+  for (const candidate of rejected) {
+    assert.throws(() => resolveApiBaseUrl(candidate), candidate);
+    assert.throws(() => resolveOAuthApiKeyUrl(candidate), candidate);
+  }
+});
+
+test("OAuth provisioning disables redirects before the Firebase bearer token is sent", () => {
+  const source = readFileSync(
+    fileURLToPath(new URL("../auth-handler.ts", import.meta.url)),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /fetch\(\s*resolveOAuthApiKeyUrl\([\s\S]*?method:\s*"POST",\s*redirect:\s*"error"/u,
   );
 });

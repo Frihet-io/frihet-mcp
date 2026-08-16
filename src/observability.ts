@@ -6,8 +6,9 @@
  *
  * Design:
  *   - Fail-open: any Langfuse error logs a warning and lets the tool proceed.
- *   - PII: tool input content is passed as-is (business data is fine to trace).
- *     userId / apiKey metadata are hashed with a simple SHA-256 fingerprint.
+ *   - Data minimization: only bounded operational facts cross the telemetry
+ *     boundary. Tool input/output, arbitrary error text, and user/workspace
+ *     identity are never serialized.
  *   - Fire-and-forget: traces are sent via waitUntil (Workers) or unref'd promise
  *     (Node.js) so they never block tool responses.
  *
@@ -19,7 +20,7 @@
  * Docs: https://langfuse.com/docs/api/reference/overview
  */
 
-import { redactClone, redactText } from "./redaction.js";
+import { log } from "./logger.js";
 
 // Declared to avoid TS errors in Workers environment where `process` is not typed
 declare const process: { env?: Record<string, string | undefined> } | undefined;
@@ -75,24 +76,6 @@ function resolveConfig(): LangfuseConfig | null {
   return workerEnv ?? getConfig();
 }
 
-// ── PII helpers ──────────────────────────────────────────────────────────────
-
-/**
- * One-way fingerprint for PII values (apiKey, userId, email).
- * Uses Web Crypto API (available in both Node.js ≥18 and Workers).
- */
-async function hashPii(value: string): Promise<string> {
-  try {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(value);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
-  } catch {
-    return "[hash-error]";
-  }
-}
-
 // ── Langfuse ingestion types ─────────────────────────────────────────────────
 
 // Minimal Langfuse batch ingestion payload
@@ -102,8 +85,6 @@ interface LangfuseSpanBody {
   name: string;
   startTime: string;
   endTime: string;
-  input?: unknown;
-  output?: unknown;
   metadata?: Record<string, unknown>;
   level?: "DEFAULT" | "DEBUG" | "WARNING" | "ERROR";
   statusMessage?: string;
@@ -113,11 +94,8 @@ interface LangfuseTraceBody {
   id: string;
   name: string;
   timestamp: string;
-  input?: unknown;
-  output?: unknown;
   metadata?: Record<string, unknown>;
   tags?: string[];
-  userId?: string;
 }
 
 interface IngestionBatch {
@@ -133,10 +111,7 @@ function newId(): string {
 
 // ── Fabricated-success / stub detection ──────────────────────────────────────
 
-interface StubMarker {
-  plannedEndpoint?: string;
-  note?: string;
-}
+interface StubMarker { stub: true }
 
 /**
  * Inspect a resolved tool output for stub / not-implemented / unavailable
@@ -165,17 +140,11 @@ export function inspectStubMarker(output: unknown): StubMarker | null {
 
   for (const obj of candidates) {
     if (obj["_stub"] === true || obj["_notImplemented"] === true || obj["_unavailable"] === true) {
-      return {
-        plannedEndpoint: typeof obj["_plannedEndpoint"] === "string" ? (obj["_plannedEndpoint"] as string) : undefined,
-        note: typeof obj["_note"] === "string" ? (obj["_note"] as string) : undefined,
-      };
+      return { stub: true };
     }
     // A bare _plannedEndpoint (without an explicit flag) is also a stub signal.
     if (typeof obj["_plannedEndpoint"] === "string") {
-      return {
-        plannedEndpoint: obj["_plannedEndpoint"] as string,
-        note: typeof obj["_note"] === "string" ? (obj["_note"] as string) : undefined,
-      };
+      return { stub: true };
     }
   }
 
@@ -198,36 +167,34 @@ async function sendBatch(config: LangfuseConfig, batch: IngestionBatch): Promise
   });
 
   if (!resp.ok) {
-    // Log but don't throw — fail-open
-    const body = await resp.text().catch(() => "");
-    console.error(
-      JSON.stringify({
-        service: "frihet-mcp",
-        level: "warn",
-        message: `Langfuse ingestion failed: ${resp.status} ${body.slice(0, 200)}`,
-        operation: "langfuse_send",
-        timestamp: new Date().toISOString(),
-      }),
-    );
+    // Never read/log the provider response body. Status is sufficient to
+    // correlate an operational delivery failure without importing arbitrary
+    // third-party text into telemetry.
+    log({
+      level: "warn",
+      message: "Langfuse ingestion request failed",
+      operation: "langfuse_send",
+      error: {
+        message: "MCP operation failed",
+        code: "telemetry_http_error",
+        statusCode: resp.status,
+      },
+    });
   }
 }
 
 // ── Main trace function ──────────────────────────────────────────────────────
 
 interface TraceContext {
-  /** User-Agent from MCP client or other client identifier */
-  clientName?: string;
   /** MCP protocol version */
   mcpVersion?: string;
-  /** Frihet workspace/user ID — will be hashed */
-  userId?: string;
 }
 
 // Module-level context set once per session (Workers: per DO init, Node.js: startup)
 let _sessionContext: TraceContext = {};
 
 /**
- * Set session-level context (client identity, MCP version).
+ * Set session-level protocol context. Client identity is intentionally absent.
  * Call once from server init; applies to all subsequent traces.
  */
 export function setTraceContext(ctx: TraceContext): void {
@@ -238,19 +205,14 @@ export function setTraceContext(ctx: TraceContext): void {
 
 interface TracePayloadParams {
   toolName: string;
-  /** Raw tool input args (redacted before serialization). */
-  input: unknown;
-  /** Raw tool output (redacted before serialization); ignored when isError. */
-  output: unknown;
   isError: boolean;
-  errorMessage?: string;
+  errorClass?: string;
+  errorCode?: string;
+  statusCode?: number;
   startTime: Date;
   endTime: Date;
   traceId: string;
   spanId: string;
-  /** Already-hashed user id, or undefined. */
-  userIdHashed?: string;
-  clientName?: string;
   mcpVersion?: string;
   /** Fabricated-stub marker, or null on a genuine result. */
   stub: StubMarker | null;
@@ -259,79 +221,75 @@ interface TracePayloadParams {
 /**
  * Builds the Langfuse trace+span ingestion batch for a single tool call.
  *
- * CRITICAL (Trust): `input` and `output` are passed through {@link redactClone}
- * before they enter the payload, so government IDs (taxId/NIF/CIF), banking
- * identifiers (IBAN), webhook signing secrets, and auth tokens NEVER reach the
- * external Langfuse service — in ANY profile mode. The tool-call output handed
- * to the user is redacted later (OpenAI mode only); this redacts the trace copy
- * unconditionally. Exported so a test can assert no sensitive value survives.
+ * CRITICAL (Trust): this builder is an allowlist. It has no input/output or
+ * identity fields and ignores any extra runtime properties a caller supplies.
+ * Exported so tests can assert the exact operational shape.
  */
 export function buildTracePayload(p: TracePayloadParams): IngestionBatch {
   const {
-    toolName, input, output, isError, errorMessage,
-    startTime, endTime, traceId, spanId, userIdHashed, clientName, mcpVersion, stub,
+    toolName, isError, errorClass, errorCode, statusCode,
+    startTime, endTime, traceId, spanId, mcpVersion, stub,
   } = p;
 
   const stubbed = stub !== null;
   // success: false whenever the call threw OR returned a fabricated stub body.
   const success = !isError && !stubbed;
-  const stubNote =
-    stub?.note ??
-    (stub?.plannedEndpoint
-      ? `Backend endpoint not yet available: ${stub.plannedEndpoint}`
-      : undefined);
-
-  // ── Redact BEFORE the payload is built (never mutates the live response) ──
-  const safeArgs = redactClone(input);
-  const safeError = errorMessage ? redactText(errorMessage) : errorMessage;
-  const safeOutput = isError ? { error: safeError } : redactClone(output);
+  const safeToolName = toolNameToken(toolName) ?? "unknown_tool";
+  const safeMcpVersion = mcpVersion === "mcp/1.0" ? mcpVersion : undefined;
+  const safeErrorClass = TELEMETRY_ERROR_CLASSES.has(errorClass ?? "")
+    ? errorClass
+    : undefined;
+  const safeErrorCode = TELEMETRY_ERROR_CODES.has(errorCode ?? "")
+    ? errorCode
+    : undefined;
+  const safeStatusCode = typeof statusCode === "number"
+    && Number.isInteger(statusCode)
+    && statusCode >= 0
+    && statusCode <= 599
+    ? statusCode
+    : undefined;
+  const errorFacts = {
+    ...(safeErrorClass ? { errorClass: safeErrorClass } : {}),
+    ...(safeErrorCode ? { errorCode: safeErrorCode } : {}),
+    ...(safeStatusCode !== undefined ? { statusCode: safeStatusCode } : {}),
+  };
 
   const traceBody: LangfuseTraceBody = {
     id: traceId,
     name: "mcp_request",
     timestamp: startTime.toISOString(),
-    input: { tool: toolName, args: safeArgs },
-    output: safeOutput,
     metadata: {
-      tool: toolName,
-      clientName,
-      mcpVersion,
+      tool: safeToolName,
+      ...(safeMcpVersion ? { mcpVersion: safeMcpVersion } : {}),
       // FALSE on a thrown error AND on a fabricated-stub fallback.
       success,
-      ...(stubbed
-        ? {
-            stub: true,
-            ...(stub?.plannedEndpoint ? { plannedEndpoint: stub.plannedEndpoint } : {}),
-            ...(stubNote ? { note: stubNote } : {}),
-          }
-        : {}),
+      ...(stubbed ? { stub: true } : {}),
+      ...errorFacts,
     },
-    tags: [`mcp.tool.${toolName}`, ...(stubbed ? ["mcp.stub"] : [])],
-    ...(userIdHashed ? { userId: userIdHashed } : {}),
+    tags: [`mcp.tool.${safeToolName}`, ...(stubbed ? ["mcp.stub"] : [])],
   };
 
   const spanBody: LangfuseSpanBody = {
     id: spanId,
     traceId,
-    name: `tool.${toolName}`,
+    name: `tool.${safeToolName}`,
     startTime: startTime.toISOString(),
     endTime: endTime.toISOString(),
-    input: safeArgs,
-    output: safeOutput,
     metadata: {
       durationMs: endTime.getTime() - startTime.getTime(),
-      clientName,
-      mcpVersion,
+      ...(safeMcpVersion ? { mcpVersion: safeMcpVersion } : {}),
+      success,
       ...(stubbed ? { stub: true } : {}),
+      ...errorFacts,
     },
     // ERROR on a thrown error; WARNING on a fabricated-stub fallback (the call
     // "succeeded" mechanically but returned no real backend data); DEFAULT only
     // on a genuine success.
     level: isError ? "ERROR" : stubbed ? "WARNING" : "DEFAULT",
-    ...(isError && safeError
-      ? { statusMessage: safeError }
-      : stubbed && stubNote
-        ? { statusMessage: stubNote }
+    ...(isError
+      ? { statusMessage: safeErrorCode ?? safeErrorClass ?? "operation_failed" }
+      : stubbed
+        ? { statusMessage: "stub_response" }
         : {}),
   };
 
@@ -341,6 +299,68 @@ export function buildTracePayload(p: TracePayloadParams): IngestionBatch {
       { type: "span-create", id: newId(), timestamp: startTime.toISOString(), body: spanBody },
     ],
   };
+}
+
+const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/u;
+const TELEMETRY_ERROR_CLASSES = new Set([
+  "handled_mcp_error",
+  "request_timeout",
+  "abort_error",
+  "api_error",
+  "telemetry_error",
+  "unknown_error",
+]);
+const TELEMETRY_ERROR_CODES = new Set([
+  "tool_error",
+  "request_timeout",
+  "unauthorized",
+  "forbidden",
+  "not_found",
+  "rate_limited",
+  "client_error",
+  "backend_error",
+  "telemetry_http_error",
+  "telemetry_error",
+  "unknown_error",
+]);
+
+function toolNameToken(value: unknown): string | undefined {
+  return typeof value === "string" && TOOL_NAME.test(value) ? value : undefined;
+}
+
+function statusErrorCode(statusCode: unknown): string | undefined {
+  if (typeof statusCode !== "number" || !Number.isInteger(statusCode)) return undefined;
+  if (statusCode === 401) return "unauthorized";
+  if (statusCode === 403) return "forbidden";
+  if (statusCode === 404) return "not_found";
+  if (statusCode === 408) return "request_timeout";
+  if (statusCode === 429) return "rate_limited";
+  if (statusCode >= 400 && statusCode < 500) return "client_error";
+  if (statusCode >= 500 && statusCode <= 599) return "backend_error";
+  return undefined;
+}
+
+function operationalErrorFacts(error: unknown): Pick<TracePayloadParams, "errorClass" | "errorCode" | "statusCode"> {
+  if (!error || typeof error !== "object") return { errorClass: "unknown_error" };
+  const record = error as Record<string, unknown>;
+  const statusCode = typeof record.statusCode === "number" ? record.statusCode : undefined;
+  const name = record.name;
+  const errorClass = name === "TimeoutError"
+    ? "request_timeout"
+    : name === "AbortError"
+      ? "abort_error"
+      : statusErrorCode(statusCode)
+        ? "api_error"
+        : "unknown_error";
+  return {
+    errorClass,
+    errorCode: statusErrorCode(statusCode) ?? (errorClass === "request_timeout" ? "request_timeout" : "unknown_error"),
+    statusCode,
+  };
+}
+
+function isHandledMcpError(output: unknown): boolean {
+  return !!output && typeof output === "object" && (output as Record<string, unknown>).isError === true;
 }
 
 /**
@@ -356,7 +376,7 @@ export function buildTracePayload(p: TracePayloadParams): IngestionBatch {
  */
 export async function traceMCPTool<T>(
   toolName: string,
-  input: unknown,
+  _input: unknown,
   fn: () => Promise<T>,
 ): Promise<T> {
   const config = resolveConfig();
@@ -372,16 +392,20 @@ export async function traceMCPTool<T>(
 
   let result: T;
   let isError = false;
-  let errorMessage: string | undefined;
+  let errorFacts: Pick<TracePayloadParams, "errorClass" | "errorCode" | "statusCode"> = {};
   let output: unknown;
 
   try {
     result = await fn();
     output = result;
+    if (isHandledMcpError(result)) {
+      isError = true;
+      errorFacts = { errorClass: "handled_mcp_error", errorCode: "tool_error" };
+    }
     return result;
   } catch (err) {
     isError = true;
-    errorMessage = err instanceof Error ? err.message : String(err);
+    errorFacts = operationalErrorFacts(err);
     throw err;
   } finally {
     const endTime = new Date();
@@ -400,40 +424,32 @@ export async function traceMCPTool<T>(
     // Fire-and-forget — build and send async, never awaited
     void (async () => {
       try {
-        // Hash PII fields
-        const userIdRaw = _sessionContext.userId;
-        const userIdHashed = userIdRaw ? await hashPii(userIdRaw) : undefined;
-
-        // buildTracePayload redacts input/output (taxId/secret/IBAN/tokens) so
-        // the external Langfuse service never stores cleartext PII or credentials.
         const batch = buildTracePayload({
           toolName,
-          input,
-          output,
           isError,
-          errorMessage,
+          ...errorFacts,
           startTime,
           endTime,
           traceId,
           spanId,
-          userIdHashed,
-          clientName: _sessionContext.clientName,
           mcpVersion: _sessionContext.mcpVersion,
           stub,
         });
 
         await sendBatch(config, batch);
       } catch (langfuseErr) {
-        // Fail-open: log warn only
-        console.error(
-          JSON.stringify({
-            service: "frihet-mcp",
-            level: "warn",
-            message: `Langfuse trace failed (non-blocking): ${langfuseErr instanceof Error ? langfuseErr.message : String(langfuseErr)}`,
-            operation: "langfuse_trace",
-            timestamp: new Date().toISOString(),
-          }),
-        );
+        // Fail-open, but never serialize the provider/runtime exception text.
+        const facts = operationalErrorFacts(langfuseErr);
+        log({
+          level: "warn",
+          message: "Langfuse trace failed (non-blocking)",
+          operation: "langfuse_trace",
+          error: {
+            message: "MCP operation failed",
+            code: "telemetry_error",
+            statusCode: facts.statusCode,
+          },
+        });
       }
     })();
   }

@@ -47,6 +47,10 @@ import { authHandler } from "./auth-handler.js";
 import { OAUTH_PROVIDER_REVIEW_OPTIONS } from "../../../src/openai-review-oauth.js";
 import { MCP_SERVER_VERSION, FULL_TOOL_COUNT } from "./server-meta.js";
 import { buildServerCard } from "./server-card.js";
+import {
+  openApiUnavailableResponse,
+  serveOpenApiAsset,
+} from "./openapi-safety.js";
 
 // ---------------------------------------------------------------------------
 // Auth props — stored in OAuth token, available via this.props in McpAgent
@@ -79,11 +83,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
       level: "info",
       message: "MCP session initialized",
       operation: "session_init",
-      metadata: {
-        userId: this.props?.userId,
-        email: this.props?.email,
-        locale: this.props?.locale,
-      },
+      metadata: { transport: "remote" },
     });
 
     // Inject Langfuse config from Worker env vars and set per-session trace context.
@@ -94,7 +94,6 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
       baseUrl: this.env.LANGFUSE_BASE_URL,
     });
     setTraceContext({
-      userId: this.props?.userId ?? this.props?.email,
       mcpVersion: "mcp/1.0",
     });
 
@@ -760,222 +759,6 @@ format: JSON
 note: Use the JSON endpoint for programmatic access.
 `;
 
-// --- Scoped OpenAPI spec for OpenAI mode --------------------------------------
-// Removes paths/schemas that do not back any of the 53 reviewed tools (Stay/PMS,
-// deposits, quarterly taxes, e-invoice XML, batch, inbound-webhook resend) and
-// strips government-ID / banking / credential property names from all schemas.
-const OPENAI_DROP_PATH_PREFIXES = [
-  "/v1/channels", "/v1/deposits", "/v1/guests", "/v1/properties",
-  "/v1/reservations", "/v1/quarterly", "/webhooks/resend-inbound",
-];
-const OPENAI_DROP_PATHS_EXACT = new Set([
-  "/v1/invoices/{invoiceId}/xml",
-  "/v1/expenses/{expenseId}/billable",
-  "/v1/quotes/{quoteId}/pdf",
-  "/v1/{resource}/batch",
-]);
-const OPENAI_KEEP_PATHS_EXACT = new Set([
-  "/v1/invoices",
-  "/v1/invoices/{invoiceId}",
-  "/v1/invoices/{invoiceId}/pdf",
-  "/v1/invoices/{invoiceId}/send",
-  "/v1/invoices/{invoiceId}/paid",
-  "/v1/expenses",
-  "/v1/expenses/{expenseId}",
-  "/v1/clients",
-  "/v1/clients/{clientId}",
-  "/v1/clients/{clientId}/contacts",
-  "/v1/clients/{clientId}/contacts/{contactId}",
-  "/v1/clients/{clientId}/activities",
-  "/v1/clients/{clientId}/activities/{activityId}",
-  "/v1/clients/{clientId}/notes",
-  "/v1/clients/{clientId}/notes/{noteId}",
-  "/v1/products",
-  "/v1/products/{productId}",
-  "/v1/quotes",
-  "/v1/quotes/{quoteId}",
-  "/v1/quotes/{quoteId}/send",
-  "/v1/summary",
-  "/v1/vendors",
-  "/v1/vendors/{vendorId}",
-  "/v1/context",
-  "/v1/monthly",
-  "/v1/webhooks",
-  "/v1/webhooks/{webhookId}",
-  "/v1/invoices/{invoiceId}/credit-note",
-  "/v1/invoices/{invoiceId}/late-fee",
-]);
-const OPENAI_DROP_SCHEMAS = new Set([
-  "Channel", "ChannelCreate", "ChannelStatus", "Deposit", "DepositCreate", "DepositStatus",
-  "Guest", "Property", "PropertyCreate", "PropertyStatus", "Reservation", "ReservationCreate",
-  "ReservationStatus", "QuarterlySummary", "BatchResponse", "ReceiptQueueItem", "ResendInboundPayload",
-]);
-const OPENAI_ALLOWED_TAGS = new Set([
-  "Invoices", "Expenses", "Clients", "Products", "Quotes", "Vendors",
-  "Summary", "Intelligence", "Webhooks", "Contacts", "Activities", "Notes",
-]);
-const OPENAI_TAG_DESCRIPTIONS: Record<string, string> = {
-  Invoices: "Create, read, update, send, and manage invoice records.",
-  Expenses: "Record and manage business expenses.",
-  Clients: "Manage client records with contact details and addresses.",
-  Products: "Manage product and service catalogue records with pricing.",
-  Quotes: "Create, read, update, send, and manage quotes.",
-  Vendors: "Manage vendor records with contact details and addresses.",
-  Summary: "Financial dashboard data including revenue, expenses, and profit aggregations.",
-  Intelligence: "Business context and monthly financial summaries.",
-  Webhooks: "Manage webhook subscriptions for Frihet business events.",
-  Contacts: "Manage contact persons associated with a client.",
-  Activities: "Manage client activity timeline entries.",
-  Notes: "Manage notes attached to a client.",
-};
-const OPENAI_STRIP_PROPS = [
-  "taxId", "tax_id", "clientTaxId", "client_tax_id", "nif", "cif", "vatNumber", "vat_number", "vatId", "vat_id",
-  "documentType", "documentNumber", "signatureCaptured", "passport", "passportNumber",
-  "dni", "nationalId", "national_id", "iban", "bankAccount", "bank_account", "accountNumber",
-  "secret", "hasSecret", "has_secret", "apiKey", "api_key", "ssn", "socialSecurityNumber", "social_security_number",
-  "requestId", "request_id", "traceId", "trace_id", "sessionId", "session_id",
-  "userId", "user_id", "verifactuHash", "verifactu_hash", "meta", "security",
-];
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function stripSensitivePropsDeep(node: any): void {
-  if (!node || typeof node !== "object") return;
-  if (Array.isArray(node)) { for (const x of node) stripSensitivePropsDeep(x); return; }
-  for (const p of OPENAI_STRIP_PROPS) {
-    if (p in node) delete node[p];
-  }
-  if (node.properties && typeof node.properties === "object") {
-    for (const p of OPENAI_STRIP_PROPS) delete node.properties[p];
-  }
-  if (Array.isArray(node.required)) {
-    node.required = node.required.filter((r: string) => !OPENAI_STRIP_PROPS.includes(r));
-  }
-  for (const v of Object.values(node)) stripSensitivePropsDeep(v);
-}
-
-function sanitizeOpenAIReviewText(text: string): string {
-  return text
-    .replace(/clientTaxId/gi, "client identifier")
-    .replace(/NIF\/CIF\/VAT/gi, "regulated identifiers")
-    .replace(/\bNIF\b|\bCIF\b/gi, "regulated identifier")
-    .replace(/\bVAT\b/gi, "tax")
-    .replace(/\bIBAN\b/gi, "banking identifier")
-    .replace(/VeriFactu[^.\n]*/gi, "internal compliance metadata")
-    .replace(/Facturae[^.\n]*/gi, "credit-note metadata")
-    .replace(/TicketBAI[^.\n]*/gi, "regional e-invoicing metadata")
-    .replace(/KSeF[^.\n]*/gi, "e-invoicing metadata")
-    .replace(/VIES[^.\n]*/gi, "external tax validation")
-    .replace(/Modelo 303/gi, "estimated tax total")
-    .replace(/taxId/gi, "regulated identifier")
-    .replace(/quarterly tax figures?/gi, "business figures")
-    .replace(/tax IDs?/gi, "regulated identifiers")
-    .replace(/SHA-256 hash chain integrity[^,.\n]*/gi, "audit history")
-    .replace(/Spanish tax compliance/gi, "internal compliance");
-}
-
-function addOpenAIComponentRef(
-  refs: Map<string, { section: string; name: string }>,
-  queue: Array<{ section: string; name: string }>,
-  ref: string,
-): void {
-  const match = ref.match(/^#\/components\/([^/]+)\/([^/]+)$/);
-  if (!match) return;
-  const [, section, encodedName] = match;
-  const name = decodeURIComponent(encodedName);
-  const key = `${section}/${name}`;
-  if (!refs.has(key)) {
-    refs.set(key, { section, name });
-    queue.push({ section, name });
-  }
-}
-
-function collectOpenAIComponentRefs(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  node: any,
-  refs: Map<string, { section: string; name: string }>,
-  queue: Array<{ section: string; name: string }>,
-): void {
-  if (!node || typeof node !== "object") return;
-  if (Array.isArray(node)) {
-    for (const item of node) collectOpenAIComponentRefs(item, refs, queue);
-    return;
-  }
-  if (typeof node.$ref === "string") addOpenAIComponentRef(refs, queue, node.$ref);
-  for (const value of Object.values(node)) collectOpenAIComponentRefs(value, refs, queue);
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function pruneUnusedOpenAIComponents(spec: any): void {
-  const refs = new Map<string, { section: string; name: string }>();
-  const queue: Array<{ section: string; name: string }> = [];
-  collectOpenAIComponentRefs(spec.paths, refs, queue);
-  for (let i = 0; i < queue.length; i += 1) {
-    const { section, name } = queue[i];
-    collectOpenAIComponentRefs(spec.components?.[section]?.[name], refs, queue);
-  }
-  for (const [section, entries] of Object.entries(spec.components ?? {})) {
-    if (!entries || typeof entries !== "object" || Array.isArray(entries)) continue;
-    for (const name of Object.keys(entries as Record<string, unknown>)) {
-      if (!refs.has(`${section}/${name}`)) delete (entries as Record<string, unknown>)[name];
-    }
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function sanitizeOpenAIDescriptionsDeep(node: any): void {
-  if (!node || typeof node !== "object") return;
-  if (Array.isArray(node)) { for (const x of node) sanitizeOpenAIDescriptionsDeep(x); return; }
-  for (const [key, value] of Object.entries(node)) {
-    if (typeof value === "string") {
-      node[key] = sanitizeOpenAIReviewText(value);
-      continue;
-    }
-    sanitizeOpenAIDescriptionsDeep(value);
-  }
-}
-
-function scopeOpenApiForOpenAI(specText: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let spec: any;
-  try { spec = JSON.parse(specText); } catch { return specText; }
-  if (spec.paths && typeof spec.paths === "object") {
-    for (const p of Object.keys(spec.paths)) {
-      const drop = !OPENAI_KEEP_PATHS_EXACT.has(p) ||
-        OPENAI_DROP_PATHS_EXACT.has(p) ||
-        OPENAI_DROP_PATH_PREFIXES.some((pre) => p === pre || p.startsWith(pre + "/"));
-      if (drop) delete spec.paths[p];
-    }
-  }
-  if (spec.components?.schemas) {
-    for (const s of OPENAI_DROP_SCHEMAS) delete spec.components.schemas[s];
-  }
-  if (Array.isArray(spec.tags)) {
-    spec.tags = spec.tags
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter((tag: any) => OPENAI_ALLOWED_TAGS.has(tag.name))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((tag: any) => ({
-        ...tag,
-        description: OPENAI_TAG_DESCRIPTIONS[tag.name] ??
-          sanitizeOpenAIReviewText(tag.description ?? ""),
-      }));
-  }
-  delete spec.security;
-  if (spec.components?.securitySchemes) delete spec.components.securitySchemes;
-  stripSensitivePropsDeep(spec.paths);
-  stripSensitivePropsDeep(spec.components);
-  pruneUnusedOpenAIComponents(spec);
-  if (spec.info) {
-    spec.info.description =
-      "Frihet ERP API — ChatGPT connector reviewed surface (invoicing, expenses, clients/CRM, products, quotes, vendors, webhooks, and monthly summaries). " +
-      "Regulated identifiers, banking identifiers, credentials, diagnostic metadata, and hidden product modules are excluded.";
-    spec.info["x-frihet-openai-profile"] = "chatgpt-reviewed-v2";
-  }
-  spec.servers = [{ url: "https://api.frihet.io", description: "Frihet API" }];
-  sanitizeOpenAIDescriptionsDeep(spec);
-  return JSON.stringify(spec);
-}
-
 // ---------------------------------------------------------------------------
 // OAuthProvider wraps the Worker — handles OAuth 2.0 + PKCE flow
 // ---------------------------------------------------------------------------
@@ -1260,21 +1043,12 @@ export default {
           const assetReq = new Request(new URL("/openapi.json", request.url).toString());
           const assetResp = await env.ASSETS.fetch(assetReq);
           if (assetResp.ok) {
-            const headers = new Headers();
-            for (const [key, value] of Object.entries(BASE_SECURITY_HEADERS)) {
-              headers.set(key, value);
-            }
-            headers.set("Content-Type", "application/json; charset=utf-8");
-            headers.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
             // In OpenAI mode, serve a scoped spec: only the 53-tool path families,  // mcp-refs:ok
             // gov-ID / banking / credential properties stripped (see scopeOpenApiForOpenAI).
-            if (openai) {
-              const scoped = scopeOpenApiForOpenAI(await assetResp.text());
-              return new Response(scoped, { status: 200, headers });
-            }
-            return new Response(assetResp.body, { status: 200, headers });
+            return serveOpenApiAsset(assetResp, openai, BASE_SECURITY_HEADERS);
           }
         }
+        if (openai) return openApiUnavailableResponse(BASE_SECURITY_HEADERS);
         return new Response(
           JSON.stringify({ error: "OpenAPI spec temporarily unavailable", canonical: "https://api.frihet.io/openapi.json" }),
           {
@@ -1316,17 +1090,14 @@ export default {
 
     // Log all non-trivial requests (skip favicons, static assets)
     const durationMs = Math.round(Date.now() - startTime);
-    const userAgent = request.headers.get("user-agent") ?? "unknown";
     log({
       level: response.status >= 500 ? "error" : response.status >= 400 ? "warn" : "info",
-      message: `${request.method} ${url.pathname} ${response.status} ${durationMs}ms`,
+      message: "MCP HTTP request completed",
       operation: "http_request",
       durationMs,
       metadata: {
         method: request.method,
-        path: url.pathname,
         statusCode: response.status,
-        userAgent,
       },
     });
 

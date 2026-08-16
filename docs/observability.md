@@ -1,7 +1,9 @@
 # Langfuse Observability — Env Var Setup
 
 Self-hosted Langfuse at `https://langfuse.frihet.io` traces every MCP tool call
-(tool name, input args, response time, errors). Fail-open: missing keys or
+(tool name, response time, success/failure, bounded error classification). Tool
+inputs, outputs, business content, and workspace/user identity are omitted by
+default. Fail-open: missing keys or
 Langfuse down → tool calls proceed unchanged.
 
 > **Never commit real keys to this repo.** This is a public repository. All values
@@ -61,8 +63,7 @@ Add to the MCP server config in `mcpServers`:
 ```
 
 Langfuse keys are **optional** — omit them and the server runs with tracing disabled
-(fail-open). Optional: `FRIHET_CLIENT_NAME` — label to identify the MCP client in
-Langfuse traces (e.g. `"claude-desktop"`, `"cursor"`, `"windsurf"`).
+(fail-open). Client labels and user/workspace identity are intentionally omitted.
 
 ---
 
@@ -89,8 +90,12 @@ Every tool call emits a `trace-create` + `span-create` batch to `/api/public/ing
 | `trace.name` | `mcp_request` |
 | `trace.tags` | `["mcp.tool.<toolName>"]` |
 | `span.name` | `tool.<toolName>` |
-| `span.input` | Full tool args (business data OK; apiKey/userId hashed) |
-| `span.output` | Tool result or `{error: "..."}` |
-| `span.level` | `DEFAULT` or `ERROR` |
+| Tool input/output | Omitted — no business payload crosses the telemetry boundary |
+| `span.level` | `DEFAULT`, `WARNING` (stub), or `ERROR` |
 | `span.metadata.durationMs` | Wall-clock time |
-| `trace.userId` | SHA-256 fingerprint (first 16 hex chars) of userId/email |
+| Error detail | Bounded class/code/status only; raw messages and provider bodies omitted |
+| Workspace/user identity | Omitted |
+
+Stable pseudonymous workspace correlation would require a separately
+provisioned, rotatable, domain-separated HMAC secret and session-scoped design.
+No such infrastructure dependency is introduced by the default telemetry path.

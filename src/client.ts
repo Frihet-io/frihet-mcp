@@ -366,6 +366,7 @@ export class FrihetClient {
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
+        redirect: "error",
       });
     } catch (error) {
       const durationMs = Math.round(Date.now() - startTime);
@@ -496,6 +497,7 @@ export class FrihetClient {
       headers,
       body: body ? JSON.stringify(body) : undefined,
       signal,
+      redirect: "error",
     });
   }
 

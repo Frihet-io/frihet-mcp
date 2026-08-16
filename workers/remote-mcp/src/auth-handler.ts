@@ -19,28 +19,6 @@ type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 
 const app = new Hono<{ Bindings: AuthEnv }>();
 
-/**
- * One-way SHA-256 fingerprint (first 12 hex) of a PII value for LOG lines only.
- *
- * The submission claims "No PII logged" — so uid/email must never appear in
- * cleartext in logs. The raw values still flow where the protocol needs them
- * (API-key provisioning body, OAuth session props); this only guards log output.
- * Returns "none" for an absent value and "hash-error" if WebCrypto is missing.
- */
-async function fingerprintPii(value: string | undefined): Promise<string> {
-  if (!value) return "none";
-  try {
-    const data = new TextEncoder().encode(value);
-    const buf = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-      .slice(0, 12);
-  } catch {
-    return "hash-error";
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Public endpoints
 // ---------------------------------------------------------------------------
@@ -190,6 +168,7 @@ app.post("/callback", async (c) => {
     resolveOAuthApiKeyUrl(c.env.FRIHET_API_BASE),
     {
       method: "POST",
+      redirect: "error",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${body.idToken}`,
@@ -205,7 +184,7 @@ app.post("/callback", async (c) => {
     // error detail; the status code is enough to correlate here.
     log({
       level: "error",
-      message: `OAuth callback: failed to provision API key for uid:${await fingerprintPii(decoded.uid)}`,
+      message: "OAuth callback: failed to provision API key",
       operation: "oauth_callback",
       error: {
         message: `API key provisioning returned ${upstreamStatus}`,
@@ -249,12 +228,8 @@ app.post("/callback", async (c) => {
 
   log({
     level: "info",
-    message: `OAuth callback: success for uid:${await fingerprintPii(decoded.uid)}`,
+    message: "OAuth callback: success",
     operation: "oauth_callback",
-    metadata: {
-      userId: await fingerprintPii(decoded.uid),
-      email: await fingerprintPii(decoded.email),
-    },
   });
 
   // Best-effort consume of the state now that the grant has fully succeeded.

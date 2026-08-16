@@ -8,7 +8,7 @@
  * public-openai/ from public/, keeping only the paths/schemas backing the 53
  * reviewed tools and stripping government-ID / banking / credential properties.
  *
- * Mirrors scopeOpenApiForOpenAI() in src/index.ts. Run before `wrangler deploy --env openai`.
+ * Mirrors scopeOpenApiForOpenAI() in src/openapi-safety.ts. Run before `wrangler deploy --env openai`.
  *   node scripts/scope-openai-openapi.mjs
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
@@ -179,7 +179,61 @@ function sanitizeDescriptionsDeep(node) {
   }
 }
 
+function assertValidOpenApiDocument(spec, stage) {
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+    throw new Error(`Invalid ${stage} OpenAPI document`);
+  }
+  if (typeof spec.openapi !== "string" || !/^3\.\d+\.\d+$/u.test(spec.openapi)) {
+    throw new Error(`Invalid ${stage} OpenAPI version`);
+  }
+  if (!spec.paths || typeof spec.paths !== "object" || Array.isArray(spec.paths)) {
+    throw new Error(`Invalid ${stage} OpenAPI paths`);
+  }
+  if (Object.keys(spec.paths).length === 0) {
+    throw new Error(`Empty ${stage} OpenAPI paths`);
+  }
+  const rootKeys = new Set(["openapi", "info", "servers", "security", "tags", "paths", "components"]);
+  for (const key of Object.keys(spec)) {
+    if (!rootKeys.has(key)) throw new Error(`Unexpected ${stage} OpenAPI root field`);
+  }
+  if (!spec.info || typeof spec.info !== "object" || Array.isArray(spec.info)) {
+    throw new Error(`Invalid ${stage} OpenAPI info`);
+  }
+  if (spec.components !== undefined
+    && (!spec.components || typeof spec.components !== "object" || Array.isArray(spec.components))) {
+    throw new Error(`Invalid ${stage} OpenAPI components`);
+  }
+  for (const field of ["tags", "servers", "security"]) {
+    if (spec[field] !== undefined && !Array.isArray(spec[field])) {
+      throw new Error(`Invalid ${stage} OpenAPI ${field}`);
+    }
+  }
+  const pathItemKeys = new Set([
+    "$ref", "summary", "description", "get", "put", "post", "delete", "options",
+    "head", "patch", "trace", "servers", "parameters",
+  ]);
+  const methods = new Set(["get", "put", "post", "delete", "options", "head", "patch", "trace"]);
+  for (const [path, item] of Object.entries(spec.paths)) {
+    if (!path.startsWith("/") || !item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`Invalid ${stage} OpenAPI path item`);
+    }
+    for (const [key, value] of Object.entries(item)) {
+      if (!pathItemKeys.has(key)) throw new Error(`Invalid ${stage} OpenAPI path field`);
+      if (methods.has(key) && (!value || typeof value !== "object" || Array.isArray(value))) {
+        throw new Error(`Invalid ${stage} OpenAPI operation`);
+      }
+      if ((key === "parameters" || key === "servers") && !Array.isArray(value)) {
+        throw new Error(`Invalid ${stage} OpenAPI path collection`);
+      }
+      if ((key === "$ref" || key === "summary" || key === "description") && typeof value !== "string") {
+        throw new Error(`Invalid ${stage} OpenAPI path text`);
+      }
+    }
+  }
+}
+
 const spec = JSON.parse(readFileSync(join(SRC, "openapi.json"), "utf8"));
+assertValidOpenApiDocument(spec, "source");
 for (const p of Object.keys(spec.paths ?? {})) {
   const drop = !KEEP_PATHS_EXACT.has(p) ||
     DROP_PATHS_EXACT.has(p) ||
@@ -211,6 +265,7 @@ if (spec.info) {
 }
 spec.servers = [{ url: "https://api.frihet.io", description: "Frihet API" }];
 sanitizeDescriptionsDeep(spec);
+assertValidOpenApiDocument(spec, "scoped");
 
 if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, "openapi.json"), JSON.stringify(spec, null, 2));

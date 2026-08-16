@@ -101,3 +101,4 @@ id = "9207b98598f849109139ad11f3b0ac51"
 [env.openai.assets]
 directory = "./public-openai"
 binding = "ASSETS"
+run_worker_first = ["/openapi.json"]
