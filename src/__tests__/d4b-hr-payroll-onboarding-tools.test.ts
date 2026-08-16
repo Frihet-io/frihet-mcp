@@ -69,10 +69,13 @@ const MOCK_ATTENDANCE = {
 
 const MOCK_OVERTIME = {
   period: "2026-05",
-  totalRegularHours: 160,
-  totalOvertimeHours: 12,
-  estimatedCostEur: 480,
-  byEmployee: [],
+  employeeId: null,
+  recordCount: 1,
+  dailyOvertime: [{ date: "2026-05-16", minutes: 60, exceedsDaily: false }],
+  weeklyOvertime: [{ weekStart: "2026-05-11", totalMinutes: 540, overtimeMinutes: 0 }],
+  monthlyTotal: { workedMinutes: 540, overtimeMinutes: 60, regularMinutes: 480 },
+  annualOvertimeHours: 1,
+  alerts: [],
 };
 
 const MOCK_ANOMALY = {
@@ -98,18 +101,14 @@ const MOCK_WEBHOOK_TEST = {
 const MOCK_PAYROLL_EXPORT = {
   format: "a3" as const,
   month: "2026-05",
-  fileUrl: "https://files.frihet.io/payroll/2026-05-a3.csv",
-  filename: "payroll-2026-05.csv",
-  rowCount: 12,
-  generatedAt: "2026-05-16T10:00:00Z",
+  employees: [],
+  summary: { exportedCount: 0, skippedNotReady: 0, totalGrossAnnual: 0 },
 };
 
 const MOCK_PAYROLL_CHECKLIST = {
   month: "2026-05",
-  totalEmployees: 12,
-  readyEmployees: 10,
-  missingEmployees: 2,
   employees: [],
+  summary: { total: 0, ready: 0, notReady: 0, reviewedThisMonth: 0 },
 };
 
 const MOCK_ONBOARDING_STATUS = {
@@ -162,6 +161,14 @@ const MOCK_PERMISSIONS_ME = {
   notIncluded: ["featureFlags", "deployedEndpoints"],
 };
 
+const MOCK_CURRENT_PERIOD = {
+  fiscalYear: "2026",
+  fiscalYearStart: "01-01",
+  status: "open" as const,
+  dateRange: { from: "2026-01-01", to: "2026-12-31" },
+  closing: null,
+};
+
 const MOCK_PERIOD = {
   id: "period_2026_q2",
   type: "quarterly" as const,
@@ -208,7 +215,7 @@ function makeSuccessClient(): import("../client-interface.js").IFrihetClient {
     getMyPermissions: async () => MOCK_PERMISSIONS_ME,
 
     // Period close
-    getCurrentPeriod: async () => MOCK_PERIOD,
+    getCurrentPeriod: async () => MOCK_CURRENT_PERIOD,
     closePeriod: async () => MOCK_PERIOD_CLOSED,
     reopenPeriod: async (d: Record<string, unknown>) => ({ ...MOCK_PERIOD, status: "reopened", reopenReason: d["reason"] }),
   } as unknown as import("../client-interface.js").IFrihetClient;
@@ -377,10 +384,11 @@ describe("HR Tools — happy path", () => {
     assert.equal(r.structuredContent!["durationMinutes"], 480);
   });
 
-  test("overtime_report returns aggregated hours", async () => {
+  test("overtime_report returns ERP overtime calculations", async () => {
     const r = await server.tools.get("overtime_report")!.handler({ period: "2026-05" });
     assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["totalOvertimeHours"], 12);
+    assert.equal((r.structuredContent!["monthlyTotal"] as { overtimeMinutes: number }).overtimeMinutes, 60);
+    assert.equal(r.structuredContent!["recordCount"], 1);
   });
 
   test("anomaly_list returns paginated anomalies", async () => {
@@ -411,20 +419,20 @@ describe("Webhook test_webhook", () => {
 // ── Payroll ──────────────────────────────────────────────────────────────────
 
 describe("Payroll Tools", () => {
-  test("payroll_export returns CSV URL for A3 format", async () => {
+  test("payroll_export returns normalized rows for A3 label", async () => {
     const server = await makePayrollServer(makeSuccessClient);
     const r = await server.tools.get("payroll_export")!.handler({ format: "a3", month: "2026-05" });
     assert.ok(!r.isError);
     assert.equal(r.structuredContent!["format"], "a3");
-    assert.equal(r.structuredContent!["rowCount"], 12);
+    assert.deepEqual(r.structuredContent!["employees"], []);
+    assert.equal((r.structuredContent!["summary"] as { exportedCount: number }).exportedCount, 0);
   });
 
-  test("payroll_checklist returns readiness counts", async () => {
+  test("payroll_checklist returns ERP readiness summary", async () => {
     const server = await makePayrollServer(makeSuccessClient);
     const r = await server.tools.get("payroll_checklist")!.handler({ month: "2026-05" });
     assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["readyEmployees"], 10);
-    assert.equal(r.structuredContent!["missingEmployees"], 2);
+    assert.deepEqual(r.structuredContent!["summary"], { total: 0, ready: 0, notReady: 0, reviewedThisMonth: 0 });
   });
 
   test("payroll_export 404 → isError", async () => {

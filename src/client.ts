@@ -1811,7 +1811,8 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- HR (Leaves + Attendance + Anomalies)
-  // NOTE: /v1/leaves, /v1/time-entries, /v1/anomalies — D4-A parallel deploy. 404 propagates until backend ships.
+  // The ERP routes are live. Single-object family reports use the standard
+  // `{ data, meta }` response envelope and must be unwrapped exactly once.
 
   async listLeaves(
     params?: { employeeId?: string; status?: string; from?: string; to?: string; limit?: number; offset?: number; after?: string },
@@ -1858,7 +1859,7 @@ export class FrihetClient {
   async getOvertimeReport(
     params: { period: string; employeeId?: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("GET", "/time-entries/overtime", undefined, {
+    return this.requestUnwrapped("GET", "/time-entries/overtime", undefined, {
       period: params.period,
       employeeId: params.employeeId,
     });
@@ -1885,19 +1886,20 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Payroll
-  // NOTE: /v1/payroll/prep/* — D4-A parallel deploy. 404 propagates until backend ships.
+  // These live read routes return normalized payroll-preparation records in
+  // the standard single-object `{ data, meta }` envelope.
 
   async exportPayroll(
-    params: { format: "a3" | "contasol" | "sage" | "holded" | "siltra"; month: string },
+    params: { format: "a3" | "contasol" | "sage" | "siltra"; month: string },
   ): Promise<Record<string, unknown>> {
-    return this.request("GET", "/payroll/prep/export", undefined, {
+    return this.requestUnwrapped("GET", "/payroll/prep/export", undefined, {
       format: params.format,
       month: params.month,
     });
   }
 
   async getPayrollChecklist(params: { month: string }): Promise<Record<string, unknown>> {
-    return this.request("GET", "/payroll/prep/employees", undefined, {
+    return this.requestUnwrapped("GET", "/payroll/prep/employees", undefined, {
       month: params.month,
     });
   }
@@ -1928,13 +1930,14 @@ export class FrihetClient {
   }
 
   // ---------------------------------------------------------------- Period Close
-  // NOTE: /v1/periods/* — D4-A parallel deploy. 404 propagates until backend ships.
+  // Period reads are live and enveloped. Fiscal close/reopen writes remain
+  // honest ERP 501 responses and are intentionally unchanged here.
 
-  async getCurrentPeriod(params?: { periodId?: string }): Promise<Record<string, unknown>> {
-    if (params?.periodId) {
-      return this.request("GET", `/periods/${encodeURIComponent(params.periodId)}`);
+  async getCurrentPeriod(params?: { fiscalYear?: string }): Promise<Record<string, unknown>> {
+    if (params?.fiscalYear) {
+      return this.requestUnwrapped("GET", `/periods/${encodeURIComponent(params.fiscalYear)}`);
     }
-    return this.request("GET", "/periods/current");
+    return this.requestUnwrapped("GET", "/periods/current");
   }
 
   async closePeriod(data: { type: "monthly" | "quarterly" }): Promise<Record<string, unknown>> {

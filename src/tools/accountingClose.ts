@@ -2,7 +2,7 @@
  * Period close tools for the Frihet MCP server — D4-B megasprint (3 tools).
  *
  * Tools:
- *   1. period_close_status — get the current accounting period state (open/closing/closed)
+ *   1. period_close_status — get the current or selected fiscal-year state
  *   2. period_close        — close a monthly or quarterly period (TRUST AREA)
  *   3. period_reopen       — reopen a closed period with required reason (TRUST AREA)
  *
@@ -11,8 +11,8 @@
  * Closing a period freezes invoices/expenses/journal entries. Reopening requires a
  * compliance reason logged for audit. These are TRUST AREA operations.
  *
- * NOTE: ERP backend endpoints land in parallel D4-A wave. 404s propagate as isError
- * until backend ships. TODO: confirm callable boundary vs REST shell for closePeriod.
+ * Period reads are live. The ERP close/reopen routes remain deferred and return
+ * honest 501 responses without mutating fiscal state.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -24,6 +24,7 @@ import {
   getContent,
   mutateContent,
   READ_ONLY_ANNOTATIONS,
+  currentPeriodOutput,
   periodStatusOutput,
 } from "./shared.js";
 import { withBackendGuard } from "./backend-availability.js";
@@ -36,18 +37,22 @@ export function registerAccountingCloseTools(server: McpServer, client: IFrihetC
     {
       title: "Period Close Status",
       description:
-        "Get the current accounting period state (open / closing / closed / reopened). " +
-        "Without periodId returns the current open or most recently closed period. " +
-        "/ Devuelve el estado del periodo contable actual (abierto/cerrando/cerrado/reabierto).",
+        "Get the open or closed state of the current fiscal year, including its fiscal-year start, " +
+        "inclusive date range, and nullable closing details. Pass a four-digit fiscal-year label to read it explicitly. " +
+        "/ Devuelve el estado abierto o cerrado del ejercicio fiscal actual o indicado.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
-        periodId: z.string().optional().describe("Specific period ID (default: current) / ID periodo especifico"),
+        periodId: z
+          .string()
+          .regex(/^\d{4}$/)
+          .optional()
+          .describe("Compatibility field: fiscal-year label YYYY, not an arbitrary period ID (default: current) / Ejercicio fiscal YYYY"),
       },
-      outputSchema: periodStatusOutput,
+      outputSchema: currentPeriodOutput,
     },
     async ({ periodId }) => withToolLogging("period_close_status", () =>
-      withBackendGuard("period_close_status", "/v1/periods/current", async () => {
-        const result = await client.getCurrentPeriod({ periodId });
+      withBackendGuard("period_close_status", periodId ? `/v1/periods/${periodId}` : "/v1/periods/current", async () => {
+        const result = await client.getCurrentPeriod({ fiscalYear: periodId });
         return {
           content: [getContent(formatRecord("Period status", result))],
           structuredContent: result as unknown as Record<string, unknown>,

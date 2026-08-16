@@ -6,6 +6,7 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ### Fixed
 
+- **HR/payroll/period reads now match the live ERP DTOs (#138).** `overtime_report`, `payroll_export`, `payroll_checklist`, and `period_close_status` unwrap one standard `{ data, meta }` envelope and expose the exact current read shapes. Fabricated quarterly/cost/file/status fields and the unsupported payroll label were removed; the backwards-compatible `periodId` input is now restricted to a `YYYY` fiscal-year label. Real-client and real-SDK tests pin one GET, output validation, demo parity, and legacy-shape rejection without changing fiscal close/reopen behavior.
 - **`get_invoice_pdf` / `get_invoice_einvoice` died on real document bodies (#1393).** The generic client JSON-parsed raw PDF/XML success bodies. Document reads now perform one fetch per successful attempt, keep timeout and cancellation active through a bounded stream, and preserve 429/error handling without an unbounded body read. Invoice PDFs return request identity plus base64 bytes; stored e-invoices dispatch honestly between strict UTF-8 XML (5 MiB cap) and Factur-X PDF (25 MiB cap), including `Content-Disposition` filenames. Unexpected MIME, malformed bytes, and empty artifacts fail closed. The generic JSON request path is unchanged. Schemas, interface signatures, descriptions, demo fixtures, and adversarial transport tests are aligned with the live ERP response contract.
 
 ## [1.16.6] — 2026-08-06
@@ -207,7 +208,7 @@ All notable changes to `@frihet/mcp-server` are documented here.
 - **D4-B megasprint — HR / Payroll / Onboarding / Permissions / Period close (19 new tools across 5 new files + 1 webhook test)**: wraps D1+D2 Frihet-ERP features previously absent from MCP surface (D3-T6 audit finding).
   - **HR (9 tools, `src/tools/hr.ts`)**: `leave_request_create`, `leave_approve`, `leave_reject`, `leave_cancel`, `leave_list`, `attendance_clock_in`, `attendance_clock_out`, `overtime_report`, `anomaly_list`. Wraps REST `/v1/leaves`, `/v1/time-entries`, `/v1/anomalies`.
   - **Webhook trust (1 tool, extended `src/tools/webhooks.ts`)**: `test_webhook` — fire synthetic event to verify endpoint reachability + signature validation. REST `POST /v1/webhooks/:id/test`.
-  - **Payroll (2 tools, `src/tools/payroll.ts`)**: `payroll_export` (A3/Contasol/Sage/Holded/SILTRA gestoria formats), `payroll_checklist` (employee readiness per payroll month). REST `/v1/payroll/prep/export`, `/v1/payroll/prep/employees`. Frihet stages data → gestoria processes payroll.
+  - **Payroll (2 tools, `src/tools/payroll.ts`)**: `payroll_export` (normalized employee data with an echoed A3/Contasol/Sage/SILTRA destination label, not a generated provider file), `payroll_checklist` (employee readiness per payroll month). REST `/v1/payroll/prep/export`, `/v1/payroll/prep/employees`. Frihet stages data → gestoria processes payroll.
   - **Onboarding (2 tools, `src/tools/onboarding.ts`)**: `onboarding_status`, `onboarding_persona_set` (autonomo/empresa/agencia/gestoria). REST `/v1/onboarding/status`, `/v1/onboarding/persona`.
   - **Permissions (2 tools, `src/tools/permissions.ts`)**: `permissions_matrix`, `permissions_me`. REST `/v1/permissions/matrix`, `/v1/permissions/me`.
   - **Period close (3 tools, `src/tools/accountingClose.ts`)**: `period_close_status`, `period_close` (TRUST AREA: `confirm=true` gate), `period_reopen` (TRUST AREA: `confirm=true` + reason required). REST `/v1/periods/current`, `/v1/periods/close`, `/v1/periods/:id/reopen`.
@@ -224,7 +225,7 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ### Notes
 
-- ERP backend endpoints land in parallel D4-A wave; until then the tools surface 404 errors as `isError=true` (consistent with existing banking/fiscal stub-or-propagate pattern). TODO comments mark `logLeaveDecision` callable wiring, A3 column confirmation, and SILTRA file extension.
+- At this beta's release, the ERP endpoints were still planned for a parallel D4-A wave and surfaced 404 as `isError=true`. The payroll routes now return normalized JSON with an echoed destination label; the former provider-file/extension TODOs did not become shipped capabilities.
 - `period_close` and `period_reopen` follow the Trust Area `confirm=true` gate pattern (same as `match_transaction_to_invoice`).
 - Npm publish deferred to D15 batch.
 

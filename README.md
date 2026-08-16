@@ -542,15 +542,15 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `leave_list` | List leave requests with filters (user, status, date range) |
 | `attendance_clock_in` | Record clock-in for an employee |
 | `attendance_clock_out` | Record clock-out for an employee |
-| `overtime_report` | Generate overtime report for a period |
+| `overtime_report` | Read daily/weekly overtime, aggregate minutes/hours, and compliance alerts computed over the selected YYYY or YYYY-MM records |
 | `anomaly_list` | List attendance anomalies (missing punches, excessive overtime) |
 
 ### Payroll (2)
 
 | Tool | What it does |
 |------|-------------|
-| `payroll_export` | Export payroll data for a period (CSV/PDF for gestoría) |
-| `payroll_checklist` | Generate pre-payroll checklist: pending leaves, anomalies, overtime |
+| `payroll_export` | Read normalized payroll-ready employee data; the format value is an echoed destination label, not a generated file |
+| `payroll_checklist` | List payable employees with payroll-profile readiness, missing fields, and monthly review state |
 
 ### Onboarding (2)
 
@@ -570,7 +570,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 | Tool | What it does |
 |------|-------------|
-| `period_close_status` | Get the close status for an accounting period |
+| `period_close_status` | Get the current or selected YYYY fiscal-year range, open/closed state, and nullable closing details |
 | `period_close` | Close an accounting period (gestor/admin only — TRUST AREA) |
 | `period_reopen` | Reopen a closed period with a mandatory reason (TRUST AREA) |
 

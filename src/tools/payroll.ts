@@ -2,17 +2,14 @@
  * Payroll preparation tools for the Frihet MCP server — D4-B megasprint (2 tools).
  *
  * Tools:
- *   1. payroll_export    — export payroll for a month in gestoria format (A3, Contasol, Sage, Holded, Siltra)
- *   2. payroll_checklist — list employees with status (ready / missing_data / blocked) for a month
+ *   1. payroll_export    — read the normalized export-ready employee dataset
+ *   2. payroll_checklist — read payroll-profile readiness for payable employees
  *
  * REST surface: /v1/payroll/prep/export, /v1/payroll/prep/employees
  *
- * Frihet does NOT process payroll. It exports to gestoria-compatible formats so
- * the asesoria handles SS/IRPF/contracts. Output formats track the most common
- * Spanish payroll software clusters.
- *
- * NOTE: ERP backend endpoints land in parallel D4-A wave. 404s propagate as isError
- * until backend ships. TODO: confirm A3 columns + SILTRA file extension.
+ * The ERP validates and echoes a destination-format label but returns the same
+ * normalized JSON dataset for each value. It does not generate a format-specific
+ * file, and Frihet does not process payroll. These read routes are live.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -34,25 +31,19 @@ export function registerPayrollTools(server: McpServer, client: IFrihetClient): 
   server.registerTool(
     "payroll_export",
     {
-      title: "Export Payroll (Gestoria Format)",
+      title: "Payroll Export-Ready Data",
       description:
-        "Export payroll data for a month in gestoria-compatible format. " +
-        "Supported formats:\n" +
-        "  - 'a3'       — Wolters Kluwer A3 (CSV with Spanish payroll columns)\n" +
-        "  - 'contasol' — Sage Contasol\n" +
-        "  - 'sage'     — Sage 50/200\n" +
-        "  - 'holded'   — Holded import format\n" +
-        "  - 'siltra'   — SILTRA Seguridad Social XML\n" +
-        "\n" +
-        "Frihet does NOT calculate payroll — it exports staged data for the gestoria. " +
-        "Month format: 'YYYY-MM'. " +
-        "/ Exporta datos de nominas en formato compatible con gestoria. Mes en formato 'YYYY-MM'.",
+        "Read the normalized payroll-ready employee dataset for a month. " +
+        "The ERP accepts 'a3', 'contasol', 'sage', or 'siltra' as a destination label and echoes it; " +
+        "the response is JSON and is identical across formats apart from that label. " +
+        "No CSV, XML, PDF, or provider-specific file is generated. Frihet does not calculate payroll. " +
+        "/ Lee los datos normalizados listos para nomina; no genera un archivo especifico del proveedor.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         format: z
-          .enum(["a3", "contasol", "sage", "holded", "siltra"])
-          .describe("Gestoria payroll software format / Formato del software de gestoria"),
-        month: z.string().regex(/^\d{4}-\d{2}$/).describe("Month in 'YYYY-MM' format / Mes formato 'YYYY-MM'"),
+          .enum(["a3", "contasol", "sage", "siltra"])
+          .describe("Echoed destination label; does not change JSON serialization / Etiqueta de destino"),
+        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).describe("Month in 'YYYY-MM' format / Mes formato 'YYYY-MM'"),
       },
       outputSchema: payrollExportOutput,
     },
@@ -74,17 +65,13 @@ export function registerPayrollTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Payroll Readiness Checklist",
       description:
-        "List all employees for a given month with their payroll readiness status. " +
-        "Status values:\n" +
-        "  - 'ready'         — all required data present, ready to export\n" +
-        "  - 'missing_data'  — some required fields missing (see missingFields[])\n" +
-        "  - 'blocked'       — manually blocked or data inconsistency detected\n" +
-        "\n" +
-        "Use BEFORE payroll_export to identify gaps. Month format: 'YYYY-MM'. " +
-        "/ Lista empleados con estado de preparacion para nomina. Usar antes de payroll_export.",
+        "List payable employees (active or on leave) for a month, whether each has a payroll profile, " +
+        "whether its required fields are ready, which fields are missing, and monthly review state. " +
+        "Suspended and offboarded employees are excluded. Use before payroll_export. " +
+        "/ Lista empleados pagables y la preparacion real de su perfil de nomina.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
-        month: z.string().regex(/^\d{4}-\d{2}$/).describe("Month in 'YYYY-MM' format / Mes formato 'YYYY-MM'"),
+        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).describe("Month in 'YYYY-MM' format / Mes formato 'YYYY-MM'"),
       },
       outputSchema: payrollChecklistOutput,
     },

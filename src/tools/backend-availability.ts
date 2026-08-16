@@ -4,9 +4,9 @@
  * PROBLEM (the bug this prevents): several tool families are wired here AHEAD of
  * their Frihet-ERP backend Cloud Functions shipping (fiscal `/v1/fiscal/*`, bank
  * rules `/v1/banking/rules`, gestoria `/v1/gestoria/*`, GL audit `/v1/gl/*`,
- * portal domain/onboard, IGIC, IS, VIES onboarding, payroll prep,
- * HR leaves/anomalies, accounting periods, webhook test). Until the CF deploys,
- * the API returns a genuine HTTP 404.
+ * portal domain/onboard, IGIC, IS, VIES onboarding, and webhook test). Until a
+ * staged CF deploys, the API returns a genuine HTTP 404. Live HR, payroll-read,
+ * and period-read tools also retain this guard as workspace-rollout safety.
  *
  * If that raw 404 reaches `handleToolError` it is mapped to the generic message
  * "Resource not found. / Recurso no encontrado." — which an LLM reads as "the

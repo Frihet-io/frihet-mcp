@@ -14,9 +14,8 @@
  *
  * REST surface: /v1/leaves, /v1/time-entries, /v1/anomalies
  *
- * NOTE: ERP backend endpoints land in parallel D4-A wave. Tools wired —
- * 404s propagate as isError until backend ships. TODO: wire to CF
- * logLeaveDecision callable when REST shell lands.
+ * These ERP REST routes are live. The backend guard remains a rollout/workspace
+ * safety net so an unavailable route is never misreported as an empty result.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -258,14 +257,14 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
     {
       title: "Overtime Report",
       description:
-        "Generate an overtime report for a period. Aggregates regular vs overtime hours " +
-        "per employee + total estimated cost in EUR. Useful for payroll prep and labor-law audits. " +
-        "Period format: 'YYYY-MM' (monthly) or 'YYYY-QN' (quarterly) or 'YYYY' (annual). " +
-        "/ Informe de horas extra por periodo. Agrega horas regulares vs extra por empleado + coste estimado.",
+        "Read the ERP overtime computation for a calendar month or year: daily and weekly overtime, " +
+        "worked/regular/overtime minutes, overtime hours, and compliance alerts computed from records in the selected period. " +
+        "Optionally filter the attendance records by employee. Period format: 'YYYY-MM' or 'YYYY'. " +
+        "/ Lee desgloses diarios y semanales, y minutos/horas agregados calculados con los registros del periodo seleccionado, con alertas.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
-        period: z.string().describe("Period (YYYY-MM, YYYY-QN, or YYYY) / Periodo"),
-        employeeId: z.string().optional().describe("Optional filter by employee / Filtrar por empleado opcional"),
+        period: z.string().regex(/^\d{4}(-(0[1-9]|1[0-2]))?$/).describe("Period (YYYY-MM or YYYY) / Periodo"),
+        employeeId: z.string().min(1).optional().describe("Optional filter by employee / Filtrar por empleado opcional"),
       },
       outputSchema: overtimeReportOutput,
     },

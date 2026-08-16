@@ -1075,19 +1075,40 @@ export const attendanceEntryItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
-/** Overtime aggregated report. */
+/** Exact ERP DTO for `GET /v1/time-entries/overtime`. */
 export const overtimeReportOutput = z.object({
-  period: z.string(),
-  totalRegularHours: z.number().optional(),
-  totalOvertimeHours: z.number().optional(),
-  estimatedCostEur: z.number().optional(),
-  byEmployee: z.array(z.object({
-    employeeId: z.string(),
-    employeeName: z.string().optional(),
-    regularHours: z.number().optional(),
-    overtimeHours: z.number().optional(),
-  }).passthrough()).optional(),
-  generatedAt: z.string().optional(),
+  period: z.string().regex(/^\d{4}(-(0[1-9]|1[0-2]))?$/),
+  employeeId: z.string().nullable(),
+  recordCount: z.number().int().nonnegative(),
+  dailyOvertime: z.array(z.object({
+    date: z.string(),
+    minutes: z.number().nonnegative(),
+    exceedsDaily: z.boolean(),
+  })),
+  weeklyOvertime: z.array(z.object({
+    weekStart: z.string(),
+    totalMinutes: z.number().nonnegative(),
+    overtimeMinutes: z.number().nonnegative(),
+  })),
+  monthlyTotal: z.object({
+    workedMinutes: z.number().nonnegative(),
+    overtimeMinutes: z.number().nonnegative(),
+    regularMinutes: z.number().nonnegative(),
+  }),
+  annualOvertimeHours: z.number().nonnegative(),
+  alerts: z.array(z.object({
+    type: z.enum(["daily_exceeded", "weekly_exceeded", "annual_approaching", "annual_exceeded", "missing_break"]),
+    severity: z.enum(["warning", "critical"]),
+    message: z.string(),
+    date: z.string(),
+  })),
+  data: z.never().optional(),
+  meta: z.never().optional(),
+  totalRegularHours: z.never().optional(),
+  totalOvertimeHours: z.never().optional(),
+  estimatedCostEur: z.never().optional(),
+  byEmployee: z.never().optional(),
+  generatedAt: z.never().optional(),
 }).passthrough();
 
 /** Anomaly detection record — backend `/v1/anomalies`. */
@@ -1115,29 +1136,61 @@ export const webhookTestResultOutput = z.object({
   error: z.string().optional(),
 }).passthrough();
 
-/** Payroll export result — backend `/v1/payroll/prep/export`. */
+/** Exact normalized dataset DTO from `GET /v1/payroll/prep/export`. */
 export const payrollExportOutput = z.object({
-  format: z.enum(["a3", "contasol", "sage", "holded", "siltra"]),
-  month: z.string(),
-  fileUrl: z.string().optional(),
-  filename: z.string().optional(),
-  rowCount: z.number().int().optional(),
-  generatedAt: z.string().optional(),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  format: z.enum(["a3", "contasol", "sage", "siltra"]),
+  employees: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    nss: z.string(),
+    irpfPct: z.number(),
+    salaryGrossAnnual: z.number(),
+    convenioColectivo: z.string().nullable(),
+    categoriaProfesional: z.string().nullable(),
+    prorrateoPagasExtras: z.boolean().nullable(),
+    formaPago: z.enum(["transferencia", "efectivo", "cheque"]),
+    iban: z.string().nullable(),
+  })),
+  summary: z.object({
+    exportedCount: z.number().int().nonnegative(),
+    skippedNotReady: z.number().int().nonnegative(),
+    totalGrossAnnual: z.number(),
+  }),
+  data: z.never().optional(),
+  meta: z.never().optional(),
+  fileUrl: z.never().optional(),
+  filename: z.never().optional(),
+  rowCount: z.never().optional(),
+  generatedAt: z.never().optional(),
 }).passthrough();
 
-/** Payroll checklist — backend `/v1/payroll/prep/employees`. */
+/** Exact readiness DTO from `GET /v1/payroll/prep/employees`. */
 export const payrollChecklistOutput = z.object({
-  month: z.string(),
-  totalEmployees: z.number().int().optional(),
-  readyEmployees: z.number().int().optional(),
-  missingEmployees: z.number().int().optional(),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   employees: z.array(z.object({
-    employeeId: z.string(),
-    employeeName: z.string().optional(),
-    status: z.enum(["ready", "missing_data", "blocked"]).optional(),
-    missingFields: z.array(z.string()).optional(),
-  }).passthrough()).optional(),
-  generatedAt: z.string().optional(),
+    id: z.string(),
+    name: z.string(),
+    status: z.enum(["active", "onLeave"]),
+    hasPayrollProfile: z.boolean(),
+    ready: z.boolean(),
+    missingFields: z.array(z.enum(["nss", "irpfPct", "salaryGrossAnnual", "formaPago", "iban"])),
+    reviewedForMonth: z.string().nullable(),
+    reviewedThisMonth: z.boolean(),
+    reviewedAt: z.string().nullable(),
+  })),
+  summary: z.object({
+    total: z.number().int().nonnegative(),
+    ready: z.number().int().nonnegative(),
+    notReady: z.number().int().nonnegative(),
+    reviewedThisMonth: z.number().int().nonnegative(),
+  }),
+  data: z.never().optional(),
+  meta: z.never().optional(),
+  totalEmployees: z.never().optional(),
+  readyEmployees: z.never().optional(),
+  missingEmployees: z.never().optional(),
+  generatedAt: z.never().optional(),
 }).passthrough();
 
 /** Onboarding workspace state — backend `/v1/onboarding/status`. */
@@ -1236,7 +1289,7 @@ export const permissionsMeOutput = z.object({
     .describe("Authorization surfaces this endpoint cannot truthfully report"),
 }).passthrough();
 
-/** Accounting period state — backend `/v1/periods/*`. */
+/** Legacy demo/write result retained for period_close and period_reopen only. */
 export const periodStatusOutput = z.object({
   id: z.string(),
   type: z.enum(["monthly", "quarterly"]).optional(),
@@ -1249,6 +1302,36 @@ export const periodStatusOutput = z.object({
   reopenReason: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
+}).passthrough();
+
+/** Exact ERP DTO for `GET /v1/periods/current` and `GET /v1/periods/YYYY`. */
+export const currentPeriodOutput = z.object({
+  fiscalYear: z.string().regex(/^\d{4}$/),
+  fiscalYearStart: z.string().regex(/^\d{2}-\d{2}$/),
+  status: z.enum(["open", "closed"]),
+  dateRange: z.object({
+    from: z.string(),
+    to: z.string(),
+  }),
+  closing: z.object({
+    status: z.string(),
+    closedAt: z.string().nullable(),
+    netIncome: z.number().nullable(),
+    totalIncome: z.number().nullable(),
+    totalExpenses: z.number().nullable(),
+    journalEntries: z.number().nullable(),
+  }).nullable(),
+  data: z.never().optional(),
+  meta: z.never().optional(),
+  id: z.never().optional(),
+  type: z.never().optional(),
+  startDate: z.never().optional(),
+  endDate: z.never().optional(),
+  closedAt: z.never().optional(),
+  closedBy: z.never().optional(),
+  reopenedAt: z.never().optional(),
+  reopenReason: z.never().optional(),
+  generatedAt: z.never().optional(),
 }).passthrough();
 
 /* ------------------------------------------------------------------ */
