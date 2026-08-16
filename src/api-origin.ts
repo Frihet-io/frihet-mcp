@@ -21,7 +21,8 @@ export function normalizePublicApiBaseUrl(value: string): string {
     throw new Error("FRIHET_API_URL must use https");
   }
   const hostname = parsed.hostname.toLowerCase();
-  if (hostname.endsWith(".") || !(hostname === "frihet.io" || hostname.endsWith(".frihet.io"))) {
+  if (hostname.split(".").some((label) => label.length === 0)
+    || !(hostname === "frihet.io" || hostname.endsWith(".frihet.io"))) {
     throw new Error("FRIHET_API_URL hostname must be under frihet.io");
   }
   if (parsed.username || parsed.password) {
