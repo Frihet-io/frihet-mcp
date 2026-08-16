@@ -1,13 +1,13 @@
 /**
- * Trust test — no government ID, credential, or banking identifier may ever
- * reach the external Langfuse observability service.
+ * Trust test — no tool payload or identity may ever reach the external
+ * Langfuse observability service.
  *
  * Regression guard for the P0 finding (Codex audit 2026-06-22): the Langfuse
  * tracer captured the RAW tool output BEFORE the OpenAI profile redaction
  * wrapper ran, so taxId/secret/IBAN leaked into traces in every profile mode.
- * The fix moved redaction INTO buildTracePayload, so the trace copy is redacted
- * unconditionally. This test fails if any sensitive value survives into the
- * serialized ingestion batch.
+ * Telemetry is now an operational allowlist rather than a payload redaction
+ * denylist. Adversarial extra fields are supplied through a runtime cast so the
+ * test fails if the builder ever starts spreading caller data.
  */
 
 import { describe, test } from "node:test";
@@ -63,8 +63,13 @@ describe("observability redaction", () => {
       traceId: "trace_1",
       spanId: "span_1",
       stub: null,
-    });
+    } as unknown as Parameters<typeof buildTracePayload>[0]);
     assertNoSecrets(JSON.stringify(batch));
+    for (const event of batch.batch) {
+      assert.ok(!("input" in event.body));
+      assert.ok(!("output" in event.body));
+      assert.ok(!("userId" in event.body));
+    }
   });
 
   test("buildTracePayload strips PII from input args even on the error path", () => {
@@ -81,7 +86,7 @@ describe("observability redaction", () => {
       traceId: "trace_2",
       spanId: "span_2",
       stub: null,
-    });
+    } as unknown as Parameters<typeof buildTracePayload>[0]);
     assertNoSecrets(JSON.stringify(batch));
   });
 

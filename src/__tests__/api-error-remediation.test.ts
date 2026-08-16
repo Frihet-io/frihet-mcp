@@ -102,7 +102,19 @@ describe("403 remediation rendering", () => {
         assert.doesNotMatch(output, new RegExp(unsafeValue));
         assert.doesNotMatch(serializedLogs, new RegExp(unsafeValue));
       }
-      assert.match(serializedLogs, /403 forbidden: Forbidden/);
+      assert.equal(rawLogs.length, 2);
+      for (const rawLog of rawLogs) {
+        const parsed = JSON.parse(rawLog) as {
+          message: string;
+          error?: { message?: string; code?: string; statusCode?: number };
+        };
+        assert.ok(["MCP tool call failed", "MCP tool error"].includes(parsed.message));
+        assert.deepEqual(parsed.error, {
+          message: "MCP operation failed",
+          code: "forbidden",
+          statusCode: 403,
+        });
+      }
     } finally {
       console.error = originalConsoleError;
     }

@@ -20,6 +20,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { FrihetClient } from "./client.js";
 import { DemoFrihetClient } from "./demo-client.js";
 import type { IFrihetClient } from "./client-interface.js";
+import { normalizePublicApiBaseUrl } from "./api-origin.js";
 
 // Single source of truth for the server version: package.json (read at runtime
 // from dist/../package.json). Hardcoding it here caused repeated version drift
@@ -65,31 +66,16 @@ function main(): void {
     process.exit(1);
   }
 
-  const baseUrl = process.env.FRIHET_API_URL;
+  const baseUrlRaw = process.env.FRIHET_API_URL;
+  let baseUrl: string | undefined;
 
-  if (!demoMode && baseUrl !== undefined) {
-    let parsed: URL;
+  if (!demoMode && baseUrlRaw !== undefined) {
     try {
-      parsed = new URL(baseUrl);
-    } catch {
+      baseUrl = normalizePublicApiBaseUrl(baseUrlRaw);
+    } catch (error) {
       console.error(
-        `Error: FRIHET_API_URL is not a valid URL: "${baseUrl}"\n` +
-          "It must be a valid https:// URL with a frihet.io hostname.\n",
-      );
-      process.exit(1);
-    }
-
-    if (parsed.protocol !== "https:") {
-      console.error(
-        `Error: FRIHET_API_URL must use https:// (got "${parsed.protocol}").\n`,
-      );
-      process.exit(1);
-    }
-
-    if (!parsed.hostname.endsWith("frihet.io")) {
-      console.error(
-        `Error: FRIHET_API_URL hostname must be under frihet.io (got "${parsed.hostname}").\n` +
-          "This prevents redirection to untrusted servers.\n",
+        `Error: ${error instanceof Error ? error.message : "FRIHET_API_URL is invalid"}.\n` +
+          "It must be a canonical https:// URL with a trusted frihet.io hostname.\n",
       );
       process.exit(1);
     }
@@ -105,11 +91,10 @@ function main(): void {
     );
   }
 
-  // Set trace context for Langfuse (reads LANGFUSE_* from process.env automatically).
-  // clientName can be overridden via FRIHET_CLIENT_NAME env var by the MCP host.
+  // Set the fixed protocol fact for Langfuse (reads LANGFUSE_* from process.env automatically).
+  // Client identity is deliberately omitted from telemetry.
   setTraceContext({
     mcpVersion: "mcp/1.0",
-    clientName: process.env.FRIHET_CLIENT_NAME,
   });
 
   const server = new McpServer({
