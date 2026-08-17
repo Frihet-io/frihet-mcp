@@ -36,9 +36,14 @@ export const FULL_TOOL_COUNT = 157;
  * source as the version and tool counts above — and for the same reason. They
  * had already drifted three ways (#145): `www.frihet.io`'s agents.json and
  * `api.frihet.io`'s both served `/legal/*`, which has never been a route and
- * returns 404, while this Worker served `/en/*`. A bare `curl` cannot detect
- * the 404 — the WAF answers 403 to a default User-Agent for every path — which
- * is how two dead URLs stayed published.
+ * returns 404, while this Worker served `/en/*`.
+ *
+ * Why it stayed published: measured 2026-08-18, a bare `curl` gets 403 from the
+ * WAF on exactly those two dead paths while returning 200 on the live `/es/`
+ * and `/en/` ones. So the cheapest possible check reports "403, probably just
+ * the WAF" for a URL that is actually a 404, and reports a clean 200 for the
+ * healthy ones — the failure is invisible precisely where it matters. Verifying
+ * these needs a browser User-Agent.
  *
  * `/es/*` is canonical, not merely reachable: it is what the pages' own
  * `<link rel="canonical">` emits, what `x-default` resolves to, and what

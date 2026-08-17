@@ -195,8 +195,10 @@ const AGENTS_JSON = JSON.stringify({
   ],
   // Canonical legal URLs (#145). These were `/legal/privacy` and
   // `/legal/terms`, which have never been routes on www.frihet.io and return
-  // 404 — undetectable with a bare curl, because the WAF answers 403 to a
-  // default User-Agent for every path here. `/es/*` is what the pages'
+  // 404. A bare curl does not reveal that: measured 2026-08-18 it gets 403 from
+  // the WAF on those two dead paths and 200 on the live ones, so the cheap
+  // check looks like WAF noise exactly where the URL is actually broken.
+  // Verifying these needs a browser User-Agent. `/es/*` is what the pages'
   // `<link rel="canonical">` emits and what `x-default` resolves to.
   //
   // This Worker is a single standalone file with no bundler, so it cannot
