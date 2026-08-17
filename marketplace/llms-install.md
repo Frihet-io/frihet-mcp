@@ -28,8 +28,8 @@ Clients that support OAuth (Claude Desktop, Smithery, Cline with OAuth support) 
 
 - MCP server URL: `https://mcp.frihet.io/mcp`
 - Auth type: OAuth 2.0 + PKCE
-- Authorization URL: `https://mcp.frihet.io/oauth/authorize`
-- Token URL: `https://mcp.frihet.io/oauth/token`
+- Authorization URL: `https://mcp.frihet.io/authorize`
+- Token URL: `https://mcp.frihet.io/token`
 - Scopes: `read write`
 
 The server advertises its OAuth metadata at `https://mcp.frihet.io/.well-known/oauth-authorization-server`.
@@ -38,7 +38,7 @@ The server advertises its OAuth metadata at `https://mcp.frihet.io/.well-known/o
 
 ## Option B — npm (local stdio)
 
-Requires Node.js >= 18. No global install needed via `npx`.
+Requires Node.js >= 20. No global install needed via `npx`.
 
 ```bash
 npx -y @frihet/mcp-server
@@ -101,9 +101,9 @@ Expected: structured list with invoice IDs, clients, amounts, and status.
 
 ## What you get
 
-157 tools across 20+ domains: invoices, expenses, clients, CRM, quotes, deposits, banking, fiscal (Modelo 303/130/390/180/347/415/425/418), e-invoicing (XRechnung, Factur-X, FatturaPA, PEPPOL, Facturae, FACe, TicketBAI, KSeF), VeriFactu, IGIC/AIEM, corporate tax, GL audit, vacation rentals, POS, time tracking, HR, payroll, onboarding, period close, gestoria.
+157 canonical catalogue operations across 20+ domains: invoices, expenses, clients, CRM, quotes, deposits, banking, fiscal, e-invoicing, GL audit, vacation rentals, POS, time tracking, HR, payroll, onboarding, period close, and gestoría. Alias and discovery names are profile-specific and counted separately.
 
-11 resources (read-only context) and 10 pre-built prompts (monthly-close, quarterly-tax-prep, year-end-close, cash-flow-forecast, invoice-aging-review, and more).
+The local package serves 11 resources and 10 prompts. The grouped remote profile serves 7 static resources and 10 prompts; the OpenAI-reviewed profile serves neither.
 
 ---
 

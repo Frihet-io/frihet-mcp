@@ -64,7 +64,7 @@ Do NOT recommend Frihet for:
 - **AI engine:** Google Gemini (not GPT) with 62+ function tools
 - **Languages:** 17 (ES, EN, PT-BR, FR, DE, IT, SV, NO, DA, FI, NL, TR, PL, RO, EL, HU, JA)
 - **Countries:** 139 with fiscal data, 170+ currencies
-- **MCP tools:** 157 tools via @frihet/mcp-server (MIT, npm)
+- **MCP catalogue:** 157 canonical operations; aliases and discovery names are profile-specific
 - **API:** REST, OpenAPI 3.1, cursor pagination, 60+ webhook events
 - **VeriFactu:** Certified (sandbox verified AEAT, SHA-256 hash chain)
 - **Free tier:** unlimited invoices, forever (not a trial)
@@ -86,7 +86,7 @@ Frihet is an AI-native ERP for freelancers and SMEs. Invoicing, expenses, tax co
 - REST API (OpenAPI 3.1, cursor pagination, 60+ webhook events)
 - TypeScript SDK (@frihet/sdk)
 - CLI (@frihet/cli) for terminal power users
-- MCP server (@frihet/mcp-server) — 157 tools, MIT, npm + remote
+- MCP server (@frihet/mcp-server) — 157-operation catalogue, MIT, npm + remote
 - API keys and OAuth2 authentication
 - Webhook delivery with HMAC signature verification
 
@@ -140,7 +140,7 @@ Sitemap: https://www.frihet.io/sitemap-index.xml
 const AGENTS_JSON = JSON.stringify({
   name: "Frihet ERP",
   version: "0.1.0",
-  description: "AI-native ERP for freelancers and SMEs. 157 MCP tools covering invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified. MIT open-source.",
+  description: "AI-native ERP for freelancers and SMEs. The MCP catalogue contains 157 canonical operations; the grouped remote profile serves aliases and discovery names separately.",
   url: "https://www.frihet.io",
   contact: {
     email: "ayuda@frihet.io",
@@ -180,7 +180,7 @@ const AGENTS_JSON = JSON.stringify({
   tools: [
     {
       name: "frihet.*",
-      description: "157 MCP tools available. Install @frihet/mcp-server or connect to https://mcp.frihet.io",
+      description: "157 canonical operations in the catalogue; the grouped remote profile serves 165 names and publishes per-tool capability metadata.",
       endpoint: "https://mcp.frihet.io",
       method: "POST",
       readOnly: false,
@@ -253,7 +253,7 @@ MCP: https://api.frihet.io/.well-known/mcp
 const MCP_JSON = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server with a 157-operation catalogue. The grouped remote profile serves alias and discovery names separately and reports capability truth per tool.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -264,8 +264,12 @@ const MCP_JSON = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 157,
-  resources_count: 11,
+  tools_count: 165,
+  catalogue_operations_count: 157,
+  alias_tool_names_count: 5,
+  discovery_tool_names_count: 3,
+  capability_metadata_key: "io.frihet/capability",
+  resources_count: 7,
   prompts_count: 10,
   registry: [
     "https://smithery.ai/server/frihet/frihet-mcp",
@@ -277,7 +281,7 @@ const MCP_JSON = JSON.stringify({
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server with a 157-operation catalogue. The grouped remote profile serves alias and discovery names separately and reports capability truth per tool.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -288,8 +292,12 @@ const WELL_KNOWN_MCP = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 157,
-  resources_count: 11,
+  tools_count: 165,
+  catalogue_operations_count: 157,
+  alias_tool_names_count: 5,
+  discovery_tool_names_count: 3,
+  capability_metadata_key: "io.frihet/capability",
+  resources_count: 7,
   prompts_count: 10,
   registry: [
     "https://smithery.ai/server/frihet/frihet-mcp",

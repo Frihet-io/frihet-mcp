@@ -42,6 +42,16 @@ const ALLOW_DIRTY = ARGS.includes('--allow-dirty');
 // === SOURCE OF TRUTH ===
 const pkg = JSON.parse(readFileSync(join(SELF, 'package.json'), 'utf8'));
 const VERSION = pkg.version;
+const publicCapabilityContract = JSON.parse(
+  readFileSync(
+    join(SELF, 'src/__tests__/fixtures/public-capability-contract.json'),
+    'utf8',
+  ),
+);
+const REMOTE_GROUPED_TOOL_COUNT =
+  publicCapabilityContract.surfaces.remoteGrouped.tools.length;
+const REMOTE_GROUPED_RESOURCE_COUNT =
+  publicCapabilityContract.surfaces.remoteGrouped.resources.length;
 
 // Real tool count = registerTool calls in src/tools/*.ts minus meta-tools in register-all.ts
 const toolDir = join(SELF, 'src/tools');
@@ -322,16 +332,24 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
     // between deploys — pointing discovery at it is what let the spec rot).
     // NOTE: this rule was inverted on 29-jul-2026 together with the redirect
     // removal. The enforcement below is the source of truth for its direction.
-    // All three are asserted here against the SoT (TOOL_COUNT from package.json —
-    // no second source of truth) so the discovery surface can't re-drift.
+    // Counts are asserted against the generated real-SDK profile capture, while
+    // canonical operation prose remains pinned to TOOL_COUNT.
     if (repoName === 'frihet-mcp' && rel === 'workers/api-proxy/worker.js') {
       lines.forEach((line, idx) => {
         // (a) bare-numeric tools_count field
         const tc = line.match(/tools_count:\s*(\d+)/);
-        if (tc && parseInt(tc[1], 10) !== TOOL_COUNT) {
+        if (tc && parseInt(tc[1], 10) !== REMOTE_GROUPED_TOOL_COUNT) {
           findings.push({
             repo: repoName, file: rel, line: idx + 1, severity: 'fail',
-            kind: 'tool-count', found: parseInt(tc[1], 10), expected: TOOL_COUNT,
+            kind: 'tool-count', found: parseInt(tc[1], 10), expected: REMOTE_GROUPED_TOOL_COUNT,
+            snippet: line.trim().slice(0, 120),
+          });
+        }
+        const rc = line.match(/resources_count:\s*(\d+)/);
+        if (rc && parseInt(rc[1], 10) !== REMOTE_GROUPED_RESOURCE_COUNT) {
+          findings.push({
+            repo: repoName, file: rel, line: idx + 1, severity: 'fail',
+            kind: 'resource-count', found: parseInt(rc[1], 10), expected: REMOTE_GROUPED_RESOURCE_COUNT,
             snippet: line.trim().slice(0, 120),
           });
         }

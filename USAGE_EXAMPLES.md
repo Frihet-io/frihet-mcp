@@ -1,143 +1,39 @@
-# Frihet MCP Server - Usage Examples
+# Frihet MCP usage examples
 
-Structured examples for testing the Frihet MCP server with a seeded test account.
+These examples show the intended interaction shape. Use your own authorized
+workspace or the package's explicit local demo mode; never paste credentials or
+customer data into public examples.
 
-> **Prerequisites:** Run the seed script (`scripts/seed-test-account.ts` in the Frihet-ERP repo) to populate the test account with sample data before testing these examples.
+## Review unpaid invoices
 
----
+Prompt: “Show my unpaid invoices and summarize the outstanding total.”
 
-## Example 1: Financial Overview
+Expected routing: `list_invoices` with a supported status filter, followed by a
+summary calculated from the returned structured data.
 
-**Prompt:**
-```
-Show me all unpaid invoices and calculate the total outstanding amount.
-```
+## Create a draft invoice
 
-**Tools used:** `list_invoices` (readOnlyHint: true)
+Prompt: “Create a draft invoice for 10 consulting hours at 80 EUR/hour.”
 
-**Expected behavior:**
-1. Calls `list_invoices` with `status: "sent"` to retrieve all unpaid/sent invoices.
-2. Returns 3 invoices:
-   - INV-2026-004: UI/UX Design for TechStart Solutions GmbH (5,100 EUR, 0% tax -- EU reverse charge)
-   - INV-2026-005: Hosting for Nordic Digital ApS (250 EUR, 0% tax -- EU)
-   - INV-2026-006: Web Development for Innovate Labs SL (4,023.75 EUR, 21% IVA)
-3. Calculates total outstanding: approximately 9,373.75 EUR.
-4. May note that INV-2026-006 is past its due date (Feb 28).
+Expected routing: `create_invoice` with explicit line-item quantity/unit price.
+The tool returns the structured draft; it does not send the invoice unless the
+separate external action is requested.
 
-**What this demonstrates:** Read-only data retrieval, filtering by status, financial aggregation from structured data.
+## Record an expense
 
----
+Prompt: “Record a 25 EUR office-supplies expense dated today.”
 
-## Example 2: Create an Invoice
+Expected routing: `create_expense` with the supported description, amount,
+category, and date fields.
 
-**Prompt:**
-```
-Create an invoice for Barcelona Design Studio: 40 hours of web development at 95 EUR/hour, 21% IVA, due April 15th 2026.
-```
+## Convert an accepted quote
 
-**Tools used:** `create_invoice` (destructiveHint: false)
+Prompt: “Find my accepted quote for this client and prepare a matching draft
+invoice.”
 
-**Expected behavior:**
-1. Calls `create_invoice` with:
-   - `clientName`: "Barcelona Design Studio"
-   - `items`: one line item (description: "Web Development", quantity: 40, unitPrice: 95)
-   - `taxRate`: 21
-   - `dueDate`: "2026-04-15"
-2. Returns the created invoice with:
-   - Subtotal: 3,800 EUR
-   - IVA (21%): 798 EUR
-   - Total: 4,598 EUR
-   - Status: "draft"
-3. Confirms the invoice was created successfully with all fields populated.
+Expected routing: read the quote through `list_quotes`/`get_quote`, then ask for
+confirmation before creating a separate invoice when appropriate. Do not invent
+identifiers or values absent from the returned record.
 
-**What this demonstrates:** Write operation creating a new business document with proper tax calculation, referencing an existing client.
-
----
-
-## Example 3: Expense Tracking
-
-**Prompt:**
-```
-Log a 599 EUR expense for Adobe Creative Cloud annual subscription, category software, dated January 5th 2026.
-```
-
-**Tools used:** `create_expense` (destructiveHint: false)
-
-**Expected behavior:**
-1. Calls `create_expense` with:
-   - `description`: "Adobe Creative Cloud annual subscription"
-   - `amount`: 599
-   - `category`: "Software"
-   - `date`: "2026-01-05"
-   - `vendor`: "Adobe Inc." (or "Adobe")
-2. Returns the created expense record with all fields.
-3. Note: the test account already has a similar expense seeded, so the AI may mention the duplicate.
-
-**What this demonstrates:** Expense creation with proper categorization. Shows that the MCP server handles financial record-keeping for tax-deductible business expenses.
-
----
-
-## Example 4: Client Search
-
-**Prompt:**
-```
-Find all clients based in Spain and show their contact details.
-```
-
-**Tools used:** `list_clients` (readOnlyHint: true)
-
-**Expected behavior:**
-1. Calls `list_clients` to retrieve all clients.
-2. Filters results to Spanish clients (country contains "Espana" or fiscalZone is "peninsula"):
-   - **Barcelona Design Studio** -- NIF B67890123, Carrer de Mallorca 245, Barcelona, hola@bcndesign.studio
-   - **Innovate Labs SL** -- NIF B12345678, Calle de Serrano 41, Madrid, admin@innovatelabs.es
-3. Presents the data in a structured format with names, tax IDs, addresses, and emails.
-4. May note that the other 3 clients are international (Germany, UK, Denmark).
-
-**What this demonstrates:** Read-only listing with intelligent filtering. Shows the MCP server's ability to query and present structured business data.
-
----
-
-## Example 5: Quote-to-Invoice Workflow
-
-**Prompt:**
-```
-Look at the accepted quote for Innovate Labs and create an invoice based on it.
-```
-
-**Tools used:**
-- `list_quotes` (readOnlyHint: true)
-- `get_quote` (readOnlyHint: true)
-- `create_invoice` (destructiveHint: false)
-
-**Expected behavior:**
-1. Calls `list_quotes` with `status: "accepted"` to find the accepted quote.
-2. Finds QUO-2026-003 for Innovate Labs SL:
-   - Web Development Retainer (20h x 95 EUR = 1,900 EUR)
-   - Monthly Hosting & Maintenance (1 x 250 EUR = 250 EUR)
-   - Subtotal: 2,150 EUR + 21% IVA = 2,601.50 EUR
-3. Calls `create_invoice` with matching line items, client details, and tax rate from the quote.
-4. Returns the newly created invoice that mirrors the accepted quote.
-
-**What this demonstrates:** Multi-step workflow combining read and write operations. Shows the MCP server enabling an AI assistant to orchestrate a real business process (converting a quote into an invoice) using multiple tool calls.
-
----
-
-## Test Account Details
-
-| Field     | Value                     |
-|-----------|---------------------------|
-| Email     | `mcp-test@frihet.io`      |
-| Password  | `FrihetMcpTest2026!`      |
-| Plan      | Pro                       |
-| API Key   | Generated by seed script  |
-
-### Seeded Data Summary
-
-| Entity    | Count | Details                                              |
-|-----------|-------|------------------------------------------------------|
-| Clients   | 5     | 2 Spanish, 2 EU (Germany, Denmark), 1 UK             |
-| Products  | 5     | Hourly services (3) + fixed-price (2)                |
-| Invoices  | 10    | 3 paid, 3 sent (1 overdue), 2 draft, 1 cancelled    |
-| Expenses  | 8     | Software, travel, office, marketing, legal           |
-| Quotes    | 3     | 1 draft, 1 sent, 1 accepted                         |
+The generated public-capability contract is authoritative for operation names,
+callability, annotations, resources, prompts, and profile-specific exposure.

@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "frihet-erp",
   "displayName": "Frihet ERP",
-  "version": "1.16.0",
-  "description": "Manage invoices, expenses, clients, quotes and Spanish/EU tax compliance from natural language. Bundles the Frihet MCP server (157 tools) plus a business-aware skill with embedded IVA/IGIC/IRPF knowledge and multi-step workflows (monthly close, quarterly 303).",
+  "version": "1.16.6",
+  "description": "Manage invoices, expenses, clients, quotes and Spanish/EU tax compliance from natural language. The Frihet MCP catalogue contains 157 canonical operations; runtime capability metadata distinguishes API-dependent, checked, deferred and unavailable operations.",
   "author": {
     "name": "Frihet",
     "email": "hola@frihet.io",

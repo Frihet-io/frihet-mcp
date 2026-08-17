@@ -9,6 +9,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 
+/** Exact prompt registrations below; runtime capture gates this value. */
+export const MCP_PROMPT_COUNT = 10;
+
 export function registerAllPrompts(server: McpServer): void {
   // -- monthly-close --
 

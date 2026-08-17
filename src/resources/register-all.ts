@@ -64,13 +64,13 @@ Endpoints:
   PATCH  /quotes/:id        — Update quote
   DELETE /quotes/:id        — Delete quote
 
-  GET    /webhooks          — List webhooks (paginated)
+  GET    /webhooks          — List webhooks (unpaginated)
   GET    /webhooks/:id      — Get webhook by ID
   POST   /webhooks          — Create webhook
   PATCH  /webhooks/:id      — Update webhook
   DELETE /webhooks/:id      — Delete webhook
 
-Pagination:
+Pagination (list families that expose limit/offset; webhooks are unpaginated):
   Query params: limit (1-100, default 50), offset (default 0)
   Response: { data: [...], total: number, limit: number, offset: number }
 
@@ -83,7 +83,7 @@ Error responses:
   500 — Internal server error
 
 Content-Type: application/json
-All monetary values in EUR (cents not used — decimal euros).
+Monetary values use the currency declared by each record; amounts are decimal major units.
 Dates in ISO 8601 format (YYYY-MM-DD or full datetime).`;
 
 const TAX_RATES = `Spanish Tax Rates by Fiscal Zone
@@ -170,11 +170,6 @@ CANARY ISLANDS (IGIC instead of IVA)
   Modelo 420  — IGIC quarterly return (same deadlines as Modelo 303)
   Modelo 425  — Annual IGIC summary (same deadline as Modelo 390)
   Filed with ATC (Administración Tributaria Canaria), NOT AEAT
-
-VERIFACTU (mandatory e-invoicing, phased rollout)
-  2026: Voluntary adoption
-  2027: Mandatory for large companies
-  2028: Mandatory for all businesses
 
 KEY DATES SUMMARY
   Apr 20 — Q1 filings
@@ -400,8 +395,8 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://api/schema",
     {
       description:
-        "OpenAPI schema summary: all endpoints, authentication method, rate limits, pagination, and error codes. " +
-        "/ Resumen del esquema OpenAPI: endpoints, autenticación, límites, paginación y errores.",
+        "Selected core REST endpoint summary with authentication, rate limits, pagination, and error codes. " +
+        "/ Resumen de endpoints REST principales, autenticación, límites, paginación y errores.",
       mimeType: "text/plain",
     },
     async () => ({
@@ -442,8 +437,7 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     {
       description:
         "Spanish quarterly tax calendar with filing deadlines for Modelo 303, 130, 390, 420 (IGIC), and annual returns. " +
-        "Includes VeriFactu e-invoicing timeline. " +
-        "/ Calendario fiscal trimestral español con plazos de presentación de modelos y VeriFactu.",
+        "/ Calendario fiscal trimestral español con plazos de presentación de modelos.",
       mimeType: "text/plain",
     },
     async () => ({

@@ -126,12 +126,11 @@ const SOURCE_USER_AGENT = "frihet-mcp-server";
 /**
  * Fresh idempotency key, always a syntactically valid UUID v4.
  *
- * `crypto.randomUUID` is a global on the Cloudflare Workers runtime and on
- * Node >= 19. On Node 18 — our declared `engines` floor — `globalThis.crypto`
- * is behind `--experimental-global-webcrypto`, so the fallback is a REAL code
- * path there, not a theoretical one. It therefore has to produce a UUID and
- * not an ad-hoc string: the backend documents "UUID v4 recommended", and
- * src/__tests__/idempotency-key-contract.test.ts asserts the shape.
+ * `crypto.randomUUID` is global on Cloudflare Workers and the supported Node
+ * runtime. The fallback remains defense in depth for constrained embedders and
+ * tests that intentionally remove the global; it must still produce a UUID,
+ * not an ad-hoc string. The backend recommends UUID v4 and the contract test
+ * asserts the shape.
  */
 function newIdempotencyKey(): string {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;

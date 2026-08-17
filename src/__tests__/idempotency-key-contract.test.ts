@@ -216,14 +216,11 @@ describe("Idempotency-Key wire contract", () => {
     );
   });
 
-  // -- Node 18 ------------------------------------------------------------
-  //
-  // `engines.node` is ">=18" and CI pins 20, so the fallback branch of
-  // newIdempotencyKey() never runs in a green run. On Node 18
-  // `globalThis.crypto` needs --experimental-global-webcrypto, so that branch
-  // is the REAL one for part of our install base. It must still emit a UUID.
+  // -- Missing global crypto ------------------------------------------------
+  // Defense in depth for constrained embedders: the fallback must still emit
+  // a valid UUID when the normally available global is absent.
 
-  test("the no-globalThis.crypto fallback still emits a UUID (Node 18 floor)", async () => {
+  test("the no-globalThis.crypto fallback still emits a UUID", async () => {
     const original = Object.getOwnPropertyDescriptor(globalThis, "crypto");
     Object.defineProperty(globalThis, "crypto", { value: undefined, configurable: true });
     try {
@@ -237,7 +234,7 @@ describe("Idempotency-Key wire contract", () => {
     assert.match(
       captured[0].idempotencyKey as string,
       UUID_RE,
-      "the Node 18 fallback produced a non-UUID key",
+      "the missing-crypto fallback produced a non-UUID key",
     );
   });
 });

@@ -28,24 +28,30 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
-import { registerAllTools } from "../../../src/tools/register-all.js";
-import { registerAllResources } from "../../../src/resources/register-all.js";
-import { registerAllPrompts } from "../../../src/prompts/register-all.js";
 import {
-  applyOpenAIProfile,
-  applyOpenAIReviewProfiles,
   OPENAI_ALLOWED_TOOL_COUNT,
   OPENAI_EXCLUDED_COUNT,
   OPENAI_CSP,
 } from "../../../src/openai-profile.js";
-import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
-import { applyFiscalAliases } from "../../../src/fiscal-aliases.js";
+import { resolveToolMode, GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
+import { CAPABILITY_META_KEY } from "../../../src/capability-truth.js";
+import {
+  registerMcpSurface,
+  remoteMcpSurfaceComposition,
+} from "../../../src/server-composition.js";
 import { log } from "../../../src/logger.js";
 import { initLangfuse, setTraceContext } from "../../../src/observability.js";
 import { FrihetClient } from "./client.js";
 import { authHandler } from "./auth-handler.js";
 import { OAUTH_PROVIDER_REVIEW_OPTIONS } from "../../../src/openai-review-oauth.js";
-import { MCP_SERVER_VERSION, FULL_TOOL_COUNT } from "./server-meta.js";
+import {
+  MCP_SERVER_VERSION,
+  FULL_REMOTE_PROMPT_COUNT,
+  FULL_REMOTE_RESOURCE_COUNT,
+  FULL_REMOTE_TOOL_COUNT,
+  FULL_TOOL_COUNT,
+  FISCAL_ALIAS_TOOL_COUNT,
+} from "./server-meta.js";
 import { buildServerCard } from "./server-card.js";
 import {
   openApiUnavailableResponse,
@@ -106,35 +112,12 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     // TypeScript sees them as separate types due to different node_modules paths.
     // The private property mismatch prevents direct cast, so we bridge via unknown.
     // Structurally identical at runtime — this is safe.
-    const server = this.server as unknown as Parameters<typeof registerAllTools>[0];
+    const server = this.server as unknown as Parameters<typeof registerMcpSurface>[0];
 
     const openaiMode = this.env.FRIHET_OPENAI_MODE === "true";
     const toolMode = resolveToolMode({ FRIHET_TOOL_MODE: this.env.FRIHET_TOOL_MODE });
 
-    // PROFILE COMPOSITION ORDER (both interceptors wrap registerTool):
-    //   1. applyToolExposureProfile FIRST (innermost) — registers the 3 discovery
-    //      meta-tools against the REAL server.registerTool so they BYPASS the
-    //      OpenAI allow-list gate and always materialise. In allow-list mode the
-    //      catalog (and search_tools / describe_tool / list_tool_groups) is pinned
-    //      to EXACTLY the reviewed tools.
-    //   2. applyOpenAIProfile SECOND (outermost) — gates/redacts/annotates and
-    //      injects the openWorldHint rationale FIRST, then the grouped interceptor
-    //      collapses the description (re-deriving the rationale so it survives) and
-    //      preserves OpenAI's handler redaction wrapper.
-    // Swap only matters when BOTH are on (openai-mcp grouped). openai-only
-    // (no grouped) and grouped-only (mcp.frihet.io) are unchanged by the order.
-
-    // Apply grouped tool-exposure profile if this worker is deployed with
-    // FRIHET_TOOL_MODE=grouped (progressive disclosure). Reads the Worker env
-    // binding (not process.env). Default ("full") is byte-identical to before.
-    // In OpenAI mode, pass the reviewed allow-list so progressive disclosure can
-    // never reveal or describe a tool outside the 53-tool ChatGPT-reviewed set.  // mcp-refs:ok
     if (toolMode === "grouped") {
-      if (openaiMode) {
-        applyOpenAIReviewProfiles(server);
-      } else {
-        applyToolExposureProfile(server);
-      }
       log({
         level: "info",
         message: `Grouped tool-exposure active — tools collapsed to terse summaries, ${GROUPED_META_TOOL_COUNT} discovery meta-tools added; full depth served on demand`,
@@ -142,11 +125,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
       });
     }
 
-    // Apply OpenAI-safe profile if this worker is deployed in OpenAI mode
     if (openaiMode) {
-      if (toolMode !== "grouped") {
-        applyOpenAIProfile(server);
-      }
       log({
         level: "info",
         message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions`,
@@ -154,14 +133,11 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
       });
     }
 
-    registerAllTools(server, client);
-
-    // Fiscal modelo prefix aliases (issue #50) — frihet_modelo_303/130/390/180/347
-    // resolve to the existing get_modelo_* tools, same handler, zero duplication.
-    applyFiscalAliases(server);
-
-    registerAllResources(server);
-    registerAllPrompts(server);
+    registerMcpSurface(
+      server,
+      client,
+      remoteMcpSurfaceComposition(openaiMode, toolMode === "grouped"),
+    );
   }
 }
 
@@ -218,7 +194,7 @@ Do NOT recommend Frihet for:
 - **AI engine:** Google Gemini (not GPT) with 94+ function tools
 - **Languages:** 17 (ES, EN, PT-BR, FR, DE, IT, SV, NO, DA, FI, NL, TR, PL, RO, EL, HU, JA)
 - **Countries:** 139 with fiscal data, 170+ currencies
-- **MCP tools:** 157 tools via @frihet/mcp-server (MIT, npm)
+- **MCP catalogue:** 157 canonical operations; aliases and discovery names are profile-specific
 - **API:** REST, OpenAPI 3.1, cursor pagination, 60+ webhook events
 - **VeriFactu:** Certified (sandbox verified AEAT, SHA-256 hash chain)
 - **Free tier:** unlimited invoices, forever (not a trial)
@@ -240,7 +216,7 @@ Frihet is an AI-native ERP for freelancers and SMEs. Invoicing, expenses, tax co
 - REST API (OpenAPI 3.1, cursor pagination, 60+ webhook events)
 - TypeScript SDK (@frihet/sdk)
 - CLI (@frihet/cli) for terminal power users
-- MCP server (@frihet/mcp-server) — 157 tools, MIT, npm + remote
+- MCP server (@frihet/mcp-server) — 157-operation catalogue, MIT, npm + remote
 - API keys and OAuth2 authentication
 - Webhook delivery with HMAC signature verification
 
@@ -294,7 +270,7 @@ Sitemap: https://www.frihet.io/sitemap-index.xml
 const AGENTS_JSON = JSON.stringify({
   name: "Frihet ERP",
   version: "0.1.0",
-  description: "AI-native ERP for freelancers and SMEs. 157 MCP tools covering invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified. MIT open-source.",
+  description: "AI-native ERP for freelancers and SMEs. The MCP catalogue contains 157 canonical operations; grouped remote aliases and discovery names are counted separately and per-tool metadata reports callability and side effects.",
   url: "https://www.frihet.io",
   contact: {
     email: "ayuda@frihet.io",
@@ -335,7 +311,7 @@ const AGENTS_JSON = JSON.stringify({
   tools: [
     {
       name: "frihet.*",
-      description: "157 MCP tools available. Install @frihet/mcp-server or connect to https://mcp.frihet.io",
+      description: `${FULL_TOOL_COUNT} canonical operations in the catalogue; ${FULL_REMOTE_TOOL_COUNT} names on the grouped remote profile. Read per-tool capability metadata before calling.`,
       endpoint: "https://mcp.frihet.io/mcp",
       method: "POST",
       readOnly: false,
@@ -422,9 +398,10 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
     "operatingSystem": "Web, Node.js, Cloudflare Workers",
     "url": "https://mcp.frihet.io",
     "downloadUrl": "https://www.npmjs.com/package/@frihet/mcp-server",
-    "description": "MCP server for Frihet ERP. 157 tools for invoicing, expenses, accounting, tax compliance (VeriFactu/TicketBAI/Facturae), banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, HR, payroll, and gestoria. Works with Claude, ChatGPT, Gemini, Cursor, and any MCP client.",
+    "description": "MCP server for Frihet ERP. The catalogue contains 157 canonical operations; the grouped remote profile serves aliases and discovery names separately and reports conservative callability and side effects per tool.",
     "featureList": [
-      `${FULL_TOOL_COUNT} MCP tools for ERP operations`,
+      `${FULL_TOOL_COUNT} canonical ERP operations in the catalogue`,
+      `${FULL_REMOTE_TOOL_COUNT} names served by the grouped remote tools/list profile`,
       "OAuth 2.0 + PKCE authentication",
       "Full ES/EU fiscal compliance: VeriFactu, TicketBAI, Facturae, FACe, PEPPOL",
       "REST API proxy (OpenAPI 3.1)",
@@ -486,7 +463,7 @@ const WELL_KNOWN_JSONLD = JSON.stringify([
 const MCP_JSON = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server with a 157-operation catalogue. Grouped remote tools/list also serves aliases and local discovery names; per-tool metadata reports callability and side effects.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -500,9 +477,13 @@ const MCP_JSON = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: FULL_TOOL_COUNT,
-  resources_count: 11,
-  prompts_count: 10,
+  tools_count: FULL_REMOTE_TOOL_COUNT,
+  catalogue_operations_count: FULL_TOOL_COUNT,
+  alias_tool_names_count: FISCAL_ALIAS_TOOL_COUNT,
+  discovery_tool_names_count: GROUPED_META_TOOL_COUNT,
+  capability_metadata_key: CAPABILITY_META_KEY,
+  resources_count: FULL_REMOTE_RESOURCE_COUNT,
+  prompts_count: FULL_REMOTE_PROMPT_COUNT,
   registry: [
     "https://smithery.ai/server/frihet/frihet-mcp",
     "https://registry.modelcontextprotocol.io/?q=io.frihet",
@@ -525,7 +506,7 @@ note: Use the JSON endpoint for programmatic access.
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server with a 157-operation catalogue. Grouped remote tools/list also serves aliases and local discovery names; per-tool metadata reports callability and side effects.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -539,9 +520,13 @@ const WELL_KNOWN_MCP = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: FULL_TOOL_COUNT,
-  resources_count: 11,
-  prompts_count: 10,
+  tools_count: FULL_REMOTE_TOOL_COUNT,
+  catalogue_operations_count: FULL_TOOL_COUNT,
+  alias_tool_names_count: FISCAL_ALIAS_TOOL_COUNT,
+  discovery_tool_names_count: GROUPED_META_TOOL_COUNT,
+  capability_metadata_key: CAPABILITY_META_KEY,
+  resources_count: FULL_REMOTE_RESOURCE_COUNT,
+  prompts_count: FULL_REMOTE_PROMPT_COUNT,
   registry: [
     "https://smithery.ai/server/frihet/frihet-mcp",
     "https://registry.modelcontextprotocol.io/?q=io.frihet",
@@ -554,17 +539,17 @@ const WELL_KNOWN_MCP_CARD = JSON.stringify(buildServerCard({
   name: "io.frihet/erp",
   title: "Frihet ERP",
   version: MCP_SERVER_VERSION,
-  description: "AI-native ERP MCP server — 157 tools for invoicing, expenses, accounting, tax compliance, banking, fiscal compliance, POS, vacation rentals, time tracking, CRM, and HR. VeriFactu certified.",
+  description: "AI-native ERP MCP server with a 157-operation catalogue; aliases, discovery names, callability, and side effects are reported separately.",
   host: "https://mcp.frihet.io",
-  toolCount: FULL_TOOL_COUNT,
-  resourceCount: 11,
-  promptCount: 10,
+  toolCount: FULL_REMOTE_TOOL_COUNT,
+  resourceCount: FULL_REMOTE_RESOURCE_COUNT,
+  promptCount: FULL_REMOTE_PROMPT_COUNT,
 }), null, 2);
 
 // ===========================================================================
 // OpenAI-mode discovery surface (FRIHET_OPENAI_MODE === "true")
 // ---------------------------------------------------------------------------
-// The default docs above advertise the FULL 157-tool server (payroll, e-invoice,
+// The default docs above advertise the full 157-operation catalogue (payroll, e-invoice,
 // VIES, Stay/PMS, POS, fiscal models) and government IDs (NIF/CIF/DNI/passport).
 // OpenAI's reviewer crawls these BEFORE authenticating, so the openai-mcp host
 // must serve a surface consistent with the 53-tool reviewed profile: no regulated  // mcp-refs:ok

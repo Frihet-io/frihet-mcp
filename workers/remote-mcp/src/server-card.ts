@@ -64,8 +64,8 @@ export function buildServerCard(input: ServerCardInput): Record<string, unknown>
     },
     capabilities: {
       tools: { listChanged: true },
-      prompts: { listChanged: true },
-      resources: { listChanged: true },
+      ...(input.promptCount > 0 ? { prompts: { listChanged: true } } : {}),
+      ...(input.resourceCount > 0 ? { resources: { listChanged: true } } : {}),
     },
     authentication: {
       required: true,

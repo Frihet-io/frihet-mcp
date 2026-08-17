@@ -13,12 +13,12 @@ description: >-
 license: MIT
 metadata:
   author: BRTHLS
-  version: 1.16.0
+  version: 1.16.6
   mcp-server: frihet-mcp
   category: business-management
   tags: [erp, invoicing, expenses, tax-compliance, ai-business, spain, mcp]
   documentation: https://docs.frihet.io/desarrolladores/mcp-server
-  support: support@frihet.io
+  support: ayuda@frihet.io
 ---
 
 # Frihet MCP Skill
@@ -66,9 +66,9 @@ Run `/frihet status` — if you see your account info, you're ready.
 | `/frihet webhooks` | Configure automation triggers | `/frihet webhooks` |
 | `/frihet setup` | Guided connection setup | `/frihet setup` |
 
-## MCP Tools (157 total)
+## MCP catalogue (157 canonical operations)
 
-The table below lists the core resource groups. The server exposes **157 tools across 20+ domains** (banking, e-invoicing, HR, payroll, POS, vacation rentals, corporate tax, and more) — see the [README tool catalog](https://github.com/Frihet-io/frihet-mcp#tools-157) for the full list.
+The table below lists the core resource groups. The catalogue contains **157 canonical operations across 20+ domains**; alias and discovery names are profile-specific. See the [README catalogue](https://github.com/Frihet-io/frihet-mcp#catalogue-operations-157) for the full list and capability semantics.
 
 | Resource | Tools | Operations |
 |----------|-------|------------|

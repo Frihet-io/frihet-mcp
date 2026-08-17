@@ -10,7 +10,8 @@ import assert from "node:assert/strict";
 import { buildServerCard, MCP_PROTOCOL_VERSION } from "../server-card.ts";
 
 const VERSION = "1.16.0";
-const FULL_TOOL_COUNT = 157;
+const FULL_REMOTE_TOOL_COUNT = 165;
+const OPENAI_LIVE_TOOL_COUNT = 56;
 
 const card = buildServerCard({
   name: "io.frihet/erp",
@@ -18,8 +19,8 @@ const card = buildServerCard({
   version: VERSION,
   description: "AI-native ERP MCP server.",
   host: "https://mcp.frihet.io",
-  toolCount: FULL_TOOL_COUNT,
-  resourceCount: 11,
+  toolCount: FULL_REMOTE_TOOL_COUNT,
+  resourceCount: 7,
   promptCount: 10,
 });
 
@@ -50,7 +51,12 @@ test("card pins schema, protocol version, docs, and tool count", () => {
   assert.equal(card.$schema, "https://static.modelcontextprotocol.io/schemas/mcp-server-card/v1.json");
   assert.equal(card.protocolVersion, MCP_PROTOCOL_VERSION);
   assert.equal(card.documentationUrl, "https://docs.frihet.io/desarrolladores/mcp-server");
-  assert.equal(card.tools_count, FULL_TOOL_COUNT);
+  assert.equal(card.tools_count, FULL_REMOTE_TOOL_COUNT);
+  assert.deepEqual(card.capabilities, {
+    tools: { listChanged: true },
+    prompts: { listChanged: true },
+    resources: { listChanged: true },
+  });
 });
 
 test("host is respected so the OpenAI-scoped card self-references its own origin", () => {
@@ -60,7 +66,7 @@ test("host is respected so the OpenAI-scoped card self-references its own origin
     version: VERSION,
     description: "Scoped.",
     host: "https://openai-mcp.frihet.io",
-    toolCount: 53,
+    toolCount: OPENAI_LIVE_TOOL_COUNT,
     resourceCount: 0,
     promptCount: 0,
   });
@@ -71,5 +77,8 @@ test("host is respected so the OpenAI-scoped card self-references its own origin
     auth.authorizationServer,
     "https://openai-mcp.frihet.io/.well-known/oauth-authorization-server",
   );
-  assert.equal(scoped.tools_count, 53);
+  assert.equal(scoped.tools_count, OPENAI_LIVE_TOOL_COUNT);
+  assert.deepEqual(scoped.capabilities, {
+    tools: { listChanged: true },
+  });
 });

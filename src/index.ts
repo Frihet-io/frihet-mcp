@@ -34,12 +34,12 @@ const PKG_VERSION: string = (() => {
     return "0.0.0";
   }
 })();
-import { registerAllTools } from "./tools/register-all.js";
-import { registerAllResources } from "./resources/register-all.js";
-import { registerAllPrompts } from "./prompts/register-all.js";
-import { applyOpenAIProfile, OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT, OPENAI_REVIEWED_TOOL_ALLOWLIST } from "./openai-profile.js";
-import { resolveToolMode, applyToolExposureProfile, GROUPED_META_TOOL_COUNT } from "./tool-exposure.js";
-import { applyFiscalAliases } from "./fiscal-aliases.js";
+import { OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT } from "./openai-profile.js";
+import { resolveToolMode, GROUPED_META_TOOL_COUNT } from "./tool-exposure.js";
+import {
+  localMcpSurfaceComposition,
+  registerMcpSurface,
+} from "./server-composition.js";
 import { log } from "./logger.js";
 import { registerShutdownHook } from "./metrics.js";
 import { setTraceContext } from "./observability.js";
@@ -102,38 +102,15 @@ function main(): void {
     version: PKG_VERSION,
     description:
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
-      "Provides 157 tools (including business context, monthly summaries, quarterly taxes, invoice duplication, CRM subcollections, and deposit management), " +
-      "11 resources (7 static + 4 live), and 10 workflow prompts for business management " +
+      "Provides a catalogue of 157 canonical operations; fiscal aliases and optional grouped discovery names are reported separately. " +
+      "The local package serves 11 resources (7 static + 4 API-backed) and 10 workflow prompts " +
       "with full Spanish tax compliance (IVA, IGIC, IPSI).",
   });
 
   const openaiMode = process.env.FRIHET_OPENAI_MODE === "true";
   const toolMode = resolveToolMode();
 
-  // PROFILE COMPOSITION ORDER (both interceptors wrap registerTool):
-  //   1. applyToolExposureProfile FIRST (innermost) — so the 3 discovery
-  //      meta-tools register against the REAL server.registerTool and bypass the
-  //      OpenAI allow-list gate. In allow-list mode it catalogs ONLY the reviewed
-  //      tools, keeping the progressive-disclosure surface == the reviewed 53.
-  //   2. applyOpenAIProfile SECOND (outermost) — a business-tool registration is
-  //      first gated/redacted/annotated/openWorldHint-justified by OpenAI, THEN
-  //      collapsed by the grouped interceptor, so the terse collapsed line is the
-  //      final description and OpenAI's handler redaction survives.
-  // Order only matters when BOTH are active (openai-mcp grouped); openai-only and
-  // grouped-only are unaffected by the swap.
-
-  // Apply grouped tool-exposure profile if enabled (progressive disclosure).
-  // FRIHET_TOOL_MODE=grouped collapses the full tool descriptions into terse
-  // one-liners + adds list_tool_groups / search_tools / describe_tool meta-tools,
-  // so agents load depth on demand instead of a flat 157-tool wall of context.
-  // Default (unset / "full") is byte-identical to current behavior. When OpenAI
-  // mode is also on, pass the reviewed allow-list so the catalog/meta-tools are
-  // pinned to exactly the 53 reviewed tools.
   if (toolMode === "grouped") {
-    applyToolExposureProfile(
-      server,
-      openaiMode ? { allowlist: OPENAI_REVIEWED_TOOL_ALLOWLIST } : undefined,
-    );
     log({
       level: "info",
       message: `Grouped tool-exposure active — tools collapsed to terse summaries, ${GROUPED_META_TOOL_COUNT} discovery meta-tools added (list_tool_groups, search_tools, describe_tool); full depth served on demand`,
@@ -141,9 +118,7 @@ function main(): void {
     });
   }
 
-  // Apply OpenAI-safe profile if enabled (strips sensitive fields, fixes annotations)
   if (openaiMode) {
-    applyOpenAIProfile(server);
     log({
       level: "info",
       message: `OpenAI safety profile active — ${OPENAI_ALLOWED_TOOL_COUNT} tools allowed, prompts hidden, ${OPENAI_EXCLUDED_COUNT} defense-in-depth exclusions, ${OPENAI_EXCLUDED_RESOURCE_COUNT} resources excluded, gov IDs + credentials redacted`,
@@ -151,18 +126,11 @@ function main(): void {
     });
   }
 
-  // Register tools (62 full / 60 in OpenAI mode)
-  registerAllTools(server, client);
-
-  // Fiscal modelo prefix aliases (issue #50) — frihet_modelo_303/130/390/180/347
-  // resolve to the existing get_modelo_* tools, same handler, zero duplication.
-  applyFiscalAliases(server);
-
-  // Register 11 resources (7 static + 4 dynamic via API)
-  registerAllResources(server, client);
-
-  // Register 10 workflow prompts
-  registerAllPrompts(server);
+  registerMcpSurface(
+    server,
+    client,
+    localMcpSurfaceComposition(openaiMode, toolMode === "grouped"),
+  );
 
   // Register shutdown hook to log final metrics summary
   registerShutdownHook();
@@ -170,7 +138,7 @@ function main(): void {
   // Connect via stdio transport
   const transport = new StdioServerTransport();
   server.connect(transport).then(() => {
-    console.error(`[frihet-mcp] v${PKG_VERSION} | 157 tools | https://github.com/Frihet-io/frihet-mcp`);
+    console.error(`[frihet-mcp] v${PKG_VERSION} | capability truth enabled | https://github.com/Frihet-io/frihet-mcp`);
     log({
       level: "info",
       message: "Frihet MCP server running on stdio",

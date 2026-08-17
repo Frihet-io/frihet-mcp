@@ -1,8 +1,6 @@
 # Release Notes — @frihet/mcp-server v1.13.0
 
-> **Draft — do not publish until Viktor approves.**
-> Publishing a GitHub Release on `v1.13.0` re-triggers crawls from PulseMCP, mcp.so, and Glama.
-> Command: `gh release create v1.13.0 --title "v1.13.0 — 151 tools, full ES/EU fiscal compliance" --notes-file docs/RELEASE_NOTES_1.13.0.md`
+> Historical release notes. Not a current release or deployment instruction.
 
 ---
 
@@ -65,17 +63,6 @@ It is the largest single-version surface expansion in the project's history — 
 ### Prompts (10)
 
 `monthly-close`, `onboard-client`, `quarterly-tax-prep`, `overdue-followup`, `new-client-invoice`, `expense-report`, `year-end-close`, `cash-flow-forecast`, `invoice-aging-review`, `expense-batch`
-
-### Why this matters for discoverability
-
-Publishing this release on GitHub re-triggers crawls from:
-- **PulseMCP** — indexes from GitHub releases
-- **mcp.so** — indexes from npm + GitHub
-- **Glama** — indexes from `glama.json` + GitHub
-
-All three currently list stale counts (31 / 52 tools from early versions). A new GH Release pointing at the updated README + `glama.json` clears the undercount.
-
----
 
 ## Installation
 

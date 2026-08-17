@@ -14,7 +14,16 @@ import { provisionOAuthApiKey } from "./oauth-provisioning.js";
 import { resolveOAuthApiKeyUrl } from "./api-url.js";
 import { getLoginPage } from "./login-page.js";
 import { log } from "../../../src/logger.js";
-import { MCP_SERVER_VERSION, FULL_TOOL_COUNT } from "./server-meta.js";
+import {
+  MCP_SERVER_VERSION,
+  FULL_REMOTE_PROMPT_COUNT,
+  FULL_REMOTE_RESOURCE_COUNT,
+  FULL_REMOTE_TOOL_COUNT,
+  FULL_TOOL_COUNT,
+  FISCAL_ALIAS_TOOL_COUNT,
+} from "./server-meta.js";
+import { GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
+import { OPENAI_ALLOWED_TOOL_COUNT } from "../../../src/openai-profile.js";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 
@@ -25,6 +34,8 @@ const app = new Hono<{ Bindings: AuthEnv }>();
 // ---------------------------------------------------------------------------
 
 app.get("/", (c) => {
+  const openai = c.env.FRIHET_OPENAI_MODE === "true";
+  const host = openai ? "https://openai-mcp.frihet.io" : "https://mcp.frihet.io";
   return c.json({
     name: "Frihet MCP Server",
     version: MCP_SERVER_VERSION,
@@ -32,16 +43,25 @@ app.get("/", (c) => {
       "AI-native business management — invoices, expenses, clients, products, quotes",
     docs: "https://docs.frihet.io/desarrolladores/mcp-server",
     openapi: "https://api.frihet.io/openapi.yaml",
-    mcp: "https://mcp.frihet.io/mcp",
+    mcp: `${host}/mcp`,
     status: "https://status.frihet.io",
     auth: {
       type: "oauth2",
-      authorization_server:
-        "https://mcp.frihet.io/.well-known/oauth-authorization-server",
+      authorization_server: `${host}/.well-known/oauth-authorization-server`,
     },
-    tools: FULL_TOOL_COUNT,
-    resources: 11,
-    prompts: 10,
+    tools: openai
+      ? OPENAI_ALLOWED_TOOL_COUNT + GROUPED_META_TOOL_COUNT
+      : FULL_REMOTE_TOOL_COUNT,
+    ...(openai
+      ? { reviewedBusinessOperations: OPENAI_ALLOWED_TOOL_COUNT }
+      : {
+          catalogueOperations: FULL_TOOL_COUNT,
+          aliasNames: FISCAL_ALIAS_TOOL_COUNT,
+          capabilityMetadata: "io.frihet/capability",
+        }),
+    discoveryNames: GROUPED_META_TOOL_COUNT,
+    resources: openai ? 0 : FULL_REMOTE_RESOURCE_COUNT,
+    prompts: openai ? 0 : FULL_REMOTE_PROMPT_COUNT,
   });
 });
 
