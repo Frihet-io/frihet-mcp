@@ -41,6 +41,25 @@ jobs:
       - name: Test
         run: npm test
 
+      # Discovery-artifact truth for the two Workers that publish agents.json
+      # and ai.txt (#145): canonical /es/ legal URLs on BOTH hosts, and no
+      # rate-limit claim that no code enforces. Run as its own step because the
+      # root `npm test` list does not cover workers/, so nothing here executed
+      # this gate before — and an unenforced gate is how /legal/* stayed
+      # published as a 404 on api.frihet.io.
+      #
+      # Invoked directly rather than through the Worker's package script: this
+      # file imports only node: builtins, so it needs no `npm ci` in
+      # workers/remote-mcp. The rest of that suite is still not covered by CI
+      # (pre-existing gap, tracked separately).
+      #
+      # Plain .mjs with an explicit path, deliberately: this job pins Node 20,
+      # which supports neither `--experimental-strip-types` (Node 22.6+) nor
+      # glob arguments to `--test`. The Worker's own `npm test` uses both, which
+      # is fine locally but would fail here.
+      - name: Discovery artifact truth (workers legal URLs + rate-limit claim)
+        run: node --test workers/remote-mcp/src/__tests__/discovery-legal-truth.test.mjs
+
       - name: OpenAI review descriptor freeze
         run: npm run gate:openai-review-descriptor
 
