@@ -51,6 +51,8 @@ import {
   FULL_REMOTE_TOOL_COUNT,
   FULL_TOOL_COUNT,
   FISCAL_ALIAS_TOOL_COUNT,
+  LEGAL_PRIVACY_URL,
+  LEGAL_TERMS_URL,
 } from "./server-meta.js";
 import { buildServerCard } from "./server-card.js";
 import {
@@ -325,13 +327,22 @@ const AGENTS_JSON = JSON.stringify({
     { input: "I just uploaded a receipt photo — categorize it", description: "Scan expense receipt", expectedOutput: "Receipt scanned: €45.50, Restaurant, deductible 50% (IVA 10%), category: meals" },
   ],
   legal: {
-    privacyPolicy: "https://www.frihet.io/en/privacy",
-    termsOfService: "https://www.frihet.io/en/terms",
+    privacyPolicy: LEGAL_PRIVACY_URL,
+    termsOfService: LEGAL_TERMS_URL,
   },
-  rateLimit: {
-    tier: "pro",
-    requestsPerMinute: 600,
-  },
+  // Deliberately no rate-limit field (#145). mcp.frihet.io has no enforced
+  // local limiter — this Worker only passes an upstream 429 through
+  // (auth-handler.ts). The figure previously published here was also wrong on
+  // the tier axis: the only enforced per-minute cap of that size in the fleet
+  // belongs to the BUSINESS tier of api.frihet.io (Frihet-ERP unkeyService
+  // PLAN_RATE_LIMITS), which is double what the advertised tier actually gets.
+  // An agent paces its request budget against whatever this blob says, so a
+  // precise number no code applies is worse than none. Owner decision: publish
+  // nothing here, do NOT substitute a "corrected" value.
+  //
+  // No number appears in this comment on purpose — the gate in
+  // discovery-legal-truth.test.ts forbids the token anywhere in this file, so
+  // the claim cannot creep back as prose or under a renamed field.
 }, null, 2);
 
 // /sitemap.xml — minimal sitemap for mcp.frihet.io
@@ -354,7 +365,7 @@ Allow: /
 
 Trained-for-AI: yes
 Contact: ayuda@frihet.io
-License: https://www.frihet.io/en/terms
+License: ${LEGAL_TERMS_URL}
 
 # AI crawlers — explicitly allowed for training and indexing
 User-agent: GPTBot
@@ -631,10 +642,10 @@ const AGENTS_JSON_OPENAI = JSON.stringify({
     { input: "List my clients", description: "List clients", expectedOutput: "Clients with name, email, phone, and address" },
   ],
   legal: {
-    privacyPolicy: "https://www.frihet.io/en/privacy",
-    termsOfService: "https://www.frihet.io/en/terms",
+    privacyPolicy: LEGAL_PRIVACY_URL,
+    termsOfService: LEGAL_TERMS_URL,
   },
-  rateLimit: { tier: "pro", requestsPerMinute: 600 },
+  // No `rateLimit` field — same reason as the default-host blob above (#145).
 }, null, 2);
 
 // Shared scoped descriptor for /.well-known/mcp and /mcp.json in OpenAI mode
@@ -728,7 +739,7 @@ Allow: /
 
 Trained-for-AI: yes
 Contact: ayuda@frihet.io
-License: https://www.frihet.io/en/terms
+License: ${LEGAL_TERMS_URL}
 
 # Machine-readable surfaces (ChatGPT connector)
 Llms-txt: ${OPENAI_HOST}/llms.txt

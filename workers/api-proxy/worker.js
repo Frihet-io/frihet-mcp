@@ -193,14 +193,29 @@ const AGENTS_JSON = JSON.stringify({
     { input: "List my top 5 clients by revenue", description: "Get client summary", expectedOutput: "Top 5 clients by 2026 YTD revenue: [Acme Corp €8,400, ...]" },
     { input: "I just uploaded a receipt photo — categorize it", description: "Scan expense receipt", expectedOutput: "Receipt scanned: €45.50, Restaurant, deductible 50% (IVA 10%), category: meals" },
   ],
+  // Canonical legal URLs (#145). These were `/legal/privacy` and
+  // `/legal/terms`, which have never been routes on www.frihet.io and return
+  // 404. A bare curl does not reveal that: measured 2026-08-18 it gets 403 from
+  // the WAF on those two dead paths and 200 on the live ones, so the cheap
+  // check looks like WAF noise exactly where the URL is actually broken.
+  // Verifying these needs a browser User-Agent. `/es/*` is what the pages'
+  // `<link rel="canonical">` emits and what `x-default` resolves to.
+  //
+  // This Worker is a single standalone file with no bundler, so it cannot
+  // import the canonical constants in
+  // `workers/remote-mcp/src/server-meta.ts`. The parity assertions in
+  // `workers/remote-mcp/src/__tests__/discovery-legal-truth.test.ts` read that
+  // module as the expected value and fail if these two literals drift from it.
   legal: {
-    privacyPolicy: "https://www.frihet.io/legal/privacy",
-    termsOfService: "https://www.frihet.io/legal/terms",
+    privacyPolicy: "https://www.frihet.io/es/privacy",
+    termsOfService: "https://www.frihet.io/es/terms",
   },
-  rateLimit: {
-    tier: "pro",
-    requestsPerMinute: 600,
-  },
+  // Deliberately no rate-limit field (#145). The figure published here was
+  // unenforced on this surface and wrong on the tier axis: the only enforced
+  // per-minute cap of that size belongs to the BUSINESS tier (Frihet-ERP
+  // unkeyService PLAN_RATE_LIMITS), not the tier this blob advertised. Owner
+  // decision: publish no number rather than a corrected one. No figure appears
+  // in this comment on purpose — the gate forbids the token file-wide.
 }, null, 2);
 
 // /sitemap.xml — minimal sitemap pointing to key machine-readable surfaces
@@ -219,7 +234,7 @@ Allow: /
 
 Trained-for-AI: yes
 Contact: ayuda@frihet.io
-License: https://www.frihet.io/legal/terms
+License: https://www.frihet.io/es/terms
 
 # AI crawlers — explicitly allowed for training and indexing
 User-agent: GPTBot
