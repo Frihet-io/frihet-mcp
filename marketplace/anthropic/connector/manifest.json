@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.frihet/erp",
   "title": "Frihet ERP",
-  "description": "AI-native ERP MCP server — full ES/EU fiscal compliance (VeriFactu/TicketBAI/Facturae) + invoicing, CRM, tax, banking, HR, payroll, period close.",
-  "version": "1.14.5",
+  "description": "AI-native ERP MCP server with a 157-operation catalogue; grouped remote aliases, discovery names, callability, and side effects are reported separately.",
+  "version": "1.16.6",
   "license": "MIT",
   "repository": {
     "url": "https://github.com/Frihet-io/frihet-mcp",
@@ -14,7 +14,7 @@
   "author": {
     "name": "Frihet",
     "url": "https://frihet.io",
-    "email": "hola@frihet.io"
+    "email": "ayuda@frihet.io"
   },
   "remotes": [
     {
@@ -22,8 +22,8 @@
       "url": "https://mcp.frihet.io/mcp",
       "auth": {
         "type": "oauth2",
-        "authorizationUrl": "https://mcp.frihet.io/oauth/authorize",
-        "tokenUrl": "https://mcp.frihet.io/oauth/token",
+        "authorizationUrl": "https://mcp.frihet.io/authorize",
+        "tokenUrl": "https://mcp.frihet.io/token",
         "scopes": ["read", "write"],
         "pkce": true
       }
@@ -33,7 +33,7 @@
     {
       "registryType": "npm",
       "identifier": "@frihet/mcp-server",
-      "version": "1.14.5",
+      "version": "1.16.6",
       "transport": {
         "type": "stdio"
       },
@@ -48,11 +48,6 @@
       ]
     }
   ],
-  "capabilities": {
-    "tools": 157,
-    "resources": 11,
-    "prompts": 10
-  },
   "categories": ["Finance & Accounting", "Business Tools", "ERP", "Tax Compliance"],
   "keywords": [
     "erp", "invoicing", "facturacion", "tax", "verifactu", "ticketbai", "facturae",

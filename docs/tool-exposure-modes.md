@@ -1,6 +1,7 @@
 # Tool exposure modes — depth served on demand
 
-> Status: implemented, opt-in. Default behavior is unchanged.
+> Status: implemented. Grouped description exposure is opt-in; public
+> capability metadata applies to both full profiles.
 > Env flag: `FRIHET_TOOL_MODE` (`full` | `grouped`). Default `full`.
 
 ## The problem
@@ -22,15 +23,14 @@ progressive disclosure.
 
 ## The mechanism
 
-`FRIHET_TOOL_MODE` selects the exposure strategy. It is purely an **exposure
-layer** — it never changes a tool's name, input schema, annotations or handler
-logic.
+`FRIHET_TOOL_MODE` selects the description/discovery strategy. It never changes
+a tool's name, input schema or handler logic. Full public profiles also attach
+conservative capability metadata and correct action annotations where needed.
 
 ### `full` (default)
 
-All tools are registered exactly as before, with their full bilingual
-descriptions and schemas. **Byte-identical to previous releases.** Existing
-clients are unaffected; no opt-out needed.
+Canonical tools and fiscal aliases keep their full bilingual descriptions and
+schemas. Public descriptors also report callability and side-effect truth.
 
 ### `grouped` (opt-in)
 
@@ -51,9 +51,9 @@ Then it adds **three discovery meta-tools** as the entry point:
 | `search_tools(query, group?, limit?)` | Tools matching a free-text query across name/title/summary/group, with their group, summary, read-only flag and input fields. Ranked, with the exact-name match on top. |
 | `describe_tool(name)` | The **full original description** and input fields for one tool, on demand. |
 
-The agent now loads three meta-tool descriptions plus ~157 terse one-liners
-instead of 157 multi-paragraph bilingual blobs, and pulls full depth only for
-the handful of tools it actually needs.
+The grouped remote profile serves three meta-tool descriptions plus 162 terse
+business names (157 canonical operations + 5 fiscal aliases), for 165 names in
+total. It pulls full depth only for the handful of tools it actually needs.
 
 ```
 agent → list_tool_groups()          # "what domains exist?"
@@ -90,12 +90,13 @@ tools that say "invoice" but belong to fiscal/compliance) are pinned via a small
 
 ## Guarantees
 
-- **`full` is unchanged.** Default path applies no interceptor.
-- **No behavior change in `grouped`.** Names, input schemas, annotations and
-  handlers are untouched; only the *description string* the agent loads up front
-  is collapsed. The real tools stay fully invocable.
+- **Operation behavior is unchanged.** Names, input schemas and handlers are
+  preserved. Public capability metadata and action annotation corrections are
+  descriptor truth, not new backend capability.
+- **Grouped mode changes description density.** The description string loaded up
+  front is collapsed; real tools remain directly invocable.
 - **Audited tool count stays 157.** The exposure layer lives in `src/`, not
-  `src/tools/*.ts`, so `npm run audit:mcp-refs` still counts 157 ERP tools. The
+  `src/tools/*.ts`, so `npm run audit:mcp-refs` still counts 157 canonical catalogue operations. The
   three meta-tools are discovery helpers, not ERP tools, and are added only in
   grouped mode.
 - **Composes with `FRIHET_OPENAI_MODE`.** If both are set, the OpenAI allowlist
@@ -109,10 +110,10 @@ depth stays usable inside an agent's context budget as the surface grows.
 
 ## Tests
 
-`src/__tests__/tool-exposure.test.ts` covers: mode resolution; full mode is
-byte-identical (157 tools, no meta-tools, descriptions untouched); grouped mode
-adds 3 meta-tools + a 157-entry catalog and collapses descriptions; names,
-annotations, schemas and handler behavior are preserved; `groupForTool`
-reproduces `FILE_TO_GROUP` for all 157 tools; and each meta-tool's runtime
+`src/__tests__/tool-exposure.test.ts` covers mode resolution and the exposure
+interceptor in isolation: full mode adds no meta-tools; grouped mode adds 3
+discovery names + a 157-entry catalogue and collapses descriptions; names,
+schemas and handler behavior are preserved; `groupForTool`
+reproduces `FILE_TO_GROUP` for all 157 canonical operations; and each discovery tool's runtime
 behavior (`list_tool_groups`, `search_tools` with group filter, `describe_tool`
 including the unknown-name error path).

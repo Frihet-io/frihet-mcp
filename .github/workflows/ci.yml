@@ -44,6 +44,9 @@ jobs:
       - name: OpenAI review descriptor freeze
         run: npm run gate:openai-review-descriptor
 
+      - name: Generated public capability truth
+        run: npm run gate:public-capability-truth
+
       # Version/tool-count drift gate. Scoped to this repo: sister repos
       # (Frihet-ERP/Saas/docs) aren't checked out in CI, so we only assert the
       # package's OWN refs (server.json, README, index.ts, CHANGELOG) match the

@@ -12,7 +12,7 @@
     {
       "name": "frihet-erp",
       "source": "./plugins/frihet-erp",
-      "description": "Connect Cursor to your Frihet ERP — 157 tools for invoicing, expenses, CRM, banking and Spanish/EU fiscal compliance (VeriFactu, TicketBAI, Facturae)."
+      "description": "Connect Cursor to Frihet ERP. The catalogue contains 157 canonical operations for invoicing, expenses, CRM, banking and Spanish/EU fiscal compliance; capability metadata reports runtime status separately."
     }
   ]
 }

@@ -21,8 +21,8 @@
   <a href="https://smithery.ai/servers/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
-  <img src="https://img.shields.io/badge/tools-157-18181b?style=flat&labelColor=09090b" alt="157 tools (+5 fiscal aliases)">
-  <img src="https://img.shields.io/badge/node-%3E%3D18-18181b?style=flat&labelColor=09090b" alt="node >=18">
+  <img src="https://img.shields.io/badge/catalogue-157_operations-18181b?style=flat&labelColor=09090b" alt="157 canonical catalogue operations">
+  <img src="https://img.shields.io/badge/node-%3E%3D20-18181b?style=flat&labelColor=09090b" alt="node >=20">
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
 
@@ -47,7 +47,7 @@
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
 
-> **Tool count:** the package (1.16.6) ships all 157 tools (+5 fiscal aliases), same as the remote endpoint (`mcp.frihet.io`).
+> **Surface truth:** the catalogue contains 157 canonical operations. The local full profile serves those plus 5 fiscal alias names (162 names). The hosted grouped profile also adds 3 local discovery names (165 names). Catalogue membership is not a promise that a backing API is enabled for every workspace.
 
 ---
 
@@ -60,7 +60,7 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-157 tools (+5 fiscal aliases). 11 resources. 10 prompts. Structured output on every tool. Zero boilerplate.
+157 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources; the hosted Worker deliberately serves the 7 static resources, while API-backed workspace resources remain local-profile only.
 
 <!-- v1.12.0-beta.1 — D4-B megasprint: HR (9), payroll (2), onboarding (2), permissions (2), period close (3), webhook test (1) = +19 = 157 tools total -->
 
@@ -222,7 +222,7 @@ Talk to your ERP. These are real prompts, not marketing copy.
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. Most of the 157 tools (+5 fiscal aliases) are CRUD operations over the REST API; the rest are read-only summaries and fiscal/e-invoice actions.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. Most of the 157 canonical operations are CRUD operations over the REST API; the rest are read-only summaries and fiscal/e-invoice actions. Alias and discovery names are counted separately.
 
 **Works great:**
 
@@ -249,7 +249,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ---
 
-## Tools (157)
+## Catalogue operations (157)
 
 ### Invoices (12)
 
@@ -574,13 +574,26 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `period_close` | Close an accounting period (gestor/admin only — TRUST AREA) |
 | `period_reopen` | Reopen a closed period with a mandatory reason (TRUST AREA) |
 
-All 157 tools (+5 fiscal aliases) return **structured output** via `outputSchema` -- typed JSON, not raw text. List tools return paginated results (`{ data, total, limit, offset }`).
+All canonical operations (and their aliases) return **structured output** via `outputSchema` -- typed JSON, not raw text. List response shapes follow their API family; not every list endpoint is paginated.
+
+### Capability and side-effect truth
+
+On the full MCP surfaces, every `tools/list` entry includes `_meta["io.frihet/capability"]`:
+
+- `registered` means the name and handler exist in this server build;
+- `callability` is `api_dependent` (the handler calls the API; deployment, workspace enablement, and authorization still decide), `runtime_checked` (the handler explicitly distinguishes an absent backend from empty data), `deferred`, `unavailable`, or `local`—never an unconditional “available” claim;
+- `writesFrihet`, `externalInteraction`, and `externalSideEffects` distinguish state changes and calls to external entities/providers;
+- MCP action annotations remain the standard source for read-only, destructive, idempotent, and open-world hints.
+
+The ChatGPT/OpenAI host is a separately reviewed surface: 53 reviewed business operations plus 3 discovery names, with 0 prompts and 0 resources. It must not be inferred from the full catalogue.
 
 ---
 
-## Resources (11)
+## Resources
 
 Context the AI can read to make smarter decisions.
+
+The local package serves 11 resources: 7 static references plus 4 API-backed workspace resources. The hosted Worker serves the 7 static resources. The OpenAI-reviewed host serves 0 resources.
 
 **Static** (reference data, no API calls):
 
@@ -588,7 +601,7 @@ Context the AI can read to make smarter decisions.
 |----------|-----|-----------------|
 | API Schema | `frihet://api/schema` | OpenAPI summary: endpoints, auth, rate limits, pagination, error codes |
 | Tax Rates | `frihet://tax/rates` | Tax rates by Spanish fiscal zone: IVA, IGIC, IPSI, EU reverse charge, IRPF |
-| Tax Calendar | `frihet://tax/calendar` | Quarterly filing deadlines: Modelo 303, 130, 390, 420, VeriFactu timeline |
+| Tax Calendar | `frihet://tax/calendar` | Quarterly and annual filing deadlines for the listed Spanish tax models |
 | Expense Categories | `frihet://config/expense-categories` | 8 categories with deductibility rules, IVA treatment, amortization |
 | Invoice Statuses | `frihet://config/invoice-statuses` | Status flow (draft > sent > paid/overdue > cancelled), transition rules, webhook events |
 | Currencies | `frihet://config/currencies` | 40 supported currencies with ISO codes, symbols, decimal places, locale formatting |
@@ -670,10 +683,10 @@ Frihet's differentiator is **depth** — full ES/EU fiscal coverage plus native 
 
 | Mode | Behavior |
 |------|----------|
-| `full` (default) | All tools are exposed with their full descriptions and schemas. **Unchanged from previous releases** — existing setups are unaffected. |
+| `full` (default) | Canonical tools and fiscal aliases are exposed with full descriptions and schemas. Public descriptors add conservative callability and side-effect truth; operation names, schemas and handlers are unchanged. |
 | `grouped` | **Progressive disclosure.** Each tool's description collapses to a one-line `[group] summary — full schema via describe_tool('name')`, and three lightweight discovery tools are added. The agent loads depth only for the tools it actually needs. |
 
-In `grouped` mode the tools are unchanged — same names, same input schemas, same behavior. Only the *up-front context cost* changes. Discovery flows through three meta-tools:
+In `grouped` mode operation names, input schemas and handlers are unchanged. Descriptors also expose the same conservative capability and action truth as the full profile. Discovery flows through three meta-tools:
 
 - **`list_tool_groups()`** — the domain map (invoicing, expenses, fiscal/compliance, banking, CRM, HR/payroll, stay/PMS, POS, intelligence, products, platform) with a one-line blurb and tool count for each.
 - **`search_tools(query)`** — free-text search across tool name, title, summary and group; returns matching tools with their group, summary, read-only flag and input fields. Optional `group` filter and `limit`.
@@ -695,7 +708,7 @@ In `grouped` mode the tools are unchanged — same names, same input schemas, sa
 }
 ```
 
-> This is an opt-in exposure layer only — it never changes a tool's logic, name or behavior, and `full` mode is byte-identical to before. The same interceptor pattern powers the OpenAI-safe profile (`FRIHET_OPENAI_MODE`).
+> Grouped exposure changes description density, not operation behavior. The frozen OpenAI-reviewed profile is composed separately and remains independently gated.
 
 ---
 
@@ -797,7 +810,7 @@ npm run build   # must pass before submitting
 
 | Package | What it is |
 |---------|-----------|
-| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (157 tools + 5 fiscal aliases, 11 resources, 10 prompts) |
+| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (157 canonical operations + 5 alias names; 11 local resources; 10 prompts) |
 | [`@frihet/sdk`](https://github.com/Frihet-io/frihet-sdk) | TypeScript SDK (`frihet.invoices.create()`) |
 | [`frihet`](https://www.npmjs.com/package/frihet) | CLI (`frihet invoices list --status overdue`) |
 | [`n8n-nodes-frihet`](https://www.npmjs.com/package/n8n-nodes-frihet) | n8n community node for workflow automation |
@@ -816,6 +829,7 @@ npm run build   # must pass before submitting
 - [MCP Registry](https://registry.modelcontextprotocol.io/?q=io.frihet) -- Anthropic official registry
 - [Remote endpoint](https://mcp.frihet.io) -- Hosted MCP server (Cloudflare Workers)
 - [OpenAPI spec](https://api.frihet.io/openapi.json) -- Machine-readable API definition
+- [Security policy](./SECURITY.md) -- Private vulnerability reporting guidance
 
 ---
 

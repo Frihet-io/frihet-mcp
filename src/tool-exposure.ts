@@ -1,9 +1,9 @@
 /**
  * Tool-exposure profile for the Frihet MCP server — progressive disclosure.
  *
- * Activated by FRIHET_TOOL_MODE=grouped (env var or Worker binding).
- * Default (unset, or FRIHET_TOOL_MODE=full) leaves the server BYTE-IDENTICAL
- * to today: all 157 tools registered with their full descriptions/schemas.
+ * Activated by FRIHET_TOOL_MODE=grouped (env var or Worker binding). Default
+ * full mode keeps full descriptions/schemas and does not add discovery names;
+ * the outer public composition may still attach capability truth metadata.
  *
  * ── Why ──────────────────────────────────────────────────────────────────
  * Context rot is the 2026 problem: a flat list of 157 tool descriptions,
@@ -26,7 +26,7 @@
  *      description to a single terse "[group] summary — full schema via
  *      describe_tool('name')" line. That is the context saving.
  *   3. Adds three lightweight META-TOOLS as the entry point for discovery:
- *        • list_tool_groups()      — the 9-domain map with per-group counts
+ *        • list_tool_groups()      — the 11-domain map with per-group counts
  *        • search_tools(query)     — fuzzy match → matching tool summaries
  *        • describe_tool(name)     — full original description + input fields
  *
@@ -241,6 +241,10 @@ interface CatalogEntry {
   description: string;
   /** Whether the tool mutates state (from annotations.readOnlyHint). */
   readOnly: boolean;
+  /** Full MCP action annotations, exposed only on the full capability profile. */
+  annotations?: Record<string, boolean>;
+  /** Conservative runtime capability fact, exposed only on the full profile. */
+  capability?: Record<string, unknown>;
   /** Input field names, for quick schema shape without dumping zod. */
   inputFields: string[];
 }
@@ -342,7 +346,13 @@ export function resolveToolMode(
 export function applyToolExposureProfile(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server: any,
-  options?: { allowlist?: ReadonlySet<string> },
+  options?: {
+    allowlist?: ReadonlySet<string>;
+    capabilityTruth?: {
+      metaKey: string;
+      localDiscovery: (name: string) => object;
+    };
+  },
 ): ToolExposureHandle {
   const catalog = new Map<string, CatalogEntry>();
   const groups = new Map<ToolGroupId, string[]>();
@@ -376,6 +386,10 @@ export function applyToolExposureProfile(
     const inputFields = inputSchemaFieldNames(config?.inputSchema);
     const readOnly = config?.annotations?.readOnlyHint === true;
 
+    const annotations = config?.annotations as Record<string, boolean> | undefined;
+    const capability = options?.capabilityTruth
+      ? config?._meta?.[options.capabilityTruth.metaKey] as Record<string, unknown> | undefined
+      : undefined;
     const entry: CatalogEntry = {
       name,
       group,
@@ -383,6 +397,7 @@ export function applyToolExposureProfile(
       summary: firstSentence(fullDescription),
       description: fullDescription,
       readOnly,
+      ...(options?.capabilityTruth ? { annotations, capability } : {}),
       inputFields,
     };
     catalog.set(name, entry);
@@ -421,7 +436,7 @@ export function applyToolExposureProfile(
 
   // Register the meta-tools eagerly. Their handlers close over `catalog`/`groups`
   // which finish populating as the real tools register right after this call.
-  registerMetaTools(originalRegisterTool, handle);
+  registerMetaTools(originalRegisterTool, handle, options?.capabilityTruth);
 
   return handle;
 }
@@ -459,6 +474,10 @@ function registerMetaTools(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   originalRegisterTool: (name: string, config: any, handler: any) => unknown,
   handle: ToolExposureHandle,
+  capabilityTruth?: {
+    metaKey: string;
+    localDiscovery: (name: string) => object;
+  },
 ): void {
   const { catalog, groups } = handle;
 
@@ -475,6 +494,15 @@ function registerMetaTools(
         "[openWorldHint: false — reads the in-process tool catalog only.] " +
         "/ Lista los dominios de herramientas de Frihet ERP con descripción y recuento. Empieza aquí.",
       annotations: META_ANNOTATIONS,
+      ...(capabilityTruth
+        ? {
+            _meta: {
+              [capabilityTruth.metaKey]: capabilityTruth.localDiscovery(
+                "list_tool_groups",
+              ),
+            },
+          }
+        : {}),
       inputSchema: {},
       outputSchema: z
         .object({})
@@ -514,6 +542,15 @@ function registerMetaTools(
         "[openWorldHint: false — reads the in-process tool catalog only.] " +
         "/ Busca herramientas por texto libre. Devuelve coincidencias con grupo, resumen y campos.",
       annotations: META_ANNOTATIONS,
+      ...(capabilityTruth
+        ? {
+            _meta: {
+              [capabilityTruth.metaKey]: capabilityTruth.localDiscovery(
+                "search_tools",
+              ),
+            },
+          }
+        : {}),
       inputSchema: {
         query: z
           .string()
@@ -574,6 +611,8 @@ function registerMetaTools(
           title: e.title,
           summary: e.summary,
           readOnly: e.readOnly,
+          ...(e.annotations ? { annotations: e.annotations } : {}),
+          ...(e.capability ? { capability: e.capability } : {}),
           inputFields: e.inputFields,
           score,
         }));
@@ -600,6 +639,15 @@ function registerMetaTools(
         "[openWorldHint: false — reads the in-process tool catalog only.] " +
         "/ Devuelve la descripción completa de una herramienta por su nombre exacto.",
       annotations: META_ANNOTATIONS,
+      ...(capabilityTruth
+        ? {
+            _meta: {
+              [capabilityTruth.metaKey]: capabilityTruth.localDiscovery(
+                "describe_tool",
+              ),
+            },
+          }
+        : {}),
       inputSchema: {
         name: z
           .string()
@@ -648,6 +696,8 @@ function registerMetaTools(
         group: entry.group,
         title: entry.title,
         readOnly: entry.readOnly,
+        ...(entry.annotations ? { annotations: entry.annotations } : {}),
+        ...(entry.capability ? { capability: entry.capability } : {}),
         inputFields: entry.inputFields,
         description: entry.description,
       });

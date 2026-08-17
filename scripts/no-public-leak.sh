@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# no-public-leak.sh — prevent competitor-comparison + business-secret leaks on
-# the PUBLIC frihet-mcp surface (repo is public + npm + mcp.frihet.io Worker).
-#
-# WHY: the June-2026 Holded cease-&-desist remediation scrubbed the website +
-# docs but MISSED this public MCP repo — a "When to recommend Frihet" worker
-# block listed "Alternatives to Holded, QuickBooks, ..." (comparison + named a
-# C&D claimant) and DISTRIBUTION-ROADMAP.md exposed competitive strategy.
-# This gate makes that class of leak fail CI instead of shipping silently.
+# no-public-leak.sh — prevent competitor-comparison, internal-strategy, and
+# operational submission material from entering this public repo/package.
 #
 # Scope: marketing/strategy prose surfaces plus public functional payroll
 # contracts. Unsupported provider labels must not survive in client, schema,
@@ -52,11 +46,8 @@ if grep -rinE "distribution-roadmap|first-mover advantage|cease.?(and|&).?desist
   note "Business-secret / legal-strategy marker found on public surface — move to a private location."
 fi
 
-# 4. No internal doctrine / internal-tooling markers on prose surfaces (July-2026
-#    leak class: CLAUDE.md carried the "north star" roadmap + moat doctrine, and
-#    AGENTS.md carried internal multi-agent dispatch + LLM-router cost rules).
-#    Public-repo CLAUDE.md/AGENTS.md are docs for EXTERNAL contributors, never
-#    internal operating docs.
+# 4. Public-repo contributor docs must not carry internal doctrine, private
+# operating methods, or internal tooling/cost configuration.
 if grep -rinE "north.?star|moat|SOUL\.md|~/\.claude/bin|litellm|sonnet worker|multi-agent dispatch|doctrina|doctrine" \
      --include="*.md" --include="*.ts" --include="*.js" --include="*.toml" . 2>/dev/null | grep -v node_modules | grep -v "/dist/" | grep -v "scripts/no-public-leak.sh"; then
   note "Internal doctrine / internal-tooling marker found — public repo docs are for external contributors only."
@@ -67,7 +58,26 @@ if git ls-files | grep -inE "strategy|roadmap|secrets?\.md$|decision_spec" ; the
   note "Strategy/secrets-named file tracked in public repo — keep these in a private repo."
 fi
 
+# 6. Marketplace directories are public metadata, never an operational
+# submission runbook. Keep credentials, provider mutations, test-account setup,
+# approval sequencing, and private review narratives out of the tracked tree.
+public_marketplace_docs=(
+  USAGE_EXAMPLES.md
+  marketplace
+  docs/observability.md
+  docs/openai-test-cases.md
+  docs/openai-review-descriptor-freeze.md
+  docs/openai-resubmission-guide.md
+  docs/RELEASE_NOTES_1.13.0.md
+  docs/stay-tools-design.md
+  REGISTRY-SUBMISSION-CHECKLIST.md
+)
+if grep -rinE "DO NOT SUBMIT|OPENAI_TOKEN_GOES_HERE|wrangler (deploy|secret put)|test account at https|submit (first|last)|submission order|awaiting .* final OK|rejection was caused|gh release create|re-triggers crawls|approval needed|night sprint|wave [0-9]+ candidate|--print-current|FRIHET_API_KEY=.*node scripts/test-openai" \
+     "${public_marketplace_docs[@]}" 2>/dev/null; then
+  note "Operational marketplace/submission intelligence found in public docs."
+fi
+
 if [ "$fail" -eq 0 ]; then
-  echo "✓ no-public-leak: clean (no competitor comparison, strategy secret, or internal doctrine on public surface)"
+  echo "✓ no-public-leak: clean (no competitor comparison, strategy secret, internal doctrine, or submission runbook)"
 fi
 exit $fail
