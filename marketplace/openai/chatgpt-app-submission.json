@@ -531,9 +531,9 @@
         "destructiveHint": true
       },
       "justifications": {
-        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "read_only_justification": "This tool deletes or cancels an invoice in the user's Frihet account.",
         "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
-        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+        "destructive_justification": "A draft invoice is deleted from the database and cannot be recovered. An invoice that has already been issued is not destroyed: it is cancelled (status=cancelled) and retained, because Spanish VeriFactu rules forbid breaking the invoice hash chain. The response states which of the two occurred."
       }
     },
     "delete_expense": {
@@ -603,9 +603,9 @@
         "destructiveHint": true
       },
       "justifications": {
-        "read_only_justification": "This tool permanently deletes a record from the user's Frihet account.",
+        "read_only_justification": "This tool deletes or cancels a quote in the user's Frihet account.",
         "open_world_justification": "This tool only communicates with the Frihet API (api.frihet.io). No external requests are made.",
-        "destructive_justification": "This tool permanently deletes the record from the database. This action cannot be undone."
+        "destructive_justification": "A draft quote is deleted from the database and cannot be recovered. A quote that has already been sent or accepted is not destroyed: it is cancelled (status=cancelled) and retained. The response states which of the two occurred."
       }
     },
     "delete_vendor": {

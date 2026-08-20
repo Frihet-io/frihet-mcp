@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, quoteItemOutput, actionResultOutput } from "./shared.js";
+import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, quoteItemOutput, actionResultOutput } from "./shared.js";
 
 const quoteItemSchema = z.object({
   description: z.string().describe("Description of the line item / Descripcion del concepto"),
@@ -225,19 +225,58 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
     {
       title: "Delete Quote",
       description:
-        "Permanently delete a quote by its ID. This action cannot be undone. " +
-        "/ Elimina permanentemente un presupuesto por su ID. Esta accion no se puede deshacer.",
+        "Delete a quote by its ID. Requires confirm=true. " +
+        "Only a DRAFT quote is removed permanently. A sent/accepted/rejected/expired quote is NOT " +
+        "destroyed: the backend CANCELS it (status=cancelled) — the same non-destructive path invoices " +
+        "take — and it stays readable via get_quote. The result reports which happened in `outcome` " +
+        "(\"deleted\" or \"cancelled\"). " +
+        "/ Elimina un presupuesto por su ID. Requiere confirm=true. Solo un presupuesto en BORRADOR se " +
+        "elimina de forma permanente. Uno ya enviado/aceptado/rechazado NO se destruye: se CANCELA " +
+        "(status=cancelled) y sigue consultable con get_quote.",
       annotations: DELETE_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Quote ID / ID del presupuesto"),
+        confirm: z
+          .boolean()
+          .describe("Must be true to confirm deletion / Debe ser true para confirmar la eliminacion"),
       },
-      outputSchema: deleteResultOutput,
+      outputSchema: documentDeleteResultOutput,
     },
-    async ({ id }) => withToolLogging("delete_quote", async () => {
-      await client.deleteQuote(id);
+    async ({ id, confirm }) => withToolLogging("delete_quote", async () => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Error: confirm=true is required to delete a quote. " +
+                "A draft quote is removed permanently; a sent/accepted quote is CANCELLED " +
+                "(status=cancelled) instead and remains in the record. " +
+                "Set confirm=true to proceed. / " +
+                "Se requiere confirm=true para eliminar un presupuesto.",
+            },
+          ],
+          isError: true,
+        };
+      }
+      // 204 → undefined (draft row destroyed). 200 → soft-cancel body. See GAP-12.
+      const outcome = await client.deleteQuote(id);
+      const cancelled = !!outcome && typeof outcome === "object";
+      const body = cancelled ? (outcome as Record<string, unknown>) : {};
+      const previous = typeof body["previousStatus"] === "string" ? ` (was ${body["previousStatus"]})` : "";
       return {
-        content: [mutateContent(`Quote ${id} deleted successfully. / Presupuesto ${id} eliminado correctamente.`)],
-        structuredContent: { success: true, id } as unknown as Record<string, unknown>,
+        content: [mutateContent(
+          cancelled
+            ? `Quote ${id} was CANCELLED, not deleted${previous}: it still exists with status=cancelled. / ` +
+              `Presupuesto ${id} CANCELADO, no eliminado: sigue existiendo con status=cancelled.`
+            : `Quote ${id} deleted permanently (it was a draft). / ` +
+              `Presupuesto ${id} eliminado permanentemente (era un borrador).`,
+        )],
+        structuredContent: {
+          success: true,
+          id,
+          ...body,
+          outcome: cancelled ? "cancelled" : "deleted",
+        } as unknown as Record<string, unknown>,
       };
     }),
   );

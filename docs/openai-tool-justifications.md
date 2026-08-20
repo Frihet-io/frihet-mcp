@@ -42,7 +42,7 @@ All these share the same justifications:
 
 ---
 
-## DELETE TOOLS (9 tools)
+## DELETE TOOLS — hard delete (7 tools)
 
 | Field | Justification |
 |-------|---------------|
@@ -50,7 +50,31 @@ All these share the same justifications:
 | **Open World: No** | This tool only communicates with the Frihet API (api.frihet.io). No external requests are made. |
 | **Destructive: Yes** | This tool permanently deletes the record from the database. This action cannot be undone. |
 
-**Tools:** `delete_invoice`, `delete_expense`, `delete_client`, `delete_client_contact`, `delete_client_note`, `delete_product`, `delete_quote`, `delete_vendor`, `delete_webhook`
+**Tools:** `delete_expense`, `delete_client`, `delete_client_contact`, `delete_client_note`, `delete_product`, `delete_vendor`, `delete_webhook`
+
+---
+
+## DELETE TOOLS — fiscal documents (2 tools)
+
+`delete_invoice` and `delete_quote` do **not** always delete. Spanish VeriFactu
+forbids destroying an issued invoice, so the backend only removes a **draft**;
+anything already sent/paid/accepted is **cancelled** (`status=cancelled`) and
+stays readable via `get_invoice` / `get_quote`. The response reports which of
+the two happened. They are kept in a separate section because the blanket
+"cannot be undone" wording above is false for them.
+
+| Field | Justification |
+|-------|---------------|
+| **Read Only: No** | This tool deletes or cancels a record in the user's Frihet account. |
+| **Open World: No** | This tool only communicates with the Frihet API (api.frihet.io). No external requests are made. |
+| **Destructive: Yes** | A draft document is deleted from the database and cannot be recovered. A document that has already been issued is not destroyed: it is cancelled (status=cancelled) and retained, because Spanish VeriFactu rules forbid breaking the invoice hash chain. |
+
+**Tools:** `delete_invoice`, `delete_quote`
+
+> **Reviewed-descriptor note.** Direct MCP clients additionally require
+> `confirm=true` on both tools. That input is deliberately absent from the
+> ChatGPT surface while the current app review is in flight — see
+> `docs/openai-review-descriptor-freeze.md`.
 
 ---
 

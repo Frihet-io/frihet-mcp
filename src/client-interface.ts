@@ -20,7 +20,12 @@ export interface IFrihetClient {
   getInvoice(id: string): Promise<Record<string, unknown>>;
   createInvoice(data: Record<string, unknown>): Promise<Record<string, unknown>>;
   updateInvoice(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
-  deleteInvoice(id: string): Promise<void>;
+  /**
+   * Resolves to the soft-cancel payload when the backend answered 200 (non-draft
+   * invoice CANCELLED, not destroyed — VeriFactu hash chain), or void/undefined
+   * when it answered 204 (draft really removed). See `FrihetClient.deleteInvoice`.
+   */
+  deleteInvoice(id: string): Promise<Record<string, unknown> | void>;
   searchInvoices(query: string, params?: { limit?: number; offset?: number; after?: string; fields?: string; status?: string; from?: string; to?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
 
   // Expenses
@@ -49,7 +54,8 @@ export interface IFrihetClient {
   getQuote(id: string): Promise<Record<string, unknown>>;
   createQuote(data: Record<string, unknown>): Promise<Record<string, unknown>>;
   updateQuote(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;
-  deleteQuote(id: string): Promise<void>;
+  /** Same 200-cancel / 204-destroy contract as {@link IFrihetClient.deleteInvoice}. */
+  deleteQuote(id: string): Promise<Record<string, unknown> | void>;
 
   // Vendors
   listVendors(params?: { q?: string; limit?: number; offset?: number; after?: string; fields?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
