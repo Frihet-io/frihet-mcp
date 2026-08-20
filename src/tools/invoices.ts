@@ -159,7 +159,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const result = await client.listInvoices({ limit, offset, after, fields, status, from, to, clientId, seriesId });
       const hints = enrichResponse("invoices", "list", result.data);
       return {
-        content: [listContent(formatPaginatedResponse("invoices", result))],
+        content: [listContent(formatPaginatedResponse("invoices", result) + hints)],
         structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
@@ -240,7 +240,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const result = await client.createInvoice(input);
       const hints = enrichResponse("invoices", "create", result);
       return {
-        content: [mutateContent(formatRecord("Invoice created", result))],
+        content: [mutateContent(formatRecord("Invoice created", result) + hints)],
         structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
@@ -282,7 +282,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const result = await client.updateInvoice(id, data);
       const hints = enrichResponse("invoices", "update", result);
       return {
-        content: [mutateContent(formatRecord("Invoice updated", result))],
+        content: [mutateContent(formatRecord("Invoice updated", result) + hints)],
         structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
@@ -342,7 +342,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
               "status=cancelled because VeriFactu forbids destroying an issued invoice. / " +
               `Factura ${id} CANCELADA, no eliminada: sigue existiendo con status=cancelled (VeriFactu).`
             : `Invoice ${id} deleted permanently (it was a draft). / ` +
-              `Factura ${id} eliminada permanentemente (era un borrador).`,
+              `Factura ${id} eliminada permanentemente (era un borrador).` + hints,
         )],
         structuredContent: {
           success: true,
@@ -401,7 +401,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const label = query ? `invoices matching "${query}"` : "invoices";
       const hints = enrichResponse("invoices", "list", result.data);
       return {
-        content: [listContent(formatPaginatedResponse(label, result))],
+        content: [listContent(formatPaginatedResponse(label, result) + hints)],
         structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
@@ -602,7 +602,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       }, idempotencyKey);
       const hints = enrichResponse("invoices", "create", result);
       return {
-        content: [mutateContent(formatRecord("Credit note created", result))],
+        content: [mutateContent(formatRecord("Credit note created", result) + hints)],
         structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),

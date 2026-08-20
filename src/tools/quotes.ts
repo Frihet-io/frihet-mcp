@@ -178,7 +178,7 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
       const result = await client.createQuote(input);
       const hints = enrichResponse("quotes", "create", result);
       return {
-        content: [mutateContent(formatRecord("Quote created", result))],
+        content: [mutateContent(formatRecord("Quote created", result) + hints)],
         structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
