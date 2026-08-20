@@ -393,9 +393,18 @@ describe("GAP-04 — every confirm-gated tool announces confirm where the agent 
  * The reviewed ChatGPT descriptor is frozen mid-review
  * (docs/openai-review-descriptor-freeze.md). Adding a required `confirm` and
  * rewriting the delete prose would have drifted it, so on the OpenAI surface —
- * and ONLY there — `confirm` is stripped from the advertised schema and supplied
- * by `impliedInputValues`, while the first sentence of each description is
- * pinned byte-identical to the approved text.
+ * and ONLY there — `confirm` is stripped from the advertised schema and the
+ * wrapped handler FAIL-CLOSES the affected tools, while the first sentence of
+ * each description is pinned byte-identical to the approved text.
+ *
+ * Earlier this lane used `impliedInputValues: { confirm: true }` to bridge
+ * the stripping. That manufactured user authorization (especially for
+ * `send_invoice`, where ChatGPT does NOT prompt for a destructiveHint: false
+ * tool). The current design refuses any call without an explicit `confirm:
+ * true` and tells the agent the operation is temporarily unavailable on this
+ * surface pending OpenAI app review approval. Pinned by the FAIL CLOSED tests
+ * below and the static guard that bans any reintroduction of
+ * `impliedInputValues`.
  *
  * That divergence is load-bearing and silent: nothing about it is visible in the
  * base tool files. These tests are what stop it from rotting.
@@ -434,7 +443,7 @@ describe("frozen-descriptor divergence — reviewed ChatGPT surface stays byte-i
       needDivergence,
       Object.keys(FROZEN_DIVERGENCE).sort(),
       `a confirm-gated tool entered/left the reviewed OpenAI surface. Every such tool ` +
-        `needs a stripInputFields + impliedInputValues + descriptionOverride entry in ` +
+        `needs a stripInputFields + failClosedTools + descriptionOverride entry in ` +
         `openai-profile.ts, or the frozen descriptor drifts and CI goes red.`,
     );
   });
@@ -479,7 +488,16 @@ describe("frozen-descriptor divergence — reviewed ChatGPT surface stays byte-i
     }
   });
 
-  test("a reviewed tool whose confirm was stripped still WORKS (implied confirm)", async () => {
+  test("FAIL CLOSED: a reviewed tool whose confirm was stripped REFUSES without real confirm", async () => {
+    // The previous design bridged `confirm` stripping with impliedInputValues
+    // ({ confirm: true }), which manufactured user authorization. The current
+    // design FAIL-CLOSES the affected tools on the reviewed surface: any call
+    // without an explicit `confirm: true` is refused with isError BEFORE the
+    // side-effecting handler runs. This test is BOTH the fail-closed gate and
+    // the mutation detector for the old impliedInputValues mechanism — if
+    // someone re-adds `confirm: true` to impliedInputValues, the wrapped
+    // handler would silently authorize the call, the API would be invoked, and
+    // the `calls === []` assertion below would go red.
     for (const name of Object.keys(FROZEN_DIVERGENCE)) {
       const { client, calls } = makeRecordingClient();
       const server = new StubMcpServer();
@@ -487,20 +505,106 @@ describe("frozen-descriptor divergence — reviewed ChatGPT surface stays byte-i
       registerAllTools(asMcp(server), client);
 
       // Exactly what ChatGPT can send: the advertised schema, nothing more.
+      // `confirm` is not in the schema, so the caller cannot send it.
       const result = await server.tools.get(name)!.handler({ id: "test_id_1" });
+
+      assert.equal(
+        result.isError,
+        true,
+        `${name} accepted a call without explicit confirm: impliedInputValues (or any other ` +
+          `mechanism) is manufacturing user authorization. Manufacturing consent is a ` +
+          `hard rule violation.`,
+      );
+      const text = result.content[0]!.text;
+      assert.match(
+        text,
+        /confirm/i,
+        `${name} failure must name confirm so the agent can recover`,
+      );
+      assert.match(
+        text,
+        /(temporarily|unavailable|review|approval)/i,
+        `${name} failure must explain the temporary disposition (ChatGPT surface pending ` +
+          `OpenAI app review)`,
+      );
+      assert.deepEqual(
+        calls,
+        [],
+        `${name} must NOT reach the side-effecting handler on the reviewed surface ` +
+          `(called: ${calls.join(",")}). Implied consent is forbidden.`,
+      );
+    }
+  });
+
+  test("FAIL CLOSED: explicit confirm:true is treated as proven consent (defense-in-depth)", async () => {
+    // The schema strips `confirm` from the advertised input, so ChatGPT can
+    // never send it. This test exercises the defense-in-depth path: if a
+    // caller (or a future bypass) supplies `confirm: true` explicitly, the
+    // gate must let it through. The recorded client is invoked exactly once
+    // (the side-effecting handler runs). If a future regression tightens the
+    // gate so far that even an explicit `confirm: true` is refused, this
+    // test catches it.
+    for (const name of Object.keys(FROZEN_DIVERGENCE)) {
+      const { client, calls } = makeRecordingClient();
+      const server = new StubMcpServer();
+      applyOpenAIReviewProfiles(server);
+      registerAllTools(asMcp(server), client);
+
+      const result = await server.tools.get(name)!.handler({ id: "test_id_1", confirm: true });
 
       assert.notEqual(
         result.isError,
         true,
-        `${name} refuses every ChatGPT call: confirm was stripped from the schema without a ` +
-          `matching impliedInputValues entry, so the guard can never be satisfied there.`,
+        `${name} refused an explicit confirm:true — proven consent must be honored. ` +
+          `(called: ${calls.join(",")})`,
       );
-      assert.equal(
-        calls.length,
-        1,
-        `${name} never reached the API on the reviewed surface (called: ${calls.join(",")})`,
+      assert.ok(
+        calls.length >= 1,
+        `${name} never reached the side-effecting handler on an explicit confirm:true ` +
+          `(called: ${calls.join(",")})`,
       );
     }
+  });
+
+  test("NO impliedInputValues code pattern remains in openai-profile.ts (static guard)", () => {
+    // Regression tripwire: the old mechanism used
+    //   impliedInputValues: { delete_invoice: { confirm: true }, … }
+    // to manufacture consent. If anyone re-adds that exact code pattern —
+    // a property assignment whose object value contains `confirm: true` —
+    // this test goes red. It is deliberately tighter than a name match: it
+    // only fires on the actual code-level shape that would re-introduce the
+    // bug, so explanatory comments in the new code (which mention the old
+    // design) are not flagged.
+    const src = readRepoFile("src/openai-profile.ts");
+    // Code-level pattern: `impliedInputValues: {` followed (within the same
+    // object literal, up to the first balanced `}`) by a `confirm: true`
+    // entry. We allow nested braces by using a depth counter instead of a
+    // single regex.
+    const start = src.search(/impliedInputValues\s*:\s*\{/);
+    if (start === -1) return; // name not present at all — pass
+    let depth = 0;
+    let i = src.indexOf("{", start);
+    let end = -1;
+    for (; i < src.length; i++) {
+      const ch = src[i];
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end === -1) return; // unbalanced — let the parser deal with it
+    const block = src.slice(start, end + 1);
+    assert.equal(
+      /confirm\s*:\s*true/.test(block),
+      false,
+      `openai-profile.ts ships an impliedInputValues code block that contains ` +
+        `confirm:true: \`${block}\`. Manufacturing user authorization is a hard ` +
+        `rule violation. Re-introducing this is a fail-closed test failure.`,
+    );
   });
 
   test("describe_tool carries the correction the frozen first sentence cannot", async () => {
@@ -511,11 +615,24 @@ describe("frozen-descriptor divergence — reviewed ChatGPT surface stays byte-i
       const payload = JSON.parse(
         (await describe_.handler({ name })).content[0]!.text,
       ) as { description?: string };
+      const desc = payload.description ?? "";
       assert.match(
-        payload.description ?? "",
+        desc,
         mustSay,
         `describe_tool('${name}') is the ONLY place the reviewed surface can tell the truth ` +
           `(tools/list is frozen). Its description must match ${mustSay}.`,
+      );
+      // The full description (served by describe_tool, not frozen) must also
+      // explain the temporary disposition: this tool is FAIL-CLOSED on the
+      // reviewed ChatGPT surface pending OpenAI app review. Without this the
+      // agent has no prose basis to recover from the isError returned by the
+      // fail-closed gate.
+      assert.match(
+        desc,
+        /(temporarily|unavailable|review|approval)/i,
+        `describe_tool('${name}') must explain the temporary disposition (ChatGPT surface ` +
+          `pending OpenAI app review). Without it, the agent has no prose basis to recover ` +
+          `from the isError returned by the fail-closed gate.`,
       );
     }
   });

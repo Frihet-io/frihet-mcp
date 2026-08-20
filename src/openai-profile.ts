@@ -48,13 +48,25 @@ interface OpenAIProfile {
   /** Per-tool input fields to remove from schema */
   stripInputFields: Record<string, string[]>;
   /**
-   * Values supplied to the handler on the client's behalf for inputs that were
-   * removed by {@link stripInputFields}. Without this, stripping a REQUIRED
-   * field turns the tool into a permanent error on the reviewed surface.
-   * An explicitly-sent value always wins (defence in depth — the field is not
-   * in the advertised schema, so one should never arrive).
+   * Tools whose `confirm` field is required on the base surface but stripped
+   * from the reviewed OpenAI schema. The wrapped handler FAIL-CLOSES these on
+   * the reviewed surface: any call without an explicit `confirm: true` is
+   * refused with isError BEFORE the side-effecting handler runs. Direct MCP
+   * clients are unaffected — `confirm` stays required and enforced there.
+   *
+   * Why not supply an implied `confirm: true` (the previous design)? Doing so
+   * manufactures user authorization: the agent never confirms, the tool never
+   * prompts (especially for `send_invoice`, where ChatGPT does NOT show a
+   * destructive-action prompt), and the call goes through. The honest
+   * alternative is to refuse the call and tell the user the operation is
+   * temporarily unavailable on this surface until the ongoing OpenAI app
+   * review approves a descriptor that exposes `confirm`.
+   *
+   * The frozen first sentence of each `descriptionOverrides[name]` is a byte
+   * contract with the snapshot fixture; the temporary-disposition text lives
+   * in the sentences AFTER it (served by describe_tool, not frozen).
    */
-  impliedInputValues: Record<string, Record<string, unknown>>;
+  failClosedTools: ReadonlySet<string>;
   /**
    * Per-tool outputSchema replacements. Used to hold the reviewed descriptor at
    * the exact shape OpenAI approved while the base tool widens its output for
@@ -217,6 +229,15 @@ const PROFILE: OpenAIProfile = {
     //
     // Do not "tidy" the first sentence of any of these three. It is a byte
     // contract with src/__tests__/fixtures/openai-review-descriptor.snapshot.json.
+    //
+    // As of the fail-closed remediation, each of these three is also wrapped
+    // by the fail-closed gate (PROFILE.failClosedTools): calls on the reviewed
+    // surface without an explicit `confirm: true` are refused with isError
+    // BEFORE the side-effecting handler runs. The temporary-disposition text
+    // below is appended AFTER the first sentence so it reaches describe_tool
+    // (the call ChatGPT makes before invoking) without disturbing the frozen
+    // first sentence.
+    //
     // Full rationale + closing conditions: docs/openai-review-descriptor-freeze.md
     // § "Deliberate divergence — truth-in-descriptions (2026-08-08)".
     delete_invoice:
@@ -226,9 +247,18 @@ const PROFILE: OpenAIProfile = {
       "(status=cancelled) so the VeriFactu hash chain stays intact, and it remains readable " +
       "via get_invoice. The response states which of the two happened — report that to the " +
       "user rather than assuming the record is gone. " +
+      "TEMPORARY DISPOSITION (reviewed ChatGPT surface only): this tool is " +
+      "currently unavailable on the ChatGPT surface pending the ongoing OpenAI app " +
+      "review. The `confirm` field is intentionally NOT exposed here to avoid " +
+      "manufacturing user consent, and any call without an explicit `confirm: true` " +
+      "is refused with isError before the side-effecting handler runs. Use the " +
+      "Frihet app or a direct MCP client (Claude, Cursor, Cline…) to invoke it. " +
       "/ IMPORTANTE: solo se elimina una factura en BORRADOR. Una factura emitida/pagada NO " +
       "se destruye: se CANCELA (status=cancelled) para preservar la cadena de hash VeriFactu " +
-      "y sigue consultable con get_invoice.",
+      "y sigue consultable con get_invoice. NO DISPONIBLE TEMPORALMENTE en la superficie " +
+      "ChatGPT revisada hasta que la revision de OpenAI apruebe un descriptor que declare " +
+      "confirm; cualquier llamada sin confirm:true se rechaza con isError antes de tocar el " +
+      "handler. Usa la app de Frihet o un cliente MCP directo (Claude, Cursor, Cline…).",
 
     delete_quote:
       "Permanently delete a quote by its ID. " +
@@ -236,18 +266,39 @@ const PROFILE: OpenAIProfile = {
       "sent/accepted/rejected/expired is NOT destroyed: the backend CANCELS it " +
       "(status=cancelled) and it remains readable via get_quote. The response states which " +
       "of the two happened — report that to the user rather than assuming the record is gone. " +
+      "TEMPORARY DISPOSITION (reviewed ChatGPT surface only): this tool is " +
+      "currently unavailable on the ChatGPT surface pending the ongoing OpenAI app " +
+      "review. The `confirm` field is intentionally NOT exposed here to avoid " +
+      "manufacturing user consent, and any call without an explicit `confirm: true` " +
+      "is refused with isError before the side-effecting handler runs. Use the " +
+      "Frihet app or a direct MCP client (Claude, Cursor, Cline…) to invoke it. " +
       "/ IMPORTANTE: solo se elimina un presupuesto en BORRADOR. Uno ya enviado/aceptado NO " +
-      "se destruye: se CANCELA (status=cancelled) y sigue consultable con get_quote.",
+      "se destruye: se CANCELA (status=cancelled) y sigue consultable con get_quote. " +
+      "NO DISPONIBLE TEMPORALMENTE en la superficie ChatGPT revisada hasta que la revision " +
+      "de OpenAI apruebe un descriptor que declare confirm; cualquier llamada sin " +
+      "confirm:true se rechaza con isError antes de tocar el handler. Usa la app de Frihet " +
+      "o un cliente MCP directo (Claude, Cursor, Cline…).",
 
     send_invoice:
       "Send an invoice to the client via email using the client's stored email address. " +
       "The invoice must exist and should not already be cancelled. " +
       "This delivers mail to a third party outside the workspace and CANNOT be recalled — " +
       "confirm with the user before calling it. " +
+      "TEMPORARY DISPOSITION (reviewed ChatGPT surface only): this tool is " +
+      "currently unavailable on the ChatGPT surface pending the ongoing OpenAI app " +
+      "review. ChatGPT does not prompt for confirmation on a destructiveHint: false " +
+      "tool, and the `confirm` field is intentionally NOT exposed here to avoid " +
+      "manufacturing user consent. Any call without an explicit `confirm: true` " +
+      "is refused with isError before the side-effecting handler runs. Use the " +
+      "Frihet app or a direct MCP client (Claude, Cursor, Cline…) to invoke it. " +
       "[openWorldHint: true — triggers email delivery to the client's external email address " +
       "via Frihet's transactional email service] " +
       "/ Envia una factura al cliente por email usando el email almacenado del cliente. " +
-      "Llega a un tercero y no se puede anular: confirma con el usuario antes de llamarla.",
+      "Llega a un tercero y no se puede anular: confirma con el usuario antes de llamarla. " +
+      "NO DISPONIBLE TEMPORALMENTE en la superficie ChatGPT revisada hasta que la revision " +
+      "de OpenAI apruebe un descriptor que declare confirm; cualquier llamada sin " +
+      "confirm:true se rechaza con isError antes de tocar el handler. Usa la app de Frihet " +
+      "o un cliente MCP directo (Claude, Cursor, Cline…).",
 
     send_quote:
       "Send a quote to the client via email using the client's stored email address. " +
@@ -303,28 +354,31 @@ const PROFILE: OpenAIProfile = {
     // ── FROZEN-DESCRIPTOR DIVERGENCE ────────────────────────────────
     // `confirm` is a NEW required input on the base tools. Adding it to the
     // reviewed inputSchema would break the frozen descriptor mid-review, so it
-    // is removed here and supplied by impliedInputValues below.
+    // is removed here. Direct MCP clients (Claude, Cursor, Cline…) keep the
+    // guard — `confirm` stays required and is enforced by the tool handler.
     //
-    // What actually protects the user on each surface:
-    //   • direct MCP clients (Claude, Cursor, Cline…) — no destructive-action
-    //     UI exists, so `confirm` IS the protection. It stays required there.
-    //   • ChatGPT — delete_invoice/delete_quote carry destructiveHint: true, so
-    //     the client prompts the user before invoking.
-    //   • send_invoice carries destructiveHint: false / openWorldHint: true, so
-    //     ChatGPT does NOT prompt. That gap is NOT closed by this divergence and
-    //     is recorded as open in docs/openai-review-descriptor-freeze.md.
+    // On the reviewed ChatGPT surface, removing the field without supplying a
+    // value used to be bridged by impliedInputValues below; that manufactured
+    // user authorization (especially for `send_invoice`, where ChatGPT does
+    // NOT prompt before invoking a destructiveHint: false tool). The new
+    // design FAIL-CLOSES the affected tools on the reviewed surface: any call
+    // without an explicit `confirm: true` is refused with isError before the
+    // side-effecting handler runs. See PROFILE.failClosedTools and the wrapped
+    // handler below.
     delete_invoice: ["confirm"],
     delete_quote:   ["confirm"],
   },
 
-  // ── Implied inputs for stripped-but-required fields ────────────────
-  // Stripping a REQUIRED field without supplying it makes the tool a permanent
-  // error on the reviewed surface. Pinned by the divergence tests.
-  impliedInputValues: {
-    delete_invoice: { confirm: true },
-    delete_quote:   { confirm: true },
-    send_invoice:   { confirm: true },
-  },
+  // ── Tools that FAIL CLOSED on the reviewed surface ────────────────
+  // `confirm` is required on the base surface for these three, but the field
+  // is stripped from the reviewed inputSchema. To prevent manufacturing
+  // consent (the previous design supplied `confirm: true` via
+  // impliedInputValues), the wrapped handler refuses any call that does not
+  // carry an explicit `confirm: true` in the input. The frozen first sentence
+  // of each `descriptionOverrides[name]` is unchanged; the temporary-
+  // disposition text is appended AFTER it, served only by describe_tool
+  // (which is not frozen).
+  failClosedTools: new Set(["delete_invoice", "delete_quote", "send_invoice"]),
 
   // ── Output schemas held at the reviewed shape ──────────────────────
   // delete_invoice/delete_quote widened their base output to `documentDelete-
@@ -575,12 +629,44 @@ export function applyOpenAIProfile(server: any): void {
       config.outputSchema = stripSensitiveOutputSchema(config.outputSchema, fieldsToRedact);
     }
 
-    // 5. Wrap handler to redact sensitive output fields, and to re-supply any
-    // REQUIRED input that step 4 removed from the advertised schema.
-    const implied = PROFILE.impliedInputValues[name];
+    // 5. Wrap handler to redact sensitive output fields, and to FAIL CLOSED
+    //    on tools whose required `confirm` was stripped from the advertised
+    //    schema. The fail-closed gate refuses any call without an explicit
+    //    `confirm: true` BEFORE the side-effecting handler runs, so the user
+    //    is never silently authorized. Direct MCP clients are unaffected
+    //    (the field is not stripped there and the base tool still requires it).
+    const isFailClosed = PROFILE.failClosedTools.has(name);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const wrappedHandler = async (input: any) => {
-      const result = await handler(implied ? { ...implied, ...input } : input);
+      if (isFailClosed && input?.confirm !== true) {
+        // Defense-in-depth: the schema already strips `confirm` from the
+        // advertised input, so ChatGPT cannot send it. This gate is for any
+        // future path that bypasses the SDK validation. We treat the ABSENCE
+        // of an explicit `confirm: true` as "no proven consent" and refuse.
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text:
+                `Error: ${name} requires explicit user confirmation, but the ` +
+                `confirm input is intentionally NOT exposed on the reviewed ChatGPT ` +
+                `surface pending the ongoing OpenAI app review. This operation is ` +
+                `temporarily unavailable here. Use the Frihet app or a direct MCP ` +
+                `client (Claude, Cursor, Cline…) to invoke it. / ` +
+                `Esta operacion requiere confirmacion explicita, pero la entrada ` +
+                `confirm NO esta expuesta en la superficie ChatGPT revisada hasta ` +
+                `que la revision de OpenAI apruebe un descriptor que la declare. ` +
+                `Operacion no disponible temporalmente en esta superficie. Usa la ` +
+                `app de Frihet o un cliente MCP directo (Claude, Cursor, Cline…).`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Pass the caller's input through unchanged. We never inject a synthetic
+      // `confirm: true` — implied consent is the bug we just removed.
+      const result = await handler(input ?? {});
 
       // Redact structuredContent (programmatic output)
       if (result.structuredContent) {

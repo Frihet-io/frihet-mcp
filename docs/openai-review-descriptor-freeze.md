@@ -104,13 +104,15 @@ Fixing that on the base tools changes the description *and* adds a required
 review has been in flight since July. Refreshing the snapshot needs owner
 approval; shipping nothing leaves the false prose live on every surface.
 
-The resolution keeps both invariants:
+The resolution keeps both invariants, with a hard rule that the reviewed surface
+MUST NOT manufacture user authorization:
 
-| Surface | Description | `confirm` |
-|---------|-------------|-----------|
-| Direct MCP (Claude, Cursor, Cline, npm, `mcp.frihet.io`) | corrected | **required** |
-| Reviewed ChatGPT (`tools/list`) | byte-identical to the fixture | absent from the schema |
-| Reviewed ChatGPT (`describe_tool`) | **corrected** | n/a |
+| Surface | Description | `confirm` | Behaviour on invocation |
+|---------|-------------|-----------|------------------------|
+| Direct MCP (Claude, Cursor, Cline, npm, `mcp.frihet.io`) | corrected | **required** | enforced by tool handler |
+| Reviewed ChatGPT (`tools/list`) | byte-identical to the fixture (first sentence) | absent from the schema | n/a |
+| Reviewed ChatGPT (`describe_tool`) | corrected + temporary-disposition note | n/a | n/a |
+| Reviewed ChatGPT (call) | n/a | absent | **FAIL CLOSED** — isError unless explicit `confirm: true` |
 
 How it works — all in `src/openai-profile.ts`:
 
@@ -121,38 +123,57 @@ How it works — all in `src/openai-profile.ts`:
    correction lives in those later sentences and is served by `describe_tool`,
    which the model calls before invoking and which the freeze does not cover.
 2. **`stripInputFields`** removes `confirm` from the three reviewed schemas.
-3. **`impliedInputValues`** supplies `confirm: true` to the handler on the
-   reviewed surface. Without it, stripping a *required* field would make each
-   tool a permanent input-validation error in ChatGPT.
+3. **`failClosedTools`** lists the three reviewed tools whose `confirm` was
+   stripped. The wrapped handler refuses any call without an explicit
+   `confirm: true` BEFORE the side-effecting handler runs, returning isError
+   with a message that names the operation as "temporarily unavailable on this
+   surface pending the ongoing OpenAI app review". The agent has a prose basis
+   to recover (or to suggest the Frihet app / a direct MCP client).
 4. **`outputSchemaOverrides`** holds `delete_invoice` / `delete_quote` at the
    approved `deleteResultOutput` shape; the base tools widened to
    `documentDeleteResultOutput` (which carries `outcome: deleted | cancelled`).
 
-Why the reviewed surface is not left unprotected: `delete_invoice` and
-`delete_quote` carry `destructiveHint: true`, so ChatGPT prompts the user before
-invoking them. `confirm` exists for direct MCP clients, which have no such UI.
+The fail-closed gate replaces the earlier `impliedInputValues: { confirm: true }`
+bridge. That mechanism manufactured user authorization — the agent never
+confirmed, the tool never prompted (especially for `send_invoice`, which carries
+`destructiveHint: false / openWorldHint: true` and so does NOT trigger a
+ChatGPT destructive-action prompt), and the call went through. Manufacturing
+consent is a hard rule violation. Temporary unavailability is the honest
+alternative: refuse the call, tell the agent why, and let the user pick a
+surface where `confirm` is enforceable (Frihet app, direct MCP).
+
+Direct MCP clients are unaffected: the `confirm` field is not stripped there
+(it stays required and enforced by the tool handler). The change is scoped to
+the OpenAI profile.
 
 ### Still open after this divergence
 
-- **`send_invoice` has `destructiveHint: false` and `openWorldHint: true`.**
-  ChatGPT does **not** prompt for it, and `confirm` is stripped there, so on the
-  reviewed surface a send can be triggered with no confirmation at any layer.
-  Correcting the annotation would itself drift the frozen descriptor. This gap
-  is **not** closed by this divergence.
 - Eleven other risky tools ship with no confirm guard; six of them are inside
   the frozen descriptor. They are enumerated in `UNGATED_RISK_DEBT` in
   `src/__tests__/truth-in-descriptions.test.ts`, which fails if the list grows.
+  Of those, the ones exposed on the reviewed ChatGPT surface (delete_client,
+  delete_client_contact, delete_client_note, delete_product, delete_vendor,
+  delete_webhook, frihet_portal_domain_remove, send_quote, send_einvoice) are
+  also fail-closed candidates for a future remediation: the same manufacturing-
+  consent concern applies if a future change adds a required `confirm` to their
+  base schemas. They are out of scope for this lane.
+- `send_invoice` is now fail-closed on the reviewed surface (not just an open
+  gap). The previous "ChatGPT does not prompt for confirmation" concern is
+  resolved by the gate; the temporary disposition is documented in
+  `describe_tool` and in the isError message.
 
 ### Closing conditions
 
 When the current review completes, the owner should approve a delta that folds
 the corrected prose and the `confirm` input into the reviewed descriptor, then
-delete all four mechanisms above along with `FROZEN_DIVERGENCE` in
-`src/__tests__/truth-in-descriptions.test.ts`. Until then the divergence is
-pinned by that test block: the composed description is compared to the fixture,
-`confirm` is asserted required on the base surface and absent on the reviewed
-one, and the reviewed tools are invoked with only their advertised inputs to
-prove `impliedInputValues` keeps them working.
+remove `failClosedTools` and the fail-closed branch from the wrapped handler,
+restore the `confirm` field on the reviewed schemas, and delete
+`FROZEN_DIVERGENCE` in `src/__tests__/truth-in-descriptions.test.ts`. Until then
+the divergence is pinned by that test block: the composed description is
+compared to the fixture, `confirm` is asserted required on the base surface and
+absent on the reviewed one, and the reviewed tools are invoked with only their
+advertised inputs to prove the fail-closed gate refuses them without
+explicit `confirm: true`.
 
 ## Approved resubmission delta — 2026-08-03
 
