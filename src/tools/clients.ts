@@ -113,7 +113,7 @@ export function registerClientTools(server: McpServer, client: IFrihetClient): v
       const hints = enrichResponse("clients", "create", result);
       return {
         content: [mutateContent(formatRecord("Client created", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );

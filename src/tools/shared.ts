@@ -253,18 +253,29 @@ export function mutateContent(text: string): AnnotatedTextContent {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Contextual enrichment — _suggestions and _warnings                 */
+/*  Contextual enrichment — text appended to `content`, not structuredContent */
 /* ------------------------------------------------------------------ */
 
 /**
- * Adds contextual suggestions and warnings to tool responses.
- * Helps AI agents know what to do next without guessing.
+ * Returns agent-facing suggestions and warnings for a tool call, formatted
+ * as plain text to be APPENDED to the human-readable `content` block.
+ *
+ * Why text, not structured fields: `structuredContent` is the strict
+ * outputSchema contract. Spreading `{ _suggestions, _warnings }` into
+ * structuredContent would make them undeclared enrichment (Inspector /
+ * conformance failures, drift in the OpenAI reviewed surface's frozen
+ * snapshot). The hints are agent-facing and deterministic from the
+ * emitted data, so they belong in the text the model reads, not in the
+ * JSON the schema validates. Pinned by
+ * src/__tests__/paginated-strict-output.test.ts (ERP #1580): the strict
+ * contract test asserts structuredContent never carries the old
+ * `_suggestions` / `_warnings` keys.
  */
 export function enrichResponse(
   resource: string,
   operation: string,
   data: unknown,
-): { _suggestions?: string[]; _warnings?: string[] } {
+): string {
   const suggestions: string[] = [];
   const warnings: string[] = [];
 
@@ -349,10 +360,17 @@ export function enrichResponse(
     warnings.push("This action cannot be undone / Esta accion no se puede deshacer");
   }
 
-  return {
-    ...(suggestions.length > 0 ? { _suggestions: suggestions } : {}),
-    ...(warnings.length > 0 ? { _warnings: warnings } : {}),
-  };
+  if (suggestions.length === 0 && warnings.length === 0) return "";
+  const lines: string[] = [];
+  if (warnings.length > 0) {
+    lines.push("Warnings:");
+    for (const w of warnings) lines.push(`  - ${w}`);
+  }
+  if (suggestions.length > 0) {
+    lines.push("Suggested next steps:");
+    for (const s of suggestions) lines.push(`  - ${s}`);
+  }
+  return "\n" + lines.join("\n");
 }
 
 /* ------------------------------------------------------------------ */
@@ -385,6 +403,15 @@ export function paginatedOutput<T extends z.ZodObject>(
   // so they keep the item schema's own required contract (an `{}` row there is
   // an API regression the schema must catch, not tolerate).
   const rowSchema = opts.projectable ? itemSchema.partial() : itemSchema;
+  // Canonical envelope contract: the emitted `structuredContent` of every
+  // paginated tool is exactly this object. The MCP SDK validates the runtime
+  // value against this schema on every call; anything not declared here is
+  // an Inspector/conformance failure. Pinned by
+  // src/__tests__/paginated-strict-output.test.ts (ERP #1580). The
+  // OpenAI reviewed surface's frozen snapshot (`openai-review-descriptor`)
+  // is a byte contract on this shape, so adding a field here would drift
+  // the snapshot — the right place for agent-facing hints is the `content`
+  // text block, not `structuredContent` (see enrichResponse).
   return z.object({
     data: z.array(rowSchema),
     total: z.number(),

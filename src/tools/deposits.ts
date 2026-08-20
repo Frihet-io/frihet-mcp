@@ -55,7 +55,7 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
       const hints = enrichResponse("deposits", "list", result.data);
       return {
         content: [listContent(formatPaginatedResponse("deposits", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -125,7 +125,7 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
       const hints = enrichResponse("deposits", "create", result);
       return {
         content: [mutateContent(formatRecord("Deposit created", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -185,7 +185,7 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
       const hints = enrichResponse("deposits", "delete", { id });
       return {
         content: [mutateContent(`Deposit ${id} deleted successfully. / Deposito ${id} eliminado correctamente.`)],
-        structuredContent: { success: true, id, ...hints } as unknown as Record<string, unknown>,
+        structuredContent: { success: true, id } as unknown as Record<string, unknown>,
       };
     }),
   );

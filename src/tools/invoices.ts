@@ -160,7 +160,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const hints = enrichResponse("invoices", "list", result.data);
       return {
         content: [listContent(formatPaginatedResponse("invoices", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -241,7 +241,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const hints = enrichResponse("invoices", "create", result);
       return {
         content: [mutateContent(formatRecord("Invoice created", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -283,7 +283,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const hints = enrichResponse("invoices", "update", result);
       return {
         content: [mutateContent(formatRecord("Invoice updated", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -349,7 +349,6 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           id,
           ...body,
           outcome: cancelled ? "cancelled" : "deleted",
-          ...hints,
         } as unknown as Record<string, unknown>,
       };
     }),
@@ -403,7 +402,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const hints = enrichResponse("invoices", "list", result.data);
       return {
         content: [listContent(formatPaginatedResponse(label, result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -604,7 +603,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const hints = enrichResponse("invoices", "create", result);
       return {
         content: [mutateContent(formatRecord("Credit note created", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
