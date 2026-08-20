@@ -401,6 +401,31 @@ export const deleteResultOutput = z.object({
 });
 
 /**
+ * Schema for deletes of FISCAL DOCUMENTS (invoices, quotes) — the only two
+ * resources where "delete" is not always a delete.
+ *
+ * The backend refuses to destroy a non-draft invoice/quote (VeriFactu hash
+ * chain) and soft-CANCELS it instead, distinguishing the outcomes on the wire:
+ * 204 = row destroyed, 200 + body = document kept with status=cancelled
+ * (erp-main publicApi.ts `deleteResource`). `outcome` is what lets an agent
+ * tell the user which one actually happened (GAP-12).
+ *
+ * Deliberately NOT folded into {@link deleteResultOutput}: that one is shared by
+ * nine non-fiscal delete tools whose backend has no cancel branch, and widening
+ * it would drift their published output schema for no behavioural reason.
+ */
+export const documentDeleteResultOutput = z.object({
+  success: z.boolean(),
+  id: z.string(),
+  /** "deleted" = row destroyed (204). "cancelled" = document kept, status=cancelled (200). */
+  outcome: z.enum(["deleted", "cancelled"]).optional(),
+  /** Document status after a soft cancel (always "cancelled" when present). */
+  status: z.string().optional(),
+  /** Status the document held before it was cancelled (e.g. "sent", "paid"). */
+  previousStatus: z.string().optional(),
+});
+
+/**
  * Permissive structured-output schema for tools whose API returns an open
  * `Record<string, unknown>` (summaries, single-object actions, VIES/portal
  * responses). Declares NO required fields and stays `.passthrough()`, so the

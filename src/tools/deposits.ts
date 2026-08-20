@@ -228,19 +228,38 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Refund Deposit",
       description:
-        "Refund a deposit back to the client. " +
-        "Transitions the deposit status to 'refunded'. " +
-        "Example: id='dep_abc123', reason='Project cancelled' " +
-        "/ Devuelve un deposito al cliente.",
+        "Refund a deposit back to the client. Requires confirm=true. " +
+        "Transitions the deposit status to 'refunded' — a money movement that is not reversible " +
+        "from this tool. " +
+        "Example: id='dep_abc123', reason='Project cancelled', confirm=true " +
+        "/ Devuelve un deposito al cliente. Requiere confirm=true. " +
+        "Es un movimiento de dinero que no se puede revertir desde esta herramienta.",
       annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Deposit ID / ID del deposito"),
         reason: z.string().optional().describe("Reason for the refund / Motivo de la devolucion"),
         notes: z.string().optional().describe("Refund notes / Notas de la devolucion"),
+        confirm: z
+          .boolean()
+          .describe("Must be true to confirm the refund / Debe ser true para confirmar la devolucion"),
       },
       outputSchema: actionResultOutput,
     },
-    async ({ id, ...data }) => withToolLogging("refund_deposit", async () => {
+    async ({ id, confirm, ...data }) => withToolLogging("refund_deposit", async () => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Error: confirm=true is required to refund a deposit. " +
+                "This returns the client's money and sets the deposit to status=refunded; " +
+                "there is no un-refund tool. Set confirm=true when you are certain. / " +
+                "Se requiere confirm=true para devolver un deposito. Es un movimiento de dinero irreversible.",
+            },
+          ],
+          isError: true,
+        };
+      }
       const result = await client.refundDeposit(id, data);
       return {
         content: [mutateContent(formatRecord("Deposit refunded", result))],

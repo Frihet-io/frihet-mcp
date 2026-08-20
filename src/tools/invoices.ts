@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, invoiceItemOutput, actionResultOutput, creditNoteResultOutput, pdfResultOutput, einvoiceResultOutput } from "./shared.js";
+import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, invoiceItemOutput, actionResultOutput, creditNoteResultOutput, pdfResultOutput, einvoiceResultOutput } from "./shared.js";
 
 const invoiceItemSchema = z.object({
   description: z.string().describe("Description of the line item / Descripcion del concepto"),
@@ -295,20 +295,62 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Delete Invoice",
       description:
-        "Permanently delete an invoice by its ID. This action cannot be undone. " +
-        "/ Elimina permanentemente una factura por su ID. Esta accion no se puede deshacer.",
+        "Delete an invoice by its ID. Requires confirm=true. " +
+        "Only a DRAFT invoice is removed permanently. A sent/paid/overdue invoice is NOT destroyed: " +
+        "the backend CANCELS it (status=cancelled) so the VeriFactu hash chain stays intact, and the " +
+        "document remains readable via get_invoice. The result reports which happened in `outcome` " +
+        "(\"deleted\" or \"cancelled\"). " +
+        "/ Elimina una factura por su ID. Requiere confirm=true. Solo una factura en BORRADOR se elimina " +
+        "de forma permanente. Una factura emitida/pagada NO se destruye: se CANCELA (status=cancelled) para " +
+        "preservar la cadena de hash VeriFactu y sigue consultable con get_invoice.",
       annotations: DELETE_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Invoice ID / ID de la factura"),
+        confirm: z
+          .boolean()
+          .describe("Must be true to confirm deletion / Debe ser true para confirmar la eliminacion"),
       },
-      outputSchema: deleteResultOutput,
+      outputSchema: documentDeleteResultOutput,
     },
-    async ({ id }) => withToolLogging("delete_invoice", async () => {
-      await client.deleteInvoice(id);
+    async ({ id, confirm }) => withToolLogging("delete_invoice", async () => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Error: confirm=true is required to delete an invoice. " +
+                "A draft invoice is removed permanently; a sent/paid invoice is CANCELLED " +
+                "(status=cancelled) instead, because VeriFactu forbids breaking the hash chain. " +
+                "Either way the invoice stops counting as a live receivable. Set confirm=true to proceed. / " +
+                "Se requiere confirm=true para eliminar una factura.",
+            },
+          ],
+          isError: true,
+        };
+      }
+      // 204 → undefined (draft row destroyed). 200 → soft-cancel body (document
+      // kept, status=cancelled). Reporting both as "deleted" is the GAP-12 lie.
+      const outcome = await client.deleteInvoice(id);
+      const cancelled = !!outcome && typeof outcome === "object";
+      const body = cancelled ? (outcome as Record<string, unknown>) : {};
       const hints = enrichResponse("invoices", "delete", { id });
+      const previous = typeof body["previousStatus"] === "string" ? ` (was ${body["previousStatus"]})` : "";
       return {
-        content: [mutateContent(`Invoice ${id} deleted successfully. / Factura ${id} eliminada correctamente.`)],
-        structuredContent: { success: true, id, ...hints } as unknown as Record<string, unknown>,
+        content: [mutateContent(
+          cancelled
+            ? `Invoice ${id} was CANCELLED, not deleted${previous}: it still exists with ` +
+              "status=cancelled because VeriFactu forbids destroying an issued invoice. / " +
+              `Factura ${id} CANCELADA, no eliminada: sigue existiendo con status=cancelled (VeriFactu).`
+            : `Invoice ${id} deleted permanently (it was a draft). / ` +
+              `Factura ${id} eliminada permanentemente (era un borrador).`,
+        )],
+        structuredContent: {
+          success: true,
+          id,
+          ...body,
+          outcome: cancelled ? "cancelled" : "deleted",
+          ...hints,
+        } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -373,17 +415,37 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Send Invoice",
       description:
-        "Send an invoice to the client via email. Optionally override the recipient email address. " +
+        "Send an invoice to the client via email. Requires confirm=true. " +
+        "Optionally override the recipient email address. " +
         "The invoice must exist and should not already be cancelled. " +
-        "/ Envia una factura al cliente por email. Opcionalmente se puede cambiar el email destinatario.",
+        "Sending reaches a third party and cannot be recalled. " +
+        "/ Envia una factura al cliente por email. Requiere confirm=true. " +
+        "Opcionalmente se puede cambiar el email destinatario. El envio llega a un tercero y no se puede anular.",
       annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Invoice ID / ID de la factura"),
         to: z.string().optional().describe("Override recipient email / Email destinatario alternativo"),
+        confirm: z
+          .boolean()
+          .describe("Must be true to confirm sending / Debe ser true para confirmar el envio"),
       },
       outputSchema: actionResultOutput,
     },
-    async ({ id, to }) => withToolLogging("send_invoice", async () => {
+    async ({ id, to, confirm }) => withToolLogging("send_invoice", async () => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Error: confirm=true is required to send an invoice. " +
+                "This delivers an email to the client — a third party outside this workspace — " +
+                "and it cannot be recalled once sent. Set confirm=true to proceed. / " +
+                "Se requiere confirm=true para enviar una factura por email a un tercero.",
+            },
+          ],
+          isError: true,
+        };
+      }
       const result = await client.sendInvoice(id, to);
       return {
         content: [mutateContent(formatRecord("Invoice sent", result))],
