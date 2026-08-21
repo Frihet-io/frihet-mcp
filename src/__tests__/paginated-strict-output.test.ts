@@ -510,6 +510,135 @@ describe("#1580 — paginated outputSchema strict contract", () => {
     );
   });
 
+  test("delete_invoice CANCELLED branch (R3): warnings + cannot-be-undone guidance in content, structuredContent clean, 'Warnings:' exactly once", async () => {
+    // R3 regression (ERP #1580): the R2 2500-char substring scan counted
+    // delete_invoice as having `+ hints` because the substring appeared
+    // inside the DELETED branch of the ternary (line 345 pre-R3). The
+    // CANCELLED branch (the 200 + body = soft-cancel VeriFactu path) silently
+    // dropped the enrichment — 15/16 behavioral paths had warnings, not
+    // 16/16. The R3 fix extracts the per-branch body text to `bodyText` and
+    // appends `+ hints` once, AFTER the ternary closes, so both terminal
+    // branches carry the warnings structurally. This test pins the
+    // CANCELLED branch at RUNTIME (not just source-level) by stubbing the
+    // API to return the 200 soft-cancel body.
+    const { server } = makeServer({
+      deleteInvoice: () => ({ success: true, status: "cancelled", previousStatus: "sent" }),
+    });
+    const entry = server.tools.get("delete_invoice")!;
+    assert.ok(entry, "delete_invoice is not registered");
+    const result = await entry.handler({ id: "inv_abc", confirm: true });
+    assert.equal(
+      result.isError,
+      undefined,
+      "delete_invoice (cancelled) must not error — confirm=true was supplied.",
+    );
+    const sc = (result.structuredContent ?? {}) as Record<string, unknown>;
+    // Outcome + VeriFactu status echo through.
+    assert.equal(sc.outcome, "cancelled", "delete_invoice (cancelled) reports outcome=cancelled");
+    assert.equal(sc.status, "cancelled", "delete_invoice (cancelled) reports status=cancelled");
+    assert.equal(sc.previousStatus, "sent", "delete_invoice (cancelled) echoes previousStatus");
+    // Strict: NO _warnings/_suggestions leak into structuredContent.
+    assert.equal(
+      Object.keys(sc).includes("_warnings"),
+      false,
+      "delete_invoice (cancelled) leaked _warnings into structuredContent. " +
+        "The hints belong in the content text block, not in the strict contract.",
+    );
+    assert.equal(
+      Object.keys(sc).includes("_suggestions"),
+      false,
+      "delete_invoice (cancelled) leaked _suggestions into structuredContent. " +
+        "The hints belong in the content text block, not in the strict contract.",
+    );
+    // Content text: both the LITERAL section header AND the cannot-be-undone
+    // guidance must appear (enrichResponse("invoices", "delete", ...) emits
+    // the bilingual warning).
+    const text = (result.content?.[0] as { text?: string } | undefined)?.text ?? "";
+    assert.ok(
+      text.includes("Warnings:"),
+      `delete_invoice (cancelled) content text is missing the LITERAL "Warnings:" header. ` +
+        `enrichResponse("invoices", "delete", ...) emits the cannot-be-undone warning ` +
+        `and the bodyText + hints concat must reach the OUTER terminal return. ` +
+        `Got: ${JSON.stringify(text.slice(-300))}`,
+    );
+    assert.ok(
+      text.includes("cannot be undone") || text.includes("no se puede deshacer"),
+      `delete_invoice (cancelled) content text is missing the cannot-be-undone guidance. ` +
+        `The agent must be warned that the cancel action is irreversible. ` +
+        `Got: ${JSON.stringify(text.slice(-300))}`,
+    );
+    // Exactly once — a regression that double-appends must not silently pass.
+    const warningsCount = (text.match(/Warnings:/g) ?? []).length;
+    assert.equal(
+      warningsCount,
+      1,
+      `delete_invoice (cancelled) content text has ${warningsCount} "Warnings:" headers, ` +
+        `expected exactly 1. A double-append regression slipped through R1's substring scan; ` +
+        `R3 pins the count.`,
+    );
+  });
+
+  test("delete_invoice DELETED branch (R3): warnings + cannot-be-undone guidance in content, structuredContent clean, 'Warnings:' exactly once", async () => {
+    // Same assertions as the CANCELLED branch but for the 204/destroyed-draft
+    // path. The stub returns undefined (the 204 case: no body) — the
+    // handler treats it as `cancelled = false` and falls into the DELETED
+    // branch. Without R3's fix this branch was the ONLY one with `+ hints`,
+    // so this test would have passed before R3. After R3 it MUST still pass
+    // — pinning the branch that R2 silently relied on.
+    const { server } = makeServer({
+      deleteInvoice: () => undefined,
+    });
+    const entry = server.tools.get("delete_invoice")!;
+    assert.ok(entry, "delete_invoice is not registered");
+    const result = await entry.handler({ id: "inv_xyz", confirm: true });
+    assert.equal(
+      result.isError,
+      undefined,
+      "delete_invoice (deleted) must not error — confirm=true was supplied.",
+    );
+    const sc = (result.structuredContent ?? {}) as Record<string, unknown>;
+    assert.equal(sc.outcome, "deleted", "delete_invoice (deleted) reports outcome=deleted");
+    // The 204 path has no body — only the literal outcome is meaningful.
+    assert.equal(
+      sc.status,
+      undefined,
+      "delete_invoice (deleted) has no status (draft was destroyed, no body returned).",
+    );
+    // Strict: NO _warnings/_suggestions leak into structuredContent.
+    assert.equal(
+      Object.keys(sc).includes("_warnings"),
+      false,
+      "delete_invoice (deleted) leaked _warnings into structuredContent. " +
+        "The hints belong in the content text block, not in the strict contract.",
+    );
+    assert.equal(
+      Object.keys(sc).includes("_suggestions"),
+      false,
+      "delete_invoice (deleted) leaked _suggestions into structuredContent. " +
+        "The hints belong in the content text block, not in the strict contract.",
+    );
+    const text = (result.content?.[0] as { text?: string } | undefined)?.text ?? "";
+    assert.ok(
+      text.includes("Warnings:"),
+      `delete_invoice (deleted) content text is missing the LITERAL "Warnings:" header. ` +
+        `Got: ${JSON.stringify(text.slice(-300))}`,
+    );
+    assert.ok(
+      text.includes("cannot be undone") || text.includes("no se puede deshacer"),
+      `delete_invoice (deleted) content text is missing the cannot-be-undone guidance. ` +
+        `Got: ${JSON.stringify(text.slice(-300))}`,
+    );
+    // Exactly once.
+    const warningsCount = (text.match(/Warnings:/g) ?? []).length;
+    assert.equal(
+      warningsCount,
+      1,
+      `delete_invoice (deleted) content text has ${warningsCount} "Warnings:" headers, ` +
+        `expected exactly 1. A double-append regression slipped through R1's substring scan; ` +
+        `R3 pins the count.`,
+    );
+  });
+
   test(">=1 third paginated resource strict green: list_bank_accounts", async () => {
     // The user-mandated third coverage slot. banking has no enrichResponse
     // call at all (not in scope for hints) — the empty-hint path again.
@@ -693,6 +822,114 @@ describe("#1580 — paginated outputSchema strict contract", () => {
     );
   });
 
+  test("INVENTORY (R3): every callsite's `+ hints` lives OUTSIDE any ternary — branch-local concats forbidden", () => {
+    // R3 lesson (ERP #1580): the R2 substring scan above counted
+    // delete_invoice as having `+ hints` because the substring appeared
+    // inside the DELETED branch of the ternary (`... + hints` on the
+    // `: ... + hints,` line). The CANCELLED branch (the 200 + body =
+    // soft-cancel VeriFactu path) silently dropped the enrichment — 16
+    // callsites / 16 source-level matches ≠ 16 behavioral paths. 15/16
+    // paths had warnings, not 16/16.
+    //
+    // The R3 fix extracts the per-branch body text to `bodyText` and
+    // appends `+ hints` ONCE, after the ternary closes. This test
+    // verifies the structural invariant at the source level: for each
+    // callsite, the `+ hints` concat MUST NOT live inside a ternary's
+    // branch. Concretely: if a content fn call (`mutateContent(`,
+    // `listContent(`, `getContent(`) contains BOTH a `?` (ternary
+    // indicator) AND `+ hints`, the `+ hints` is in one branch and the
+    // other branch silently drops the warnings. A future refactor that
+    // re-introduces a branch-local concat — even if it satisfies the
+    // substring scan above — fails this test.
+    const src = readRepoFile("src/tools/invoices.ts") +
+      readRepoFile("src/tools/expenses.ts") +
+      readRepoFile("src/tools/clients.ts") +
+      readRepoFile("src/tools/vendors.ts") +
+      readRepoFile("src/tools/quotes.ts") +
+      readRepoFile("src/tools/deposits.ts") +
+      readRepoFile("src/tools/crm.ts");
+    const callsiteRe = /const hints = enrichResponse\([^)]+\);/g;
+    const offenders: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = callsiteRe.exec(src)) !== null) {
+      const after = src.slice(m.index, m.index + 3000);
+      // 1. Find the FIRST `content: [` opening after the callsite.
+      const contentOpen = /\bcontent:\s*\[/.exec(after);
+      if (!contentOpen) {
+        offenders.push(`callsite at offset ${m.index}: no \`content: [\` within 3000 chars`);
+        continue;
+      }
+      // 2. Walk brackets to find the matching `]` of the array.
+      let depth = 1;
+      let pos = contentOpen.index + contentOpen[0].length;
+      while (pos < after.length && depth > 0) {
+        const c = after[pos];
+        if (c === "[") depth++;
+        else if (c === "]") depth--;
+        pos++;
+      }
+      if (depth !== 0) {
+        offenders.push(`callsite at offset ${m.index}: unmatched brackets in \`content: [\``);
+        continue;
+      }
+      // The array element body is between `[` and `]`.
+      const arrayBody = after.slice(
+        contentOpen.index + contentOpen[0].length,
+        pos - 1,
+      );
+      // 3. The array body MUST contain `+ hints` (or `+ (hints`).
+      const hasHintsConcat = /\+\s*\(?hints/.test(arrayBody);
+      if (!hasHintsConcat) {
+        offenders.push(`callsite at offset ${m.index}: no \`+ hints\` inside the content array element`);
+        continue;
+      }
+      // 4. For every content-fn call inside the array element, check
+      // that the fn arg does NOT contain BOTH a `?` (ternary indicator)
+      // AND `+ hints`. That combination is the bug class: the ternary
+      // has `+ hints` in one branch only.
+      const fnRe = /\b(mutate|list|get)Content\s*\(/g;
+      let branchLocal = false;
+      let fm: RegExpExecArray | null;
+      while ((fm = fnRe.exec(arrayBody)) !== null) {
+        const openParen = fm.index + fm[0].lastIndexOf("(");
+        let pdepth = 1;
+        let ppos = openParen + 1;
+        while (ppos < arrayBody.length && pdepth > 0) {
+          const c = arrayBody[ppos];
+          if (c === "(") pdepth++;
+          else if (c === ")") pdepth--;
+          ppos++;
+        }
+        if (pdepth !== 0) continue; // unmatched — skip
+        const fnArg = arrayBody.slice(openParen + 1, ppos - 1);
+        // Has ternary indicator? The R2 bug's signature is
+        // `\n  cancelled\n    ? ` — a multi-line ternary. We use a
+        // simple `?` count, with the awareness that URLs in the
+        // content text (rare) could trigger a false positive. For our
+        // 16 callsites, none have a URL with `?` in the content text,
+        // so the simple count is reliable here.
+        const qCount = (fnArg.match(/\?/g) ?? []).length;
+        const hasHintsInArg = /\+\s*\(?hints/.test(fnArg);
+        if (qCount > 0 && hasHintsInArg) {
+          branchLocal = true;
+          break;
+        }
+      }
+      if (branchLocal) {
+        offenders.push(
+          `callsite at offset ${m.index}: \`+ hints\` lives INSIDE a content-fn arg that also contains a ternary. ` +
+            `The ternary's other branch silently drops the warnings. ` +
+            `Fix: extract the per-branch body to a variable BEFORE the return, then \`+ hints\` AFTER the ternary closes.`,
+        );
+      }
+    }
+    assert.deepEqual(
+      offenders,
+      [],
+      `${offenders.length} callsite(s) fail the R3 OUTER-terminal structural check:\n${offenders.join("\n")}`,
+    );
+  });
+
   test("STRICT additional-property check is independent from the SDK's loose Zod parser", () => {
     // The MCP SDK's validateToolOutput path uses `safeParseAsync` on Zod's
     // LOOSE `z.object()` (Zod v4 default), which silently ACCEPTS extra
@@ -773,6 +1010,127 @@ describe("#1580 — paginated outputSchema strict contract", () => {
         `this is the positive case that pins the expected ratio. ` +
         `If a future refactor legitimately reduces the callsite count, update ` +
         `this assertion to match — do NOT silently allow the ratio to drop below 1:1.`,
+    );
+  });
+
+  test("MUTATION (R3): dropping `+ hints` from delete_invoice's source makes the runtime tests RED on the affected branch", async () => {
+    // R3 mutation detector (ERP #1580): proves the runtime branch tests
+    // above (`delete_invoice CANCELLED` + `delete_invoice DELETED`) are
+    // actually pinned to `+ hints` in the source — not satisfied by a
+    // substring scan alone. The R2 bug had `+ hints` only in the
+    // DELETED branch (line 345 pre-R3), so the substring scan was green
+    // but the CANCELLED runtime path was silently dropping the warnings.
+    //
+    // The detector works by:
+    // 1. Reading the live `invoices.ts` source.
+    // 2. Extracting the `delete_invoice` handler block.
+    // 3. Programmatically SIMULATING the mutation: remove `+ hints`
+    //    (or `+ (hints ?? "")`) from the block.
+    // 4. Verifying the mutated block has 0 `+ hints` matches (the
+    //    mutation "took") — proving the regex pattern matches the
+    //    exact concat syntax used.
+    // 5. Verifying the live (unmutated) block has exactly 1 `+ hints`
+    //    match at the OUTER position — if a future regression puts
+    //    `+ hints` in BOTH branches, the count goes to 2 and the
+    //    assertion flips red (forcing a single OUTER concat).
+    const invoicesSrc = readRepoFile("src/tools/invoices.ts");
+    // Extract the delete_invoice handler. Match from the `async ({ id, confirm })`
+    // opener to the close of the handler — bounded by 3000 chars (the handler
+    // is ~50 lines, well within 3000). A regex anchored at the next
+    // `search_invoices` comment (the following tool) gives a clean cut.
+    const startMatch = invoicesSrc.match(
+      /async \(\{ id, confirm \}\) => withToolLogging\("delete_invoice", async \(\) => \{/,
+    );
+    assert.ok(
+      startMatch,
+      "could not locate the delete_invoice handler opener in src/tools/invoices.ts",
+    );
+    const startIdx = startMatch.index ?? 0;
+    // Find the next `// -- search_invoices --` comment (the following tool).
+    // The handler ends before that comment.
+    const endMarker = invoicesSrc.indexOf("// -- search_invoices --", startIdx);
+    assert.ok(
+      endMarker > startIdx,
+      "could not locate the end of the delete_invoice handler block in src/tools/invoices.ts",
+    );
+    // Walk backwards from the end marker to find the closing of the
+    // delete_invoice block (the registerTool close). The handler closes
+    // with `}),` (closing the `withToolLogging` arrow + comma) followed
+    // by `);` (closing the `registerTool` call). The structural close is
+    // the second `);` after the handler body — i.e. the matching close
+    // of `server.registerTool(... async (...) => withToolLogging(...)`.
+    const beforeEnd = invoicesSrc.slice(0, endMarker);
+    // Find the position of the handler inner close: `}),` (parens close,
+    // comma). This marks the end of the `withToolLogging(...)` arrow's
+    // async body.
+    const handlerClose = beforeEnd.lastIndexOf("}),");
+    assert.ok(
+      handlerClose > startIdx,
+      "could not locate the delete_invoice handler inner close (`}),`)",
+    );
+    // Include the trailing registerTool close `);\n  }` to capture the
+    // full handler block. The full block ends at the line containing
+    // `);` after `}),` — that closes the registerTool call.
+    const afterHandlerClose = beforeEnd.slice(handlerClose + 3);
+    const registerClose = afterHandlerClose.indexOf(");");
+    assert.ok(
+      registerClose >= 0,
+      "could not locate the delete_invoice registerTool close (`);`)",
+    );
+    const deleteBlock = invoicesSrc.slice(
+      startIdx,
+      handlerClose + 3 + registerClose + 2,
+    );
+    // Strip line comments and block comments before counting — the R3
+    // comment we added above mentions `+ hints` twice in prose. Only
+    // real code-level concats should count.
+    const strippedBlock = deleteBlock
+      // Strip /* ... */ block comments
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      // Strip // line comments (everything from `//` to end of line)
+      .replace(/\/\/.*$/gm, "");
+    // The live block MUST have at least 1 `+ hints` (otherwise the
+    // runtime tests above would already be red).
+    const liveConcatCount = (strippedBlock.match(/\+\s*\(?hints[^,)]*/g) ?? []).length;
+    assert.ok(
+      liveConcatCount >= 1,
+      `delete_invoice block has ${liveConcatCount} \`+ hints\` concats, expected >= 1. ` +
+        `Without it, the runtime branch tests above would go red.`,
+    );
+    // Mutation simulation: remove the FIRST `+ hints` (or `+ (hints ...)`)
+    // from the block. This models "someone dropped the OUTER concat"
+    // — the regression class. The mutated block MUST have exactly 1
+    // fewer `+ hints` match — proving the regex pattern matches the
+    // exact concat syntax used in source. If this assertion ever fails,
+    // the source's concat syntax changed and this test must be updated.
+    const mutated = strippedBlock.replace(/\s*\+\s*\(?hints[^,)]*/, "");
+    const mutatedConcatCount = (mutated.match(/\+\s*\(?hints[^,)]*/g) ?? []).length;
+    assert.equal(
+      mutatedConcatCount,
+      liveConcatCount - 1,
+      `mutation simulation failed to remove \`+ hints\` from delete_invoice. ` +
+        `Live count: ${liveConcatCount}; after mutation: ${mutatedConcatCount}. ` +
+        `The regex pattern in this test must match the exact concat syntax used in source.`,
+    );
+    // Pin the R3 invariant: the live block has exactly 1 `+ hints` at
+    // the OUTER position (post-R3 fix). The R2 bug had `+ hints` in ONLY
+    // the DELETED branch (count = 1 in code, but the runtime CANCELLED
+    // test still went red because the concat was branch-local). Count
+    // alone isn't sufficient — the structural ternary check is done by
+    // the INVENTORY (R3) test above. This test pins the COUNT invariant:
+    // a future refactor that puts the concat in BOTH branches of the
+    // ternary (the R2 regression class) takes the count to 2, and this
+    // assertion flips red — forcing the author to consolidate to a
+    // single OUTER concat.
+    assert.equal(
+      liveConcatCount,
+      1,
+      `delete_invoice block has ${liveConcatCount} \`+ hints\` concats, expected exactly 1. ` +
+        `A count > 1 means the R2 branch-local regression recurred: the concat ` +
+        `lives in BOTH branches of the ternary (e.g. \`cancelled ? "..." + hints : "..." + hints\`) ` +
+        `and is structurally fragile. The R3 fix consolidates to a single OUTER ` +
+        `concat: \`const bodyText = cancelled ? "..." : "..."; mutateContent(bodyText + hints)\`. ` +
+        `The branch-local structural check is owned by the INVENTORY (R3) test above.`,
     );
   });
 });

@@ -335,15 +335,21 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       const body = cancelled ? (outcome as Record<string, unknown>) : {};
       const hints = enrichResponse("invoices", "delete", { id });
       const previous = typeof body["previousStatus"] === "string" ? ` (was ${body["previousStatus"]})` : "";
+      // R3 fix (ERP #1580): extract the per-branch body text to a single
+      // variable and append `+ hints` ONCE, after the ternary closes. R2's
+      // `+ hints` was branch-local (only in the DELETED branch), so the
+      // CANCELLED branch silently dropped the "cannot be undone" warning —
+      // 15/16 behavioral paths had warnings, not 16/16. The OUTER concat
+      // guarantees both terminal branches carry the enrichment. The
+      // `paginated-strict-output.test.ts` runtime tests pin BOTH branches.
+      const bodyText = cancelled
+        ? `Invoice ${id} was CANCELLED, not deleted${previous}: it still exists with ` +
+          "status=cancelled because VeriFactu forbids destroying an issued invoice. / " +
+          `Factura ${id} CANCELADA, no eliminada: sigue existiendo con status=cancelled (VeriFactu).`
+        : `Invoice ${id} deleted permanently (it was a draft). / ` +
+          `Factura ${id} eliminada permanentemente (era un borrador).`;
       return {
-        content: [mutateContent(
-          cancelled
-            ? `Invoice ${id} was CANCELLED, not deleted${previous}: it still exists with ` +
-              "status=cancelled because VeriFactu forbids destroying an issued invoice. / " +
-              `Factura ${id} CANCELADA, no eliminada: sigue existiendo con status=cancelled (VeriFactu).`
-            : `Invoice ${id} deleted permanently (it was a draft). / ` +
-              `Factura ${id} eliminada permanentemente (era un borrador).` + hints,
-        )],
+        content: [mutateContent(bodyText + hints)],
         structuredContent: {
           success: true,
           id,
