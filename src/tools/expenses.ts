@@ -54,8 +54,8 @@ export function registerExpenseTools(server: McpServer, client: IFrihetClient): 
       const result = await client.listExpenses({ limit, offset, after, fields, from, to, vendorId, category });
       const hints = enrichResponse("expenses", "list", result.data);
       return {
-        content: [listContent(formatPaginatedResponse("expenses", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        content: [listContent(formatPaginatedResponse("expenses", result) + hints)],
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -120,8 +120,8 @@ export function registerExpenseTools(server: McpServer, client: IFrihetClient): 
       const result = await client.createExpense(input);
       const hints = enrichResponse("expenses", "create", result);
       return {
-        content: [mutateContent(formatRecord("Expense created", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        content: [mutateContent(formatRecord("Expense created", result) + hints)],
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -176,8 +176,8 @@ export function registerExpenseTools(server: McpServer, client: IFrihetClient): 
       await client.deleteExpense(id);
       const hints = enrichResponse("expenses", "delete", { id });
       return {
-        content: [mutateContent(`Expense ${id} deleted successfully. / Gasto ${id} eliminado correctamente.`)],
-        structuredContent: { success: true, id, ...hints } as unknown as Record<string, unknown>,
+        content: [mutateContent(`Expense ${id} deleted successfully. / Gasto ${id} eliminado correctamente.` + hints)],
+        structuredContent: { success: true, id } as unknown as Record<string, unknown>,
       };
     }),
   );

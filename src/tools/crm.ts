@@ -82,8 +82,8 @@ export function registerCrmTools(server: McpServer, client: IFrihetClient): void
       const result = await client.createClientContact(clientId, data);
       const hints = enrichResponse("contacts", "create", result);
       return {
-        content: [mutateContent(formatRecord("Contact created", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        content: [mutateContent(formatRecord("Contact created", result) + hints)],
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );

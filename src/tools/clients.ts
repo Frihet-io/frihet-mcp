@@ -112,8 +112,8 @@ export function registerClientTools(server: McpServer, client: IFrihetClient): v
       const result = await client.createClient(input);
       const hints = enrichResponse("clients", "create", result);
       return {
-        content: [mutateContent(formatRecord("Client created", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        content: [mutateContent(formatRecord("Client created", result) + hints)],
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );

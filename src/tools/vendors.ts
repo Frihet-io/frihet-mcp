@@ -99,8 +99,8 @@ export function registerVendorTools(server: McpServer, client: IFrihetClient): v
       const result = await client.createVendor(input);
       const hints = enrichResponse("vendors", "create", result);
       return {
-        content: [mutateContent(formatRecord("Vendor created", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        content: [mutateContent(formatRecord("Vendor created", result) + hints)],
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );

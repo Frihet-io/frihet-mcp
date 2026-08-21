@@ -54,8 +54,8 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
       const result = await client.listDeposits({ limit, offset, after, fields, from, to, clientId, status });
       const hints = enrichResponse("deposits", "list", result.data);
       return {
-        content: [listContent(formatPaginatedResponse("deposits", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        content: [listContent(formatPaginatedResponse("deposits", result) + hints)],
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -124,8 +124,8 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
       const result = await client.createDeposit(input);
       const hints = enrichResponse("deposits", "create", result);
       return {
-        content: [mutateContent(formatRecord("Deposit created", result))],
-        structuredContent: { ...result, ...hints } as unknown as Record<string, unknown>,
+        content: [mutateContent(formatRecord("Deposit created", result) + hints)],
+        structuredContent: { ...result } as unknown as Record<string, unknown>,
       };
     }),
   );
@@ -184,8 +184,8 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
       await client.deleteDeposit(id);
       const hints = enrichResponse("deposits", "delete", { id });
       return {
-        content: [mutateContent(`Deposit ${id} deleted successfully. / Deposito ${id} eliminado correctamente.`)],
-        structuredContent: { success: true, id, ...hints } as unknown as Record<string, unknown>,
+        content: [mutateContent(`Deposit ${id} deleted successfully. / Deposito ${id} eliminado correctamente.` + hints)],
+        structuredContent: { success: true, id } as unknown as Record<string, unknown>,
       };
     }),
   );
