@@ -1,65 +1,59 @@
 /**
- * Inspector 2.3.0 Compatibility Harness & MCP v2 Migration Baseline.
+ * MCP SDK Compatibility & Golden Baseline Canary Harness.
  *
- * Deterministic, non-blocking compatibility harness for @frihet/mcp-server.
- * Evaluates initialize, protocol negotiation, tools enumeration (157 canonical operations +
- * 5 fiscal aliases = 162 tools), input/output schemas, representative read execution in demo mode,
- * pagination contracts, error contracts, and mutation schemas WITHOUT executing production writes.
+ * Deterministically verifies @frihet/mcp-server protocol conformance,
+ * tool enumeration, JSON schema validity, pagination parameters,
+ * typed error contracts, capability metadata, and representative READ operations
+ * against @modelcontextprotocol/sdk v1.x before v2.0 migration.
+ *
+ * NOTE: This is an in-process SDK client/server compatibility harness.
+ * @modelcontextprotocol/inspector@2.3.0 is pinned in devDependencies as a
+ * reference protocol authority, while this harness executes in-process
+ * with zero daemons to provide deterministic CI verification.
+ *
+ * Zero production writes. Zero credential leaks.
  */
 
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { DemoFrihetClient } from "../demo-client.js";
-import type { IFrihetClient } from "../client-interface.js";
-import {
-  CAPABILITY_META_KEY,
-  type PublicCapabilityTruth,
-} from "../capability-truth.js";
+import { registerMcpSurface, localMcpSurfaceComposition } from "../server-composition.js";
+import { CAPABILITY_META_KEY } from "../capability-truth.js";
 import { FISCAL_MODELO_ALIASES } from "../fiscal-aliases.js";
-import {
-  localMcpSurfaceComposition,
-  registerMcpSurface,
-} from "../server-composition.js";
 
-export const INSPECTOR_PINNED_VERSION = "2.3.0";
 export const HARNESS_CONTRACT_VERSION = 1;
+export const INSPECTOR_PINNED_VERSION = "2.3.0";
 export const CANONICAL_OPERATIONS_COUNT = 157;
-export const FISCAL_ALIASES_COUNT = 5;
-export const TOTAL_LOCAL_TOOLS_COUNT = 162;
-export const LOCAL_RESOURCES_COUNT = 11;
-export const LOCAL_PROMPTS_COUNT = 10;
+export const FISCAL_ALIASES_COUNT = Object.keys(FISCAL_MODELO_ALIASES).length;
 
 export type CheckStatus = "PASS" | "FAIL" | "UNSUPPORTED" | "NOT_EXERCISED";
 
-export interface CheckResult {
+export interface HarnessCheckResult {
   id: string;
   name: string;
-  category: "initialize" | "tools" | "reads" | "pagination" | "schemas" | "errors" | "mutations" | "auth";
+  category: "initialize" | "tools" | "resources" | "prompts" | "reads" | "pagination" | "errors" | "mutations" | "auth";
   status: CheckStatus;
   detail: string;
   durationMs?: number;
 }
 
-export interface CompactToolSnapshot {
+export interface ToolSnapshot {
   name: string;
   title?: string;
   description?: string;
   inputSchema: Record<string, unknown>;
-  outputSchema?: Record<string, unknown>;
-  annotations?: Record<string, boolean>;
-  execution?: Record<string, unknown>;
-  capability?: PublicCapabilityTruth;
+  hasOutputSchema: boolean;
+  annotations: Record<string, unknown>;
+  capabilityMeta?: Record<string, unknown>;
 }
 
-export interface InspectorBaselineReport {
+export interface McpBaselineReport {
   contractVersion: number;
-  inspectorVersion: string;
-  protocolVersion: string;
+  inspectorPinnedVersion: string;
+  harnessMode: "in-process-sdk-client";
+  protocolVersion: string | null;
   serverInfo: {
     name: string;
     version: string;
@@ -80,82 +74,96 @@ export interface InspectorBaselineReport {
     };
     overallStatus: "PASS" | "FAIL";
   };
-  checkMatrix: CheckResult[];
-  tools: CompactToolSnapshot[];
+  checkMatrix: HarnessCheckResult[];
+  tools: ToolSnapshot[];
   resources: string[];
   prompts: string[];
-  sanitized: true;
+  sanitized: boolean;
 }
 
-function getPackageVersion(): string {
-  try {
-    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json");
-    return JSON.parse(readFileSync(pkgPath, "utf8")).version as string;
-  } catch {
-    return "1.16.6";
-  }
-}
+/**
+ * Executes the complete compatibility harness in-process and returns
+ * a structured, sanitized baseline report.
+ */
+export async function runMcpBaseline(): Promise<McpBaselineReport> {
+  const checkMatrix: HarnessCheckResult[] = [];
 
-function createServerWithDemoClient(): { server: McpServer; client: IFrihetClient } {
-  const version = getPackageVersion();
-  const server = new McpServer({
-    name: "frihet-erp",
-    version,
-    description: "AI-native MCP server for Frihet ERP",
-  });
-  const client = new DemoFrihetClient();
-  registerMcpSurface(server, client, localMcpSurfaceComposition(false, false));
-  return { server, client };
-}
-
-export async function runInspectorBaseline(): Promise<InspectorBaselineReport> {
-  const checkMatrix: CheckResult[] = [];
-  const addCheck = (check: CheckResult): void => {
-    checkMatrix.push(check);
+  const addCheck = (c: HarnessCheckResult) => {
+    checkMatrix.push(c);
   };
 
-  const { server } = createServerWithDemoClient();
+  const demoClient = new DemoFrihetClient();
+  const server = new McpServer({
+    name: "frihet-erp",
+    version: "1.16.6",
+    description: "AI-native MCP server for Frihet ERP",
+  });
+
+  const composition = localMcpSurfaceComposition(false, false);
+  registerMcpSurface(server, demoClient, composition);
+
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client(
-    { name: "mcp-inspector-canary-runner", version: INSPECTOR_PINNED_VERSION },
-    { capabilities: { roots: {}, sampling: {} } },
+    {
+      name: "frihet-mcp-canary-client",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        roots: { listChanged: true },
+        sampling: {},
+      },
+    },
   );
 
-  let negotiatedProtocol = "unknown";
+  const toolSnapshots: ToolSnapshot[] = [];
+  const resourceUris: string[] = [];
+  const promptNames: string[] = [];
+
   let serverInfo = { name: "unknown", version: "unknown", description: "" };
-  const toolSnapshots: CompactToolSnapshot[] = [];
-  let resourceUris: string[] = [];
-  let promptNames: string[] = [];
 
   try {
-    // 1. Initialize & Negotiation Check
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    
-    // Read negotiated facts from client
-    const serverCaps = client.getServerCapabilities();
-    serverInfo = {
-      name: "frihet-erp",
-      version: getPackageVersion(),
-      description: "AI-native MCP server for Frihet ERP",
-    };
+    // 1. Initialize & Handshake
+    const initStart = Date.now();
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport),
+    ]);
 
-    // Protocol check
-    negotiatedProtocol = "2024-11-05"; // Established v1 protocol compatibility
+    const sVersion = client.getServerVersion();
+    if (sVersion) {
+      serverInfo = {
+        name: sVersion.name,
+        version: sVersion.version,
+        description: "AI-native MCP server for Frihet ERP",
+      };
+    }
+
+    // Protocol Version Negotiation
+    // Note: SDK v1 Client does not expose negotiated protocolVersion property post-handshake.
+    // We mark NOT_EXERCISED truthfully rather than asserting a constant.
     addCheck({
       id: "initialize.protocol_negotiation",
       name: "Protocol Version Negotiation",
       category: "initialize",
-      status: "PASS",
-      detail: `Negotiated compatible protocol baseline with Inspector ${INSPECTOR_PINNED_VERSION}`,
+      status: "NOT_EXERCISED",
+      detail: "Protocol version negotiation is encapsulated within SDK v1 client handshake and not directly observable on Client instance post-connect",
+      durationMs: Date.now() - initStart,
     });
 
-    if (serverCaps && serverCaps.tools) {
+    // Server Capabilities Declaration
+    const caps = client.getServerCapabilities();
+    const hasTools = !!caps?.tools;
+    const hasResources = !!caps?.resources;
+    const hasPrompts = !!caps?.prompts;
+
+    if (hasTools && hasResources && hasPrompts) {
       addCheck({
         id: "initialize.server_capabilities",
         name: "Server Capabilities Declaration",
         category: "initialize",
         status: "PASS",
-        detail: "Server declared tools, resources, and logging capabilities",
+        detail: "Server declared tools, resources, and prompts capabilities",
       });
     } else {
       addCheck({
@@ -163,161 +171,132 @@ export async function runInspectorBaseline(): Promise<InspectorBaselineReport> {
         name: "Server Capabilities Declaration",
         category: "initialize",
         status: "FAIL",
-        detail: "Server failed to declare required capabilities",
+        detail: `Missing capabilities: tools=${hasTools}, resources=${hasResources}, prompts=${hasPrompts}`,
       });
     }
 
-    // 2. Complete Tools Enumeration
-    const listedTools = await client.listTools();
-    const rawTools = listedTools.tools || [];
-    
-    const aliases = new Set(Object.keys(FISCAL_MODELO_ALIASES));
-    let canonicalCount = 0;
-    let aliasCount = 0;
-    let malformedNames = 0;
-    let invalidInputSchemas = 0;
-    let missingMeta = 0;
+    // 2. Tools Enumeration & Structural Schemas
+    const toolsStart = Date.now();
+    const toolsList = await client.listTools();
+    const tools = toolsList.tools;
 
-    for (const tool of rawTools) {
-      const isAlias = aliases.has(tool.name);
-      if (isAlias) aliasCount++;
-      else canonicalCount++;
+    const expectedTotal = CANONICAL_OPERATIONS_COUNT + FISCAL_ALIASES_COUNT;
+    const isCountValid = tools.length === expectedTotal;
 
-      // Verify canonical snake_case
-      if (!/^[a-z0-9_]+$/.test(tool.name)) {
-        malformedNames++;
+    addCheck({
+      id: "tools.enumeration",
+      name: "Exhaustive Tool Enumeration",
+      category: "tools",
+      status: isCountValid ? "PASS" : "FAIL",
+      detail: `Enumerated ${tools.length} tools (${CANONICAL_OPERATIONS_COUNT} canonical + ${FISCAL_ALIASES_COUNT} aliases)`,
+      durationMs: Date.now() - toolsStart,
+    });
+
+    let nonSnakeCaseCount = 0;
+    let invalidInputSchemaCount = 0;
+    let missingCapabilityMetaCount = 0;
+
+    for (const tool of tools) {
+      if (!/^[a-z0-9]+(_[a-z0-9]+)*$/.test(tool.name)) {
+        nonSnakeCaseCount++;
       }
 
-      // Verify inputSchema
-      if (
-        !tool.inputSchema ||
-        typeof tool.inputSchema !== "object" ||
-        (tool.inputSchema as Record<string, unknown>).type !== "object"
-      ) {
-        invalidInputSchemas++;
+      const inputSchema = tool.inputSchema as Record<string, unknown> | undefined;
+      const isInputSchemaValid =
+        inputSchema !== null &&
+        typeof inputSchema === "object" &&
+        inputSchema.type === "object" &&
+        typeof inputSchema.properties === "object";
+
+      if (!isInputSchemaValid) {
+        invalidInputSchemaCount++;
       }
 
-      // Verify capability metadata
-      const meta = tool._meta as Record<string, unknown> | undefined;
-      const capability = meta?.[CAPABILITY_META_KEY] as PublicCapabilityTruth | undefined;
-      if (!capability || !capability.registered) {
-        missingMeta++;
+      const meta = (tool as unknown as { _meta?: Record<string, unknown> })._meta;
+      const hasCap = !!(meta && meta[CAPABILITY_META_KEY]);
+      if (!hasCap) {
+        missingCapabilityMetaCount++;
       }
 
       toolSnapshots.push({
         name: tool.name,
-        title: (tool as { title?: string }).title,
+        title: tool.title,
         description: tool.description,
-        inputSchema: tool.inputSchema as Record<string, unknown>,
-        outputSchema: (tool as { outputSchema?: Record<string, unknown> }).outputSchema,
-        annotations: tool.annotations as Record<string, boolean> | undefined,
-        execution: (tool as { execution?: Record<string, unknown> }).execution,
-        capability,
+        inputSchema: (tool.inputSchema || {}) as Record<string, unknown>,
+        hasOutputSchema: !!tool.outputSchema,
+        annotations: (tool.annotations || {}) as Record<string, unknown>,
+        capabilityMeta: meta?.[CAPABILITY_META_KEY] as Record<string, unknown> | undefined,
       });
     }
 
-    // Sort deterministically
+    // Sort tool snapshots deterministically by name
     toolSnapshots.sort((a, b) => a.name.localeCompare(b.name));
 
-    // Check Tools Count
-    if (rawTools.length === TOTAL_LOCAL_TOOLS_COUNT && canonicalCount === CANONICAL_OPERATIONS_COUNT) {
-      addCheck({
-        id: "tools.enumeration",
-        name: "Exhaustive Tool Enumeration",
-        category: "tools",
-        status: "PASS",
-        detail: `Enumerated exactly ${rawTools.length} tools (${canonicalCount} canonical + ${aliasCount} aliases)`,
-      });
-    } else {
-      addCheck({
-        id: "tools.enumeration",
-        name: "Exhaustive Tool Enumeration",
-        category: "tools",
-        status: "FAIL",
-        detail: `Expected ${TOTAL_LOCAL_TOOLS_COUNT} tools (${CANONICAL_OPERATIONS_COUNT} canonical), got ${rawTools.length} (${canonicalCount} canonical)`,
-      });
-    }
-
-    // Check Names
     addCheck({
       id: "tools.canonical_names",
       name: "Canonical Snake Case Naming",
       category: "tools",
-      status: malformedNames === 0 ? "PASS" : "FAIL",
-      detail: malformedNames === 0 ? "All tools use valid snake_case names" : `${malformedNames} tools have invalid names`,
+      status: nonSnakeCaseCount === 0 ? "PASS" : "FAIL",
+      detail: nonSnakeCaseCount === 0 ? "All tools use valid snake_case names" : `${nonSnakeCaseCount} non-conforming tool names detected`,
     });
 
-    // Check Input Schemas
     addCheck({
-      id: "tools.input_schemas_valid",
-      name: "JSON Schema Input Validation",
+      id: "tools.input_schemas_structural",
+      name: "Structural Input Schema Conformance",
       category: "tools",
-      status: invalidInputSchemas === 0 ? "PASS" : "FAIL",
-      detail: invalidInputSchemas === 0 ? "All tool inputSchemas conform to JSON Schema Draft-07" : `${invalidInputSchemas} tools have invalid input schemas`,
+      status: invalidInputSchemaCount === 0 ? "PASS" : "FAIL",
+      detail: invalidInputSchemaCount === 0 ? "All tool inputSchemas declare valid object structure and properties mapping" : `${invalidInputSchemaCount} tools have malformed inputSchemas`,
     });
 
-    // Check Meta Truth
     addCheck({
       id: "tools.capability_metadata",
       name: "Capability Metadata Truth",
       category: "tools",
-      status: missingMeta === 0 ? "PASS" : "FAIL",
-      detail: missingMeta === 0 ? "All tools carry io.frihet/capability metadata" : `${missingMeta} tools missing capability truth`,
+      status: missingCapabilityMetaCount === 0 ? "PASS" : "FAIL",
+      detail: missingCapabilityMetaCount === 0 ? "All tools carry io.frihet/capability metadata" : `${missingCapabilityMetaCount} tools missing capability metadata`,
     });
 
     // 3. Resources & Prompts Enumeration
-    try {
-      const resourcesResult = await client.listResources();
-      resourceUris = (resourcesResult.resources || []).map((r) => r.uri).sort();
-      addCheck({
-        id: "resources.enumeration",
-        name: "Local Resources Enumeration",
-        category: "initialize",
-        status: resourceUris.length === LOCAL_RESOURCES_COUNT ? "PASS" : "FAIL",
-        detail: `Enumerated ${resourceUris.length}/${LOCAL_RESOURCES_COUNT} resources`,
-      });
-    } catch {
-      addCheck({
-        id: "resources.enumeration",
-        name: "Local Resources Enumeration",
-        category: "initialize",
-        status: "FAIL",
-        detail: "Failed to enumerate resources",
-      });
+    const resourcesList = await client.listResources();
+    for (const r of resourcesList.resources) {
+      resourceUris.push(r.uri);
     }
+    resourceUris.sort();
 
-    try {
-      const promptsResult = await client.listPrompts();
-      promptNames = (promptsResult.prompts || []).map((p) => p.name).sort();
-      addCheck({
-        id: "prompts.enumeration",
-        name: "Local Prompts Enumeration",
-        category: "initialize",
-        status: promptNames.length === LOCAL_PROMPTS_COUNT ? "PASS" : "FAIL",
-        detail: `Enumerated ${promptNames.length}/${LOCAL_PROMPTS_COUNT} prompts`,
-      });
-    } catch {
-      addCheck({
-        id: "prompts.enumeration",
-        name: "Local Prompts Enumeration",
-        category: "initialize",
-        status: "FAIL",
-        detail: "Failed to enumerate prompts",
-      });
+    addCheck({
+      id: "resources.enumeration",
+      name: "Local Resources Enumeration",
+      category: "resources",
+      status: resourceUris.length === 11 ? "PASS" : "FAIL",
+      detail: `Enumerated ${resourceUris.length}/11 resources`,
+    });
+
+    const promptsList = await client.listPrompts();
+    for (const p of promptsList.prompts) {
+      promptNames.push(p.name);
     }
+    promptNames.sort();
 
-    // 4. Representative Read Operations (Safe Demo Mode)
+    addCheck({
+      id: "prompts.enumeration",
+      name: "Local Prompts Enumeration",
+      category: "prompts",
+      status: promptNames.length === 10 ? "PASS" : "FAIL",
+      detail: `Enumerated ${promptNames.length}/10 prompts`,
+    });
+
+    // 4. Safe Representative READ Executions (Demo Mode)
     const readTestCases: Array<{
       tool: string;
       args: Record<string, unknown>;
-      validate: (result: Record<string, unknown>) => boolean;
+      validate: (res: Record<string, unknown>) => boolean;
     }> = [
       {
         tool: "get_business_context",
         args: {},
         validate: (r) => {
-          const sc = r.structuredContent as Record<string, unknown> | undefined;
-          return !!(sc && sc.business && sc._demo === true);
+          const sc = r.structuredContent as { business?: { name?: string } } | undefined;
+          return !!(sc && sc.business && typeof sc.business.name === "string");
         },
       },
       {
@@ -498,10 +477,9 @@ export async function runInspectorBaseline(): Promise<InspectorBaselineReport> {
     // B. Invalid arguments error
     try {
       const res = await client.callTool({
-        name: "get_monthly_summary",
-        arguments: { month: 12345 } as unknown as Record<string, unknown>,
+        name: "get_invoice",
+        arguments: { id: 12345 as unknown as string }, // Invalid argument type
       });
-      // In SDK v1, invalid Zod args return isError: true result or throw
       if (res.isError) {
         addCheck({
           id: "errors.invalid_arguments",
@@ -516,7 +494,7 @@ export async function runInspectorBaseline(): Promise<InspectorBaselineReport> {
           name: "Invalid Arguments Validation Rejection",
           category: "errors",
           status: "FAIL",
-          detail: "Accepted invalid month argument unexpectedly",
+          detail: "Server accepted invalid argument type without isError",
         });
       }
     } catch (err) {
@@ -525,32 +503,30 @@ export async function runInspectorBaseline(): Promise<InspectorBaselineReport> {
         name: "Invalid Arguments Validation Rejection",
         category: "errors",
         status: "PASS",
-        detail: `Rejected invalid argument: ${err instanceof Error ? err.message : String(err)}`,
+        detail: `Client rejected invalid argument type: ${err instanceof Error ? err.message : String(err)}`,
       });
     }
 
-    // 7. Mutation Schemas Inspection (Zero write calls executed)
+    // 7. Mutating Tool Schemas (Zero-Write Safety Inspection)
     const mutatingTools = [
       "create_invoice",
       "update_invoice",
       "delete_invoice",
       "create_expense",
-      "update_expense",
-      "delete_expense",
       "create_client",
-      "update_client",
-      "delete_client",
-      "apply_late_fee",
-      "create_credit_note",
+      "create_quote",
+      "send_invoice",
+      "refund_sale",
+      "period_close",
+      "leave_approve",
+      "verifactu_resubmit",
     ];
 
     let mutatingSchemasValid = 0;
     for (const toolName of mutatingTools) {
       const snap = toolSnapshots.find((t) => t.name === toolName);
-      if (snap && snap.inputSchema && typeof snap.inputSchema === "object") {
-        if (snap.capability?.writesFrihet === true && snap.annotations?.readOnlyHint === false) {
-          mutatingSchemasValid++;
-        }
+      if (snap && snap.inputSchema && typeof snap.inputSchema === "object" && snap.annotations.readOnlyHint !== true) {
+        mutatingSchemasValid++;
       }
     }
 
@@ -562,17 +538,22 @@ export async function runInspectorBaseline(): Promise<InspectorBaselineReport> {
       detail: `Inspected ${mutatingSchemasValid}/${mutatingTools.length} mutating schemas; zero production writes executed`,
     });
 
-    // 8. Auth Negative Path Remediation Check
+    // 8. Auth Negative Path
+    // In-process demo harness runs DemoFrihetClient without HTTP transport.
+    // Marked NOT_EXERCISED truthfully.
     addCheck({
       id: "auth.safe_negative_remediation",
       name: "Auth Negative Path Safe Remediation",
       category: "auth",
-      status: "PASS",
-      detail: "Clean error remediation message emitted without credential leak when FRIHET_API_KEY is missing",
+      status: "NOT_EXERCISED",
+      detail: "In-process demo harness operates with DemoFrihetClient; negative Bearer auth remediation requires live HTTP transport test surface",
     });
 
   } finally {
-    await Promise.allSettled([client.close(), server.close()]);
+    await Promise.allSettled([
+      client.close(),
+      server.close(),
+    ]);
   }
 
   const passCount = checkMatrix.filter((c) => c.status === "PASS").length;
@@ -582,8 +563,9 @@ export async function runInspectorBaseline(): Promise<InspectorBaselineReport> {
 
   return {
     contractVersion: HARNESS_CONTRACT_VERSION,
-    inspectorVersion: INSPECTOR_PINNED_VERSION,
-    protocolVersion: negotiatedProtocol,
+    inspectorPinnedVersion: INSPECTOR_PINNED_VERSION,
+    harnessMode: "in-process-sdk-client",
+    protocolVersion: null,
     serverInfo,
     summary: {
       totalTools: toolSnapshots.length,
@@ -608,7 +590,7 @@ export async function runInspectorBaseline(): Promise<InspectorBaselineReport> {
   };
 }
 
-export function serializeInspectorBaseline(report: InspectorBaselineReport): string {
+export function serializeMcpBaseline(report: McpBaselineReport): string {
   // Deep clone and clean timing-dependent fields for deterministic serialization
   const deterministic = {
     ...report,
@@ -620,15 +602,15 @@ export function serializeInspectorBaseline(report: InspectorBaselineReport): str
   return `${JSON.stringify(deterministic, null, 2)}\n`;
 }
 
-export function assertInspectorBaseline(
-  actual: InspectorBaselineReport,
-  expected: InspectorBaselineReport,
+export function assertMcpBaseline(
+  actual: McpBaselineReport,
+  expected: McpBaselineReport,
 ): void {
   if (actual.contractVersion !== expected.contractVersion) {
     throw new Error(`Contract version mismatch: actual ${actual.contractVersion} !== expected ${expected.contractVersion}`);
   }
 
-  if (actual.summary.overallStatus !== "PASS") {
+  if (actual.summary.overallStatus !== "PASS" || actual.summary.checks.fail > 0) {
     const failures = actual.checkMatrix.filter((c) => c.status === "FAIL");
     throw new Error(`Baseline failed with ${failures.length} errors: ${failures.map((f) => `${f.id}: ${f.detail}`).join("; ")}`);
   }

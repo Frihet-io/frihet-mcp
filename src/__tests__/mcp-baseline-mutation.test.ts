@@ -1,5 +1,5 @@
 /**
- * Adversarial Mutation Tests for the MCP Inspector Compatibility Harness.
+ * Adversarial Mutation Tests for the MCP Compatibility & Baseline Harness.
  *
  * Verifies that the compatibility harness and baseline assertion engine
  * deterministically turn RED under all required mutation proofs:
@@ -19,21 +19,23 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  assertInspectorBaseline,
-  runInspectorBaseline,
-  type InspectorBaselineReport,
-} from "../canary/inspector-harness.js";
+  assertMcpBaseline,
+  runMcpBaseline,
+  type McpBaselineReport,
+} from "../canary/mcp-harness.js";
 
-describe("Inspector Compatibility Lab — Mutation Proofs", () => {
-  let goldenBaseline: InspectorBaselineReport;
+describe("MCP Compatibility Lab — Mutation Proofs", () => {
+  let goldenBaseline: McpBaselineReport;
 
   test("fixture setup: capture valid baseline", async () => {
-    goldenBaseline = await runInspectorBaseline();
+    goldenBaseline = await runMcpBaseline();
     assert.equal(goldenBaseline.summary.overallStatus, "PASS");
     assert.equal(goldenBaseline.summary.totalTools, 162);
     assert.equal(goldenBaseline.summary.canonicalOperations, 157);
     assert.equal(goldenBaseline.summary.resources, 11);
     assert.equal(goldenBaseline.summary.prompts, 10);
+    assert.equal(goldenBaseline.summary.checks.pass, 21);
+    assert.equal(goldenBaseline.summary.checks.notExercised, 2);
   });
 
   test("mutation proof 1: remove one canonical tool → RED", () => {
@@ -43,7 +45,7 @@ describe("Inspector Compatibility Lab — Mutation Proofs", () => {
     mutated.summary.canonicalOperations = 156;
 
     assert.throws(
-      () => assertInspectorBaseline(mutated, goldenBaseline),
+      () => assertMcpBaseline(mutated, goldenBaseline),
       /Tool count drift|Missing expected tool/i,
       "Harness must turn RED when a canonical tool is removed",
     );
@@ -52,12 +54,11 @@ describe("Inspector Compatibility Lab — Mutation Proofs", () => {
   test("mutation proof 2: duplicate tool → RED", () => {
     const mutated = structuredClone(goldenBaseline);
     const firstTool = mutated.tools[0]!;
-    // Append duplicate tool
     mutated.tools.push(structuredClone(firstTool));
     mutated.summary.totalTools = mutated.tools.length;
 
     assert.throws(
-      () => assertInspectorBaseline(mutated, goldenBaseline),
+      () => assertMcpBaseline(mutated, goldenBaseline),
       /Duplicate tool detected|Tool count drift/i,
       "Harness must turn RED when duplicate tools exist",
     );
@@ -66,13 +67,14 @@ describe("Inspector Compatibility Lab — Mutation Proofs", () => {
   test("mutation proof 3: pagination drops page 2 → RED", () => {
     const mutated = structuredClone(goldenBaseline);
     mutated.summary.overallStatus = "FAIL";
+    mutated.summary.checks.fail = 1;
     const paginationCheck = mutated.checkMatrix.find((c) => c.id === "pagination.cursor_and_limits");
     assert.ok(paginationCheck);
     paginationCheck.status = "FAIL";
     paginationCheck.detail = "Simulated pagination failure: page 2 dropped during offset/cursor paging";
 
     assert.throws(
-      () => assertInspectorBaseline(mutated, goldenBaseline),
+      () => assertMcpBaseline(mutated, goldenBaseline),
       /Baseline failed with.*errors/i,
       "Harness must turn RED when pagination drops a page",
     );
@@ -81,13 +83,14 @@ describe("Inspector Compatibility Lab — Mutation Proofs", () => {
   test("mutation proof 4: structuredContent malformed → RED", () => {
     const mutated = structuredClone(goldenBaseline);
     mutated.summary.overallStatus = "FAIL";
+    mutated.summary.checks.fail = 1;
     const readCheck = mutated.checkMatrix.find((c) => c.id === "reads.list_invoices");
     assert.ok(readCheck);
     readCheck.status = "FAIL";
     readCheck.detail = "Invalid payload shape: structuredContent omitted required total field";
 
     assert.throws(
-      () => assertInspectorBaseline(mutated, goldenBaseline),
+      () => assertMcpBaseline(mutated, goldenBaseline),
       /Baseline failed with.*errors/i,
       "Harness must turn RED when structuredContent is malformed",
     );
@@ -97,11 +100,10 @@ describe("Inspector Compatibility Lab — Mutation Proofs", () => {
     const mutated = structuredClone(goldenBaseline);
     const invoiceTool = mutated.tools.find((t) => t.name === "get_invoice");
     assert.ok(invoiceTool);
-    // Alter schema by removing id property
     invoiceTool.inputSchema = { type: "object", properties: {} };
 
     assert.throws(
-      () => assertInspectorBaseline(mutated, goldenBaseline),
+      () => assertMcpBaseline(mutated, goldenBaseline),
       /Input schema drift on tool get_invoice/i,
       "Harness must turn RED when an input schema drifts",
     );
@@ -110,13 +112,14 @@ describe("Inspector Compatibility Lab — Mutation Proofs", () => {
   test("mutation proof 6: wrong error shape → RED", () => {
     const mutated = structuredClone(goldenBaseline);
     mutated.summary.overallStatus = "FAIL";
+    mutated.summary.checks.fail = 1;
     const errorCheck = mutated.checkMatrix.find((c) => c.id === "errors.unknown_tool");
     assert.ok(errorCheck);
     errorCheck.status = "FAIL";
     errorCheck.detail = "Unknown tool call returned 200 OK instead of typed -32601 error";
 
     assert.throws(
-      () => assertInspectorBaseline(mutated, goldenBaseline),
+      () => assertMcpBaseline(mutated, goldenBaseline),
       /Baseline failed with.*errors/i,
       "Harness must turn RED when error shape is wrong",
     );
@@ -128,7 +131,7 @@ describe("Inspector Compatibility Lab — Mutation Proofs", () => {
     mutatedRes.summary.resources = mutatedRes.resources.length;
 
     assert.throws(
-      () => assertInspectorBaseline(mutatedRes, goldenBaseline),
+      () => assertMcpBaseline(mutatedRes, goldenBaseline),
       /Resource count drift/i,
       "Harness must turn RED when resources are dropped",
     );
@@ -138,7 +141,7 @@ describe("Inspector Compatibility Lab — Mutation Proofs", () => {
     mutatedPrompt.summary.prompts = mutatedPrompt.prompts.length;
 
     assert.throws(
-      () => assertInspectorBaseline(mutatedPrompt, goldenBaseline),
+      () => assertMcpBaseline(mutatedPrompt, goldenBaseline),
       /Prompt count drift/i,
       "Harness must turn RED when prompts are dropped",
     );
@@ -151,7 +154,7 @@ describe("Inspector Compatibility Lab — Mutation Proofs", () => {
     invoiceTool.annotations = { ...invoiceTool.annotations, readOnlyHint: true };
 
     assert.throws(
-      () => assertInspectorBaseline(mutated, goldenBaseline),
+      () => assertMcpBaseline(mutated, goldenBaseline),
       /Annotation drift on tool create_invoice/i,
       "Harness must turn RED when action annotations drift",
     );
