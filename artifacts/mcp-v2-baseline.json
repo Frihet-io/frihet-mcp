@@ -745,7 +745,7 @@
     {
       "name": "create_expense",
       "title": "Create Expense",
-      "description": "Record a new expense. Requires a description and amount. Useful for tracking business costs, deductible expenses, and vendor payments. Example: description='Office supplies', amount=49.99, category='office', vendor='Amazon', taxDeductible=true / Registra un nuevo gasto. Requiere descripcion e importe. Util para seguimiento de costes, gastos deducibles y pagos a proveedores.",
+      "description": "Record a new expense. Requires a description and amount. Useful for tracking business costs, deductible expenses, and vendor payments. Example: description='Office supplies', amount=49.99, category='office', vendor='Amazon', taxDeductible=true, paidDate='2026-03-15' / Registra un nuevo gasto. Requiere descripcion e importe. Util para seguimiento de costes, gastos deducibles y pagos a proveedores.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -772,13 +772,18 @@
           "taxDeductible": {
             "description": "Whether the expense is tax deductible / Si el gasto es deducible fiscalmente",
             "type": "boolean"
+          },
+          "paidDate": {
+            "description": "Optional payment date in ISO 8601 (YYYY-MM-DD). Drives the Modelo 111/115/130 cash-basis period selector. Must be a real calendar date (2028-02-29 is valid, 2026-02-29 is not). / Fecha de pago opcional en ISO 8601 (YYYY-MM-DD). Determina el periodo de caja del Modelo 111/115/130.",
+            "type": "string"
           }
         },
         "required": [
           "description",
           "amount"
         ],
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
       },
       "hasOutputSchema": true,
       "annotations": {
