@@ -464,6 +464,7 @@
       },
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
         "properties": {
           "amount": {
             "description": "Amount in EUR / Importe en EUR",
@@ -479,6 +480,10 @@
           },
           "description": {
             "description": "Expense description / Descripcion del gasto",
+            "type": "string"
+          },
+          "paidDate": {
+            "description": "Optional payment date in ISO 8601 (YYYY-MM-DD). Drives the Modelo 111/115/130 cash-basis period selector. Must be a real calendar date (2028-02-29 is valid, 2026-02-29 is not). / Fecha de pago opcional en ISO 8601 (YYYY-MM-DD). Determina el periodo de caja del Modelo 111/115/130.",
             "type": "string"
           },
           "taxDeductible": {

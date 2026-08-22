@@ -21,7 +21,7 @@ Technical reference for working with the Frihet MCP server tools. Covers rate li
 |------|-----------|-------|
 | `list_expenses` | `offset`, `limit`, `category`, `dateFrom`, `dateTo` | Default limit 20 |
 | `get_expense` | `id` (required) | |
-| `create_expense` | `description`, `amount`, `date`, `category`, `taxAmount`, `supplier` | Category: one of 8 values |
+| `create_expense` | `description`, `amount`, `date`, `category`, `vendor`, `taxDeductible`, `paidDate` (strict YYYY-MM-DD) | Category: one of 8 values; `paidDate` drives the Modelo 111/115/130 cash-basis period selector |
 | `update_expense` | `id` (required), partial fields | |
 | `delete_expense` | `id` (required) | |
 
