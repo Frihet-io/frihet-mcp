@@ -301,8 +301,8 @@ export class DemoFrihetClient implements IFrihetClient {
 
   // ---------------------------------------------------------------- Webhooks
   async listWebhooks(): Promise<{ data: Webhook[]; total: number; _demo?: true; _demoNotice?: string }> {
-    const { data, total, _demo, _demoNotice } = demoEmptyPage();
-    return { data: data as unknown as Webhook[], total, _demo, _demoNotice };
+    const { data, total } = demoEmptyPage();
+    return { data: data as unknown as Webhook[], total };
   }
   async getWebhook(id: string): Promise<Webhook> {
     return {
