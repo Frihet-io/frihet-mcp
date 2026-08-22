@@ -1,0 +1,846 @@
+{
+  "issue": "berthelius/Frihet-ERP#1578 Phase 0",
+  "generatedBy": "scripts/conformance/run-phase0.mjs",
+  "deterministic": "No timestamps, ports, session ids or durations are recorded — rerunning on the same SHA must produce a byte-identical file.",
+  "versions": {
+    "serverSha": "37b0e59947eff3f2ddf0c380d739ee9fc8fcbdb8",
+    "serverPackageVersion": "1.16.6",
+    "sdkVersion": "1.30.0",
+    "sdkDeclaredRange": "^1.27.0",
+    "protocolVersion": "2025-11-25",
+    "conformanceVersion": "0.1.16",
+    "inspectorVersion": "2.3.0",
+    "nodeVersion": "v22.22.2"
+  },
+  "harnessIntegrity": {
+    "conformance": "sha512-GI7qiN0r39/MH2srVUR3AXaEN0YLCro20lIBbnvc1frBhszenxvUifBuTzxeVQVagILfBzCIcnungUOma8OrgA==",
+    "inspector": "sha512-eXqGdLuSIGLLDmmpYzhTZMfs2HEn2ykV9CQ1cjcyf0snAoeV5pcDBs9epIxz9nRWw6HfsvcqBlr8m55olCLGDg=="
+  },
+  "target": {
+    "transport": "stdio",
+    "mode": "FRIHET_DEMO=1 (fixtures, no network, no FRIHET_API_KEY present)",
+    "reachedVia": "scripts/conformance/http-bridge.mjs — verbatim JSON-RPC relay, required because the official server harness speaks Streamable HTTP only",
+    "advertisedCapabilities": {
+      "tools": {
+        "listChanged": true
+      },
+      "resources": {
+        "listChanged": true
+      },
+      "prompts": {
+        "listChanged": true
+      }
+    },
+    "serverInfoName": "frihet-erp",
+    "inventoryCounts": {
+      "tools": 162,
+      "resources": 11,
+      "prompts": 10
+    }
+  },
+  "conformance": {
+    "relayedMessages": 170,
+    "declaredScenarios": [
+      "server-initialize",
+      "logging-set-level",
+      "ping",
+      "completion-complete",
+      "tools-list",
+      "tools-call-simple-text",
+      "tools-call-image",
+      "tools-call-audio",
+      "tools-call-embedded-resource",
+      "tools-call-mixed-content",
+      "tools-call-with-logging",
+      "tools-call-error",
+      "tools-call-with-progress",
+      "tools-call-sampling",
+      "tools-call-elicitation",
+      "json-schema-2020-12",
+      "elicitation-sep1034-defaults",
+      "server-sse-polling",
+      "server-sse-multiple-streams",
+      "elicitation-sep1330-enums",
+      "resources-list",
+      "resources-read-text",
+      "resources-read-binary",
+      "resources-templates-read",
+      "resources-subscribe",
+      "resources-unsubscribe",
+      "prompts-list",
+      "prompts-get-simple",
+      "prompts-get-with-args",
+      "prompts-get-embedded-resource",
+      "prompts-get-with-image",
+      "dns-rebinding-protection"
+    ],
+    "matrix": [
+      {
+        "scenario": "completion-complete",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "capability-absent",
+        "note": "Frihet advertises no completions capability.",
+        "evidence": "Failed: MCP error -32601: Method not found",
+        "evidenceRequired": "-32601",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "dns-rebinding-protection",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "bridge-under-test",
+        "note": "Host/Origin validation belongs to the HTTP transport. Frihet ships stdio only, so this measures http-bridge.mjs.",
+        "evidence": "harness reported FAILURE,SUCCESS against the relay, not the server",
+        "unknownFixtures": [],
+        "relayedMessages": 4,
+        "rawStatuses": [
+          "FAILURE",
+          "SUCCESS"
+        ]
+      },
+      {
+        "scenario": "elicitation-sep1034-defaults",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Same elicitation-triggering fixture, SEP-1034 defaults variant.",
+        "evidence": "requested tool:test_elicitation_sep1034_defaults; harness statuses FAILURE",
+        "unknownFixtures": [
+          "tool:test_elicitation_sep1034_defaults"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "elicitation-sep1330-enums",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Same elicitation-triggering fixture, SEP-1330 enums variant.",
+        "evidence": "requested tool:test_elicitation_sep1330_enums; harness statuses FAILURE",
+        "unknownFixtures": [
+          "tool:test_elicitation_sep1330_enums"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "json-schema-2020-12",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Needs a named fixture tool. Frihet tool schemas are therefore NOT covered by this scenario — tracked as an uncovered area in the report, not as a pass.",
+        "evidence": "Tool 'json_schema_2020_12_tool' not found. Available tools: get_business_context, get_monthly_summary, get_quarterly_taxes, duplic",
+        "evidenceRequired": "json_schema_2020_12_tool",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "logging-set-level",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "capability-absent",
+        "note": "Frihet advertises tools/resources/prompts only. logging/setLevel correctly returns Method not found.",
+        "evidence": "Failed: MCP error -32601: Method not found",
+        "evidenceRequired": "-32601",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "ping",
+        "outcome": "PASS",
+        "reason": "harness-success",
+        "evidence": "",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "SUCCESS"
+        ]
+      },
+      {
+        "scenario": "prompts-get-embedded-resource",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Hardcoded reference prompt name.",
+        "evidence": "requested prompt:test_prompt_with_embedded_resource; harness statuses FAILURE",
+        "unknownFixtures": [
+          "prompt:test_prompt_with_embedded_resource"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "prompts-get-simple",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Hardcoded reference prompt name. Real Frihet prompts/get is exercised by the Inspector smoke.",
+        "evidence": "requested prompt:test_simple_prompt; harness statuses FAILURE",
+        "unknownFixtures": [
+          "prompt:test_simple_prompt"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "prompts-get-with-args",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Hardcoded reference prompt name.",
+        "evidence": "requested prompt:test_prompt_with_arguments; harness statuses FAILURE",
+        "unknownFixtures": [
+          "prompt:test_prompt_with_arguments"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "prompts-get-with-image",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Hardcoded reference prompt name.",
+        "evidence": "requested prompt:test_prompt_with_image; harness statuses FAILURE",
+        "unknownFixtures": [
+          "prompt:test_prompt_with_image"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "prompts-list",
+        "outcome": "PASS",
+        "reason": "harness-success",
+        "evidence": "",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "SUCCESS"
+        ]
+      },
+      {
+        "scenario": "resources-list",
+        "outcome": "PASS",
+        "reason": "harness-success",
+        "evidence": "",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "SUCCESS"
+        ]
+      },
+      {
+        "scenario": "resources-read-binary",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Hardcoded reference URI.",
+        "evidence": "requested resource:test://static-binary; harness statuses FAILURE",
+        "unknownFixtures": [
+          "resource:test://static-binary"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "resources-read-text",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Hardcoded reference URI. Real Frihet resources/read is exercised by the Inspector smoke instead.",
+        "evidence": "requested resource:test://static-text; harness statuses FAILURE",
+        "unknownFixtures": [
+          "resource:test://static-text"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "resources-subscribe",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "capability-absent",
+        "note": "resources capability is advertised, but without subscribe.",
+        "evidence": "Failed: MCP error -32601: Method not found",
+        "evidenceRequired": "-32601",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "resources-templates-read",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Hardcoded reference template URI.",
+        "evidence": "requested resource:test://template/123/data; harness statuses FAILURE",
+        "unknownFixtures": [
+          "resource:test://template/123/data"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "resources-unsubscribe",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "capability-absent",
+        "note": "Same absent sub-capability as resources-subscribe.",
+        "evidence": "Failed: MCP error -32601: Method not found",
+        "evidenceRequired": "-32601",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "server-initialize",
+        "outcome": "PASS",
+        "reason": "harness-success",
+        "evidence": "",
+        "unknownFixtures": [],
+        "relayedMessages": 3,
+        "rawStatuses": [
+          "SUCCESS"
+        ]
+      },
+      {
+        "scenario": "server-sse-multiple-streams",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "bridge-under-test",
+        "note": "SSE stream management is the bridge's. Its SUCCESS is explicitly NOT counted as a Frihet pass.",
+        "evidence": "harness reported SUCCESS,SUCCESS against the relay, not the server",
+        "unknownFixtures": [],
+        "relayedMessages": 9,
+        "rawStatuses": [
+          "SUCCESS",
+          "SUCCESS"
+        ]
+      },
+      {
+        "scenario": "server-sse-polling",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "bridge-under-test",
+        "note": "SSE resumability/priming/retry are the bridge's, and the scenario also needs a test_reconnection fixture tool.",
+        "evidence": "harness reported INFO,INFO,FAILURE,INFO,WARNING,WARNING,INFO against the relay, not the server",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "INFO",
+          "INFO",
+          "FAILURE",
+          "INFO",
+          "WARNING",
+          "WARNING",
+          "INFO"
+        ]
+      },
+      {
+        "scenario": "tools-call-audio",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Needs a tool that returns audio content. Frihet exposes none.",
+        "evidence": "requested tool:test_audio_content; harness statuses FAILURE",
+        "unknownFixtures": [
+          "tool:test_audio_content"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "tools-call-elicitation",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Needs a tool that elicits from the client during the call.",
+        "evidence": "requested tool:test_elicitation; harness statuses FAILURE",
+        "unknownFixtures": [
+          "tool:test_elicitation"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "tools-call-embedded-resource",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Needs a tool that returns an embedded resource.",
+        "evidence": "requested tool:test_embedded_resource; harness statuses FAILURE",
+        "unknownFixtures": [
+          "tool:test_embedded_resource"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "tools-call-error",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-false-green-on-missing-fixture",
+        "note": "the harness reported SUCCESS while requesting tool:test_error_handling, which this server does not expose — the assertion was satisfied by the server's not-found error, so nothing was exercised",
+        "evidence": "requested tool:test_error_handling; harness statuses SUCCESS",
+        "unknownFixtures": [
+          "tool:test_error_handling"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "SUCCESS"
+        ]
+      },
+      {
+        "scenario": "tools-call-image",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Needs a tool that returns image content. Frihet exposes none; binary payloads travel as resource links.",
+        "evidence": "requested tool:test_image_content; harness statuses FAILURE",
+        "unknownFixtures": [
+          "tool:test_image_content"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "tools-call-mixed-content",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Needs a tool returning several content types at once.",
+        "evidence": "requested tool:test_multiple_content_types; harness statuses FAILURE",
+        "unknownFixtures": [
+          "tool:test_multiple_content_types"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "tools-call-sampling",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Needs a tool that calls sampling/createMessage back into the client.",
+        "evidence": "requested tool:test_sampling; harness statuses FAILURE",
+        "unknownFixtures": [
+          "tool:test_sampling"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "tools-call-simple-text",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-false-green-on-missing-fixture",
+        "note": "the harness reported SUCCESS while requesting tool:test_simple_text, which this server does not expose — the assertion was satisfied by the server's not-found error, so nothing was exercised",
+        "evidence": "requested tool:test_simple_text; harness statuses SUCCESS",
+        "unknownFixtures": [
+          "tool:test_simple_text"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "SUCCESS"
+        ]
+      },
+      {
+        "scenario": "tools-call-with-logging",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "capability-absent",
+        "note": "Scenario first calls logging/setLevel; blocked by the same absent capability.",
+        "evidence": "Failed: MCP error -32601: Method not found",
+        "evidenceRequired": "-32601",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "tools-call-with-progress",
+        "outcome": "NOT_APPLICABLE",
+        "reason": "harness-fixture",
+        "note": "Needs a tool that emits progress notifications; the spec makes progress optional.",
+        "evidence": "requested tool:test_tool_with_progress; harness statuses FAILURE",
+        "unknownFixtures": [
+          "tool:test_tool_with_progress"
+        ],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "FAILURE"
+        ]
+      },
+      {
+        "scenario": "tools-list",
+        "outcome": "PASS",
+        "reason": "harness-success",
+        "evidence": "",
+        "unknownFixtures": [],
+        "relayedMessages": 5,
+        "rawStatuses": [
+          "SUCCESS"
+        ]
+      }
+    ],
+    "counts": {
+      "PASS": 5,
+      "FAIL_SERVER": 0,
+      "FAIL_HARNESS": 0,
+      "NOT_APPLICABLE": 27,
+      "NOT_EXERCISED": 0
+    },
+    "parseErrors": [],
+    "undeclared": []
+  },
+  "inspector": {
+    "cases": [
+      {
+        "id": "tools-list",
+        "intent": "tools/list over stdio",
+        "status": "PASS",
+        "exitCode": 0,
+        "expectedExitCode": 0,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "resources-list",
+        "intent": "resources/list over stdio",
+        "status": "PASS",
+        "exitCode": 0,
+        "expectedExitCode": 0,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "prompts-list",
+        "intent": "prompts/list over stdio",
+        "status": "PASS",
+        "exitCode": 0,
+        "expectedExitCode": 0,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "resources-read-real-uri",
+        "intent": "resources/read on a real Frihet URI — the gap the conformance fixtures leave open",
+        "status": "PASS",
+        "exitCode": 0,
+        "expectedExitCode": 0,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "prompts-get-no-args",
+        "intent": "prompts/get on a real Frihet prompt with no arguments",
+        "status": "PASS",
+        "exitCode": 0,
+        "expectedExitCode": 0,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "prompts-get-with-args",
+        "intent": "prompts/get with required arguments",
+        "status": "PASS",
+        "exitCode": 0,
+        "expectedExitCode": 0,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "tools-call-safe-read",
+        "intent": "tools/call on a read-only tool against demo fixtures",
+        "status": "PASS",
+        "exitCode": 0,
+        "expectedExitCode": 0,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "negative-unknown-resource",
+        "intent": "resources/read on an unknown URI must be an error, not empty success",
+        "status": "PASS",
+        "exitCode": 1,
+        "expectedExitCode": 1,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "negative-unknown-prompt",
+        "intent": "prompts/get on an unknown prompt must be an error",
+        "status": "PASS",
+        "exitCode": 1,
+        "expectedExitCode": 1,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "negative-missing-required-prompt-arg",
+        "intent": "prompts/get without a required argument must be rejected",
+        "status": "PASS",
+        "exitCode": 1,
+        "expectedExitCode": 1,
+        "provesServerBehavior": true,
+        "reasons": []
+      },
+      {
+        "id": "negative-unknown-tool",
+        "intent": "tools/call on an unknown tool",
+        "status": "NOT_EXERCISED",
+        "exitCode": 5,
+        "expectedExitCode": 5,
+        "provesServerBehavior": false,
+        "reasons": [
+          "Inspector rejects client-side (exit 5); server-side unknown-tool handling is NOT_EXERCISED here."
+        ]
+      }
+    ]
+  },
+  "relayErrors": [],
+  "commands": [
+    {
+      "id": "conformance-list",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 list --server",
+      "exitCode": 0
+    },
+    {
+      "id": "conformance-server-initialize",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario server-initialize -o raw/conformance/server-initialize",
+      "exitCode": 0
+    },
+    {
+      "id": "conformance-logging-set-level",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario logging-set-level -o raw/conformance/logging-set-level",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-ping",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario ping -o raw/conformance/ping",
+      "exitCode": 0
+    },
+    {
+      "id": "conformance-completion-complete",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario completion-complete -o raw/conformance/completion-complete",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-tools-list",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-list -o raw/conformance/tools-list",
+      "exitCode": 0
+    },
+    {
+      "id": "conformance-tools-call-simple-text",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-simple-text -o raw/conformance/tools-call-simple-text",
+      "exitCode": 0
+    },
+    {
+      "id": "conformance-tools-call-image",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-image -o raw/conformance/tools-call-image",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-tools-call-audio",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-audio -o raw/conformance/tools-call-audio",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-tools-call-embedded-resource",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-embedded-resource -o raw/conformance/tools-call-embedded-resource",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-tools-call-mixed-content",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-mixed-content -o raw/conformance/tools-call-mixed-content",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-tools-call-with-logging",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-with-logging -o raw/conformance/tools-call-with-logging",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-tools-call-error",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-error -o raw/conformance/tools-call-error",
+      "exitCode": 0
+    },
+    {
+      "id": "conformance-tools-call-with-progress",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-with-progress -o raw/conformance/tools-call-with-progress",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-tools-call-sampling",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-sampling -o raw/conformance/tools-call-sampling",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-tools-call-elicitation",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario tools-call-elicitation -o raw/conformance/tools-call-elicitation",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-json-schema-2020-12",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario json-schema-2020-12 -o raw/conformance/json-schema-2020-12",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-elicitation-sep1034-defaults",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario elicitation-sep1034-defaults -o raw/conformance/elicitation-sep1034-defaults",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-server-sse-polling",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario server-sse-polling -o raw/conformance/server-sse-polling",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-server-sse-multiple-streams",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario server-sse-multiple-streams -o raw/conformance/server-sse-multiple-streams",
+      "exitCode": 0
+    },
+    {
+      "id": "conformance-elicitation-sep1330-enums",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario elicitation-sep1330-enums -o raw/conformance/elicitation-sep1330-enums",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-resources-list",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario resources-list -o raw/conformance/resources-list",
+      "exitCode": 0
+    },
+    {
+      "id": "conformance-resources-read-text",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario resources-read-text -o raw/conformance/resources-read-text",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-resources-read-binary",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario resources-read-binary -o raw/conformance/resources-read-binary",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-resources-templates-read",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario resources-templates-read -o raw/conformance/resources-templates-read",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-resources-subscribe",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario resources-subscribe -o raw/conformance/resources-subscribe",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-resources-unsubscribe",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario resources-unsubscribe -o raw/conformance/resources-unsubscribe",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-prompts-list",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario prompts-list -o raw/conformance/prompts-list",
+      "exitCode": 0
+    },
+    {
+      "id": "conformance-prompts-get-simple",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario prompts-get-simple -o raw/conformance/prompts-get-simple",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-prompts-get-with-args",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario prompts-get-with-args -o raw/conformance/prompts-get-with-args",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-prompts-get-embedded-resource",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario prompts-get-embedded-resource -o raw/conformance/prompts-get-embedded-resource",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-prompts-get-with-image",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario prompts-get-with-image -o raw/conformance/prompts-get-with-image",
+      "exitCode": 1
+    },
+    {
+      "id": "conformance-dns-rebinding-protection",
+      "argv": "@modelcontextprotocol/conformance@0.1.16 server --url <bridge> --scenario dns-rebinding-protection -o raw/conformance/dns-rebinding-protection",
+      "exitCode": 1
+    },
+    {
+      "id": "inspector-tools-list",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method tools/list",
+      "exitCode": 0
+    },
+    {
+      "id": "inspector-resources-list",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method resources/list",
+      "exitCode": 0
+    },
+    {
+      "id": "inspector-prompts-list",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method prompts/list",
+      "exitCode": 0
+    },
+    {
+      "id": "inspector-resources-read-real-uri",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method resources/read --uri frihet://tax/rates",
+      "exitCode": 0
+    },
+    {
+      "id": "inspector-prompts-get-no-args",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method prompts/get --prompt-name overdue-followup",
+      "exitCode": 0
+    },
+    {
+      "id": "inspector-prompts-get-with-args",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method prompts/get --prompt-name monthly-close --prompt-args month=2026-07",
+      "exitCode": 0
+    },
+    {
+      "id": "inspector-tools-call-safe-read",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method tools/call --tool-name get_business_context",
+      "exitCode": 0
+    },
+    {
+      "id": "inspector-negative-unknown-resource",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method resources/read --uri frihet://__does_not_exist__",
+      "exitCode": 1
+    },
+    {
+      "id": "inspector-negative-unknown-prompt",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method prompts/get --prompt-name __does_not_exist__",
+      "exitCode": 1
+    },
+    {
+      "id": "inspector-negative-missing-required-prompt-arg",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method prompts/get --prompt-name year-end-close",
+      "exitCode": 1
+    },
+    {
+      "id": "inspector-negative-unknown-tool",
+      "argv": "@modelcontextprotocol/inspector@2.3.0 --cli node dist/index.js -e FRIHET_DEMO=1 --method tools/call --tool-name __does_not_exist__",
+      "exitCode": 5
+    }
+  ]
+}

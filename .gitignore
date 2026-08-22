@@ -15,3 +15,10 @@ SOUL.md
 # Local tooling / build cache (accidentally committed in #82)
 .wrangler/
 .serena/
+
+# Phase 0 conformance raw harness output (#1578). Regenerable with
+# `npm run conformance:phase0`, and not deterministic: the official harness
+# names its result directories with a timestamp, and one SSE scenario dumps
+# ~1.1 MB of events. The committed, byte-stable evidence is
+# docs/conformance/phase0/evidence.json.
+docs/conformance/phase0/raw/

@@ -1,0 +1,2036 @@
+{
+  "$comment": "Normalised, byte-stable evidence for docs/conformance/PHASE0-BASELINE.md. Regenerate with `npm run conformance:phase0`. The unnormalised harness output lives in raw/ and is gitignored.",
+  "versions": {
+    "serverSha": "37b0e59947eff3f2ddf0c380d739ee9fc8fcbdb8",
+    "conformanceVersion": "0.1.16",
+    "inspectorVersion": "2.3.0"
+  },
+  "scenarios": [
+    {
+      "scenario": "server-initialize",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "server-initialize",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"serverUrl\":\"http://127.0.0.1:<port>/mcp\",\"connected\":true}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "logging-set-level",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "logging-set-level",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32601: Method not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "logging/setLevel",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32601
+        }
+      ]
+    },
+    {
+      "scenario": "ping",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "ping",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"result\":{}}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "ping",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "completion-complete",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "completion-complete",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32601: Method not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "completion/complete",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32601
+        }
+      ]
+    },
+    {
+      "scenario": "tools-list",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-list",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"toolCount\":162,\"tools\":[\"get_business_context\",\"get_monthly_summary\",\"get_quarterly_taxes\",\"duplicate_invoice\",\"list_invoices\",\"get_invoice\",\"create_invoice\",\"update_invoice\",\"delete_invoice\",\"search_invoices\",\"send_invoice\",\"mark_invoice_paid\",\"get_invoice_pdf\",\"get_invoice_einvoice\",\"create_credit_note\",\"apply_late_fee\",\"list_expenses\",\"get_expense\",\"create_expense\",\"update_expense\",\"delete_expense\",\"list_clients\",\"get_client\",\"create_client\",\"update_client\",\"delete_client\",\"list_client_contacts\",\"create_client_contact\",\"delete_client_contact\",\"list_client_activities\",\"log_client_activity\",\"list_client_notes\",\"create_client_note\",\"delete_client_note\",\"list_products\",\"get_product\",\"create_product\",\"update_product\",\"delete_product\",\"list_quotes\",\"get_quote\",\"create_quote\",\"update_quote\",\"delete_quote\",\"send_quote\",\"list_vendors\",\"get_vendor\",\"create_vendor\",\"update_vendor\",\"delete_vendor\",\"list_webhooks\",\"get_webhook\",\"create_webhook\",\"update_webhook\",\"delete_webhook\",\"test_webhook\",\"list_deposits\",\"get_deposit\",\"create_deposit\",\"update_deposit\",\"delete_deposit\",\"apply_deposit\",\"refund_deposit\",\"send_einvoice\",\"get_einvoice_status\",\"validate_einvoice_xml\",\"export_datev\",\"einvoice_export\",\"face_submit\",\"face_status\",\"ticketbai_submit\",\"ticketbai_status\",\"ksef_submit\",\"list_reservations\",\"get_reservation\",\"create_reservation\",\"list_properties\",\"sync_channel\",\"list_terminals\",\"get_sale\",\"list_sales\",\"refund_sale\",\"list_kitchen_tickets\",\"get_kitchen_ticket\",\"update_kitchen_ticket\",\"list_kitchen_stations\",\"list_menu_items\",\"kitchen_flow_summary\",\"list_bank_accounts\",\"get_bank_account\",\"list_transactions\",\"categorize_transaction\",\"match_transaction_to_invoice\",\"get_modelo_303_summary\",\"get_modelo_130_summary\",\"get_modelo_390_summary\",\"get_modelo_180_summary\",\"get_modelo_347_summary\",\"verifactu_status\",\"verifactu_resubmit\",\"list_time_entries\",\"get_time_entry\",\"create_time_entry\",\"update_time_entry\",\"delete_time_entry\",\"get_time_summary\",\"list_recurring_invoices\",\"get_rec",
+            "truncated": true,
+            "originalLength": 3315
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/list",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-simple-text",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-simple-text",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"MCP error -32602: Tool test_simple_text not found\"}],\"isError\":true}}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_simple_text",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-image",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-image",
+          "status": "FAILURE",
+          "errorMessage": "No image content found",
+          "details": {
+            "json": "{\"hasData\":false}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_image_content",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-audio",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-audio",
+          "status": "FAILURE",
+          "errorMessage": "No audio content found",
+          "details": {
+            "json": "{\"hasAudioContent\":false,\"audioDataLength\":0}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_audio_content",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-embedded-resource",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-embedded-resource",
+          "status": "FAILURE",
+          "errorMessage": "No resource content found",
+          "details": {
+            "json": "{\"hasResourceContent\":false}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_embedded_resource",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-mixed-content",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-mixed-content",
+          "status": "FAILURE",
+          "errorMessage": "Expected multiple content items; Missing image content; Missing resource content",
+          "details": {
+            "json": "{\"contentCount\":1,\"contentTypes\":[\"text\"]}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_multiple_content_types",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-with-logging",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-with-logging",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32601: Method not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "logging/setLevel",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32601
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-error",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-error",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"MCP error -32602: Tool test_error_handling not found\"}],\"isError\":true}}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_error_handling",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-with-progress",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-with-progress",
+          "status": "FAILURE",
+          "errorMessage": "No progress notifications received",
+          "details": {
+            "json": "{\"progressCount\":0,\"progressNotifications\":[],\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"MCP error -32602: Tool test_tool_with_progress not found\"}],\"isError\":true}}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_tool_with_progress",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-sampling",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-sampling",
+          "status": "FAILURE",
+          "errorMessage": "Server did not request sampling from client",
+          "details": {
+            "json": "{\"samplingRequested\":false,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"MCP error -32602: Tool test_sampling not found\"}],\"isError\":true}}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_sampling",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "tools-call-elicitation",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "tools-call-elicitation",
+          "status": "FAILURE",
+          "errorMessage": "Server did not request elicitation from client",
+          "details": {
+            "json": "{\"elicitationRequested\":false,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"MCP error -32602: Tool test_elicitation not found\"}],\"isError\":true}}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_elicitation",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "json-schema-2020-12",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "json-schema-2020-12-tool-found",
+          "status": "FAILURE",
+          "errorMessage": "Tool 'json_schema_2020_12_tool' not found. Available tools: get_business_context, get_monthly_summary, get_quarterly_taxes, duplicate_invoice, list_invoices, get_invoice, create_invoice, update_invoice, delete_invoice, search_invoices, send_invoice, mark_invoice_paid, get_invoice_pdf, get_invoice_einvoice, create_credit_note, apply_late_fee, list_expenses, get_expense, create_expense, update_expense, delete_expense, list_clients, get_client, create_client, update_client, delete_client, list_client_contacts, create_client_contact, delete_client_contact, list_client_activities, log_client_activity, list_client_notes, create_client_note, delete_client_note, list_products, get_product, create_product, update_product, delete_product, list_quotes, get_quote, create_quote, update_quote, delete_quote, send_quote, list_vendors, get_vendor, create_vendor, update_vendor, delete_vendor, list_webhooks, get_webhook, create_webhook, update_webhook, delete_webhook, test_webhook, list_deposits, get_deposit, create_deposit, update_deposit, delete_deposit, apply_deposit, refund_deposit, send_einvoice, get_einvoice_status, validate_einvoice_xml, export_datev, einvoice_export, face_submit, face_status, ticketbai_submit, ticketbai_status, ksef_submit, list_reservations, get_reservation, create_reservation, list_properties, sync_channel, list_terminals, get_sale, list_sales, refund_sale, list_kitchen_tickets, get_kitchen_ticket, update_kitchen_ticket, list_kitchen_stations, list_menu_items, kitchen_flow_summary, list_bank_accounts, get_bank_account, list_transactions, categorize_transaction, match_transaction_to_invoice, get_modelo_303_summary, get_modelo_130_summary, get_modelo_390_summary, get_modelo_180_summary, get_modelo_347_summary, verifactu_status, verifactu_resubmit, list_time_entries, get_time_entry, create_time_entry, update_time_entry, delete_time_entry, get_time_summary, list_recurring_invoices, get_recurring_invoice, create_recurring_invoice, update_recurring_invoice, pause_recurring_invoice, resume_recurring_invoice, delete_recurring_invoice, run_recurring_now, list_team_members, invite_team_member, update_team_member_role, remove_team_member, gestoria_message_send, gestoria_messages_list, gestoria_template_create, gestoria_template_bulk_send, gestoria_aging_consolidated, frihet_gl_entry_approve, frihet_gl_entry_reject, frihet_gl_entry_audit_log, frihet_portal_domain_add, frihet_portal_domain_verify, frihet_portal_domain_remove, frihet_portal_onboard_link_generate, frihet_tax_id_vies_lookup, frihet_modelo_415_summary, frihet_modelo_425_summary, frihet_modelo_418_summary, frihet_aiem_calculate, frihet_modelo_200_summary, frihet_modelo_202_summary, frihet_bank_rules_list, frihet_bank_rule_create, leave_request_create, leave_approve, leave_reject, leave_cancel, leave_list, attendance_clock_in, attendance_clock_out, overtime_report, anomaly_list, payroll_export, payroll_checklist, onboarding_status, onboarding_persona_set, permissions_matrix, permissions_me, period_close_status, period_close, period_reopen, frihet_modelo_303_summary, frihet_modelo_130_summary, frihet_modelo_390_summary, frihet_modelo_180_summary, frihet_modelo_347_summary",
+          "details": {
+            "json": "{\"toolFound\":false,\"availableTools\":[\"get_business_context\",\"get_monthly_summary\",\"get_quarterly_taxes\",\"duplicate_invoice\",\"list_invoices\",\"get_invoice\",\"create_invoice\",\"update_invoice\",\"delete_invoice\",\"search_invoices\",\"send_invoice\",\"mark_invoice_paid\",\"get_invoice_pdf\",\"get_invoice_einvoice\",\"create_credit_note\",\"apply_late_fee\",\"list_expenses\",\"get_expense\",\"create_expense\",\"update_expense\",\"delete_expense\",\"list_clients\",\"get_client\",\"create_client\",\"update_client\",\"delete_client\",\"list_client_contacts\",\"create_client_contact\",\"delete_client_contact\",\"list_client_activities\",\"log_client_activity\",\"list_client_notes\",\"create_client_note\",\"delete_client_note\",\"list_products\",\"get_product\",\"create_product\",\"update_product\",\"delete_product\",\"list_quotes\",\"get_quote\",\"create_quote\",\"update_quote\",\"delete_quote\",\"send_quote\",\"list_vendors\",\"get_vendor\",\"create_vendor\",\"update_vendor\",\"delete_vendor\",\"list_webhooks\",\"get_webhook\",\"create_webhook\",\"update_webhook\",\"delete_webhook\",\"test_webhook\",\"list_deposits\",\"get_deposit\",\"create_deposit\",\"update_deposit\",\"delete_deposit\",\"apply_deposit\",\"refund_deposit\",\"send_einvoice\",\"get_einvoice_status\",\"validate_einvoice_xml\",\"export_datev\",\"einvoice_export\",\"face_submit\",\"face_status\",\"ticketbai_submit\",\"ticketbai_status\",\"ksef_submit\",\"list_reservations\",\"get_reservation\",\"create_reservation\",\"list_properties\",\"sync_channel\",\"list_terminals\",\"get_sale\",\"list_sales\",\"refund_sale\",\"list_kitchen_tickets\",\"get_kitchen_ticket\",\"update_kitchen_ticket\",\"list_kitchen_stations\",\"list_menu_items\",\"kitchen_flow_summary\",\"list_bank_accounts\",\"get_bank_account\",\"list_transactions\",\"categorize_transaction\",\"match_transaction_to_invoice\",\"get_modelo_303_summary\",\"get_modelo_130_summary\",\"get_modelo_390_summary\",\"get_modelo_180_summary\",\"get_modelo_347_summary\",\"verifactu_status\",\"verifactu_resubmit\",\"list_time_entries\",\"get_time_entry\",\"create_time_entry\",\"update_time_entry\",\"delete_time_entry\",\"get_time_summary\",\"list_recurring_invoice",
+            "truncated": true,
+            "originalLength": 3326
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/list",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "elicitation-sep1034-defaults",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "elicitation-sep1034-general",
+          "status": "FAILURE",
+          "errorMessage": "Server did not request elicitation from client",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_elicitation_sep1034_defaults",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "server-sse-polling",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "outgoing-request",
+          "status": "INFO",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"method\":\"POST\",\"url\":\"http://127.0.0.1:<port>/mcp\",\"headers\":{\"Content-Type\":\"application/json\",\"Accept\":\"text/event-stream, application/json\",\"mcp-session-id\":\"<uuid>\",\"mcp-protocol-version\":\"2025-03-26\"},\"body\":{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"test_reconnection\",\"arguments\":{}}}}",
+            "truncated": false
+          }
+        },
+        {
+          "id": "incoming-response",
+          "status": "INFO",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"statusCode\":200,\"headers\":{\"cache-control\":\"no-cache, no-transform\",\"connection\":\"keep-alive\",\"content-type\":\"text/event-stream\",\"date\":\"<http-date>\",\"mcp-session-id\":\"<uuid>\",\"transfer-encoding\":\"chunked\",\"x-accel-buffering\":\"no\"}}",
+            "truncated": false
+          }
+        },
+        {
+          "id": "incoming-sse-event",
+          "status": "FAILURE",
+          "errorMessage": "Tool call failed",
+          "details": {
+            "json": "{\"body\":{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"MCP error -32602: Tool test_reconnection not found\"}],\"isError\":true}}}",
+            "truncated": false
+          }
+        },
+        {
+          "id": "stream-closed",
+          "status": "INFO",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"eventCount\":1,\"receivedToolResponse\":true}",
+            "truncated": false
+          }
+        },
+        {
+          "id": "server-sse-priming-event",
+          "status": "WARNING",
+          "errorMessage": "Server did not send priming event with id and empty data on POST SSE stream. This is recommended for resumability.",
+          "details": {
+            "json": "{\"hasPrimingEvent\":false,\"primingEventIsFirst\":false,\"hasEventId\":false,\"eventCount\":1}",
+            "truncated": false
+          }
+        },
+        {
+          "id": "server-sse-retry-field",
+          "status": "WARNING",
+          "errorMessage": "Server did not send retry field. This is recommended for controlling client reconnection timing.",
+          "details": {
+            "json": "{\"hasRetryField\":false}",
+            "truncated": false
+          }
+        },
+        {
+          "id": "server-sse-disconnect-resume",
+          "status": "INFO",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"receivedToolResponse\":true,\"message\":\"Tool response received on initial POST stream - server did not disconnect mid-call. The test_reconnection tool should close the stream before sending the result.\"}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_reconnection",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "server-sse-multiple-streams",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "server-accepts-multiple-post-streams",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"numStreamsAttempted\":3,\"numStreamsAccepted\":3,\"numSseStreams\":3,\"statuses\":[200,200,200],\"contentTypes\":[\"text/event-stream\",\"text/event-stream\",\"text/event-stream\"]}",
+            "truncated": false
+          }
+        },
+        {
+          "id": "server-sse-streams-functional",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"numSseStreams\":3,\"functionalSseStreams\":3,\"results\":[{\"index\":0,\"type\":\"sse\",\"event\":{\"event\":\"message\",\"data\":\"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":1000,\\\"result\\\":{\\\"tools\\\":[{\\\"name\\\":\\\"get_business_context\\\",\\\"title\\\":\\\"Get Business Context\\\",\\\"description\\\":\\\"Get complete business context — profile, defaults, plan limits, recent activity, top clients, and current month summary. Call this FIRST in any session to understand the user's business. Returns everything an AI agent needs to provide personalized help without multiple round-trips. / Obtiene el contexto completo del negocio — perfil, limites del plan, actividad reciente, principales clientes y resumen del mes actual. Llama a esto PRIMERO en cualquier sesion.\\\",\\\"inputSchema\\\":{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{}},\\\"annotations\\\":{\\\"readOnlyHint\\\":true,\\\"destructiveHint\\\":false,\\\"idempotentHint\\\":true,\\\"openWorldHint\\\":false},\\\"execution\\\":{\\\"taskSupport\\\":\\\"forbidden\\\"},\\\"_meta\\\":{\\\"io.frihet/capability\\\":{\\\"registered\\\":true,\\\"callability\\\":\\\"api_dependent\\\",\\\"canonicalOperation\\\":\\\"get_business_context\\\",\\\"writesFrihet\\\":false,\\\"externalInteraction\\\":false,\\\"externalSideEffects\\\":[]}},\\\"outputSchema\\\":{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"description\\\":\\\"Business context snapshot: workspace profile, fiscal setup, plan usage, recent activity and current-month performance\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"business\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"name\\\":{\\\"type\\\":\\\"string\\\"},\\\"taxId\\\":{\\\"type\\\":\\\"string\\\"},\\\"fiscalZone\\\":{\\\"type\\\":\\\"string\\\"},\\\"currency\\\":{\\\"type\\\":\\\"string\\\"},\\\"language\\\":{\\\"type\\\":\\\"string\\\"},\\\"country\\\":{\\\"type\\\":\\\"string\\\"}},\\\"required\\\":[\\\"name\\\",\\\"fiscalZone\\\",\\\"currency\\\",\\\"language\\\",\\\"country\\\"],\\\"additionalProperties\\\":{}},\\\"defaults\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"taxRate\\\":{\\\"type\\\":\\\"number\\\"},\\\"irpfRate\\\":{\\\"type\\\":\\\"number\\\"},\\\"dueDays\\\":{\\\"type\\\":\\\"number\\\"},\\\"currency\\\":{\\\"type\\\"",
+            "truncated": true,
+            "originalLength": 1163498
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/list",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/list",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/list",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "elicitation-sep1330-enums",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "elicitation-sep1330-general",
+          "status": "FAILURE",
+          "errorMessage": "Server did not request elicitation from client",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "tools/call",
+          "toolName": "test_elicitation_sep1330_enums",
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": true,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "resources-list",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "resources-list",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"resourceCount\":11,\"resources\":[\"frihet://api/schema\",\"frihet://tax/rates\",\"frihet://tax/calendar\",\"frihet://config/expense-categories\",\"frihet://config/invoice-statuses\",\"frihet://config/currencies\",\"frihet://config/countries\",\"frihet://business-profile\",\"frihet://monthly-snapshot\",\"frihet://overdue-invoices\",\"frihet://status/plan-limits\"]}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "resources/list",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "resources-read-text",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "resources-read-text",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32602: MCP error -32602: Resource test://static-text not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "resources/read",
+          "toolName": null,
+          "resourceUri": "test://static-text",
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32602
+        }
+      ]
+    },
+    {
+      "scenario": "resources-read-binary",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "resources-read-binary",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32602: MCP error -32602: Resource test://static-binary not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "resources/read",
+          "toolName": null,
+          "resourceUri": "test://static-binary",
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32602
+        }
+      ]
+    },
+    {
+      "scenario": "resources-templates-read",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "resources-templates-read",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32602: MCP error -32602: Resource test://template/123/data not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "resources/read",
+          "toolName": null,
+          "resourceUri": "test://template/123/data",
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32602
+        }
+      ]
+    },
+    {
+      "scenario": "resources-subscribe",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "resources-subscribe",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32601: Method not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "resources/subscribe",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32601
+        }
+      ]
+    },
+    {
+      "scenario": "resources-unsubscribe",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "resources-unsubscribe",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32601: Method not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "resources/subscribe",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32601
+        }
+      ]
+    },
+    {
+      "scenario": "prompts-list",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "prompts-list",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"promptCount\":10,\"prompts\":[\"monthly-close\",\"onboard-client\",\"quarterly-tax-prep\",\"overdue-followup\",\"new-client-invoice\",\"expense-report\",\"year-end-close\",\"cash-flow-forecast\",\"invoice-aging-review\",\"expense-batch\"]}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "prompts/list",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        }
+      ]
+    },
+    {
+      "scenario": "prompts-get-simple",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "prompts-get-simple",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32602: MCP error -32602: Prompt test_simple_prompt not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "prompts/get",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": "test_simple_prompt",
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32602
+        }
+      ]
+    },
+    {
+      "scenario": "prompts-get-with-args",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "prompts-get-with-args",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32602: MCP error -32602: Prompt test_prompt_with_arguments not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "prompts/get",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": "test_prompt_with_arguments",
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32602
+        }
+      ]
+    },
+    {
+      "scenario": "prompts-get-embedded-resource",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "prompts-get-embedded-resource",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32602: MCP error -32602: Prompt test_prompt_with_embedded_resource not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "prompts/get",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": "test_prompt_with_embedded_resource",
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32602
+        }
+      ]
+    },
+    {
+      "scenario": "prompts-get-with-image",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "prompts-get-with-image",
+          "status": "FAILURE",
+          "errorMessage": "Failed: MCP error -32602: MCP error -32602: Prompt test_prompt_with_image not found",
+          "details": null
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "notifications/initialized",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "prompts/get",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": "test_prompt_with_image",
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": -32602
+        }
+      ]
+    },
+    {
+      "scenario": "dns-rebinding-protection",
+      "parseError": null,
+      "checks": [
+        {
+          "id": "localhost-host-rebinding-rejected",
+          "status": "FAILURE",
+          "errorMessage": "Expected HTTP 4xx for invalid Host/Origin headers, got 200",
+          "details": {
+            "json": "{\"hostHeader\":\"evil.example.com\",\"originHeader\":\"http://evil.example.com\",\"statusCode\":200,\"body\":null}",
+            "truncated": false
+          }
+        },
+        {
+          "id": "localhost-host-valid-accepted",
+          "status": "SUCCESS",
+          "errorMessage": "",
+          "details": {
+            "json": "{\"hostHeader\":\"127.0.0.1:<port>\",\"originHeader\":\"http://127.0.0.1:<port>\",\"statusCode\":200,\"body\":null}",
+            "truncated": false
+          }
+        }
+      ],
+      "transcript": [
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        },
+        {
+          "direction": "harness->server",
+          "method": "initialize",
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": null,
+          "errorCode": null
+        },
+        {
+          "direction": "server->harness",
+          "method": null,
+          "toolName": null,
+          "resourceUri": null,
+          "promptName": null,
+          "isError": false,
+          "errorCode": null
+        }
+      ]
+    }
+  ]
+}
