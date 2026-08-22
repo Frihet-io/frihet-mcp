@@ -29,13 +29,14 @@ describe("MCP Compatibility Lab — Mutation Proofs", () => {
 
   test("fixture setup: capture valid baseline", async () => {
     goldenBaseline = await runMcpBaseline();
-    assert.equal(goldenBaseline.summary.overallStatus, "PASS");
+    assert.equal(goldenBaseline.summary.overallStatus, "PASS_WITH_GAPS");
     assert.equal(goldenBaseline.summary.totalTools, 162);
     assert.equal(goldenBaseline.summary.canonicalOperations, 157);
     assert.equal(goldenBaseline.summary.resources, 11);
     assert.equal(goldenBaseline.summary.prompts, 10);
     assert.equal(goldenBaseline.summary.checks.pass, 21);
     assert.equal(goldenBaseline.summary.checks.notExercised, 2);
+    assert.equal(goldenBaseline.summary.checks.fail, 0);
   });
 
   test("mutation proof 1: remove one canonical tool → RED", () => {

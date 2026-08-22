@@ -21,7 +21,7 @@
       "unsupported": 0,
       "notExercised": 2
     },
-    "overallStatus": "PASS"
+    "overallStatus": "PASS_WITH_GAPS"
   },
   "checkMatrix": [
     {
@@ -54,7 +54,7 @@
     },
     {
       "id": "tools.input_schemas_structural",
-      "name": "Structural Input Schema Conformance",
+      "name": "Structural Input Schema Validation",
       "category": "tools",
       "status": "PASS",
       "detail": "All tool inputSchemas declare valid object structure and properties mapping"

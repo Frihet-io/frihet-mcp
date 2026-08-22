@@ -1,14 +1,14 @@
 /**
  * MCP SDK Compatibility & Golden Baseline Canary Harness.
  *
- * Deterministically verifies @frihet/mcp-server protocol conformance,
- * tool enumeration, JSON schema validity, pagination parameters,
+ * Deterministically verifies @frihet/mcp-server SDK v1 compatibility,
+ * golden contract, tool enumeration, JSON schema validity, pagination parameters,
  * typed error contracts, capability metadata, and representative READ operations
  * against @modelcontextprotocol/sdk v1.x before v2.0 migration.
  *
  * NOTE: This is an in-process SDK client/server compatibility harness.
- * @modelcontextprotocol/inspector@2.3.0 is pinned in devDependencies as a
- * reference protocol authority, while this harness executes in-process
+ * Model Context Protocol Inspector 2.3.0 is documented as a reference authority,
+ * while this harness executes in-process via @modelcontextprotocol/sdk v1.x client
  * with zero daemons to provide deterministic CI verification.
  *
  * Zero production writes. Zero credential leaks.
@@ -29,6 +29,7 @@ export const CANONICAL_OPERATIONS_COUNT = 157;
 export const FISCAL_ALIASES_COUNT = Object.keys(FISCAL_MODELO_ALIASES).length;
 
 export type CheckStatus = "PASS" | "FAIL" | "UNSUPPORTED" | "NOT_EXERCISED";
+export type OverallStatus = "PASS" | "PASS_WITH_GAPS" | "FAIL";
 
 export interface HarnessCheckResult {
   id: string;
@@ -72,7 +73,7 @@ export interface McpBaselineReport {
       unsupported: number;
       notExercised: number;
     };
-    overallStatus: "PASS" | "FAIL";
+    overallStatus: OverallStatus;
   };
   checkMatrix: HarnessCheckResult[];
   tools: ToolSnapshot[];
@@ -237,12 +238,12 @@ export async function runMcpBaseline(): Promise<McpBaselineReport> {
       name: "Canonical Snake Case Naming",
       category: "tools",
       status: nonSnakeCaseCount === 0 ? "PASS" : "FAIL",
-      detail: nonSnakeCaseCount === 0 ? "All tools use valid snake_case names" : `${nonSnakeCaseCount} non-conforming tool names detected`,
+      detail: nonSnakeCaseCount === 0 ? "All tools use valid snake_case names" : `${nonSnakeCaseCount} invalid tool names detected`,
     });
 
     addCheck({
       id: "tools.input_schemas_structural",
-      name: "Structural Input Schema Conformance",
+      name: "Structural Input Schema Validation",
       category: "tools",
       status: invalidInputSchemaCount === 0 ? "PASS" : "FAIL",
       detail: invalidInputSchemaCount === 0 ? "All tool inputSchemas declare valid object structure and properties mapping" : `${invalidInputSchemaCount} tools have malformed inputSchemas`,
@@ -561,6 +562,9 @@ export async function runMcpBaseline(): Promise<McpBaselineReport> {
   const unsupportedCount = checkMatrix.filter((c) => c.status === "UNSUPPORTED").length;
   const notExercisedCount = checkMatrix.filter((c) => c.status === "NOT_EXERCISED").length;
 
+  const overallStatus: OverallStatus =
+    failCount > 0 ? "FAIL" : notExercisedCount > 0 ? "PASS_WITH_GAPS" : "PASS";
+
   return {
     contractVersion: HARNESS_CONTRACT_VERSION,
     inspectorPinnedVersion: INSPECTOR_PINNED_VERSION,
@@ -580,7 +584,7 @@ export async function runMcpBaseline(): Promise<McpBaselineReport> {
         unsupported: unsupportedCount,
         notExercised: notExercisedCount,
       },
-      overallStatus: failCount === 0 ? "PASS" : "FAIL",
+      overallStatus,
     },
     checkMatrix,
     tools: toolSnapshots,
@@ -610,9 +614,13 @@ export function assertMcpBaseline(
     throw new Error(`Contract version mismatch: actual ${actual.contractVersion} !== expected ${expected.contractVersion}`);
   }
 
-  if (actual.summary.overallStatus !== "PASS" || actual.summary.checks.fail > 0) {
+  if (actual.summary.overallStatus === "FAIL" || actual.summary.checks.fail > 0) {
     const failures = actual.checkMatrix.filter((c) => c.status === "FAIL");
     throw new Error(`Baseline failed with ${failures.length} errors: ${failures.map((f) => `${f.id}: ${f.detail}`).join("; ")}`);
+  }
+
+  if (actual.summary.overallStatus !== expected.summary.overallStatus) {
+    throw new Error(`Overall status mismatch: actual ${actual.summary.overallStatus} !== expected ${expected.summary.overallStatus}`);
   }
 
   if (actual.summary.totalTools !== expected.summary.totalTools) {

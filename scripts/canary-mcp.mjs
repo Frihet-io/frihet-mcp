@@ -96,7 +96,7 @@ async function main() {
   console.log(`OVERALL STATUS: ${report.summary.overallStatus}`);
   console.log(line);
 
-  if (report.summary.overallStatus !== "PASS" || report.summary.checks.fail > 0) {
+  if (report.summary.overallStatus === "FAIL" || report.summary.checks.fail > 0) {
     process.exit(1);
   }
 }
