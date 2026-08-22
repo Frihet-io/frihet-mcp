@@ -16,14 +16,12 @@ import * as fixtures from "../demo-fixtures.js";
 import { permissionsMatrixOutput, permissionsMeOutput } from "../tools/shared.js";
 
 describe("DemoFrihetClient — reads", () => {
-  test("listInvoices returns a non-empty stamped PaginatedResponse", async () => {
+  test("listInvoices returns a non-empty canonical PaginatedResponse", async () => {
     const client = new DemoFrihetClient();
     const res = await client.listInvoices();
     assert.ok(Array.isArray(res.data), "data is an array");
     assert.ok(res.data.length > 0, "data is non-empty");
     assert.equal(res.total, res.data.length);
-    assert.equal((res as unknown as { _demo: boolean })._demo, true);
-    assert.ok((res as unknown as { _demoNotice?: string })._demoNotice, "_demoNotice present");
   });
 
   test("getInvoice(<fixture id>) returns the fixture stamped _demo:true", async () => {

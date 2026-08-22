@@ -63,30 +63,30 @@ export const DEMO_TEST_IBAN = "ES9121000418450200051332";
 /*  Paginated envelope helpers                                         */
 /* ------------------------------------------------------------------ */
 
-export type DemoPaginated = PaginatedResponse<Record<string, unknown>> & DemoStamp;
+export type DemoPaginated = PaginatedResponse<Record<string, unknown>>;
 
-/** Wrap a fixture array in a stamped PaginatedResponse. */
+/** Wrap a fixture array in a PaginatedResponse. */
 export function demoPage(
   data: Record<string, unknown>[],
   params?: { limit?: number; offset?: number },
 ): DemoPaginated {
+  const limit = params?.limit ?? 50;
+  const offset = params?.offset ?? 0;
   return {
-    data,
+    data: data.slice(offset, offset + limit),
     total: data.length,
-    limit: params?.limit ?? 50,
-    offset: params?.offset ?? 0,
-    ...READ_STAMP,
+    limit,
+    offset,
   };
 }
 
-/** Empty stamped PaginatedResponse for surfaces without dedicated fixtures. */
+/** Empty PaginatedResponse for surfaces without dedicated fixtures. */
 export function demoEmptyPage(params?: { limit?: number; offset?: number }): DemoPaginated {
   return {
     data: [],
     total: 0,
     limit: params?.limit ?? 50,
     offset: params?.offset ?? 0,
-    ...EMPTY_STAMP,
   };
 }
 
