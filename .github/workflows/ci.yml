@@ -60,6 +60,18 @@ jobs:
       - name: Discovery artifact truth (workers legal URLs + rate-limit claim)
         run: node --test workers/remote-mcp/src/__tests__/discovery-legal-truth.test.mjs
 
+      # Anti-false-green gate for the official conformance baseline (#1578
+      # Phase 0). Offline on purpose: it validates the COMMITTED artifact rather
+      # than re-running the harness, which needs network (npx fetches the pinned
+      # conformance/Inspector packages) and spawns the server. Re-running the
+      # real harness is `npm run conformance:phase0:check`, done locally.
+      #
+      # What it catches: a baseline with zero scenarios, an unparsed result, a
+      # FAILURE relabelled as PASS or NOT_APPLICABLE without evidence, and a
+      # matrix with no version metadata to say what it measured.
+      - name: Conformance baseline anti-false-green gate
+        run: npm run gate:conformance-baseline
+
       - name: OpenAI review descriptor freeze
         run: npm run gate:openai-review-descriptor
 

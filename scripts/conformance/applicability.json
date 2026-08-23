@@ -1,0 +1,201 @@
+{
+  "$comment": [
+    "Declarative classification of every official @modelcontextprotocol/conformance server scenario",
+    "for the Frihet MCP server. A rule NEVER decides a PASS: a PASS can only come from a raw SUCCESS",
+    "reported by the official harness. Rules only explain non-SUCCESS results, and each one must name",
+    "the evidence that justifies it. validate-baseline.mjs fails RED if the evidence is absent, which",
+    "is what stops a future regression from hiding behind a stale NOT_APPLICABLE.",
+    "Reasons:",
+    "  harness-fixture       - the scenario probes a fixture of the reference 'everything' server",
+    "                          (a named test tool/resource/prompt). The MCP spec does not require any",
+    "                          server to expose it, so its absence is not a Frihet defect.",
+    "  capability-absent     - Frihet does not advertise the capability, so -32601 is the spec-correct",
+    "                          answer. Guarded by requiresCapabilityAbsent: if Frihet ever starts",
+    "                          advertising it while still answering -32601, the rule stops applying and",
+    "                          the result becomes FAIL_SERVER.",
+    "  bridge-under-test     - the scenario exercises the Streamable HTTP transport, which here is the",
+    "                          relay in http-bridge.mjs, not Frihet. Neither its passes nor its failures",
+    "                          say anything about the server. Such scenarios can never be PASS."
+  ],
+  "rules": [
+    {
+      "scenario": "logging-set-level",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "capability-absent",
+      "requiresCapabilityAbsent": "logging",
+      "requiresEvidence": "-32601",
+      "note": "Frihet advertises tools/resources/prompts only. logging/setLevel correctly returns Method not found."
+    },
+    {
+      "scenario": "tools-call-with-logging",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "capability-absent",
+      "requiresCapabilityAbsent": "logging",
+      "requiresEvidence": "-32601",
+      "note": "Scenario first calls logging/setLevel; blocked by the same absent capability."
+    },
+    {
+      "scenario": "completion-complete",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "capability-absent",
+      "requiresCapabilityAbsent": "completions",
+      "requiresEvidence": "-32601",
+      "note": "Frihet advertises no completions capability."
+    },
+    {
+      "scenario": "resources-subscribe",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "capability-absent",
+      "requiresCapabilityAbsent": "resources.subscribe",
+      "requiresEvidence": "-32601",
+      "note": "resources capability is advertised, but without subscribe."
+    },
+    {
+      "scenario": "resources-unsubscribe",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "capability-absent",
+      "requiresCapabilityAbsent": "resources.subscribe",
+      "requiresEvidence": "-32601",
+      "note": "Same absent sub-capability as resources-subscribe."
+    },
+
+    {
+      "scenario": "tools-call-image",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "No image content found",
+      "note": "Needs a tool that returns image content. Frihet exposes none; binary payloads travel as resource links."
+    },
+    {
+      "scenario": "tools-call-audio",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "No audio content found",
+      "note": "Needs a tool that returns audio content. Frihet exposes none."
+    },
+    {
+      "scenario": "tools-call-embedded-resource",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "No resource content found",
+      "note": "Needs a tool that returns an embedded resource."
+    },
+    {
+      "scenario": "tools-call-mixed-content",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "Missing image content",
+      "note": "Needs a tool returning several content types at once."
+    },
+    {
+      "scenario": "tools-call-with-progress",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "No progress notifications received",
+      "note": "Needs a tool that emits progress notifications; the spec makes progress optional."
+    },
+    {
+      "scenario": "tools-call-sampling",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "Server did not request sampling from client",
+      "note": "Needs a tool that calls sampling/createMessage back into the client."
+    },
+    {
+      "scenario": "tools-call-elicitation",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "Server did not request elicitation from client",
+      "note": "Needs a tool that elicits from the client during the call."
+    },
+    {
+      "scenario": "elicitation-sep1034-defaults",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "Server did not request elicitation from client",
+      "note": "Same elicitation-triggering fixture, SEP-1034 defaults variant."
+    },
+    {
+      "scenario": "elicitation-sep1330-enums",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "Server did not request elicitation from client",
+      "note": "Same elicitation-triggering fixture, SEP-1330 enums variant."
+    },
+    {
+      "scenario": "resources-read-text",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "test://static-text",
+      "note": "Hardcoded reference URI. Real Frihet resources/read is exercised by the Inspector smoke instead."
+    },
+    {
+      "scenario": "resources-read-binary",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "test://static-binary",
+      "note": "Hardcoded reference URI."
+    },
+    {
+      "scenario": "resources-templates-read",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "test://template/123/data",
+      "note": "Hardcoded reference template URI."
+    },
+    {
+      "scenario": "prompts-get-simple",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "test_simple_prompt",
+      "note": "Hardcoded reference prompt name. Real Frihet prompts/get is exercised by the Inspector smoke."
+    },
+    {
+      "scenario": "prompts-get-with-args",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "test_prompt_with_arguments",
+      "note": "Hardcoded reference prompt name."
+    },
+    {
+      "scenario": "prompts-get-embedded-resource",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "test_prompt_with_embedded_resource",
+      "note": "Hardcoded reference prompt name."
+    },
+    {
+      "scenario": "prompts-get-with-image",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "test_prompt_with_image",
+      "note": "Hardcoded reference prompt name."
+    },
+    {
+      "scenario": "json-schema-2020-12",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "harness-fixture",
+      "requiresEvidence": "json_schema_2020_12_tool",
+      "note": "Needs a named fixture tool. Frihet tool schemas are therefore NOT covered by this scenario — tracked as an uncovered area in the report, not as a pass."
+    },
+
+    {
+      "scenario": "dns-rebinding-protection",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "bridge-under-test",
+      "note": "Host/Origin validation belongs to the HTTP transport. Frihet ships stdio only, so this measures http-bridge.mjs."
+    },
+    {
+      "scenario": "server-sse-multiple-streams",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "bridge-under-test",
+      "note": "SSE stream management is the bridge's. Its SUCCESS is explicitly NOT counted as a Frihet pass."
+    },
+    {
+      "scenario": "server-sse-polling",
+      "outcome": "NOT_APPLICABLE",
+      "reason": "bridge-under-test",
+      "note": "SSE resumability/priming/retry are the bridge's, and the scenario also needs a test_reconnection fixture tool."
+    }
+  ]
+}
