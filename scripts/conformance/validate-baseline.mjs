@@ -223,36 +223,78 @@ export function validateBaseline(baseline, evidence = null) {
     }
   }
 
-  // R8 — the evidence recorded for a NOT_APPLICABLE row must actually appear in
-  // the harness output for that scenario. Without this the row's `evidence` was
-  // the rule's own `requiresEvidence` echoed back: proof that a rule asked for a
+  // R8 — every NOT_APPLICABLE row must be justified by something in the harness
+  // output for that scenario, not by its own say-so. A row's `evidence` used to
+  // be the rule's `requiresEvidence` echoed back: proof that a rule asked for a
   // string, never that the harness produced it.
+  //
+  // There are exactly two ways a row can be justified, and a row must have one:
+  //   - an applicability rule fired      -> `evidenceRequired` must appear in a
+  //                                         FAILING check for that scenario
+  //   - the fixture detector fired       -> every name in `unknownFixtures` must
+  //                                         appear in that scenario's transcript
+  // Checking only the first left 18 of 24 rows unverified, including both of the
+  // false greens this baseline exists to document — the fixture-detector path
+  // returns before any rule is consulted, so those rows never carry an
+  // `evidenceRequired` at all.
   if (!evidence) {
     fail("R8-evidence-unverifiable", "evidence.json was not supplied, so no NOT_APPLICABLE row could be checked against the harness output");
   } else {
-    const failingTextByScenario = new Map(
+    const byScenario = new Map(
       (evidence.scenarios ?? []).map((s) => [
         s.scenario,
-        (s.checks ?? [])
-          .filter((c) => c.status === "FAILURE")
-          .map((c) => `${c.errorMessage ?? ""} ${c.details?.json ?? ""}`)
-          .join(" \n"),
+        {
+          failingText: (s.checks ?? [])
+            .filter((c) => c.status === "FAILURE")
+            .map((c) => `${c.errorMessage ?? ""} ${c.details?.json ?? ""}`)
+            .join(" \n"),
+          requested: new Set(
+            (s.transcript ?? [])
+              .filter((m) => m.direction === "harness->server")
+              .flatMap((m) =>
+                [
+                  m.toolName ? `tool:${m.toolName}` : null,
+                  m.resourceUri ? `resource:${m.resourceUri}` : null,
+                  m.promptName ? `prompt:${m.promptName}` : null,
+                ].filter(Boolean),
+              ),
+          ),
+        },
       ]),
     );
     for (const row of matrix) {
       if (row?.outcome !== "NOT_APPLICABLE" || row.reason === "bridge-under-test") continue;
-      const needle = row.evidenceRequired;
-      if (!needle) continue;
-      const text = failingTextByScenario.get(row.scenario);
-      if (text === undefined) {
+      const entry = byScenario.get(row.scenario);
+      if (entry === undefined) {
         fail("R8-evidence-unverifiable", `${row.scenario}: no entry in evidence.json to check its evidence against`);
         continue;
       }
-      if (!text.includes(needle)) {
+
+      const needle = row.evidenceRequired;
+      const fixtures = Array.isArray(row.unknownFixtures) ? row.unknownFixtures : [];
+
+      if (!needle && fixtures.length === 0) {
+        fail(
+          "R8-evidence-unverifiable",
+          `${row.scenario}: NOT_APPLICABLE with neither a rule's required evidence nor a detected missing fixture — nothing to check it against`,
+        );
+        continue;
+      }
+
+      if (needle && !entry.failingText.includes(needle)) {
         fail(
           "R8-evidence-unverifiable",
           `${row.scenario}: rule required "${needle}" but no failing check in evidence.json contains it`,
         );
+      }
+
+      for (const fixture of fixtures) {
+        if (!entry.requested.has(fixture)) {
+          fail(
+            "R8-evidence-unverifiable",
+            `${row.scenario}: recorded missing fixture "${fixture}" but the transcript in evidence.json shows no such request`,
+          );
+        }
       }
     }
   }

@@ -811,6 +811,73 @@ describe("attacks that used to pass the gate", () => {
   });
 });
 
+describe("R8 covers every NOT_APPLICABLE row, not only the ones a rule fired on", () => {
+  // Its first version checked only rows carrying `evidenceRequired`, which was 6
+  // of the 24 eligible rows in the real baseline. The fixture-detector path
+  // returns before any rule is consulted, so its 18 rows — both false greens
+  // among them — were never cross-checked at all.
+  const fixtureEvidence = () => {
+    const e = validEvidence();
+    e.scenarios.push({
+      scenario: "tools-call-simple-text",
+      checks: [{ status: "SUCCESS", errorMessage: "", details: null }],
+      transcript: [
+        { direction: "harness->server", method: "tools/call", toolName: "test_simple_text" },
+      ],
+    });
+    return e;
+  };
+  const withFixtureRow = (mutateRow = () => {}) => (b) => {
+    const row = {
+      scenario: "tools-call-simple-text",
+      outcome: "NOT_APPLICABLE",
+      reason: "harness-false-green-on-missing-fixture",
+      evidence: "requested tool:test_simple_text",
+      unknownFixtures: ["tool:test_simple_text"],
+      relayedMessages: 4,
+      rawStatuses: ["SUCCESS"],
+    };
+    mutateRow(row);
+    b.conformance.declaredScenarios.push("tools-call-simple-text");
+    b.conformance.matrix.push(row);
+  };
+
+  test("a fixture-detector row backed by the transcript is accepted", () => {
+    assert.deepEqual(mutate(withFixtureRow(), fixtureEvidence()).violations, []);
+  });
+
+  test("a missing fixture the transcript never shows being requested is RED", () => {
+    assertViolation(
+      mutate(withFixtureRow((row) => {
+        row.unknownFixtures = ["tool:i_made_this_up"];
+      }), fixtureEvidence()),
+      "R8-evidence-unverifiable",
+      /no such request/,
+    );
+  });
+
+  test("a NOT_APPLICABLE row backed by neither route is RED", () => {
+    assertViolation(
+      mutate(withFixtureRow((row) => {
+        row.unknownFixtures = [];
+      }), fixtureEvidence()),
+      "R8-evidence-unverifiable",
+      /neither a rule's required evidence nor a detected missing fixture/,
+    );
+  });
+
+  test("the shipped artifact has no NOT_APPLICABLE row that escapes both routes", () => {
+    const eligible = SHIPPED.conformance.matrix.filter(
+      (r) => r.outcome === "NOT_APPLICABLE" && r.reason !== "bridge-under-test",
+    );
+    assert.ok(eligible.length > 0);
+    for (const row of eligible) {
+      const justified = Boolean(row.evidenceRequired) || (row.unknownFixtures ?? []).length > 0;
+      assert.ok(justified, `${row.scenario} is NOT_APPLICABLE with nothing to check it against`);
+    }
+  });
+});
+
 describe("classifier — a rule explains only the failures it actually matches", () => {
   test("a passing check cannot supply the evidence for a failing one", () => {
     // `tools-call-with-logging` is a two-phase scenario: a SUCCESS reading

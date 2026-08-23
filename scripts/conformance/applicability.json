@@ -56,7 +56,7 @@
       "reason": "capability-absent",
       "requiresCapabilityAbsent": "resources.subscribe",
       "requiresEvidence": "-32601",
-      "note": "Same absent sub-capability as resources-subscribe."
+      "note": "Same absent sub-capability as resources-subscribe. The scenario never reaches resources/unsubscribe: it aborts on the resources/subscribe that sets it up, so the -32601 recorded here is the answer to subscribe."
     },
 
     {

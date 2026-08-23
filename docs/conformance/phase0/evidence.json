@@ -1,7 +1,7 @@
 {
   "$comment": "Normalised, byte-stable evidence for docs/conformance/PHASE0-BASELINE.md. Regenerate with `npm run conformance:phase0`. The unnormalised harness output lives in raw/ and is gitignored.",
   "versions": {
-    "serverSha": "37b0e59947eff3f2ddf0c380d739ee9fc8fcbdb8",
+    "serverSha": "298aa3147cf2e207dd73362d8300ddf0afb4b958",
     "conformanceVersion": "0.1.16",
     "inspectorVersion": "2.3.0"
   },

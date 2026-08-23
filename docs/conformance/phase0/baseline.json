@@ -3,7 +3,7 @@
   "generatedBy": "scripts/conformance/run-phase0.mjs",
   "deterministic": "No timestamps, ports, session ids or durations are recorded — rerunning on the same SHA must produce a byte-identical file.",
   "versions": {
-    "serverSha": "37b0e59947eff3f2ddf0c380d739ee9fc8fcbdb8",
+    "serverSha": "298aa3147cf2e207dd73362d8300ddf0afb4b958",
     "serverPackageVersion": "1.16.6",
     "sdkVersion": "1.30.0",
     "sdkDeclaredRange": "^1.27.0",
@@ -303,7 +303,7 @@
         "scenario": "resources-unsubscribe",
         "outcome": "NOT_APPLICABLE",
         "reason": "capability-absent",
-        "note": "Same absent sub-capability as resources-subscribe.",
+        "note": "Same absent sub-capability as resources-subscribe. The scenario never reaches resources/unsubscribe: it aborts on the resources/subscribe that sets it up, so the -32601 recorded here is the answer to subscribe.",
         "evidence": "Failed: MCP error -32601: Method not found",
         "evidenceRequired": "-32601",
         "unknownFixtures": [],
