@@ -35,7 +35,7 @@ what remains unmeasured, which is most of the surface.
 
 | What | Value |
 |---|---|
-| Server SHA | `37b0e59947eff3f2ddf0c380d739ee9fc8fcbdb8` |
+| Server SHA measured | `298aa3147cf2e207dd73362d8300ddf0afb4b958` (re-measured after the Phase 0 merge; that merge changed no runtime surface, so the results are identical to the original run against its parent `37b0e599…`) |
 | Server package | `@frihet/mcp-server@1.16.6` |
 | `@modelcontextprotocol/sdk` | declared `^1.27.0`, **resolved `1.30.0`** (per `package-lock.json`) |
 | Negotiated protocol | **`2025-11-25`** |
@@ -128,7 +128,10 @@ our tool input schemas are consequently not validated against JSON Schema
 `completion-complete`, `resources-subscribe`, `resources-unsubscribe`.
 
 We advertise `tools`, `resources` and `prompts` only, so `-32601 Method not
-found` is the spec-correct answer. This classification is guarded, not asserted:
+found` is the spec-correct answer. One precision, because the transcript says so
+and the scenario name does not: `resources-unsubscribe` never sent
+`resources/unsubscribe` at all — it aborted on the `resources/subscribe` that
+sets the scenario up. Both rows record the same `-32601`, from the same request. This classification is guarded, not asserted:
 each rule declares `requiresCapabilityAbsent`, and the classifier re-reads the
 live `initialize` result. If a future build starts advertising `logging` while
 still answering `-32601`, the rule stops applying and the scenario becomes
@@ -186,13 +189,13 @@ UNKNOWN ≠ PASS, no auth claim is made here in either direction.
 |---|---|
 | `R0-shape` | the baseline is not an object at all — checked first so a corrupt file reports that rather than throwing |
 | `R1-zero-scenarios` | the matrix, the declared list, or the Inspector case list is empty |
-| `R2-parser-failure` | `checks.json` is unreadable/not an array/zero-length, a row has no scenario name, a row is duplicated, or a recorded parse error is not reflected as a `FAIL_HARNESS` row |
+| `R2-parser-failure` | the matrix is missing or not an array, a row has no scenario name, a row is duplicated, or a recorded parse error is not reflected as a `FAIL_HARNESS` row. (Unreadable, non-array or zero-length `checks.json` is caught upstream, by `parseChecks` in `classify.mjs`, which throws rather than returning an empty result.) |
 | `R3-relabelled-result` | a raw `FAILURE` comes out as `PASS`; a `PASS` has no raw status behind it, or none of its raw statuses is a `SUCCESS`; any outcome outside the five allowed values (there is no `SKIP`); an Inspector `PASS` with no exit code or one that does not reach the server |
 | `R4-version-metadata-missing` | any of `serverSha`, `serverPackageVersion`, `sdkVersion`, `protocolVersion`, `conformanceVersion`, `inspectorVersion`, `nodeVersion` is absent, blank, or `"unknown"` |
-| `R5-coverage-gap` | the matrix has fewer rows than the harness declared scenarios, or results exist for a scenario never declared |
+| `R5-coverage-gap` | the matrix row count differs from the declared count in either direction, a declared scenario is absent from the matrix, or the matrix names a scenario the harness never declared |
 | `R6-bridge-cannot-pass` | a `bridge-under-test` scenario is recorded as a server `PASS` |
-| `R7-unexplained-na` | `NOT_APPLICABLE` / `NOT_EXERCISED` without a reason, or `NOT_APPLICABLE` without harness evidence |
-| `R8-evidence-unverifiable` | a `NOT_APPLICABLE` row whose required evidence does not actually appear in a failing check in `evidence.json`, or the evidence bundle being absent altogether |
+| `R7-unexplained-na` | `NOT_APPLICABLE` / `NOT_EXERCISED` without a reason, or `NOT_APPLICABLE` without harness evidence — `bridge-under-test` being the one exemption, since a transport scenario has no harness evidence *about the server* to quote |
+| `R8-evidence-unverifiable` | a `NOT_APPLICABLE` row that nothing in `evidence.json` backs: a rule's required evidence absent from every failing check, a recorded missing fixture the transcript shows was never requested, a row justified by neither, or the evidence bundle missing altogether |
 | `R9-pass-on-missing-fixture` | a `PASS` whose transcript shows the harness asked for a tool/resource/prompt the server does not expose — or a `PASS` with **zero** relayed messages attributed to it, which means the detector saw nothing rather than found nothing |
 | `R11-relay-errors` | the relay reported a dropped message, or the baseline does not record its error list at all |
 
@@ -207,8 +210,14 @@ nothing", and both false greens return as PASS with the gate still green.
 `R8` exists because a row's `evidence` used to be the rule's own
 `requiresEvidence` string echoed back — proof that a rule asked for `-32601`,
 never that the harness produced it; it is now the harness's real surrounding
-text, cross-checked against `evidence.json`. `R11` exists because the relay
-recorded its own dropped messages and nothing ever read them.
+text, cross-checked against `evidence.json`. Its first version checked only rows
+that an applicability rule had fired on, which was **6 of the 24** eligible rows:
+the fixture-detector path returns before any rule is consulted, so its 18 rows —
+including both false greens — carried no `evidenceRequired` and were never
+checked at all. It now covers all 24, cross-checking each detected missing
+fixture against the scenario's own transcript, and a row justified by neither
+route is RED. `R11` exists because the relay recorded its own dropped messages
+and nothing ever read them.
 
 Two more, from the same pass: a rule's evidence is now matched only against
 checks that actually **failed** (a passing check in a two-phase scenario could
@@ -263,10 +272,11 @@ them block Phase 0, but Phase 1 is planned on top of them.
    `@modelcontextprotocol/client@2.0.0`, `@modelcontextprotocol/server@2.0.0`.
    A v2 canary is a package **rename**, not a version bump.
 2. **"MCP 2026-07-28."** No such protocol version exists in any of the packages
-   inspected. `sdk@1.27.1`, `sdk@1.30.0` and `core@2.0.0` all know exactly
-   `2025-03-26`, `2025-06-18`, `2025-11-25`, and conformance `0.1.16` tags its
-   scenarios `2025-06-18` / `2025-11-25`. The current era is **`2025-11-25`**,
-   which this server already negotiates.
+   inspected — zero hits across the whole SDK. What does exist, in
+   `sdk@1.30.0`'s `SUPPORTED_PROTOCOL_VERSIONS`, is five versions:
+   `2025-11-25` (latest), `2025-06-18`, `2025-03-26`, `2024-11-05`, `2024-10-07`.
+   Conformance `0.1.16` tags its scenarios `2025-06-18` / `2025-11-25`. The
+   current era is **`2025-11-25`**, which this server already negotiates.
 3. **"conformance server/core/auth scenarios."** `list --server` declares no
    auth scenarios at all; auth lives in the client suite. There is no
    server-side auth conformance to run against us at `0.1.16`.
@@ -310,14 +320,20 @@ and `prompts.listChanged: true`. It never sends any of those notifications.
   (`@modelcontextprotocol/sdk` `server/mcp.js`, in `setToolRequestHandlers`,
   `setResourceRequestHandlers`, `setPromptRequestHandlers`) — Frihet does not
   opt into them, it inherits them.
-- They would be emitted by `sendToolListChanged` / `sendResourceListChanged` /
-  `sendPromptListChanged`, whose only callers inside the SDK are `.enable()`,
-  `.disable()`, `.update()`, `.remove()`, and registration performed *after*
-  `connect`.
-- `src/` calls none of those, and `registerMcpSurface` (`src/index.ts`) runs
-  before `server.connect(transport)`, so even the post-connect path never fires.
-- The same three claims are repeated on a second public surface, the Worker's
-  server card (`workers/remote-mcp/src/server-card.ts`).
+- Registering a tool, resource or prompt **does** call
+  `sendToolListChanged()` / `sendResourceListChanged()` /
+  `sendPromptListChanged()`, unconditionally, at the end of the register call.
+  What makes it a no-op is a guard *inside* the sender — each one is
+  `if (this.isConnected()) { … }`, evaluated at call time.
+- `registerMcpSurface` (`src/index.ts`) runs synchronously **before**
+  `server.connect(transport)`, so every one of those calls happens while
+  `isConnected()` is false and is dropped. `src/` never calls `.enable()`,
+  `.disable()`, `.update()` or `.remove()` afterwards, and never registers
+  anything post-`connect`, so nothing ever re-triggers them.
+- A second public surface repeats the claim: the Worker's server card
+  (`workers/remote-mcp/src/server-card.ts`) advertises `tools.listChanged`
+  unconditionally, and `prompts`/`resources` behind a `count > 0` check — which
+  with 10 prompts and 11 resources means all three appear at runtime.
 
 A client that trusts the advertisement will wait for a notification that never
 arrives. Carried into Phase 1: either emit them or stop advertising them. No
