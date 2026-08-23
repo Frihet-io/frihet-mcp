@@ -597,11 +597,13 @@ describe("classifier — a verdict requires something decisive", () => {
   });
 
   test("a PASS row whose raw statuses hold no SUCCESS is RED", () => {
-    const b = validBaseline();
-    b.conformance.matrix[0].rawStatuses = ["INFO", "WARNING"];
-    const { ok, violations } = validateBaseline(b);
-    assert.equal(ok, false);
-    assert.ok(violations.some((v) => v.rule === "R3-relabelled-result" && /no SUCCESS/.test(v.detail)));
+    assertViolation(
+      mutate((b) => {
+        b.conformance.matrix[0].rawStatuses = ["INFO", "WARNING"];
+      }),
+      "R3-relabelled-result",
+      /no SUCCESS/,
+    );
   });
 });
 

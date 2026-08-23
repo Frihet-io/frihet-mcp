@@ -184,6 +184,7 @@ UNKNOWN ≠ PASS, no auth claim is made here in either direction.
 
 | Rule | Fails when |
 |---|---|
+| `R0-shape` | the baseline is not an object at all — checked first so a corrupt file reports that rather than throwing |
 | `R1-zero-scenarios` | the matrix, the declared list, or the Inspector case list is empty |
 | `R2-parser-failure` | `checks.json` is unreadable/not an array/zero-length, a row has no scenario name, a row is duplicated, or a recorded parse error is not reflected as a `FAIL_HARNESS` row |
 | `R3-relabelled-result` | a raw `FAILURE` comes out as `PASS`; a `PASS` has no raw status behind it, or none of its raw statuses is a `SUCCESS`; any outcome outside the five allowed values (there is no `SKIP`); an Inspector `PASS` with no exit code or one that does not reach the server |
