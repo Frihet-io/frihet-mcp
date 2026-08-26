@@ -18,6 +18,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync, existsSync
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFORMANCE_PKG, CONFORMANCE_VERSION, INSPECTOR_PKG, INSPECTOR_VERSION } from "./pinned-versions.mjs";
+import { compareIgnoringProvenance } from "./provenance.mjs";
 import { buildMatrix, parseChecks, summarise, ParseError } from "./classify.mjs";
 import { validateBaseline } from "./validate-baseline.mjs";
 import { CASES, judgeCase, runCase } from "./inspector-smoke.mjs";
@@ -390,21 +391,41 @@ async function main() {
 
   const { ok, violations } = validateBaseline(baseline, evidence);
   const artifacts = [
-    { file: "baseline.json", body: `${JSON.stringify(baseline, null, 2)}\n` },
-    { file: "evidence.json", body: `${JSON.stringify(evidence, null, 2)}\n` },
+    { file: "baseline.json", body: `${JSON.stringify(baseline, null, 2)}\n`, value: baseline },
+    { file: "evidence.json", body: `${JSON.stringify(evidence, null, 2)}\n`, value: evidence },
   ];
 
-  for (const { file, body } of artifacts) {
+  const provenanceNotes = [];
+
+  for (const { file, body, value } of artifacts) {
     const target = join(OUT_DIR, file);
     if (!CHECK_MODE) {
       writeFileSync(target, body);
       continue;
     }
-    const committed = existsSync(target) ? readFileSync(target, "utf8") : "";
-    if (committed !== body) {
+    if (!existsSync(target)) {
+      writeFileSync(join(RAW_DIR, `${file}.actual`), body);
+      console.error(`RED — ${file} is not committed. Diff raw/${file}.actual against ${file}.`);
+      process.exit(1);
+    }
+
+    // Compare the RESULT, not the identity of the run. `versions.serverSha` is
+    // `git rev-parse HEAD`, so a byte comparison turns red on every commit —
+    // including one that changes nothing the harness can observe. Everything
+    // else, including the SDK/protocol/harness versions, the inventory counts
+    // and the full scenario matrix, is still compared byte for byte.
+    // See scripts/conformance/provenance.mjs.
+    const committedValue = JSON.parse(readFileSync(target, "utf8"));
+    const { equal, provenance } = compareIgnoringProvenance(value, committedValue);
+    if (!equal) {
       writeFileSync(join(RAW_DIR, `${file}.actual`), body);
       console.error(`RED — ${file} drifted. Diff raw/${file}.actual against ${file}.`);
       process.exit(1);
+    }
+    for (const entry of provenance) {
+      if (entry.observed !== entry.committed) {
+        provenanceNotes.push(`${file}:${entry.pointer} captured at ${entry.committed}, ran at ${entry.observed}`);
+      }
     }
   }
 
@@ -420,6 +441,9 @@ async function main() {
       `NOT_APPLICABLE=${c.NOT_APPLICABLE} NOT_EXERCISED=${c.NOT_EXERCISED}), ` +
       `${baseline.inspector.cases.length} inspector cases.`,
   );
+  // Not a failure, but not discarded either: the operator should be able to see
+  // that the committed baseline was captured at a different commit.
+  for (const note of provenanceNotes) console.log(`  provenance — ${note}`);
 }
 
 main().catch((error) => {
