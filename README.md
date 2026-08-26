@@ -80,6 +80,26 @@ When you're ready for your real data, drop the flag and add your key ([app.frihe
 
 ---
 
+## For AI agents
+
+If you are an agent reading this repository rather than a person reading a page, everything you need is machine-readable and generated from the running server — you do not have to parse this README.
+
+| What | Where |
+|------|-------|
+| Onboarding contract: quickstart per client, auth, safe workflow, human-authority tool lists, error recovery | [`docs/agent-onboarding.json`](./docs/agent-onboarding.json) — also shipped inside the npm package |
+| Per-tool capability truth: `callability`, `writesFrihet`, `externalInteraction`, `externalSideEffects` | `_meta["io.frihet/capability"]` on every entry of `tools/list` |
+| How to behave once connected | the `instructions` string returned by `initialize` — your client hands it to you automatically |
+
+Three rules the contract encodes, in short:
+
+1. **Orient before acting.** `get_business_context` and the `frihet://tax/rates` resource decide the correct fiscal treatment. Do not recall a Spanish tax rate from memory.
+2. **Draft, show, stop.** `create_invoice`, `create_quote` and `create_credit_note` all default to `status=draft` — no fiscal number, no hash, nothing sent to a tax authority. Present the draft and hand back.
+3. **Human authority is not yours to assume.** Any tool with a non-empty `externalSideEffects` reaches a client's inbox, a webhook, money, or AEAT / VeriFactu / TicketBAI / FACe. Several also take `confirm=true`; that flag records a human decision — never set it to satisfy your own plan.
+
+`docs/agent-onboarding.json` is regenerated from the live surface by `npm run generate:agent-onboarding` and gated in CI by `npm run gate:agent-onboarding`, so its tool lists and counts cannot drift from the server.
+
+---
+
 ## Install
 
 ### One-line (Claude Code, Cursor, Copilot, Codex, Windsurf, Gemini CLI, and more)
@@ -106,7 +126,36 @@ Once available in the community marketplace:
 
 Skill invocation: `/frihet-erp:frihet-mcp`. The bundled `.mcp.json` launches `@frihet/mcp-server` via `npx` — set `FRIHET_API_KEY` in your environment (get one at [app.frihet.io](https://app.frihet.io) → Settings → API keys).
 
-### Claude Code / Claude Desktop
+### Claude Code — one command
+
+```bash
+claude mcp add frihet -s user -e FRIHET_API_KEY=fri_your_key_here -- npx -y @frihet/mcp-server
+claude mcp list          # verify: frihet ✓ Connected
+```
+
+The CLI owns the config file, so there is nothing to hand-edit and no path to get wrong. (User scope writes `~/.claude.json`, not `~/.claude/mcp.json`.)
+
+### Codex CLI — one command
+
+```bash
+codex mcp add frihet --env FRIHET_API_KEY=fri_your_key_here -- npx -y @frihet/mcp-server
+codex mcp list           # verify
+```
+
+Codex config is **TOML**, not JSON. `codex mcp add` writes:
+
+```toml
+[mcp_servers.frihet]
+command = "npx"
+args = ["-y", "@frihet/mcp-server"]
+
+[mcp_servers.frihet.env]
+FRIHET_API_KEY = "fri_your_key_here"
+```
+
+> Pasting a JSON `mcpServers` block into `~/.codex/config.toml` is a TOML parse error that takes down your **whole** Codex config, not just this server. Use the command above.
+
+### Claude Desktop, Cursor, Windsurf, Cline — JSON config
 
 ```json
 {
@@ -124,14 +173,12 @@ Skill invocation: `/frihet-erp:frihet-mcp`. The bundled `.mcp.json` launches `@f
 
 | Tool | Config file |
 |------|------------|
-| Claude Code | `~/.claude/mcp.json` |
 | Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | Cursor | `.cursor/mcp.json` or `~/.cursor/mcp.json` |
 | Windsurf | `~/.windsurf/mcp.json` |
 | Cline | VS Code settings or `.cline/mcp.json` |
-| Codex CLI | `~/.codex/config.toml` (MCP section) |
 
-The JSON config is identical for all tools. Only the file path changes.
+The JSON above is identical for these four clients; only the file path changes. Claude Code and Codex are **not** in this table — they manage their own config through the CLI commands shown above.
 
 ### Remote (no install)
 
