@@ -1,0 +1,48 @@
+name: Published artifact drift
+
+# Issue #154: every internal gate stayed green for 20 days while `npx -y
+# @frihet/mcp-server` served a build that predated two `fix(security)` commits.
+# `audit:mcp-refs` could not see it — it compares the repo against itself.
+# This job compares the repo against what users actually install.
+#
+# Deliberately NOT a pull-request gate. A contributor's PR cannot remedy a
+# missing publish, and a gate that a PR author cannot turn green is a gate
+# everyone learns to ignore. The comparator's own unit tests DO run on every PR
+# via `npm test`, so the logic is protected everywhere; only the live probe is
+# scoped here.
+
+on:
+  schedule:
+    # 07:00 UTC daily. The failure mode this catches is measured in days.
+    - cron: "0 7 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Repo vs npm vs MCP Registry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history is load-bearing: the detector's anchor is the `gitHead`
+          # npm recorded at publish time, and a shallow clone cannot resolve it.
+          # With fetch-depth 1 this job would report UNVERIFIABLE, not GREEN —
+          # fail-closed either way, but the useful signal needs the history.
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # No `npm ci`: the detector imports only node: builtins and uses global
+      # fetch. Installing would make a supply-chain step a prerequisite for
+      # detecting a supply-chain divergence.
+      - name: Check published artifact against main
+        run: node scripts/published-artifact-drift.mjs
