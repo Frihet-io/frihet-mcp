@@ -40,6 +40,10 @@ import {
   localMcpSurfaceComposition,
   registerMcpSurface,
 } from "./server-composition.js";
+import {
+  AGENT_SERVER_INSTRUCTIONS,
+  API_KEY_LOCATION,
+} from "./agent-onboarding.js";
 import { log } from "./logger.js";
 import { registerShutdownHook } from "./metrics.js";
 import { setTraceContext } from "./observability.js";
@@ -54,14 +58,32 @@ function main(): void {
   const demoMode = demoFlag === "1" || demoFlag === "true";
 
   if (!demoMode && !apiKey) {
+    // Human-readable first, then one machine-readable line. An agent that only
+    // gets prose here has to guess; the JSON line gives it a code to branch on
+    // and the two recoveries that actually exist. /settings/api is the real,
+    // routable screen — there is no "Developers" section in the app.
     console.error(
       "Error: FRIHET_API_KEY environment variable is required.\n\n" +
         "Get your API key:\n" +
         "  1. Create a free account at https://app.frihet.io\n" +
-        "  2. Go to Settings > Developers > API Keys\n" +
-        "  3. Create a key and add it to your MCP configuration\n\n" +
+        "  2. Open https://app.frihet.io/settings/api\n" +
+        "  3. Create a key (it starts with fri_) and add it to your MCP configuration\n\n" +
         "Or try it instantly with no key: set FRIHET_DEMO=1 for example data.\n\n" +
         "Documentation: https://docs.frihet.io/desarrolladores/mcp-server\n",
+    );
+    console.error(
+      JSON.stringify({
+        error: {
+          code: "FRIHET_API_KEY_MISSING",
+          message: "FRIHET_API_KEY environment variable is required",
+          obtainAt: API_KEY_LOCATION,
+          recovery: [
+            { action: "set_env", env: { FRIHET_API_KEY: "fri_<key>" } },
+            { action: "run_without_credentials", env: { FRIHET_DEMO: "1" } },
+          ],
+          docs: "https://docs.frihet.io/desarrolladores/mcp-server",
+        },
+      }),
     );
     process.exit(1);
   }
@@ -105,6 +127,11 @@ function main(): void {
       "Provides a catalogue of 157 canonical operations; fiscal aliases and optional grouped discovery names are reported separately. " +
       "The local package serves 11 resources (7 static + 4 API-backed) and 10 workflow prompts " +
       "with full Spanish tax compliance (IVA, IGIC, IPSI).",
+  }, {
+    // Delivered by `initialize` to every MCP client, which hands it to the model
+    // before the first tool call. This is the only onboarding channel that costs
+    // the operator zero configuration. Source: src/agent-onboarding.ts.
+    instructions: AGENT_SERVER_INSTRUCTIONS,
   });
 
   const openaiMode = process.env.FRIHET_OPENAI_MODE === "true";

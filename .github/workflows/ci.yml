@@ -78,6 +78,13 @@ jobs:
       - name: Generated public capability truth
         run: npm run gate:public-capability-truth
 
+      # Agent-onboarding truth gate. docs/agent-onboarding.json is a projection
+      # of the live MCP surface (confirm guards, external side effects, counts),
+      # not a parallel claim about it: hand-editing the file, or adding a confirm
+      # guard without regenerating, turns this red.
+      - name: Agent onboarding descriptor parity
+        run: npm run gate:agent-onboarding
+
       # Version/tool-count drift gate. Scoped to this repo: sister repos
       # (Frihet-ERP/Saas/docs) aren't checked out in CI, so we only assert the
       # package's OWN refs (server.json, README, index.ts, CHANGELOG) match the

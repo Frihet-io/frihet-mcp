@@ -1,0 +1,287 @@
+{
+  "onboardingContractVersion": 1,
+  "server": {
+    "mcpName": "io.frihet/erp",
+    "npmPackage": "@frihet/mcp-server",
+    "remoteEndpoint": "https://mcp.frihet.io/mcp",
+    "transport": [
+      "stdio",
+      "streamable-http"
+    ]
+  },
+  "auth": {
+    "envVar": "FRIHET_API_KEY",
+    "keyFormat": "fri_<key>",
+    "obtainAt": "https://app.frihet.io/settings/api",
+    "remoteMethods": [
+      "oauth2.1-pkce",
+      "bearer"
+    ],
+    "noAuthTrial": {
+      "env": {
+        "FRIHET_DEMO": "1"
+      },
+      "persists": false,
+      "network": false
+    }
+  },
+  "quickstart": {
+    "claude-code": {
+      "steps": [
+        "claude mcp add frihet -s user -e FRIHET_API_KEY=fri_... -- npx -y @frihet/mcp-server"
+      ],
+      "configFormat": "managed by the CLI (user scope writes ~/.claude.json)",
+      "verify": "claude mcp list"
+    },
+    "codex": {
+      "steps": [
+        "codex mcp add frihet --env FRIHET_API_KEY=fri_... -- npx -y @frihet/mcp-server"
+      ],
+      "configFormat": "toml (~/.codex/config.toml — JSON in this file is a parse error)",
+      "verify": "codex mcp list"
+    },
+    "generic-mcp-client-stdio": {
+      "steps": [
+        "mcpServers.frihet = { \"command\": \"npx\", \"args\": [\"-y\", \"@frihet/mcp-server\"], \"env\": { \"FRIHET_API_KEY\": \"fri_...\" } }"
+      ],
+      "configFormat": "json",
+      "verify": "initialize → tools/list returns a non-empty catalogue"
+    },
+    "generic-mcp-client-http": {
+      "steps": [
+        "mcpServers.frihet = { \"type\": \"streamable-http\", \"url\": \"https://mcp.frihet.io/mcp\", \"headers\": { \"Authorization\": \"Bearer fri_...\" } }"
+      ],
+      "configFormat": "json",
+      "verify": "initialize → tools/list returns a non-empty catalogue"
+    }
+  },
+  "capabilityDiscovery": {
+    "metaKey": "io.frihet/capability",
+    "callabilityValues": [
+      "api_dependent",
+      "runtime_checked",
+      "deferred",
+      "unavailable",
+      "local"
+    ],
+    "groupedModeEnv": {
+      "FRIHET_TOOL_MODE": "grouped"
+    },
+    "counts": {
+      "toolNames": 162,
+      "readOnly": 82,
+      "writesFrihet": 80,
+      "externalInteraction": 20,
+      "destructive": 53,
+      "resources": 11,
+      "prompts": 10
+    }
+  },
+  "safeWorkflow": {
+    "description": "Discover → orient → retrieve → draft → hand back. No step issues a document or reaches a third party.",
+    "steps": [
+      {
+        "call": "get_business_context",
+        "kind": "read",
+        "note": "Fiscal zone, currency and defaults. Everything downstream depends on it."
+      },
+      {
+        "call": "resources/read frihet://tax/rates",
+        "kind": "read",
+        "note": "Authoritative IVA / IGIC / IPSI table. Do not recall a rate from memory."
+      },
+      {
+        "call": "list_clients",
+        "kind": "read",
+        "note": "Resolve the client by name before referencing an id."
+      },
+      {
+        "call": "create_invoice",
+        "kind": "draft",
+        "note": "Defaults to status=draft — no fiscal number, no hash, no AEAT submission."
+      },
+      {
+        "call": "get_invoice",
+        "kind": "read",
+        "note": "Read the draft back and present the computed totals to the human."
+      },
+      {
+        "call": "STOP",
+        "kind": "handoff",
+        "note": "Issuing and sending are human-authorised. Report the draft id and the exact next action; do not take it."
+      }
+    ]
+  },
+  "humanAuthority": {
+    "rule": "Do not call a tool with non-empty externalSideEffects, and do not set confirm=true, without an explicit human instruction for that specific action.",
+    "confirmRequired": [
+      "delete_invoice",
+      "delete_quote",
+      "delete_recurring_invoice",
+      "delete_time_entry",
+      "match_transaction_to_invoice",
+      "period_close",
+      "period_reopen",
+      "refund_deposit",
+      "refund_sale",
+      "remove_team_member",
+      "send_invoice",
+      "verifactu_resubmit"
+    ],
+    "externalSideEffects": [
+      {
+        "tool": "create_webhook",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "delete_webhook",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "face_status",
+        "effects": [
+          "external_provider_read"
+        ]
+      },
+      {
+        "tool": "face_submit",
+        "effects": [
+          "fiscal_or_einvoice_submission"
+        ]
+      },
+      {
+        "tool": "frihet_portal_domain_add",
+        "effects": [
+          "external_provider_configuration"
+        ]
+      },
+      {
+        "tool": "frihet_portal_domain_remove",
+        "effects": [
+          "external_provider_configuration"
+        ]
+      },
+      {
+        "tool": "frihet_portal_domain_verify",
+        "effects": [
+          "external_provider_read",
+          "external_provider_configuration"
+        ]
+      },
+      {
+        "tool": "frihet_tax_id_vies_lookup",
+        "effects": [
+          "external_provider_read"
+        ]
+      },
+      {
+        "tool": "gestoria_message_send",
+        "effects": [
+          "email_or_invitation"
+        ]
+      },
+      {
+        "tool": "gestoria_template_bulk_send",
+        "effects": [
+          "email_or_invitation"
+        ]
+      },
+      {
+        "tool": "invite_team_member",
+        "effects": [
+          "email_or_invitation"
+        ]
+      },
+      {
+        "tool": "refund_sale",
+        "effects": [
+          "money_movement"
+        ]
+      },
+      {
+        "tool": "send_einvoice",
+        "effects": [
+          "fiscal_or_einvoice_submission"
+        ]
+      },
+      {
+        "tool": "send_invoice",
+        "effects": [
+          "email_or_invitation"
+        ]
+      },
+      {
+        "tool": "send_quote",
+        "effects": [
+          "email_or_invitation"
+        ]
+      },
+      {
+        "tool": "sync_channel",
+        "effects": [
+          "channel_sync"
+        ]
+      },
+      {
+        "tool": "test_webhook",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "ticketbai_submit",
+        "effects": [
+          "fiscal_or_einvoice_submission"
+        ]
+      },
+      {
+        "tool": "update_webhook",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "verifactu_resubmit",
+        "effects": [
+          "fiscal_or_einvoice_submission"
+        ]
+      }
+    ]
+  },
+  "errors": [
+    {
+      "condition": "startup exits 1 with code FRIHET_API_KEY_MISSING",
+      "meaning": "No credential in the environment.",
+      "agentAction": "Ask the human for a key from https://app.frihet.io/settings/api, or re-launch with FRIHET_DEMO=1 to explore without one."
+    },
+    {
+      "condition": "HTTP 401",
+      "meaning": "Key missing, malformed or revoked.",
+      "agentAction": "Stop and ask for a new key. Do not retry."
+    },
+    {
+      "condition": "HTTP 403",
+      "meaning": "The key is valid but lacks the scope, or the plan excludes it.",
+      "agentAction": "Report which operation was refused. Do not try a different tool to route around it."
+    },
+    {
+      "condition": "HTTP 429",
+      "meaning": "Rate limited.",
+      "agentAction": "Wait the Retry-After seconds, then retry once."
+    },
+    {
+      "condition": "HTTP 409 IDEMPOTENCY_REQUEST_IN_PROGRESS",
+      "meaning": "The first attempt's outcome could not be recorded; the server refuses to execute twice.",
+      "agentAction": "Read the resource back and reconcile from its actual state. Never retry with a fresh Idempotency-Key."
+    },
+    {
+      "condition": "capability.callability is deferred or unavailable",
+      "meaning": "The tool is registered but the backing API is not serving it.",
+      "agentAction": "Do not call it. Tell the human the capability is not live for this workspace."
+    }
+  ]
+}
