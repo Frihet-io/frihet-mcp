@@ -51,7 +51,14 @@ describe("surface list is pinned", () => {
     assert.deepEqual([...PUBLISHED_SURFACE.prefixes], ["src/", "assets/"]);
     assert.deepEqual(
       [...PUBLISHED_SURFACE.exact],
-      ["package.json", "tsconfig.json", "README.md", "LICENSE", "scripts/postinstall.js"],
+      [
+        "package.json",
+        "tsconfig.json",
+        "README.md",
+        "LICENSE",
+        "scripts/postinstall.js",
+        "docs/agent-onboarding.json",
+      ],
     );
     assert.deepEqual([...PUBLISHED_SURFACE.excludedPrefixes], ["src/__tests__/"]);
     assert.ok(Object.isFrozen(PUBLISHED_SURFACE));
@@ -64,7 +71,13 @@ describe("surface list is pinned", () => {
     // dist/ is compiled from src/, so src/ standing in for it is the contract.
     // If `files` grows a new shipped path, this fails until the surface list agrees.
     const shipped = PKG.files.filter((f) => !f.startsWith("!"));
-    const covered = new Set(["dist", "README.md", "LICENSE", "scripts/postinstall.js"]);
+    const covered = new Set([
+      "dist",
+      "README.md",
+      "LICENSE",
+      "scripts/postinstall.js",
+      "docs/agent-onboarding.json",
+    ]);
     for (const entry of shipped) {
       const known = covered.has(entry) || entry.startsWith("assets/");
       assert.ok(known, `package.json files[] entry "${entry}" is not covered by PUBLISHED_SURFACE`);

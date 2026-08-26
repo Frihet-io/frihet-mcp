@@ -58,6 +58,11 @@ export const PUBLISHED_SURFACE = Object.freeze({
     "README.md",
     "LICENSE",
     "scripts/postinstall.js",
+    // Added by the #152 fan-in: `docs/agent-onboarding.json` is listed in
+    // package.json `files`, so it is bytes a consumer installs. A commit that
+    // regenerates the descriptor changes the tarball without touching src/,
+    // and without this entry that change would be invisible to the detector.
+    "docs/agent-onboarding.json",
   ]),
   // dist/__tests__ is excluded from the tarball by package.json `files`, so changes
   // under src/__tests__ cannot reach a consumer.
