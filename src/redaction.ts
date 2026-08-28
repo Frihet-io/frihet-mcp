@@ -92,6 +92,7 @@ export function sanitizeServerRemediation(
  */
 export const SENSITIVE_FIELD_NAMES: readonly string[] = [
   "taxId", "tax_id",              // Primary field name + snake_case variant
+  "taxIdNormalized", "tax_id_normalized", // Search-normalized government tax ID
   "clientTaxId", "client_tax_id", // Per-document client government tax ID
   "nif", "cif", "vatNumber",      // Spanish/EU synonyms for government tax ID
   "vat_number", "vatId", "vat_id",
@@ -108,6 +109,20 @@ export const SENSITIVE_FIELD_NAMES: readonly string[] = [
   "requestId", "request_id", "traceId", "trace_id",
   "sessionId", "session_id", "userId", "user_id",
   "verifactuHash", "verifactu_hash",
+  // Raw Firestore records can contain nested fiscal-submission state and
+  // capability/payment identifiers that are not part of any public response
+  // contract. Redact the parent objects so future nested fields fail closed.
+  "verifactu", "verifactuAnulacion", "verifactu_anulacion",
+  "verifactuSubmission", "verifactu_submission",
+  "paymentDetails", "payment_details",
+  "paymentUrl", "payment_url", "paymentLink", "payment_link",
+  "paymentIntentId", "payment_intent_id", "stripePaymentIntentId",
+  "publicHash", "public_hash",
+  "bankTransactionId", "bank_transaction_id",
+  "bankIncomeAuthority", "bank_income_authority",
+  // Backend search indexes can embed normalized names, email addresses and
+  // government identifiers even when the canonical fields are removed.
+  "searchTokens", "search_tokens",
 ];
 
 /** Recursively removes named fields from an object/array tree, IN PLACE. */

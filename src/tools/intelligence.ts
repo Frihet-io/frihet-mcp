@@ -81,7 +81,7 @@ const businessContextOutput = z.object({
     expenseCount: z.number(),
   }).passthrough(),
 }).passthrough().describe(
-  "Business context snapshot: workspace profile, fiscal setup, plan usage, recent activity and current-month performance",
+  "Business context snapshot: workspace profile, defaults, plan usage, recent activity and current-month performance",
 );
 
 const monthlySummaryOutput = z.object({
@@ -119,7 +119,7 @@ const monthlySummaryOutput = z.object({
     estimatedModel303: z.number(),
   }).passthrough(),
 }).passthrough().describe(
-  "Monthly financial summary with revenue, expenses, profit, invoice status, top clients and estimated tax liability",
+  "Monthly business summary with revenue, expenses, profit, invoice status, top clients and expense categories",
 );
 
 export function registerIntelligenceTools(server: McpServer, client: IFrihetClient): void {

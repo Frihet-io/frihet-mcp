@@ -89,9 +89,9 @@ export function registerProductTools(server: McpServer, client: IFrihetClient): 
         "Los productos se pueden usar al crear facturas y presupuestos para entrada rapida de datos.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
-        name: z.string().describe("Product/service name / Nombre del producto o servicio"),
-        unitPrice: z.number().describe("Unit price in EUR / Precio unitario en EUR"),
-        description: z.string().optional().describe("Product description / Descripcion"),
+        name: z.string().trim().min(1).max(200).describe("Product/service name / Nombre del producto o servicio"),
+        unitPrice: z.number().finite().min(0).max(10_000_000).describe("Unit price in EUR / Precio unitario en EUR"),
+        description: z.string().max(2000).optional().describe("Product description / Descripcion"),
         taxRate: z
           .number()
           .min(0)
@@ -123,9 +123,9 @@ export function registerProductTools(server: McpServer, client: IFrihetClient): 
       annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Product ID / ID del producto"),
-        name: z.string().optional().describe("Name / Nombre"),
-        unitPrice: z.number().optional().describe("Unit price / Precio unitario"),
-        description: z.string().optional().describe("Description / Descripcion"),
+        name: z.string().trim().min(1).max(200).optional().describe("Name / Nombre"),
+        unitPrice: z.number().finite().min(0).max(10_000_000).optional().describe("Unit price / Precio unitario"),
+        description: z.string().max(2000).optional().describe("Description / Descripcion"),
         taxRate: z.number().min(0).max(100).optional().describe("Tax rate % / IVA %"),
       },
       outputSchema: productItemOutput,

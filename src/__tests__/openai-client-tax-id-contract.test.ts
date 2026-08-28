@@ -14,11 +14,16 @@ import type { IFrihetClient } from "../client-interface.js";
 import { applyOpenAIReviewProfiles } from "../openai-profile.js";
 import { registerAllTools } from "../tools/register-all.js";
 
-const REVIEWED_TOOLS = [
+const DIRECT_TAX_ID_TOOLS = [
   "create_invoice",
   "update_invoice",
   "create_quote",
   "update_quote",
+] as const;
+
+const REVIEWED_TAX_ID_TOOLS = [
+  "create_invoice",
+  "create_quote",
 ] as const;
 
 interface CapturedCall {
@@ -37,6 +42,10 @@ function makeApiClient(calls: CapturedCall[]): IFrihetClient {
     calls.push({ method, input: structuredClone(input) });
     return {
       id: `${method}_139`,
+      ...(method.endsWith("Invoice")
+        ? { invoiceNumber: "INV-139" }
+        : { quoteNumber: "QUO-139" }),
+      status: "draft",
       clientName: "Contract Test Client",
       items: [{ description: "Reviewed contract", quantity: 1, unitPrice: 100 }],
       clientTaxId: "REVIEWED-CAMEL-MUST-REDACT",
@@ -105,12 +114,14 @@ const UPDATE_ARGS = {
 };
 
 describe("#139 reviewed clientTaxId policy — real MCP SDK", () => {
-  test("reviewed tools/list removes exactly four clientTaxId input paths", async () => {
+  test("reviewed tools/list removes every visible clientTaxId input path", async () => {
     const harness = await makeHarness(true);
     try {
       const { tools } = await harness.client.listTools();
-      assert.equal(tools.length, 56, "reviewed surface remains 53 business + 3 discovery");
-      for (const name of REVIEWED_TOOLS) {
+      assert.equal(tools.length, 36, "reviewed surface remains 33 business + 3 discovery");
+      assert.equal(tools.some((tool) => tool.name === "update_invoice"), false);
+      assert.equal(tools.some((tool) => tool.name === "update_quote"), false);
+      for (const name of REVIEWED_TAX_ID_TOOLS) {
         const tool = tools.find((candidate) => candidate.name === name);
         assert.ok(tool, `${name} remains reviewed`);
         assert.equal("clientTaxId" in schemaProperties(tool), false, `${name} must not declare clientTaxId`);
@@ -128,14 +139,21 @@ describe("#139 reviewed clientTaxId policy — real MCP SDK", () => {
     }
   });
 
-  test("reviewed calls do not forward and redact camel/snake client tax IDs", async () => {
+  test("reviewed calls reject unknown tax-ID fields, then omit them from valid calls and outputs", async () => {
     const harness = await makeHarness(true);
     try {
+      for (const [name, args] of [
+        ["create_invoice", { ...CREATE_ARGS, confirm: true }],
+        ["create_quote", { ...CREATE_ARGS, confirm: true }],
+      ] as const) {
+        const rejected = await harness.client.callTool({ name, arguments: args });
+        assert.equal(rejected.isError, true, `${name} must reject undeclared clientTaxId`);
+      }
+      assert.equal(harness.calls.length, 0, "strict reviewed schemas must reject before ERP");
+
       const calls = [
-        ["create_invoice", CREATE_ARGS],
-        ["update_invoice", UPDATE_ARGS],
-        ["create_quote", CREATE_ARGS],
-        ["update_quote", UPDATE_ARGS],
+        ["create_invoice", { clientName: CREATE_ARGS.clientName, items: CREATE_ARGS.items, confirm: true }],
+        ["create_quote", { clientName: CREATE_ARGS.clientName, items: CREATE_ARGS.items, confirm: true }],
       ] as const;
 
       for (const [name, args] of calls) {
@@ -148,7 +166,7 @@ describe("#139 reviewed clientTaxId policy — real MCP SDK", () => {
         assert.equal(serialized.includes("REVIEWED-SNAKE-MUST-REDACT"), false);
       }
 
-      assert.equal(harness.calls.length, 4);
+      assert.equal(harness.calls.length, 2);
       for (const call of harness.calls) {
         assert.equal("clientTaxId" in call.input, false, `${call.method} must not receive clientTaxId`);
       }
@@ -161,7 +179,7 @@ describe("#139 reviewed clientTaxId policy — real MCP SDK", () => {
     const harness = await makeHarness(false);
     try {
       const { tools } = await harness.client.listTools();
-      for (const name of REVIEWED_TOOLS) {
+      for (const name of DIRECT_TAX_ID_TOOLS) {
         const tool = tools.find((candidate) => candidate.name === name);
         assert.ok(tool, `${name} exists directly`);
         assert.equal("clientTaxId" in schemaProperties(tool), true, `${name} keeps direct clientTaxId`);

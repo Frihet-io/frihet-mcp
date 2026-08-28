@@ -69,11 +69,11 @@ export function registerCrmTools(server: McpServer, client: IFrihetClient): void
         "/ Anade un nuevo contacto a un cliente. Requiere al menos un nombre.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
-        clientId: z.string().describe("Client ID / ID del cliente"),
-        name: z.string().describe("Contact name / Nombre del contacto"),
-        email: z.string().optional().describe("Email address / Correo electronico"),
-        phone: z.string().optional().describe("Phone number / Telefono"),
-        role: z.string().optional().describe("Role or title (e.g. CEO, CTO, Billing) / Cargo o rol"),
+        clientId: z.string().trim().min(1).max(128).describe("Client ID / ID del cliente"),
+        name: z.string().trim().min(1).max(200).describe("Contact name / Nombre del contacto"),
+        email: z.string().trim().email().max(255).optional().describe("Email address / Correo electronico"),
+        phone: z.string().trim().min(1).max(50).optional().describe("Phone number / Telefono"),
+        role: z.string().trim().min(1).max(200).optional().describe("Role or title (e.g. CEO, CTO, Billing) / Cargo o rol"),
         isPrimary: z.boolean().optional().describe("Whether this is the primary contact / Si es el contacto principal"),
       },
       outputSchema: contactItemOutput,
@@ -99,8 +99,8 @@ export function registerCrmTools(server: McpServer, client: IFrihetClient): void
         "/ Elimina permanentemente un contacto de un cliente. Esta accion no se puede deshacer.",
       annotations: DELETE_ANNOTATIONS,
       inputSchema: {
-        clientId: z.string().describe("Client ID / ID del cliente"),
-        contactId: z.string().describe("Contact ID / ID del contacto"),
+        clientId: z.string().trim().min(1).max(128).describe("Client ID / ID del cliente"),
+        contactId: z.string().trim().min(1).max(128).describe("Contact ID / ID del contacto"),
       },
       outputSchema: deleteResultOutput,
     },
@@ -129,7 +129,7 @@ export function registerCrmTools(server: McpServer, client: IFrihetClient): void
         "/ Lista todas las actividades CRM de un cliente con paginacion opcional.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
-        clientId: z.string().describe("Client ID / ID del cliente"),
+        clientId: z.string().trim().min(1).max(128).describe("Client ID / ID del cliente"),
         limit: z.number().int().min(1).max(100).optional().describe("Max results (1-100) / Resultados maximos"),
         offset: z.number().int().min(0).optional().describe("Offset / Desplazamiento"),
       },
@@ -152,16 +152,19 @@ export function registerCrmTools(server: McpServer, client: IFrihetClient): void
       title: "Log Client Activity",
       description:
         "Log a CRM activity against a client. Use to track calls, emails, meetings, or tasks. " +
+        "Do not include passwords, credentials, payment-card data, health data, or official/government identifiers in free-text fields. " +
         "Example: clientId='abc123', type='call', title='Discussed Q2 proposal', description='Client interested in upgrade' " +
-        "/ Registra una actividad CRM para un cliente. Usa para rastrear llamadas, emails, reuniones o tareas.",
+        "/ Registra una actividad CRM para un cliente. No incluyas contrasenas, credenciales, datos de tarjetas, datos de salud ni identificadores oficiales en los campos de texto libre.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: z.object({
         clientId: z.string().describe("Client ID / ID del cliente"),
         type: z
           .enum(["call", "email", "meeting", "task"])
           .describe("Activity type / Tipo de actividad"),
-        title: z.string().max(500).describe("Activity title / Titulo de la actividad"),
-        description: z.string().max(5000).optional().describe("Detailed description / Descripcion detallada"),
+        title: z.string().trim().min(1).max(500).describe("Activity title / Titulo de la actividad"),
+        description: z.string().trim().min(1).max(5000).optional().describe(
+          "Detailed description; exclude secrets, credentials, card or health data, and official identifiers / Descripcion detallada; excluye secretos, credenciales, datos de tarjetas o salud e identificadores oficiales",
+        ),
       }).strict(),
       outputSchema: activityItemOutput,
     },
@@ -212,12 +215,15 @@ export function registerCrmTools(server: McpServer, client: IFrihetClient): void
       title: "Create Client Note",
       description:
         "Add a note to a client. Notes are free-form text entries useful for keeping context. " +
+        "Do not include passwords, credentials, payment-card data, health data, or official/government identifiers. " +
         "Example: clientId='abc123', content='Prefers invoices in English. Payment NET 30.' " +
-        "/ Anade una nota a un cliente. Las notas son texto libre para mantener contexto.",
+        "/ Anade una nota a un cliente. No incluyas contrasenas, credenciales, datos de tarjetas, datos de salud ni identificadores oficiales.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
-        clientId: z.string().describe("Client ID / ID del cliente"),
-        content: z.string().describe("Note content / Contenido de la nota"),
+        clientId: z.string().trim().min(1).max(128).describe("Client ID / ID del cliente"),
+        content: z.string().trim().min(1).max(10000).describe(
+          "Note content; exclude secrets, credentials, card or health data, and official identifiers / Contenido; excluye secretos, credenciales, datos de tarjetas o salud e identificadores oficiales",
+        ),
       },
       outputSchema: noteItemOutput,
     },
@@ -241,8 +247,8 @@ export function registerCrmTools(server: McpServer, client: IFrihetClient): void
         "/ Elimina permanentemente una nota de un cliente. Esta accion no se puede deshacer.",
       annotations: DELETE_ANNOTATIONS,
       inputSchema: {
-        clientId: z.string().describe("Client ID / ID del cliente"),
-        noteId: z.string().describe("Note ID / ID de la nota"),
+        clientId: z.string().trim().min(1).max(128).describe("Client ID / ID del cliente"),
+        noteId: z.string().trim().min(1).max(128).describe("Note ID / ID de la nota"),
       },
       outputSchema: deleteResultOutput,
     },

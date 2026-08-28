@@ -57,9 +57,9 @@ export interface BinaryDocument {
   id: string;
   /** Verbatim `Content-Type` from the response (e.g. `application/pdf`). */
   contentType: string;
-  /** Byte length of the decoded body. Equal to `Buffer.byteLength(base64)` after round-trip. */
+  /** Byte length of the decoded body. Equal to the decoded base64 byte length. */
   sizeBytes: number;
-  /** Base64-encoded bytes. Round-trip via `Buffer.from(b64, 'base64')`. */
+  /** Base64-encoded bytes. */
   base64: string;
   /** Filename hint parsed from `Content-Disposition`, when present. */
   filename?: string;
@@ -196,10 +196,32 @@ function isAbortError(error: unknown): boolean {
 
 function decodeUtf8(bytes: Uint8Array, label: string): string {
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
   } catch {
     throw new FrihetApiError(200, "invalid_response", `${label} is not valid UTF-8`);
   }
+}
+
+const BASE64_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/** Encode bytes without relying on Node's Buffer in browser/Worker runtimes. */
+function encodeBase64(bytes: Uint8Array): string {
+  let encoded = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index]!;
+    const hasSecond = index + 1 < bytes.length;
+    const hasThird = index + 2 < bytes.length;
+    const second = hasSecond ? bytes[index + 1]! : 0;
+    const third = hasThird ? bytes[index + 2]! : 0;
+    const chunk = (first << 16) | (second << 8) | third;
+
+    encoded += BASE64_ALPHABET[(chunk >>> 18) & 0x3f];
+    encoded += BASE64_ALPHABET[(chunk >>> 12) & 0x3f];
+    encoded += hasSecond ? BASE64_ALPHABET[(chunk >>> 6) & 0x3f] : "=";
+    encoded += hasThird ? BASE64_ALPHABET[chunk & 0x3f] : "=";
+  }
+  return encoded;
 }
 
 export class FrihetApiError extends Error {
@@ -368,6 +390,7 @@ export class FrihetClient {
         redirect: "error",
       });
     } catch (error) {
+      clearTimeout(timeoutId);
       const durationMs = Math.round(Date.now() - startTime);
       if (error instanceof Error && error.name === "AbortError") {
         logApiCall(method, path, 408, durationMs);
@@ -378,15 +401,18 @@ export class FrihetClient {
         );
       }
       logApiCall(method, path, 0, durationMs);
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
+      throw new FrihetApiError(
+        503,
+        "network_error",
+        "The network request failed before Frihet could confirm its outcome.",
+      );
     }
 
     const durationMs = Math.round(Date.now() - startTime);
 
     // Rate limit handling
     if (response.status === 429) {
+      clearTimeout(timeoutId);
       logApiCall(method, path, 429, durationMs);
 
       if (retryCount >= MAX_RETRIES) {
@@ -427,6 +453,7 @@ export class FrihetClient {
       } catch {
         errorBody = normalizeApiError(undefined, response.status, response.statusText);
       }
+      clearTimeout(timeoutId);
       throw new FrihetApiError(
         response.status,
         errorBody.error,
@@ -439,17 +466,36 @@ export class FrihetClient {
 
     // 204 No Content (e.g. DELETE)
     if (response.status === 204) {
+      clearTimeout(timeoutId);
       return undefined as T;
     }
 
-    const data = await response.json();
+    let data: unknown;
+    try {
+      // Keep the request AbortSignal live through body consumption. A server
+      // can send 2xx headers after committing a write and then stall or truncate
+      // the JSON body; clearing the timer at headers would let this hang forever
+      // and make a committed mutation look safely retryable.
+      data = await response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const timedOut = error instanceof Error && error.name === "AbortError";
+      throw new FrihetApiError(
+        timedOut ? 408 : response.status,
+        timedOut ? "response_timeout" : "invalid_response_after_success",
+        timedOut
+          ? `Response body timed out after ${this.timeoutMs / 1000} seconds`
+          : "Frihet returned an unreadable success response after processing the request.",
+      );
+    }
+    clearTimeout(timeoutId);
 
     // Basic response validation
     if (data === null || data === undefined) {
       throw new FrihetApiError(
         response.status,
-        'invalid_response',
-        'API returned empty response',
+        "invalid_response_after_success",
+        "Frihet returned an empty success response after processing the request.",
       );
     }
 
@@ -668,7 +714,14 @@ export class FrihetClient {
           `Request timed out after ${this.timeoutMs / 1000} seconds`,
         );
       }
-      throw error;
+      if (error instanceof FrihetApiError) throw error;
+      const durationMs = Math.round(Date.now() - startedAt);
+      logApiCall(method, path, 0, durationMs);
+      throw new FrihetApiError(
+        503,
+        "network_error",
+        "The network request failed before Frihet could confirm its outcome.",
+      );
     } finally {
       clearTimeout(timeoutId);
     }
@@ -971,9 +1024,9 @@ export class FrihetClient {
 
   /**
    * DELETE /quotes/{id} — same two-outcome contract as {@link deleteInvoice}:
-   * the backend soft-CANCELS a non-draft quote (200 + body) and only destroys a
-   * draft (204). See `publicApi.ts` `deleteResource`, which takes the identical
-   * branch for `invoices` and `quotes`.
+   * the backend soft-CANCELS a non-draft quote (200 + body), destroys only a
+   * clean draft with no delivery/response/attachment/conversion evidence (204),
+   * and refuses a protected draft with 409.
    */
   async deleteQuote(id: string): Promise<Record<string, unknown> | undefined> {
     return this.requestUnwrapped("DELETE", `/quotes/${encodeURIComponent(id)}`);
@@ -1017,7 +1070,11 @@ export class FrihetClient {
   // ----------------------------------------------------------------
 
   async sendInvoice(id: string, to?: string): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(id)}/send`, to ? { to } : undefined);
+    return this.requestUnwrapped(
+      "POST",
+      `/invoices/${encodeURIComponent(id)}/send`,
+      to ? { recipientEmail: to } : undefined,
+    );
   }
 
   async markInvoicePaid(id: string, paidDate?: string): Promise<Record<string, unknown>> {
@@ -1054,7 +1111,7 @@ export class FrihetClient {
       id,
       contentType: doc.contentType,
       sizeBytes: doc.sizeBytes,
-      base64: Buffer.from(doc.bytes.buffer, doc.bytes.byteOffset, doc.bytes.byteLength).toString("base64"),
+      base64: encodeBase64(doc.bytes),
       ...(doc.filename ? { filename: doc.filename } : {}),
     };
   }
@@ -1086,7 +1143,7 @@ export class FrihetClient {
         id: invoiceId,
         contentType: doc.contentType,
         sizeBytes: doc.sizeBytes,
-        base64: Buffer.from(doc.bytes.buffer, doc.bytes.byteOffset, doc.bytes.byteLength).toString("base64"),
+        base64: encodeBase64(doc.bytes),
         ...(doc.filename ? { filename: doc.filename } : {}),
       };
     }
@@ -1145,7 +1202,11 @@ export class FrihetClient {
   // ----------------------------------------------------------------
 
   async sendQuote(id: string, to?: string): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", `/quotes/${encodeURIComponent(id)}/send`, to ? { to } : undefined);
+    return this.requestUnwrapped(
+      "POST",
+      `/quotes/${encodeURIComponent(id)}/send`,
+      to ? { recipientEmail: to } : undefined,
+    );
   }
 
   // ---------------------------------------------------------------- Webhooks

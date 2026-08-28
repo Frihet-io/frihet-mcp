@@ -14,12 +14,36 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { resolveApiBaseUrl, resolveOAuthApiKeyUrl } from "../api-url.ts";
-import { provisionOAuthApiKey } from "../oauth-provisioning.ts";
+import {
+  parseProvisionedApiKey,
+  provisionOAuthApiKey,
+} from "../oauth-provisioning.ts";
 
 const EXPECTED = "https://api.frihet.io/oauth/api-key";
 
 test("resolveOAuthApiKeyUrl strips /v1 suffix (the production bug)", () => {
   assert.equal(resolveOAuthApiKeyUrl("https://api.frihet.io/v1"), EXPECTED);
+});
+
+test("OAuth provisioning accepts only Frihet's exact generated key shape", () => {
+  const valid = `fri_${"A".repeat(43)}`;
+  assert.equal(parseProvisionedApiKey({ apiKey: valid }), valid);
+
+  for (const payload of [
+    null,
+    [],
+    {},
+    { apiKey: undefined },
+    { apiKey: "" },
+    { apiKey: "fri_short" },
+    { apiKey: `fri_${"A".repeat(42)}` },
+    { apiKey: `fri_${"A".repeat(44)}` },
+    { apiKey: `other_${"A".repeat(43)}` },
+    { apiKey: `fri_${"A".repeat(42)}!` },
+    { apiKey: ` ${valid}` },
+  ]) {
+    assert.equal(parseProvisionedApiKey(payload), undefined, JSON.stringify(payload));
+  }
 });
 
 test("resolveOAuthApiKeyUrl accepts origin form", () => {

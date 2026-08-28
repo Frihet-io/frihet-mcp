@@ -2,7 +2,7 @@
  * Tests for the OpenAI × grouped tool-exposure COMPOSITION.
  *
  * openai-mcp.frihet.io now runs BOTH profiles: the OpenAI-safe profile
- * (53 reviewed tools, redaction, openWorldHint justification) AND the grouped
+ * (33 reviewed tools, redaction, openWorldHint justification) AND the grouped
  * progressive-disclosure profile (terse descriptions + 3 discovery meta-tools).
  *
  * This is the Trust-Area-critical surface that the ChatGPT app review covers, so
@@ -10,12 +10,12 @@
  *
  *   (1) The 3 grouped meta-tools (search_tools, describe_tool, list_tool_groups)
  *       are PRESENT in OpenAI mode — they register against the real server and
- *       bypass the OpenAI allow-list gate. Live surface = 53 + 3 = 56 tools.
- *   (2) Every one of the 53 reviewed tools has a COLLAPSED (terse) description
+ *       bypass the OpenAI allow-list gate. Live surface = 33 + 3 = 36 tools.
+ *   (2) Every one of the 33 reviewed tools has a COLLAPSED (terse) description
  *       AND still carries the per-tool openWorldHint rationale marker that OpenAI
  *       app review requires.
  *   (3) The grouped catalog (what search_tools / describe_tool / list_tool_groups
- *       surface) contains ONLY the 53 reviewed tools — a tool outside the reviewed
+ *       surface) contains ONLY the 33 reviewed tools — a tool outside the reviewed
  *       set is never returned by search_tools and is rejected by describe_tool.
  *
  * Composition order under test mirrors the worker/stdio init wiring:
@@ -25,11 +25,13 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { z } from "zod/v4";
 
 import {
   applyOpenAIReviewProfiles,
   OPENAI_REVIEWED_TOOL_ALLOWLIST,
   OPENAI_ALLOWED_TOOL_COUNT,
+  OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS,
 } from "../openai-profile.js";
 import { GROUPED_META_TOOL_COUNT } from "../tool-exposure.js";
 import { registerAllTools } from "../tools/register-all.js";
@@ -43,6 +45,7 @@ interface ToolConfig {
   annotations?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   outputSchema?: unknown;
+  _meta?: Record<string, unknown>;
 }
 
 type ToolHandler = (args?: Record<string, unknown>) => Promise<{
@@ -110,12 +113,35 @@ function makeComposedServer(): StubMcpServer {
   return server;
 }
 
+function inputShape(tool: RegisteredTool): Record<string, unknown> {
+  const schema = tool.config.inputSchema;
+  return schema instanceof z.ZodObject
+    ? schema.shape as Record<string, unknown>
+    : schema ?? {};
+}
+
 const META_TOOLS = ["list_tool_groups", "search_tools", "describe_tool"] as const;
 
 /** Tools that exist on the full server but must NEVER surface in the composed one. */
 const NON_REVIEWED_TOOLS = [
   "get_quarterly_taxes",
   "get_invoice_einvoice",
+  "get_invoice_pdf",
+  "list_webhooks",
+  "get_webhook",
+  "create_webhook",
+  "update_webhook",
+  "delete_webhook",
+  "apply_late_fee",
+  "update_invoice",
+  "mark_invoice_paid",
+  "delete_invoice",
+  "send_invoice",
+  "duplicate_invoice",
+  "create_credit_note",
+  "delete_client",
+  "delete_expense",
+  "send_quote",
   "send_einvoice",
   "validate_einvoice_xml",
   "create_reservation",
@@ -124,18 +150,18 @@ const NON_REVIEWED_TOOLS = [
   "get_modelo_303_summary",
 ] as const;
 
-describe("openai × grouped composition: invariant (1) — meta-tools present, 53+3 surface", () => {
-  test("registers exactly 53 reviewed tools + 3 meta-tools (56 total)", () => {
+describe("openai × grouped composition: invariant (1) — meta-tools present, 33+3 surface", () => {
+  test("registers exactly 33 reviewed tools + 3 meta-tools (36 total)", () => {
     const server = makeComposedServer();
 
     assert.equal(GROUPED_META_TOOL_COUNT, 3);
-    assert.equal(OPENAI_ALLOWED_TOOL_COUNT, 53, "advertised reviewed count stays 53");
+    assert.equal(OPENAI_ALLOWED_TOOL_COUNT, 33, "advertised reviewed count stays 33");
     assert.equal(
       server.tools.size,
       OPENAI_ALLOWED_TOOL_COUNT + GROUPED_META_TOOL_COUNT,
-      "live surface must be the 53 reviewed tools + 3 meta-tools",
+      "live surface must be the 33 reviewed tools + 3 meta-tools",
     );
-    assert.equal(server.tools.size, 56);
+    assert.equal(server.tools.size, 36);
 
     // Prompts still hidden in OpenAI mode.
     assert.equal(server.prompts.length, 0);
@@ -183,7 +209,7 @@ describe("openai × grouped composition: invariant (1) — meta-tools present, 5
   });
 });
 
-describe("openai × grouped composition: invariant (2) — collapsed + openWorldHint on all 53", () => {
+describe("openai × grouped composition: invariant (2) — collapsed + openWorldHint on all 36", () => {
   test("every reviewed tool is collapsed AND carries an openWorldHint rationale", () => {
     const server = makeComposedServer();
     let reviewedCount = 0;
@@ -193,7 +219,7 @@ describe("openai × grouped composition: invariant (2) — collapsed + openWorld
       reviewedCount += 1;
       const desc = tool.config.description;
 
-      // Collapsed: terse "[group] summary — full schema via describe_tool('name')."
+      // Collapsed: terse "[group] summary — full description and input fields via describe_tool('name')."
       assert.match(
         desc,
         /^\[[a-z]+\] /,
@@ -205,7 +231,7 @@ describe("openai × grouped composition: invariant (2) — collapsed + openWorld
       );
       // Terse: collapsed line is short, NOT a multi-paragraph bilingual blob.
       assert.ok(
-        desc.length < 400,
+        desc.length < 520,
         `${name} description must be collapsed (terse), got length ${desc.length}`,
       );
 
@@ -222,14 +248,15 @@ describe("openai × grouped composition: invariant (2) — collapsed + openWorld
       );
     }
 
-    assert.equal(reviewedCount, OPENAI_ALLOWED_TOOL_COUNT, "must cover all 53 reviewed tools");
+    assert.equal(reviewedCount, OPENAI_ALLOWED_TOOL_COUNT, "must cover all 33 reviewed tools");
   });
 
   test("open-world tools keep openWorldHint:true rationale; read tools keep false", () => {
     const server = makeComposedServer();
 
-    // The 4 reviewed open-world tools carry the true rationale (and not false).
-    for (const name of ["send_invoice", "send_quote", "create_webhook", "update_webhook"]) {
+    // Reviewed writes that can emit email or workspace-webhook events carry
+    // the true rationale (and not false).
+    for (const name of OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS) {
       const tool = server.tools.get(name)!;
       assert.equal(tool.config.annotations?.["openWorldHint"], true, `${name} annotation true`);
       assert.match(
@@ -254,12 +281,11 @@ describe("openai × grouped composition: invariant (2) — collapsed + openWorld
     const server = makeComposedServer();
 
     // Government IDs stripped from input schema.
-    assert.equal("taxId" in (server.tools.get("create_client")!.config.inputSchema ?? {}), false);
-    assert.equal("to" in (server.tools.get("send_invoice")!.config.inputSchema ?? {}), false);
-    assert.equal("secret" in (server.tools.get("create_webhook")!.config.inputSchema ?? {}), false);
+    assert.equal("taxId" in inputShape(server.tools.get("create_client")!), false);
+    assert.equal("confirm" in inputShape(server.tools.get("create_invoice")!), true);
 
     // Output redaction wrapper survives the collapse (handler still redacts).
-    const result = await server.tools.get("create_client")!.handler({ name: "Compose Test Corp" });
+    const result = await server.tools.get("create_client")!.handler({ name: "Compose Test Corp", confirm: true });
     const serialized = JSON.stringify(result);
     assert.equal(serialized.includes("taxId"), false);
     assert.equal(serialized.includes("B12345678"), false);
@@ -268,16 +294,16 @@ describe("openai × grouped composition: invariant (2) — collapsed + openWorld
 });
 
 describe("openai × grouped composition: invariant (3) — catalog is allow-list-only", () => {
-  test("list_tool_groups counts exactly the 53 reviewed tools", async () => {
+  test("list_tool_groups counts exactly the 33 reviewed tools with scoped blurbs", async () => {
     const server = makeComposedServer();
     const res = await server.tools.get("list_tool_groups")!.handler({});
     const payload = JSON.parse(res.content[0].text) as {
-      groups: Array<{ group: string; toolCount: number }>;
+      groups: Array<{ group: string; label: string; blurb: string; toolCount: number }>;
       totalTools: number;
     };
     assert.equal(payload.totalTools, OPENAI_ALLOWED_TOOL_COUNT);
     const sum = payload.groups.reduce((acc, g) => acc + g.toolCount, 0);
-    assert.equal(sum, OPENAI_ALLOWED_TOOL_COUNT, "group counts must sum to 53");
+    assert.equal(sum, OPENAI_ALLOWED_TOOL_COUNT, "group counts must sum to 33");
     assert.ok(payload.groups.every((g) => g.toolCount > 0), "no empty groups listed");
     // Reviewed surface has no fiscal/stay/pos/hr tools → those groups must be absent.
     for (const forbidden of ["fiscal", "stay", "pos", "hr", "banking"]) {
@@ -286,6 +312,16 @@ describe("openai × grouped composition: invariant (3) — catalog is allow-list
         `group ${forbidden} must not appear (no reviewed tools in it)`,
       );
     }
+    const blurbs = payload.groups.map((group) => String((group as { blurb?: unknown }).blurb)).join(" ");
+    assert.doesNotMatch(blurbs, /PDF|webhook|quarterly|gestor[ií]a|recurring|deposit/iu);
+    const expenseGroup = payload.groups.find((group) => group.group === "expenses");
+    assert.ok(expenseGroup);
+    assert.doesNotMatch(expenseGroup.blurb, /delete/i);
+    const intelligenceGroup = payload.groups.find((group) => group.group === "intelligence");
+    assert.ok(intelligenceGroup);
+    assert.equal(intelligenceGroup.label, "Business context / Contexto del negocio");
+    assert.match(intelligenceGroup.blurb, /current-month totals/i);
+    assert.doesNotMatch(intelligenceGroup.blurb, /revenue|profit|summar/i);
   });
 
   test("search_tools NEVER returns a tool outside the reviewed allow-list (browse all)", async () => {
@@ -296,7 +332,7 @@ describe("openai × grouped composition: invariant (3) — catalog is allow-list
       count: number;
       tools: Array<{ name: string }>;
     };
-    assert.equal(payload.count, OPENAI_ALLOWED_TOOL_COUNT, "browse-all returns exactly the 53");
+    assert.equal(payload.count, OPENAI_ALLOWED_TOOL_COUNT, "browse-all returns exactly the 33 business tools");
     const leaks = payload.tools.filter((t) => !OPENAI_REVIEWED_TOOL_ALLOWLIST.has(t.name));
     assert.deepEqual(leaks, [], "search_tools must not surface any non-reviewed tool");
   });
@@ -317,20 +353,17 @@ describe("openai × grouped composition: invariant (3) — catalog is allow-list
     );
   });
 
-  test("search_tools group filter cannot reach a non-reviewed group", async () => {
+  test("search_tools schema cannot advertise a non-reviewed group", () => {
     const server = makeComposedServer();
-    // Even explicitly asking for the fiscal group returns nothing, because no
-    // fiscal tool was catalogued.
-    const res = await server.tools.get("search_tools")!.handler({
-      query: "",
-      group: "fiscal",
-      limit: 100,
-    });
-    const payload = JSON.parse(res.content[0].text) as { tools: unknown[] };
-    assert.equal(payload.tools.length, 0, "fiscal group is empty in the reviewed catalog");
+    const groupSchema = inputShape(server.tools.get("search_tools")!).group as {
+      safeParse?: (value: unknown) => { success: boolean };
+    };
+    assert.equal(groupSchema.safeParse?.("fiscal").success, false);
+    assert.equal(groupSchema.safeParse?.("banking").success, false);
+    assert.equal(groupSchema.safeParse?.("invoicing").success, true);
   });
 
-  test("describe_tool serves reviewed tools but REJECTS any tool outside the 53", async () => {
+  test("describe_tool serves reviewed tools but REJECTS any tool outside the 33", async () => {
     const server = makeComposedServer();
 
     // A reviewed tool resolves.

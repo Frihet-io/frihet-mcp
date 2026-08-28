@@ -96,7 +96,7 @@ function isFrihetApiError(error: unknown): error is FrihetApiErrorLike {
 }
 
 const FORBIDDEN_FRIENDLY_MESSAGE =
-  "Access denied. Your API key does not have permission for this action. / Acceso denegado.";
+  "Access denied. Reconnect Frihet or use configured credentials with permission for this action. / Acceso denegado. Vuelve a conectar Frihet o usa credenciales con permiso para esta accion.";
 
 /**
  * Maps an error to a user-friendly MCP tool response with error annotations.
@@ -105,6 +105,7 @@ const FORBIDDEN_FRIENDLY_MESSAGE =
 export function handleToolError(error: unknown, toolName?: string): {
   content: AnnotatedTextContent[];
   isError: true;
+  _meta?: Record<string, unknown>;
 } {
   if (isFrihetApiError(error)) {
     const loggedMessage = error.statusCode === 403 ? "Forbidden" : error.message;
@@ -123,14 +124,27 @@ export function handleToolError(error: unknown, toolName?: string): {
 
     const messages: Record<number, string> = {
       400: "Bad request. Check your input parameters. / Solicitud incorrecta. Revisa los parametros.",
-      401: "Authentication failed. Check your API key. / Autenticacion fallida. Revisa tu API key.",
+      401: "Authentication failed. Reconnect Frihet or check the configured credentials. / Autenticacion fallida. Vuelve a conectar Frihet o revisa las credenciales configuradas.",
       403: FORBIDDEN_FRIENDLY_MESSAGE,
       404: "Resource not found. / Recurso no encontrado.",
       405: "Method not allowed. / Metodo no permitido.",
       413: "Request body too large (max 1MB). / Cuerpo de la solicitud demasiado grande (max 1MB).",
       429: "Rate limit exceeded. Try again later. / Limite de peticiones excedido. Intenta mas tarde.",
       500: "Internal server error. Try again later. / Error interno del servidor.",
+      503: "Frihet could not confirm the request outcome because the network connection failed.",
     };
+
+    const transportOutcomeUnknown =
+      error.errorCode === "request_timeout" || error.errorCode === "network_error";
+    const operationOutcomeUnknown =
+      transportOutcomeUnknown
+      || error.errorCode === "response_timeout"
+      || error.errorCode === "invalid_response_after_success"
+      || (error.statusCode >= 500 && error.statusCode <= 599)
+      || (
+        error.statusCode === 409
+        && error.errorCode.toUpperCase() === "IDEMPOTENCY_REQUEST_IN_PROGRESS"
+      );
 
     let friendlyMessage: string;
     if (error.statusCode === 413 && error.errorCode === "payload_too_large") {
@@ -155,6 +169,16 @@ export function handleToolError(error: unknown, toolName?: string): {
         },
       ],
       isError: true,
+      ...(operationOutcomeUnknown
+        ? {
+            _meta: {
+              "io.frihet/operationOutcomeUnknown": true,
+              ...(transportOutcomeUnknown
+                ? { "io.frihet/transportOutcomeUnknown": true }
+                : {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -450,6 +474,8 @@ export const documentDeleteResultOutput = z.object({
   status: z.string().optional(),
   /** Status the document held before it was cancelled (e.g. "sent", "paid"). */
   previousStatus: z.string().optional(),
+  /** Backend path that performed the soft cancellation, when reported. */
+  cancelledVia: z.string().optional(),
 });
 
 /**
@@ -469,9 +495,12 @@ export function openObjectOutput(description: string) {
 /* --- Per-resource item schemas ------------------------------------ */
 
 const lineItemSchema = z.object({
+  id: z.string().optional(),
   description: z.string(),
   quantity: z.number(),
   unitPrice: z.number(),
+  taxRate: z.number().optional(),
+  discount: z.number().optional(),
 });
 
 export const invoiceItemOutput = z.object({
@@ -480,6 +509,7 @@ export const invoiceItemOutput = z.object({
   // draft — verified live. Kept documented but non-required so get/create/update
   // of a draft or a client-less invoice validates. `id` stays required: every
   // single-object read/create/update returns the doc id.
+  clientId: z.string().optional(),
   clientName: z.string().nullable().optional(),
   items: z.array(lineItemSchema).optional(),
   issueDate: z.string().optional(),
@@ -487,6 +517,7 @@ export const invoiceItemOutput = z.object({
   status: z.string().optional(),
   notes: z.string().optional(),
   taxRate: z.number().optional(),
+  discountRate: z.number().optional(),
   total: z.number().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
@@ -498,8 +529,10 @@ export const expenseItemOutput = z.object({
   amount: z.number(),
   category: z.string().optional(),
   date: z.string().optional(),
+  vendorId: z.string().optional(),
   vendor: z.string().optional(),
   taxDeductible: z.boolean().optional(),
+  paidDate: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 }).passthrough();
@@ -517,6 +550,7 @@ export const clientItemOutput = z.object({
   name: z.string(),
   email: z.string().optional(),
   phone: z.string().optional(),
+  stage: z.string().optional(),
   taxId: z.string().optional(),
   address: addressOutputSchema,
   createdAt: z.string().optional(),
@@ -529,6 +563,7 @@ export const productItemOutput = z.object({
   unitPrice: z.number(),
   description: z.string().optional(),
   taxRate: z.number().optional(),
+  isActive: z.boolean().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 }).passthrough();
@@ -536,12 +571,17 @@ export const productItemOutput = z.object({
 export const quoteItemOutput = z.object({
   id: z.string(),
   // Same draft/client-less tolerance as invoices (shared form engine).
+  clientId: z.string().optional(),
   clientName: z.string().nullable().optional(),
   items: z.array(lineItemSchema).optional(),
+  issueDate: z.string().optional(),
+  dueDate: z.string().optional(),
   validUntil: z.string().optional(),
   notes: z.string().optional(),
   status: z.string().optional(),
   total: z.number().optional(),
+  taxRate: z.number().optional(),
+  discountRate: z.number().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 }).passthrough();
@@ -765,6 +805,7 @@ export const actionResultOutput = z.object({
   success: z.boolean().optional(),
   id: z.string().optional(),
   message: z.string().optional(),
+  messageId: z.string().optional(),
   // Anti-envelope tripwire: with everything optional + passthrough, a raw
   // {data, meta} API envelope would otherwise VALIDATE — silently re-hiding the
   // exact bug this PR fixes if a client method ever regresses to raw request().
@@ -791,6 +832,9 @@ export const creditNoteResultOutput = z.object({
     originalInvoiceId: z.string().optional(),
     reason: z.string().optional(),
     fullCredit: z.boolean().optional(),
+    status: z.string().optional(),
+    rectificationMethod: z.string().optional(),
+    totalCredited: z.number().optional(),
   }).passthrough().optional(),
   // Anti-envelope tripwire — see actionResultOutput.
   data: z.never().optional(),

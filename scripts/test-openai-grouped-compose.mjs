@@ -9,13 +9,13 @@
  *    fail on the meta-tool checks — that failure is expected pre-deploy.
  *
  * What it asserts against the LIVE MCP endpoint (after a deploy):
- *   (1) tools/list returns 56 tools: the 53 reviewed business tools + the 3
+ *   (1) tools/list returns 36 tools: the 33 reviewed business tools + the 3
  *       discovery meta-tools (search_tools, describe_tool, list_tool_groups).
  *   (2) Every reviewed business tool has a collapsed description that still
  *       carries an openWorldHint rationale marker.
  *   (3) search_tools (browse-all) and describe_tool only ever surface tools that
  *       are in tools/list — i.e. the catalog never leaks a non-reviewed tool.
- *   (4) The complete tools/list descriptors and OAuth metadata match the frozen
+ *   (4) The complete tools/list descriptors and OAuth metadata match the reviewed
  *       OpenAI review snapshot exactly (after object/tool ordering only).
  *
  * Usage (AFTER deploy only):
@@ -53,9 +53,21 @@ const MUST_NOT_LEAK = [
   "get_modelo_303_summary",
   "create_reservation",
   "payroll_export",
+  "apply_late_fee",
+  "update_invoice",
+  "mark_invoice_paid",
+  "delete_invoice",
+  "send_invoice",
+  "send_quote",
+  "update_quote",
+  "delete_client",
+  "delete_expense",
+  "delete_product",
+  "get_monthly_summary",
+  "delete_vendor",
 ];
-const EXPECTED_BUSINESS = 53;
-const EXPECTED_TOTAL = EXPECTED_BUSINESS + META_TOOLS.length; // 56
+const EXPECTED_TOTAL = SNAPSHOT.tools.length;
+const EXPECTED_BUSINESS = EXPECTED_TOTAL - META_TOOLS.length;
 
 if (!API_KEY || !API_KEY.startsWith("fri_")) {
   console.error("✗ Missing/invalid API key. Pass --key fri_* or set FRIHET_API_KEY (fri_*).");
@@ -141,10 +153,10 @@ async function main() {
 
   note(
     JSON.stringify(canonicalTools(tools)) === JSON.stringify(canonicalTools(SNAPSHOT.tools)),
-    "tools/list matches the exact frozen OpenAI review descriptor",
+    "tools/list matches the exact reviewed OpenAI descriptor",
   );
 
-  // Invariant (1): 56 tools, meta-tools present.
+  // Invariant (1): exact frozen tool count, meta-tools present.
   note(tools.length === EXPECTED_TOTAL, `tools/list returns ${EXPECTED_TOTAL} tools (got ${tools.length})`);
   for (const m of META_TOOLS) note(names.has(m), `meta-tool present: ${m}`);
   const businessCount = tools.filter((t) => !META_TOOLS.includes(t.name)).length;
@@ -190,7 +202,7 @@ async function main() {
   const desc = await rpc("tools/call", { name: "describe_tool", arguments: { name: "get_quarterly_taxes" } });
   note(desc?.isError === true, "describe_tool('get_quarterly_taxes') is rejected (not in reviewed catalog)");
 
-  // list_tool_groups totals 53.
+  // list_tool_groups totals the exact frozen business-tool count.
   const groups = await rpc("tools/call", { name: "list_tool_groups", arguments: {} });
   const gPayload = parseToolText(groups);
   note(gPayload?.totalTools === EXPECTED_BUSINESS, `list_tool_groups totalTools === ${EXPECTED_BUSINESS} (got ${gPayload?.totalTools})`);
@@ -201,13 +213,13 @@ async function main() {
   note(
     JSON.stringify(canonicalize(authorizationServer)) ===
       JSON.stringify(canonicalize(SNAPSHOT.oauth.authorizationServer)),
-    "OAuth authorization-server discovery matches the freeze",
+    "OAuth authorization-server discovery matches the reviewed contract",
   );
   const protectedResource = await fetch(`${origin}/.well-known/oauth-protected-resource`).then((res) => res.json());
   note(
     JSON.stringify(canonicalize(protectedResource)) ===
       JSON.stringify(canonicalize(SNAPSHOT.oauth.protectedResource)),
-    "OAuth protected-resource metadata matches the freeze",
+    "OAuth protected-resource metadata matches the reviewed contract",
   );
   const challenge = await fetch(ENDPOINT, {
     method: "POST",
@@ -220,7 +232,7 @@ async function main() {
   note(challenge.status === 401, `unauthenticated tools/list returns 401 (got ${challenge.status})`);
   note(
     challenge.headers.get("www-authenticate") === SNAPSHOT.oauth.wwwAuthenticate.missingTokenHeader,
-    "WWW-Authenticate resource_metadata URL matches the freeze",
+    "WWW-Authenticate resource_metadata URL matches the reviewed contract",
   );
 
   console.log("");

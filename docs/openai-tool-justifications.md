@@ -1,124 +1,107 @@
-# OpenAI Tool Justifications — Copy-Paste Reference
+# OpenAI tool justifications
 
-53 reviewed business tools, 3 justifications each. The live ChatGPT surface also includes 3 read-only discovery meta-tools (`list_tool_groups`, `search_tools`, `describe_tool`) whose catalog is pinned to these 53 tools.
+The reviewed ChatGPT surface contains 33 business tools and 3 read-only
+discovery tools. Every business write requires literal `confirm=true`. Each tool
+has explicit read-only, destructive, and open-world annotations; the runtime
+descriptor also declares idempotence explicitly.
 
----
+## Read-only business tools (17)
 
-## READ-ONLY TOOLS (21 tools)
+`get_business_context`, `list_invoices`, `get_invoice`,
+`search_invoices`, `list_expenses`, `get_expense`, `list_clients`, `get_client`,
+`list_client_contacts`, `list_client_activities`, `list_client_notes`,
+`list_products`, `get_product`, `list_quotes`, `get_quote`, `list_vendors`, and
+`get_vendor`.
 
-All these share the same justifications:
+These tools read only the authenticated Frihet workspace. They cannot change or
+remove records and have no user-directed external effect. Reviewed client and
+vendor DTOs omit dedicated government identifiers and precise addresses.
 
-| Field | Justification |
-|-------|---------------|
-| **Read Only: Yes** | This tool only retrieves data from the Frihet API. It does not create, update, or delete any records. |
-| **Open World: No** | This tool only communicates with the Frihet API (api.frihet.io). It does not make requests to external services or the public internet. |
-| **Destructive: No** | This tool is read-only and cannot modify or delete any data. |
+## Webhook-capable confirmed writes (10)
 
-**Tools:** `get_business_context`, `get_monthly_summary`, `list_invoices`, `get_invoice`, `search_invoices`, `get_invoice_pdf`, `list_expenses`, `get_expense`, `list_clients`, `get_client`, `list_client_contacts`, `list_client_activities`, `list_client_notes`, `list_products`, `get_product`, `list_quotes`, `get_quote`, `list_vendors`, `get_vendor`, `list_webhooks`, `get_webhook`
+`create_invoice`, `create_expense`, `update_expense`, `create_quote`,
+`delete_quote`, `create_client`, `update_client`, `log_client_activity`,
+`create_product`, and `update_product`.
 
----
+These tools change Frihet state and can deliver a full resulting business event
+to active endpoints previously configured by the workspace owner. Webhook
+deliveries are outside the reviewed MCP response schema and can contain the
+complete underlying record, including fields not exposed to ChatGPT. Because an
+external delivery cannot be recalled, they are non-read-only, destructive,
+open-world, and non-idempotent for review purposes.
 
-## CREATE TOOLS (12 tools — standard, no external effects)
+Important per-tool consequences:
 
-| Field | Justification |
-|-------|---------------|
-| **Read Only: No** | This tool creates a new record in the user's Frihet account. |
-| **Open World: No** | This tool only writes to the Frihet database via api.frihet.io. It does not contact external services. |
-| **Destructive: No** | This tool creates new records but does not delete or irreversibly modify existing data. Created records can be edited or deleted later. |
+- `create_invoice` and `create_quote` create drafts, reserve a document number,
+  advance the numbering counter, and may create/link a client.
+- `create_invoice` also consumes monthly invoice usage, may send minimized
+  activation/usage analytics to PostHog's EU-hosted analytics service, may notify
+  eligible admins/accountants in-app and through Novu, and may award a first-use
+  referral credit to another Frihet account.
+- `create_expense` requires an explicit expense date and deductible choice, may create/link a vendor, may notify eligible
+  admins/accountants, and may award a first-use referral credit. Its date
+  determines its accounting/future tax-report period and its classification
+  affects internal accounting, but it cannot mark the expense paid, choose a
+  separate cash-basis payment period, or file a return.
+- `update_expense` can change description, category, date, or deductible
+  classification. It cannot change amount or linked supplier identity and does
+  not file or amend anything.
+- `log_client_activity` emits `client.updated` only for call, meeting, or email
+  entries because those update the parent client's latest-activity fields; a task
+  entry does not update the parent client.
+- `delete_quote` permanently removes only a clean draft with no delivery,
+  response, attachment, or conversion evidence. It refuses a protected draft.
+  For a non-draft it preserves the record, changes status to `cancelled`, and
+  may emit `quote.updated`.
 
-**Tools:** `create_invoice`, `duplicate_invoice`, `create_credit_note`, `apply_late_fee`, `create_expense`, `create_client`, `create_client_contact`, `log_client_activity`, `create_client_note`, `create_product`, `create_quote`, `create_vendor`
+## Closed-world, non-destructive confirmed writes (3)
 
----
+`create_client_contact`, `create_client_note`, and `create_vendor` add records
+inside the authenticated Frihet workspace without deleting or overwriting an
+existing record and without a user-directed external effect.
 
-## UPDATE TOOLS (7 tools — standard, no external effects)
+## Closed-world destructive update (1)
 
-| Field | Justification |
-|-------|---------------|
-| **Read Only: No** | This tool updates an existing record using PATCH semantics. Only the provided fields are changed. |
-| **Open World: No** | This tool only communicates with the Frihet API (api.frihet.io). No external requests are made. |
-| **Destructive: No** | This tool modifies fields on existing records but does not delete data. Changes are reversible by updating again. |
+`update_vendor` overwrites the supplied vendor fields using PATCH semantics.
+There is no connector undo operation, but it has no user-directed external
+effect.
 
-**Tools:** `update_invoice`, `mark_invoice_paid`, `update_expense`, `update_client`, `update_product`, `update_quote`, `update_vendor`
+## Permanent closed-world deletes (2)
 
----
+`delete_client_contact` and `delete_client_note` permanently remove one selected
+record. They are destructive,
+cannot be undone by this connector, and have no user-directed external effect.
 
-## DELETE TOOLS — hard delete (7 tools)
+## Discovery tools (3)
 
-| Field | Justification |
-|-------|---------------|
-| **Read Only: No** | This tool permanently deletes a record from the user's Frihet account. |
-| **Open World: No** | This tool only communicates with the Frihet API (api.frihet.io). No external requests are made. |
-| **Destructive: Yes** | This tool permanently deletes the record from the database. This action cannot be undone. |
+`list_tool_groups`, `search_tools`, and `describe_tool` read only the in-process
+reviewed catalogue. They perform no network call, mutate no data, and cannot
+reveal tools outside the allowlist. Discovery advertises only `invoicing`,
+`expenses`, `crm`, `intelligence`, and `catalog`.
 
-**Tools:** `delete_expense`, `delete_client`, `delete_client_contact`, `delete_client_note`, `delete_product`, `delete_vendor`, `delete_webhook`
+## Explicitly excluded capabilities
 
----
+The OpenAI profile excludes the following even though they remain available on
+the full MCP server:
 
-## DELETE TOOLS — fiscal documents (2 tools)
-
-`delete_invoice` and `delete_quote` do **not** always delete. Spanish VeriFactu
-forbids destroying an issued invoice, so the backend only removes a **draft**;
-anything already sent/paid/accepted is **cancelled** (`status=cancelled`) and
-stays readable via `get_invoice` / `get_quote`. The response reports which of
-the two happened. They are kept in a separate section because the blanket
-"cannot be undone" wording above is false for them.
-
-| Field | Justification |
-|-------|---------------|
-| **Read Only: No** | This tool deletes or cancels a record in the user's Frihet account. |
-| **Open World: No** | This tool only communicates with the Frihet API (api.frihet.io). No external requests are made. |
-| **Destructive: Yes** | A draft document is deleted from the database and cannot be recovered. A document that has already been issued is not destroyed: it is cancelled (status=cancelled) and retained, because Spanish VeriFactu rules forbid breaking the invoice hash chain. |
-
-**Tools:** `delete_invoice`, `delete_quote`
-
-> **Reviewed-descriptor note.** Direct MCP clients additionally require
-> `confirm=true` on both tools. That input is deliberately absent from the
-> ChatGPT surface while the current app review is in flight — see
-> `docs/openai-review-descriptor-freeze.md`.
-
----
-
-## OPEN WORLD TOOLS (4 tools — trigger external communication)
-
-### send_invoice
-
-| Field | Justification |
-|-------|---------------|
-| **Read Only: No** | This tool triggers sending an invoice to the client via email and updates the invoice status to sent. |
-| **Open World: Yes** | This tool causes Frihet's transactional email service to deliver the invoice PDF to the client's stored email address. An email is sent to an external recipient. |
-| **Destructive: No** | The invoice data is preserved. While the email delivery cannot be recalled, the invoice can be updated or credit-noted afterward. |
-
-### send_quote
-
-| Field | Justification |
-|-------|---------------|
-| **Read Only: No** | This tool triggers sending a quote to the client via email and updates the quote status to sent. |
-| **Open World: Yes** | This tool causes Frihet's transactional email service to deliver the quote to the client's stored email address. An email is sent to an external recipient. |
-| **Destructive: No** | The quote data is preserved. While the email delivery cannot be recalled, the quote can be updated afterward. |
-
-### create_webhook
-
-| Field | Justification |
-|-------|---------------|
-| **Read Only: No** | This tool creates a new webhook configuration that subscribes to business events. |
-| **Open World: Yes** | This tool configures Frihet to send HTTP POST requests to a user-specified external URL when subscribed business events occur (e.g. invoice.created, invoice.paid). Event data is sent to the external endpoint. |
-| **Destructive: No** | This tool creates a new configuration. It does not delete existing data. The webhook can be deactivated or deleted later. |
-
-### update_webhook
-
-| Field | Justification |
-|-------|---------------|
-| **Read Only: No** | This tool modifies an existing webhook configuration (URL, events, active status). |
-| **Open World: Yes** | This tool can change the external URL that receives webhook notifications from Frihet, redirecting event data to a different external endpoint. |
-| **Destructive: No** | This tool modifies configuration but does not delete it. Changes are reversible by updating again. |
-
----
-
-## EXCLUDED / HIDDEN TOOLS
-
-OpenAI mode uses an explicit allowlist of the 53 business tools above. Everything else in the full MCP server is hidden from the ChatGPT app submission surface, including payroll, HR, lodging/POS, banking, e-invoicing, regulated filing/export workflows, time tracking, recurring invoices, gestoría bulk-send, permissions, onboarding, period-close tools, and all MCP prompts.
-
-Explicit defense-in-depth exclusions:
-
-- `get_quarterly_taxes` — returns tax filing data with government identifiers
-- `get_invoice_einvoice` — returns e-invoice XML with regulated identifiers
+- `duplicate_invoice`, `create_credit_note`, `apply_late_fee`, `update_invoice`,
+  `mark_invoice_paid`, `delete_invoice`, `send_invoice`, and every other invoice
+  lifecycle, credit, issuing, sending, payment, cancellation, or filing action;
+- `send_quote` and `update_quote`;
+- `get_monthly_summary` because its legacy aggregate can count draft and
+  cancelled invoices as revenue, while `get_business_context` provides the
+  reviewed current-month context;
+- `delete_product` because the backend can hard-delete a product referenced by
+  historical documents, while the Frihet UI protects that relationship;
+- `delete_vendor` because removing a supplier can leave historical expenses
+  without the fiscal identity required by later reports or exports;
+- `delete_client` because it does not atomically erase all child personal data;
+- `delete_expense` because it does not atomically erase linked attachment data;
+- `get_invoice_einvoice` and `get_invoice_pdf` because raw documents can carry
+  restricted values and opaque bytes cannot be field-redacted;
+- webhook listing/configuration/testing because URLs, secrets, and arbitrary
+  metadata broaden the external-routing surface (existing owner-configured
+  endpoints can still receive events from the ten disclosed writes);
+- banking, payroll/HR, accommodation/POS, time tracking, recurring invoices,
+  regulated e-invoicing/fiscal workflows, permissions, onboarding, period-close,
+  and all MCP prompts/resources.

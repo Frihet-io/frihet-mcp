@@ -52,6 +52,15 @@ const apiProxySrc = readFileSync(
   join(REPO_ROOT, "workers", "api-proxy", "worker.js"),
   "utf8",
 );
+const openAIReleases = JSON.parse(
+  readFileSync(join(REPO_ROOT, "workers", "remote-mcp", "public-openai", "releases.json"), "utf8"),
+);
+const openAIReviewSnapshot = JSON.parse(
+  readFileSync(
+    join(REPO_ROOT, "src", "__tests__", "fixtures", "openai-review-descriptor.snapshot.json"),
+    "utf8",
+  ),
+);
 
 /** Read an exported string constant out of server-meta.ts source. */
 function canonicalConstant(name) {
@@ -116,18 +125,36 @@ test("server-meta publishes the canonical /es/ legal URLs", () => {
   assert.equal(CANONICAL_TERMS, "https://www.frihet.io/es/terms");
 });
 
-test("both remote-mcp agents.json blobs source their legal URLs from the constants", () => {
-  // Two blobs: the default host and the OpenAI-scoped host. Both must read the
-  // shared constants — a literal in either one is how the fleet drifted.
+test("default and OpenAI agents.json blobs publish the correct legal notices", () => {
   const legalBlocks = indexSrc.match(
     /legal:\s*\{\s*privacyPolicy:\s*([^,]+),\s*termsOfService:\s*([^,]+),?\s*\}/g,
   );
   assert.ok(legalBlocks, "index.ts must contain legal blocks");
   assert.equal(legalBlocks.length, 2, "expected exactly 2 legal blocks (default + OpenAI host)");
-  for (const block of legalBlocks) {
-    assert.match(block, /privacyPolicy:\s*LEGAL_PRIVACY_URL/);
-    assert.match(block, /termsOfService:\s*LEGAL_TERMS_URL/);
-  }
+  assert.equal(
+    legalBlocks.filter((block) => /privacyPolicy:\s*LEGAL_PRIVACY_URL/.test(block)).length,
+    1,
+  );
+  assert.equal(
+    legalBlocks.filter((block) => /privacyPolicy:\s*OPENAI_PRIVACY_URL/.test(block)).length,
+    1,
+  );
+  for (const block of legalBlocks) assert.match(block, /termsOfService:\s*LEGAL_TERMS_URL/);
+});
+
+test("OpenAI agents.json uses the canonical runtime server version", () => {
+  assert.match(
+    indexSrc,
+    /const AGENTS_JSON_OPENAI = JSON\.stringify\(\{[\s\S]*?version: MCP_SERVER_VERSION,/,
+  );
+  assert.doesNotMatch(indexSrc, /const AGENTS_JSON_OPENAI = JSON\.stringify\(\{[\s\S]*?version: "0\.1\.0",/);
+});
+
+test("OpenAI discovery copy distinguishes business and discovery tool counts", () => {
+  assert.match(
+    indexSrc,
+    /reviewed business tools plus \$\{GROUPED_META_TOOL_COUNT\} read-only discovery tools/,
+  );
 });
 
 test("both remote-mcp ai.txt License lines source the canonical terms constant", () => {
@@ -154,6 +181,39 @@ test("no discovery blob declares a structural rateLimit field", () => {
       `${label} must not declare a rateLimit field in a discovery blob`,
     );
   }
+});
+
+test("OpenAI llms.txt never advertises excluded quote updates or product deletion", () => {
+  assert.match(
+    indexSrc,
+    /Quotes — read quotes, prepare numbered drafts, permanently delete only clean drafts with no delivery\/response\/attachment\/conversion evidence, refuse protected drafts, and cancel non-drafts \(no update or email delivery\)/,
+  );
+  assert.match(indexSrc, /Products — read, create, and update catalogue records \(no deletion\)/);
+  assert.doesNotMatch(indexSrc, /Quotes —[^\n]*(?:list, create, update|update existing)/i);
+  assert.doesNotMatch(indexSrc, /Products —[^\n]*(?:delete|catalogue management)/i);
+});
+
+test("OpenAI discovery never advertises the excluded legacy monthly summary", () => {
+  const openAIBlock = indexSrc.slice(indexSrc.indexOf("const OPENAI_HOST"));
+  assert.match(openAIBlock, /current business context/i);
+  assert.doesNotMatch(openAIBlock, /financial summary|monthly summary:\s*revenue|business summaries/i);
+});
+
+test("OpenAI release metadata matches the frozen reviewed surface", () => {
+  const discoveryNames = new Set(["list_tool_groups", "search_tools", "describe_tool"]);
+  const expectedTotal = openAIReviewSnapshot.tools.length;
+  const expectedBusiness = openAIReviewSnapshot.tools.filter(
+    (tool) => !discoveryNames.has(tool.name),
+  ).length;
+
+  assert.equal(openAIReleases.mcpToolCount, expectedTotal);
+  assert.equal(openAIReleases.reviewedBusinessToolCount, expectedBusiness);
+  assert.equal(openAIReleases.discoveryMetaToolCount, discoveryNames.size);
+  for (const release of openAIReleases.releases) {
+    assert.equal(release.mcpToolCount, expectedTotal);
+  }
+  assert.doesNotMatch(openAIReleases.notes, /monthly summar(?:y|ies)/i);
+  assert.match(openAIReleases.notes, /current business context\/current-month totals/i);
 });
 
 // --------------------------------------------------------------------------
@@ -220,4 +280,49 @@ test("both Workers agree on the legal locale — no split fleet", () => {
   assert.equal(locale(proxyPrivacy), locale(CANONICAL_PRIVACY));
   assert.equal(locale(proxyTerms), locale(CANONICAL_TERMS));
   assert.equal(locale(CANONICAL_PRIVACY), "es");
+});
+
+// --------------------------------------------------------------------------
+// 7. OpenAI root and crawler metadata must never reveal the full server
+// --------------------------------------------------------------------------
+
+test("OpenAI mode serves its scoped MCP descriptor at the root before OAuth fallback", () => {
+  const rootRoute = indexSrc.match(
+    /if \(pathname === "\/" && openai\) \{[\s\S]*?\n\s*\}/,
+  )?.[0];
+  assert.ok(rootRoute, "index.ts must intercept GET / in OpenAI mode");
+  assert.match(rootRoute, /new Response\(WELL_KNOWN_MCP_OPENAI/);
+  assert.doesNotMatch(rootRoute, /WELL_KNOWN_MCP\b/);
+
+  const routeIndex = indexSrc.indexOf('if (pathname === "/" && openai)');
+  const fallbackIndex = indexSrc.indexOf("await (openai ? openAIOAuthProvider : fullOAuthProvider).fetch(");
+  assert.ok(routeIndex >= 0 && fallbackIndex > routeIndex, "scoped root route must run before OAuthProvider fallback");
+});
+
+test("OpenAI robots explicitly allows the three official OpenAI crawlers", () => {
+  const block = indexSrc.match(/const ROBOTS_TXT_OPENAI = `[\s\S]*?`;/)?.[0];
+  assert.ok(block, "index.ts must define a dedicated OpenAI robots policy");
+  for (const agent of ["OAI-SearchBot", "GPTBot", "ChatGPT-User"]) {
+    assert.match(block, new RegExp(`User-agent: ${agent}\\nAllow: /`));
+  }
+  assert.match(block, /Sitemap: \$\{OPENAI_HOST\}\/sitemap\.xml/);
+  assert.match(indexSrc, /new Response\(openai \? ROBOTS_TXT_OPENAI : ROBOTS_TXT/);
+});
+
+test("OpenAI discovery points to dedicated scoped support and privacy pages", () => {
+  assert.match(indexSrc, /const OPENAI_SUPPORT_URL = `\$\{OPENAI_HOST\}\/support`/);
+  assert.match(indexSrc, /const OPENAI_PRIVACY_URL = `\$\{OPENAI_HOST\}\/privacy`/);
+  const descriptor = indexSrc.match(/const OPENAI_MCP_DESCRIPTOR = \{[\s\S]*?\n\};/)?.[0];
+  assert.ok(descriptor);
+  assert.match(descriptor, /docs:\s*OPENAI_SUPPORT_URL/);
+  assert.match(descriptor, /privacy:\s*OPENAI_PRIVACY_URL/);
+  assert.doesNotMatch(descriptor, /openapi/i);
+
+  assert.match(indexSrc, /if \(openai && \(pathname === "\/support" \|\| pathname === "\/privacy"\)\)/);
+  assert.match(indexSrc, /VICTOR BERTHELIUS PATO/);
+  assert.match(indexSrc, /advances the workspace numbering counter/);
+  assert.doesNotMatch(
+    indexSrc.match(/const OPENAI_SUPPORT_HTML = `[\s\S]*?`;/)?.[0] ?? "",
+    /157 tools|raw invoice PDFs|webhook administration is available/i,
+  );
 });

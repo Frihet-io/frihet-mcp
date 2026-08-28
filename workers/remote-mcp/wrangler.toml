@@ -24,13 +24,16 @@ routes = [{ pattern = "mcp.frihet.io/*", zone_name = "frihet.io" }]
 
 # Agent-facing endpoint runs grouped tool-exposure (progressive disclosure):
 # tools/list returns terse summaries + 3 discovery meta-tools instead of the
-# flat 151-tool wall. Full depth served on demand via describe_tool/search_tools.
+# flat full-catalogue wall. Full depth served on demand via describe_tool/search_tools.
 # Read by resolveToolMode() in src/index.ts. npm package stays "full" (local
 # clients manage their own context). Rollback = remove this var + redeploy.
 # NOTE: top-level [vars] are NOT inherited by [env.openai] (it defines its own
 # [env.openai.vars]) — openai-mcp grouped must be set explicitly there.
 [vars]
 FRIHET_TOOL_MODE = "grouped"
+# Explicit fail-closed profile binding. The Worker refuses any missing or
+# mistyped value instead of silently serving the full catalogue.
+FRIHET_OPENAI_MODE = "false"
 
 # Static assets for AI-discoverability surface (Wave 1)
 # Serves public/ directory via env.ASSETS Fetcher binding.
@@ -44,12 +47,17 @@ enabled = true
 
 [durable_objects]
 bindings = [
-  { name = "MCP_OBJECT", class_name = "FrihetMCP" }
+  { name = "MCP_OBJECT", class_name = "FrihetMCP" },
+  { name = "OAUTH_STATE", class_name = "OAuthStateStore" }
 ]
 
 [[migrations]]
 new_sqlite_classes = ["FrihetMCP"]
 tag = "v1"
+
+[[migrations]]
+new_sqlite_classes = ["OAuthStateStore"]
+tag = "v2"
 
 [[kv_namespaces]]
 binding = "OAUTH_KV"
@@ -59,45 +67,47 @@ id = "9207b98598f849109139ad11f3b0ac51"
 port = 8788
 
 # OpenAI-safe deployment: wrangler deploy --env openai
-# Serves at openai-mcp.frihet.io with restricted tool set (53/55 tools)
-# Gov IDs stripped, openWorldHint corrected, credentials redacted
+# Serves at openai-mcp.frihet.io with the frozen reviewed business surface.
+# Gov IDs stripped, openWorldHint corrected, credentials redacted.
 [env.openai]
 name = "frihet-openai-mcp"
 routes = [{ pattern = "openai-mcp.frihet.io/*", zone_name = "frihet.io" }]
+workers_dev = false
+preview_urls = false
 
 [env.openai.vars]
 FRIHET_OPENAI_MODE = "true"
 # "grouped" — the two profiles NOW COMPOSE (see src/index.ts init wiring +
 # src/__tests__/openai-grouped-compose.test.ts). applyToolExposureProfile runs
-# FIRST (allowlist = the 53 reviewed tools) so its 3 discovery meta-tools
+# FIRST (allowlist = the 33 reviewed tools) so its 3 discovery meta-tools
 # (search_tools / describe_tool / list_tool_groups) register on the REAL server
 # and BYPASS the OpenAI allow-list gate; applyOpenAIProfile runs SECOND so each
-# business tool is redacted + openWorldHint-justified, THEN collapsed (the
+# business tool is redacted + safety-annotated, THEN collapsed (the
 # collapse re-derives the openWorldHint rationale so it survives, and the OpenAI
 # handler-redaction wrapper is preserved). The grouped catalog is pinned to the
-# allow-list, so progressive disclosure can never surface a tool outside the 53.
-# Live surface = 53 reviewed business tools + 3 read-only closed-world meta-tools
-# (56 total). The advertised "53 reviewed tools" count (OPENAI_ALLOWED_TOOL_COUNT)
-# is unchanged — meta-tools are discovery plumbing, not business capability.
-# ⚠️ COMPLIANCE: 53→56 tools/list change on the ChatGPT surface. Requires
-# Viktor's prod flip + an OpenAI app re-review BEFORE going live (see
-# docs/tool-exposure-modes.md). Rollback = set back to "full" + redeploy.
+# allow-list, so progressive disclosure can never surface a tool outside the 36.
+# Live surface = 33 reviewed business tools + 3 read-only closed-world meta-tools
+# (36 total). Meta-tools are discovery plumbing, not business capability.
+# Any semantic descriptor change requires a new OpenAI draft, scan, and review.
 FRIHET_TOOL_MODE = "grouped"
 
 # DO and KV are NOT inherited — must be redeclared
 [env.openai.durable_objects]
 bindings = [
-  { name = "MCP_OBJECT", class_name = "FrihetMCP" }
+  { name = "MCP_OBJECT", class_name = "FrihetMCP" },
+  { name = "OAUTH_STATE", class_name = "OAuthStateStore" }
 ]
 
 [[env.openai.kv_namespaces]]
 binding = "OAUTH_KV"
-id = "9207b98598f849109139ad11f3b0ac51"
+# Dedicated namespace: OAuth clients, grants and tokens from the reviewed host
+# must never resolve on the full mcp.frihet.io host (or vice versa).
+id = "7df4e387eee243268669425594aae45e"
 
 # Assets binding must be re-declared per env (same as DO and KV — not inherited).
-# OpenAI mode ships a SCOPED asset bundle (public-openai/) so the openapi.json
-# served directly by Cloudflare Assets is already reviewed-surface-only.
-# Regenerate with: node scripts/scope-openai-openapi.mjs (run before deploy).
+# OpenAI mode ships a scoped release-metadata bundle. `/openapi.json` runs
+# through the Worker and intentionally returns 404: MCP metadata is the sole
+# reviewed contract, avoiding a parallel REST surface that can drift.
 [env.openai.assets]
 directory = "./public-openai"
 binding = "ASSETS"

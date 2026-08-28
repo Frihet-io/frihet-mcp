@@ -22,6 +22,8 @@
     "test:openai-review-descriptor": "npm run build && node --test dist/__tests__/openai-review-descriptor.test.js",
     "test:public-capability-truth": "npm run build && node --test dist/__tests__/public-capability-truth.test.js",
     "gate:openai-review-descriptor": "npm run build && node scripts/check-openai-review-descriptor.mjs",
+    "generate:openai-submission": "npm run build && node scripts/generate-openai-submission.mjs --write",
+    "gate:openai-submission": "npm run build && node scripts/generate-openai-submission.mjs --check",
     "generate:public-capability-truth": "npm run build && node scripts/generate-public-capability-contract.mjs",
     "generate:agent-onboarding": "npm run build && node scripts/generate-agent-onboarding.mjs",
     "gate:agent-onboarding": "npm run build && node scripts/generate-agent-onboarding.mjs --check",

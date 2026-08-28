@@ -3,6 +3,17 @@ type FetchImplementation = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+/** Accept only the exact 32-byte base64url key format issued by Frihet. */
+export function parseProvisionedApiKey(payload: unknown): string | undefined {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    return undefined;
+  }
+  const apiKey = (payload as Record<string, unknown>).apiKey;
+  return typeof apiKey === "string" && /^fri_[A-Za-z0-9_-]{43}$/u.test(apiKey)
+    ? apiKey
+    : undefined;
+}
+
 /**
  * Credential-bearing OAuth provisioning request.
  *

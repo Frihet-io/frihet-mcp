@@ -10,9 +10,13 @@
 
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
-import { provisionOAuthApiKey } from "./oauth-provisioning.js";
+import {
+  parseProvisionedApiKey,
+  provisionOAuthApiKey,
+} from "./oauth-provisioning.js";
 import { resolveOAuthApiKeyUrl } from "./api-url.js";
 import { getLoginPage } from "./login-page.js";
+import { consumeOAuthState, storeOAuthState } from "./oauth-state-store.js";
 import { log } from "../../../src/logger.js";
 import {
   MCP_SERVER_VERSION,
@@ -24,17 +28,54 @@ import {
 } from "./server-meta.js";
 import { GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
 import { OPENAI_ALLOWED_TOOL_COUNT } from "../../../src/openai-profile.js";
+import {
+  FRIHET_CONNECTOR_SCOPE,
+  isValidS256CodeChallenge,
+  OPENAI_REVIEW_ORIGIN,
+  resolveFrihetAccessProfile,
+  validateOAuthBoundary,
+} from "../../../src/openai-review-oauth.js";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 
 const app = new Hono<{ Bindings: AuthEnv }>();
+
+function validateReviewedAuthorizeQuery(request: Request): string | undefined {
+  const params = new URL(request.url).searchParams;
+  const critical = [
+    "response_type",
+    "client_id",
+    "redirect_uri",
+    "resource",
+    "scope",
+    "state",
+    "code_challenge",
+    "code_challenge_method",
+  ];
+  const duplicate = critical.find((key) => params.getAll(key).length !== 1);
+  if (duplicate) return `OAuth parameter ${duplicate} must appear exactly once.`;
+  if (!(params.get("state") ?? "").trim()) {
+    return "OAuth parameter state must be non-empty.";
+  }
+  if (params.get("response_type") !== "code") {
+    return "Only the OAuth authorization code response type is supported.";
+  }
+  if (params.get("code_challenge_method") !== "S256") {
+    return "PKCE code_challenge_method must be S256.";
+  }
+  const challenge = params.get("code_challenge") ?? "";
+  if (!isValidS256CodeChallenge(challenge)) {
+    return "PKCE S256 code_challenge must be exactly 43 base64url characters.";
+  }
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Public endpoints
 // ---------------------------------------------------------------------------
 
 app.get("/", (c) => {
-  const openai = c.env.FRIHET_OPENAI_MODE === "true";
+  const openai = resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE) === "openai";
   const host = openai ? "https://openai-mcp.frihet.io" : "https://mcp.frihet.io";
   return c.json({
     name: "Frihet MCP Server",
@@ -75,6 +116,13 @@ app.get("/health", (c) =>
 // ---------------------------------------------------------------------------
 
 app.get("/authorize", async (c) => {
+  const accessProfile = resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE);
+  if (accessProfile === "openai") {
+    const queryError = validateReviewedAuthorizeQuery(c.req.raw);
+    if (queryError) {
+      return c.json({ error: "invalid_request", error_description: queryError }, 400);
+    }
+  }
   let oauthReq;
   try {
     oauthReq = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
@@ -99,6 +147,30 @@ app.get("/authorize", async (c) => {
     return c.text("Invalid OAuth request", 400);
   }
 
+  if (accessProfile === "openai") {
+    const boundary = validateOAuthBoundary(
+      {
+        resource: oauthReq.resource,
+        scope: oauthReq.scope,
+        requireResource: true,
+        requireScope: true,
+      },
+      OPENAI_REVIEW_ORIGIN,
+    );
+    if (!boundary.ok) {
+      log({
+        level: "warn",
+        message: "OAuth authorize request rejected by host boundary",
+        operation: "oauth_authorize",
+        metadata: { error: boundary.error },
+      });
+      return c.json(
+        { error: boundary.error, error_description: boundary.description },
+        400,
+      );
+    }
+  }
+
   log({
     level: "info",
     message: `OAuth authorize started for client ${oauthReq.clientId}`,
@@ -106,21 +178,38 @@ app.get("/authorize", async (c) => {
     metadata: { clientId: oauthReq.clientId },
   });
 
-  // Store OAuth request in short-lived KV entry (10 min TTL)
-  const stateKey = crypto.randomUUID();
-  await c.env.OAUTH_KV.put(
-    `auth_state:${stateKey}`,
-    JSON.stringify(oauthReq),
-    { expirationTtl: 600 },
-  );
+  // Resolve the registered client before allocating one-time state. Besides
+  // grounding the consent screen in the registered name/callback, this avoids
+  // giving unknown client IDs a state-allocation primitive.
+  let clientInfo;
+  try {
+    clientInfo = await c.env.OAUTH_PROVIDER.lookupClient(oauthReq.clientId);
+  } catch (err) {
+    log({
+      level: "warn",
+      message: "OAuth client lookup failed",
+      operation: "oauth_authorize",
+      error: { message: err instanceof Error ? err.message : String(err) },
+    });
+    return c.json({ error: "invalid_client" }, 400);
+  }
+  if (!clientInfo) {
+    return c.json({ error: "invalid_client" }, 400);
+  }
 
-  // Serve the login page
+  // Store the request in a single-use Durable Object. KV cannot atomically
+  // get-and-delete, which lets concurrent callbacks replay one state value.
+  const stateKey = crypto.randomUUID();
+  await storeOAuthState(c.env.OAUTH_STATE, stateKey, JSON.stringify(oauthReq));
+
   return c.html(
     getLoginPage({
       stateKey,
       clientId: oauthReq.clientId,
       firebaseProjectId: c.env.FIREBASE_PROJECT_ID,
-      accessProfile: c.env.FRIHET_OPENAI_MODE === "true" ? "openai" : "full",
+      accessProfile,
+      clientName: clientInfo?.clientName,
+      redirectUri: oauthReq.redirectUri,
     }),
   );
 });
@@ -130,15 +219,35 @@ app.get("/authorize", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.post("/callback", async (c) => {
-  const body = await c.req.json<{
+  let body: {
     stateKey: string;
     idToken: string;
     locale?: string;
-  }>();
+  };
+  try {
+    body = await c.req.json<typeof body>();
+  } catch {
+    return c.json({ error: "Invalid callback body" }, 400);
+  }
+  if (
+    typeof body.stateKey !== "string"
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(body.stateKey)
+    || typeof body.idToken !== "string"
+    || body.idToken.length === 0
+    || body.idToken.length > 16_384
+    || (
+      body.locale !== undefined
+      && (typeof body.locale !== "string" || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/u.test(body.locale))
+    )
+  ) {
+    return c.json({ error: "Invalid callback body" }, 400);
+  }
 
-  // Retrieve the original OAuth request from KV
-  const oauthReqJson = await c.env.OAUTH_KV.get(`auth_state:${body.stateKey}`);
-  if (!oauthReqJson) {
+  // Atomically consume the original request before any credential provisioning
+  // or code issuance. A failed callback must restart authorization; this is the
+  // fail-closed tradeoff that guarantees one state cannot mint two grants.
+  const oauthReq = await consumeOAuthState<AuthRequest>(c.env.OAUTH_STATE, body.stateKey);
+  if (!oauthReq) {
     log({
       level: "warn",
       message: "OAuth callback with invalid or expired state",
@@ -146,17 +255,30 @@ app.post("/callback", async (c) => {
     });
     return c.json({ error: "Invalid or expired state" }, 400);
   }
-  const oauthReq = JSON.parse(oauthReqJson) as AuthRequest;
-  // The state is consumed (deleted) only AFTER the grant fully succeeds (post
-  // token-verify, post provision, post completeAuthorization). Deleting it HERE —
-  // before those steps — made any transient downstream failure unrecoverable: the
-  // user's retry found no state and got "Invalid or expired state" instead of a
-  // fresh attempt within the KV TTL.
-  // NOTE: KV get/delete is NOT atomic, so this is best-effort single-use, not a
-  // hard guarantee — two concurrent callbacks for the same stateKey can both pass.
-  // That is benign here: each provisions an OAuth key that self-rotates within the
-  // bounded pool, and completeAuthorization just issues a second (unused) code.
-
+  const accessProfile = resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE);
+  if (accessProfile === "openai") {
+    const boundary = validateOAuthBoundary(
+      {
+        resource: oauthReq.resource,
+        scope: oauthReq.scope,
+        requireResource: true,
+        requireScope: true,
+      },
+      OPENAI_REVIEW_ORIGIN,
+    );
+    if (!boundary.ok) {
+      log({
+        level: "warn",
+        message: "OAuth callback state rejected by host boundary",
+        operation: "oauth_callback",
+        metadata: { error: boundary.error },
+      });
+      return c.json(
+        { error: boundary.error, error_description: boundary.description },
+        400,
+      );
+    }
+  }
   // Verify Firebase ID token using firebase-auth-cloudflare-workers
   const { Auth, WorkersKVStoreSingle } = await import(
     "firebase-auth-cloudflare-workers"
@@ -205,9 +327,9 @@ app.post("/callback", async (c) => {
         statusCode: upstreamStatus,
       },
     });
-    // State was NOT consumed above → a transient upstream failure stays retryable
-    // within the KV TTL. Preserve the common client errors (400/401/403/429)
-    // verbatim; map every other status (incl. opaque 5xx) to 502 Bad Gateway.
+    // State is single-use, so any retry starts a fresh authorization flow.
+    // Preserve common client errors (400/401/403/429) verbatim; map every other
+    // status (including opaque 5xx) to 502 Bad Gateway.
     const clientStatus: 400 | 401 | 403 | 429 | 502 =
       upstreamStatus === 400
         ? 400
@@ -221,7 +343,30 @@ app.post("/callback", async (c) => {
     return c.json({ error: "Failed to provision API key", upstreamStatus }, clientStatus);
   }
 
-  const { apiKey } = (await apiKeyResponse.json()) as { apiKey: string };
+  let provisionedPayload: unknown;
+  try {
+    provisionedPayload = await apiKeyResponse.json();
+  } catch {
+    log({
+      level: "error",
+      message: "OAuth callback: API key provisioning returned invalid JSON",
+      operation: "oauth_callback",
+      error: { message: "Invalid provisioning response" },
+    });
+    return c.json({ error: "Failed to provision API key" }, 502);
+  }
+  const apiKey = parseProvisionedApiKey(provisionedPayload);
+  if (!apiKey) {
+    // Never log the payload: even a malformed response could still contain a
+    // raw credential or user data.
+    log({
+      level: "error",
+      message: "OAuth callback: API key provisioning response failed validation",
+      operation: "oauth_callback",
+      error: { message: "Invalid provisioning response" },
+    });
+    return c.json({ error: "Failed to provision API key" }, 502);
+  }
 
   // Complete OAuth authorization — issues access + refresh tokens
   const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
@@ -231,13 +376,23 @@ app.post("/callback", async (c) => {
       label: decoded.email || decoded.uid,
     },
     scope: oauthReq.scope,
-    props: {
-      apiKey,
-      locale: body.locale || "es",
-      userId: decoded.uid,
-      email: decoded.email,
-      name: decoded.name,
-    },
+    props: accessProfile === "openai"
+      ? {
+          apiKey,
+          accessProfile,
+          oauthScope: FRIHET_CONNECTOR_SCOPE,
+          oauthResource: OPENAI_REVIEW_ORIGIN,
+          authMethod: "oauth",
+        }
+      : {
+          apiKey,
+          locale: body.locale || "es",
+          userId: decoded.uid,
+          email: decoded.email,
+          name: decoded.name,
+          accessProfile,
+          authMethod: "oauth",
+        },
   });
 
   log({
@@ -245,11 +400,6 @@ app.post("/callback", async (c) => {
     message: "OAuth callback: success",
     operation: "oauth_callback",
   });
-
-  // Best-effort consume of the state now that the grant has fully succeeded.
-  // (Not atomic vs. completeAuthorization: if this delete fails the grant already
-  // committed and the state stays replayable until its TTL — a rare, benign edge.)
-  await c.env.OAUTH_KV.delete(`auth_state:${body.stateKey}`);
 
   return c.json({ redirectTo });
 });

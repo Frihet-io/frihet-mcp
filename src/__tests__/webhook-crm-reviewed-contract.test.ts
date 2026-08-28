@@ -1,7 +1,8 @@
 /**
- * Current ERP contract regression for the reviewed webhook and CRM activity
- * tools tracked by #139. The tests cross both production seams: the real HTTP
- * client and the MCP SDK's real input/output validators.
+ * Current ERP contract regression for webhook and CRM activity tools tracked
+ * by #139. Direct MCP keeps both contracts; the narrower OpenAI profile must
+ * exclude webhook configuration entirely. The tests cross both production
+ * seams: the real HTTP client and the MCP SDK's real input/output validators.
  */
 
 import { after, before, beforeEach, describe, test } from "node:test";
@@ -416,73 +417,39 @@ describe("real MCP SDK — reviewed webhook contract", () => {
   });
 });
 
-describe("OpenAI reviewed webhook profile — real MCP SDK", () => {
-  test("secret is absent/strict in tools/list and describe_tool, rejected before ERP", async () => {
+describe("OpenAI reviewed profile excludes webhook configuration — real MCP SDK", () => {
+  test("tools/list, search_tools, and describe_tool cannot reveal webhook tools", async () => {
     const harness = await makeHarness(true);
     try {
       const { tools } = await harness.client.listTools();
-      const create = tools.find((tool) => tool.name === "create_webhook");
-      const update = tools.find((tool) => tool.name === "update_webhook");
-      assert.ok(create);
-      assert.ok(update);
-
-      for (const [name, tool] of [["create_webhook", create], ["update_webhook", update]] as const) {
-        const schema = tool.inputSchema as {
-          properties?: Record<string, unknown>;
-          additionalProperties?: boolean;
-        };
-        assert.equal("secret" in (schema.properties ?? {}), false, `${name} must omit secret`);
-        assert.equal(schema.additionalProperties, false, `${name} must reject undeclared inputs`);
-
+      const forbidden = [
+        "list_webhooks",
+        "get_webhook",
+        "create_webhook",
+        "update_webhook",
+        "delete_webhook",
+      ];
+      const names = new Set(tools.map((tool) => tool.name));
+      for (const name of forbidden) {
+        assert.equal(names.has(name), false, `${name} must not appear in reviewed tools/list`);
         const described = await harness.client.callTool({
           name: "describe_tool",
           arguments: { name },
         });
-        assert.equal(described.isError, undefined);
-        const fields = (described.structuredContent as { inputFields?: string[] }).inputFields ?? [];
-        assert.equal(fields.includes("secret"), false);
-        assert.equal(fields.some((field) => field.startsWith("~") || field.startsWith("_")), false);
+        assert.equal(described.isError, true, `${name} must not resolve through discovery`);
       }
 
-      const createDescription = await harness.client.callTool({
-        name: "describe_tool",
-        arguments: { name: "create_webhook" },
+      const searched = await harness.client.callTool({
+        name: "search_tools",
+        arguments: { query: "webhook", limit: 100 },
       });
-      assert.deepEqual(
-        (createDescription.structuredContent as { inputFields: string[] }).inputFields,
-        ["name", "url", "events", "status", "metadata"],
+      const payload = searched.structuredContent as { tools?: Array<{ name: string }> };
+      assert.ok(
+        (payload.tools ?? []).every((tool) => !forbidden.includes(tool.name)),
+        "search_tools must not leak excluded webhook names",
       );
-
-      const rejectedCreate = await harness.client.callTool({
-        name: "create_webhook",
-        arguments: {
-          name: WEBHOOK.name,
-          url: WEBHOOK.url,
-          events: WEBHOOK.events,
-          secret: "reviewed-secret-must-not-forward",
-        },
-      });
-      const rejectedUpdate = await harness.client.callTool({
-        name: "update_webhook",
-        arguments: { id: WEBHOOK.id, secret: "reviewed-secret-must-not-forward" },
-      });
-      assert.equal(rejectedCreate.isError, true);
-      assert.equal(rejectedUpdate.isError, true);
       assert.equal(calls("POST", "/webhooks").length, 0);
       assert.equal(calls("PATCH", "/webhooks/wh_139").length, 0);
-
-      const valid = await harness.client.callTool({
-        name: "create_webhook",
-        arguments: {
-          name: WEBHOOK.name,
-          url: WEBHOOK.url,
-          events: WEBHOOK.events,
-          status: "active",
-          metadata: WEBHOOK.metadata,
-        },
-      });
-      assert.equal(valid.isError, undefined);
-      assert.equal(calls("POST", "/webhooks").length, 1);
     } finally {
       await dispose(harness);
     }

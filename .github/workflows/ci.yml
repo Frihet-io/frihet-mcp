@@ -75,6 +75,9 @@ jobs:
       - name: OpenAI review descriptor freeze
         run: npm run gate:openai-review-descriptor
 
+      - name: OpenAI submission artifact parity
+        run: npm run gate:openai-submission
+
       - name: Generated public capability truth
         run: npm run gate:public-capability-truth
 

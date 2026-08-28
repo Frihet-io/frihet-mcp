@@ -11,7 +11,7 @@ import { buildServerCard, MCP_PROTOCOL_VERSION } from "../server-card.ts";
 
 const VERSION = "1.16.0";
 const FULL_REMOTE_TOOL_COUNT = 165;
-const OPENAI_LIVE_TOOL_COUNT = 56;
+const OPENAI_LIVE_TOOL_COUNT = 40;
 
 const card = buildServerCard({
   name: "io.frihet/erp",
@@ -69,6 +69,9 @@ test("host is respected so the OpenAI-scoped card self-references its own origin
     toolCount: OPENAI_LIVE_TOOL_COUNT,
     resourceCount: 0,
     promptCount: 0,
+    documentationUrl: "https://openai-mcp.frihet.io/support",
+    authenticationSchemes: ["oauth2"],
+    includeNpm: false,
   });
   const transport = scoped.transport as Record<string, unknown>;
   const auth = scoped.authentication as Record<string, unknown>;
@@ -78,6 +81,9 @@ test("host is respected so the OpenAI-scoped card self-references its own origin
     "https://openai-mcp.frihet.io/.well-known/oauth-authorization-server",
   );
   assert.equal(scoped.tools_count, OPENAI_LIVE_TOOL_COUNT);
+  assert.equal(scoped.documentationUrl, "https://openai-mcp.frihet.io/support");
+  assert.deepEqual(auth.schemes, ["oauth2"]);
+  assert.equal("package" in scoped, false);
   assert.deepEqual(scoped.capabilities, {
     tools: { listChanged: true },
   });

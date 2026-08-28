@@ -59,7 +59,7 @@ async function main() {
   const expected = JSON.parse(await readFile(snapshotPath, "utf8"));
   assertOpenAIReviewContract(actual, expected);
   console.log(
-    `OpenAI review descriptor matches the frozen 53 business + 3 discovery surface (${root})`,
+    `OpenAI review descriptor matches the reviewed ${actual.tools.length - 3} business + 3 discovery surface (${root})`,
   );
 }
 

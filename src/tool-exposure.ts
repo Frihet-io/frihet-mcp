@@ -23,8 +23,8 @@
  *      the server.
  *   2. Still registers every tool so it stays INVOCABLE (nothing breaks; tool
  *      logic, names and behavior are untouched) — but COLLAPSES its registered
- *      description to a single terse "[group] summary — full schema via
- *      describe_tool('name')" line. That is the context saving.
+ *      description to a single terse "[group] summary — full description and
+ *      input fields via describe_tool('name')" line. That is the context saving.
  *   3. Adds three lightweight META-TOOLS as the entry point for discovery:
  *        • list_tool_groups()      — the 11-domain map with per-group counts
  *        • search_tools(query)     — fuzzy match → matching tool summaries
@@ -62,7 +62,7 @@ export type ToolGroupId =
   | "catalog"
   | "platform";
 
-interface GroupMeta {
+export interface GroupMeta {
   /** Human label, bilingual. */
   label: string;
   /** One-line domain blurb shown in list_tool_groups. */
@@ -278,9 +278,9 @@ function inputSchemaFieldNames(schema: unknown): string[] {
 /**
  * Does this tool declare `confirm` as a REQUIRED input?
  *
- * Duck-typed against the zod shape (`safeParse(undefined)` fails ⇒ required) so
- * this module needs no zod import — zod is a PEER dependency here and the
- * runtime surface stays dependency-free.
+ * Handles both a raw registration shape and a strict ZodObject. The latter is
+ * used by create_expense; looking only at `schema["confirm"]` made its required
+ * confirmation disappear from the collapsed tools/list description.
  *
  * ── Why this exists ──────────────────────────────────────────────────
  * `firstSentence` keeps only the opening sentence, so a confirm requirement
@@ -293,7 +293,9 @@ function inputSchemaFieldNames(schema: unknown): string[] {
  * enumerate-instead-of-derive mistake GAP-04 was raised for.
  */
 function requiresConfirm(inputSchema: unknown): boolean {
-  const shape = inputSchema as Record<string, unknown> | undefined;
+  const shape = inputSchema instanceof z.ZodObject
+    ? inputSchema.shape as Record<string, unknown>
+    : inputSchema as Record<string, unknown> | undefined;
   if (!shape || typeof shape !== "object") return false;
   const field = shape["confirm"] as
     | { safeParse?: (v: unknown) => { success: boolean } }
@@ -359,14 +361,14 @@ export function resolveToolMode(
  *   This is the OpenAI-composition path: it pins the grouped catalog (and the
  *   tools search_tools / describe_tool / list_tool_groups surface) to EXACTLY
  *   the reviewed allow-list, so progressive disclosure can never reveal or
- *   describe a tool outside the 53-tool ChatGPT-reviewed surface. Omit (default)
+ *   describe a tool outside the 33-tool ChatGPT-reviewed business surface. Omit (default)
  *   for the open mcp.frihet.io surface, which catalogs every registered tool.
  *
  *   COMPOSITION ORDERING (openai-mcp): apply this profile FIRST so its
  *   originalRegisterTool is the REAL server.registerTool — the three meta-tools
  *   are then registered straight onto the real server and BYPASS the OpenAI
  *   allow-list gate entirely (so they always materialise without polluting the
- *   OpenAI includeTools set / its advertised 53-tool count). Apply
+ *   OpenAI includeTools set / its advertised 33-tool count). Apply
  *   applyOpenAIProfile() SECOND (outermost) so a business-tool registration is
  *   first redacted + annotated + openWorldHint-justified by OpenAI, and only
  *   THEN collapsed here — making the terse line the final description while the
@@ -379,16 +381,32 @@ export function applyToolExposureProfile(
   server: any,
   options?: {
     allowlist?: ReadonlySet<string>;
+    groupMetadata?: Partial<Record<ToolGroupId, GroupMeta>>;
     capabilityTruth?: {
       metaKey: string;
       localDiscovery: (name: string) => object;
     };
+    securitySchemes?: ReadonlyArray<{
+      type: "oauth2";
+      scopes: readonly string[];
+    }>;
   },
 ): ToolExposureHandle {
   const catalog = new Map<string, CatalogEntry>();
   const groups = new Map<ToolGroupId, string[]>();
   const handle: ToolExposureHandle = { catalog, groups };
   const allowlist = options?.allowlist;
+  const visibleGroupIds = allowlist
+    ? TOOL_GROUP_IDS.filter((group) =>
+        [...allowlist].some((name) => groupForTool(name) === group),
+      )
+    : [...TOOL_GROUP_IDS];
+  const groupMetadata = Object.fromEntries(
+    TOOL_GROUP_IDS.map((id) => [
+      id,
+      options?.groupMetadata?.[id] ?? GROUPS[id],
+    ]),
+  ) as Record<ToolGroupId, GroupMeta>;
 
   const originalRegisterTool = server.registerTool.bind(server);
 
@@ -444,7 +462,7 @@ export function applyToolExposureProfile(
     // a per-tool open-world justification on EVERY reviewed tool). When composed
     // with the OpenAI profile, that profile runs first (outermost) and has
     // already set the correct annotations.openWorldHint (e.g. true for
-    // send_invoice / send_quote / create_webhook / update_webhook). We re-derive
+    // send_invoice). We re-derive
     // the one-line rationale here from the (now-correct) annotation so the terse
     // collapsed description carries it — instead of letting the OpenAI-injected
     // rationale be lost when we overwrite config.description. Only appended in
@@ -458,20 +476,23 @@ export function applyToolExposureProfile(
     // the SCHEMA instead of trusting prose — it then covers every confirm-gated
     // tool, including ones added after this line was written.
     //
-    // In OpenAI mode this never fires: applyOpenAIProfile is the OUTERMOST
-    // wrapper (applyOpenAIReviewProfiles applies it last, so it runs first) and
-    // has already stripped `confirm` from the reviewed schemas — see the frozen
-    // -descriptor divergence documented in docs/openai-review-descriptor-freeze.md.
+    // In OpenAI mode this is deliberately load-bearing: the reviewed schema
+    // keeps `confirm` visible and required, so the collapsed tools/list line
+    // tells the agent to obtain explicit authorization before invoking it.
     let collapsed =
       `[${group}] ${entry.summary} ` +
       (requiresConfirm(config?.inputSchema) ? "Requires confirm=true. " : "") +
-      `— full schema via describe_tool('${name}').`;
+      `— full description and input fields via describe_tool('${name}').`;
     if (allowlist) {
       const ow = config?.annotations?.openWorldHint;
-      collapsed +=
-        ow === true
-          ? " [openWorldHint: true — contacts an entity outside Frihet (an email recipient or an external webhook URL).]"
-          : " [openWorldHint: false — operates only against the Frihet API (api.frihet.io); no third-party/external calls.]";
+      const explicitRationale = fullDescription.match(
+        /\[openWorldHint:\s*(?:true|false)\s+—[^\]]+\]/u,
+      )?.[0];
+      collapsed += explicitRationale
+        ? ` ${explicitRationale}`
+        : ow === true
+          ? " [openWorldHint: true — may interact with an external endpoint disclosed in describe_tool.]"
+          : " [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]";
     }
     config.description = collapsed;
 
@@ -480,7 +501,14 @@ export function applyToolExposureProfile(
 
   // Register the meta-tools eagerly. Their handlers close over `catalog`/`groups`
   // which finish populating as the real tools register right after this call.
-  registerMetaTools(originalRegisterTool, handle, options?.capabilityTruth);
+  registerMetaTools(
+    originalRegisterTool,
+    handle,
+    visibleGroupIds as [ToolGroupId, ...ToolGroupId[]],
+    groupMetadata,
+    options?.capabilityTruth,
+    options?.securitySchemes,
+  );
 
   return handle;
 }
@@ -518,49 +546,134 @@ function registerMetaTools(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   originalRegisterTool: (name: string, config: any, handler: any) => unknown,
   handle: ToolExposureHandle,
+  visibleGroupIds: [ToolGroupId, ...ToolGroupId[]],
+  groupMetadata: Readonly<Record<ToolGroupId, GroupMeta>>,
   capabilityTruth?: {
     metaKey: string;
     localDiscovery: (name: string) => object;
   },
+  securitySchemes?: ReadonlyArray<{
+    type: "oauth2";
+    scopes: readonly string[];
+  }>,
 ): void {
   const { catalog, groups } = handle;
+  const oauthConfig = securitySchemes
+    ? {
+        securitySchemes: securitySchemes.map((scheme) => ({
+          type: scheme.type,
+          scopes: [...scheme.scopes],
+        })),
+      }
+    : {};
+  const metaConfig = (name: string) => {
+    const metadata: Record<string, unknown> = {};
+    if (securitySchemes) {
+      metadata.securitySchemes = securitySchemes.map((scheme) => ({
+        type: scheme.type,
+        scopes: [...scheme.scopes],
+      }));
+    }
+    if (capabilityTruth) {
+      metadata[capabilityTruth.metaKey] = capabilityTruth.localDiscovery(name);
+    }
+    return Object.keys(metadata).length > 0 ? { _meta: metadata } : {};
+  };
+
+  const searchToolsInputShape = {
+    query: z
+      .string()
+      .optional()
+      .describe(
+        "Free-text query — matches tool name, title, summary and group. " +
+          "Omit to browse a whole group. / Texto libre; omitir para listar un grupo entero.",
+      ),
+    group: z
+      .enum(visibleGroupIds)
+      .optional()
+      .describe("Restrict results to one tool domain / Filtrar por dominio."),
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Max results (default 25) / Máximo de resultados (por defecto 25)."),
+  };
+  const describeToolInputShape = {
+    name: z
+      .string()
+      .describe(
+        "Exact tool name as returned by search_tools (e.g. 'create_invoice') / " +
+          "Nombre exacto de la herramienta devuelto por search_tools.",
+      ),
+  };
+
+  const listGroupsOutput = securitySchemes
+    ? z.object({
+        groups: z.array(z.object({
+          group: z.enum(visibleGroupIds),
+          label: z.string(),
+          blurb: z.string(),
+          toolCount: z.number().int().nonnegative(),
+        })),
+        totalGroups: z.number().int().nonnegative(),
+        totalTools: z.number().int().nonnegative(),
+        next: z.string(),
+      })
+    : z.object({}).passthrough();
+  const searchToolsOutput = securitySchemes
+    ? z.object({
+        query: z.string().nullable(),
+        group: z.enum(visibleGroupIds).nullable(),
+        count: z.number().int().nonnegative(),
+        tools: z.array(z.object({
+          name: z.string(),
+          group: z.enum(visibleGroupIds),
+          title: z.string(),
+          summary: z.string(),
+          readOnly: z.boolean(),
+          inputFields: z.array(z.string()),
+          score: z.number().int().nonnegative(),
+        })),
+        next: z.string(),
+      })
+    : z.object({}).passthrough();
+  const describeToolOutput = securitySchemes
+    ? z.object({
+        name: z.string(),
+        group: z.enum(visibleGroupIds),
+        title: z.string(),
+        readOnly: z.boolean(),
+        inputFields: z.array(z.string()),
+        description: z.string(),
+      })
+    : z.object({}).passthrough();
 
   // -- list_tool_groups --
   originalRegisterTool(
     "list_tool_groups",
     {
       title: "List tool groups",
+      ...oauthConfig,
+      ...metaConfig("list_tool_groups"),
       description:
-        "List the Frihet ERP tool domains (invoicing, expenses, fiscal/compliance, banking, CRM, " +
-        "HR/payroll, stay/PMS, POS, intelligence, products, platform) with a one-line blurb and tool " +
+        `List the available Frihet tool domains (${visibleGroupIds.join(", ")}) with a one-line blurb and tool ` +
         "count for each. Start here, then use search_tools(query) to find tools and describe_tool(name) " +
-        "for a tool's full schema. Frihet serves deep ES/EU fiscal + native compliance on demand. " +
+        "for a tool's full description and input fields. Only domains present in this reviewed connector are listed. " +
         "[openWorldHint: false — reads the in-process tool catalog only.] " +
         "/ Lista los dominios de herramientas de Frihet ERP con descripción y recuento. Empieza aquí.",
       annotations: META_ANNOTATIONS,
-      ...(capabilityTruth
-        ? {
-            _meta: {
-              [capabilityTruth.metaKey]: capabilityTruth.localDiscovery(
-                "list_tool_groups",
-              ),
-            },
-          }
-        : {}),
-      inputSchema: {},
-      outputSchema: z
-        .object({})
-        .passthrough()
-        .describe(
+      inputSchema: securitySchemes ? z.object({}).strict() : {},
+      outputSchema: listGroupsOutput.describe(
           "Tool domains with per-group blurb and tool count / Dominios de herramientas con descripción y recuento",
         ),
     },
     async () => {
-      const out = (Object.keys(GROUPS) as ToolGroupId[])
+      const out = visibleGroupIds
         .map((id) => ({
           group: id,
-          label: GROUPS[id].label,
-          blurb: GROUPS[id].blurb,
+          label: groupMetadata[id].label,
+          blurb: groupMetadata[id].blurb,
           toolCount: groups.get(id)?.length ?? 0,
         }))
         .filter((g) => g.toolCount > 0);
@@ -568,7 +681,7 @@ function registerMetaTools(
         groups: out,
         totalGroups: out.length,
         totalTools: catalog.size,
-        next: "search_tools(query) to find tools; describe_tool(name) for full schema.",
+        next: "search_tools(query) to find tools; describe_tool(name) for full description and input fields.",
       });
     },
   );
@@ -578,6 +691,8 @@ function registerMetaTools(
     "search_tools",
     {
       title: "Search tools",
+      ...oauthConfig,
+      ...metaConfig("search_tools"),
       description:
         "Find Frihet ERP tools by free-text query (matches tool name, title, summary and group). " +
         "Returns matching tools with their group, one-line summary, read-only flag and input field names — " +
@@ -586,38 +701,10 @@ function registerMetaTools(
         "[openWorldHint: false — reads the in-process tool catalog only.] " +
         "/ Busca herramientas por texto libre. Devuelve coincidencias con grupo, resumen y campos.",
       annotations: META_ANNOTATIONS,
-      ...(capabilityTruth
-        ? {
-            _meta: {
-              [capabilityTruth.metaKey]: capabilityTruth.localDiscovery(
-                "search_tools",
-              ),
-            },
-          }
-        : {}),
-      inputSchema: {
-        query: z
-          .string()
-          .optional()
-          .describe(
-            "Free-text query — matches tool name, title, summary and group. " +
-              "Omit to browse a whole group. / Texto libre; omitir para listar un grupo entero.",
-          ),
-        group: z
-          .enum(TOOL_GROUP_IDS as [ToolGroupId, ...ToolGroupId[]])
-          .optional()
-          .describe("Restrict results to one tool domain / Filtrar por dominio."),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe("Max results (default 25) / Máximo de resultados (por defecto 25)."),
-      },
-      outputSchema: z
-        .object({})
-        .passthrough()
-        .describe(
+      inputSchema: securitySchemes
+        ? z.object(searchToolsInputShape).strict()
+        : searchToolsInputShape,
+      outputSchema: searchToolsOutput.describe(
           "Matching tools with group, summary, read-only flag and input fields / Herramientas coincidentes con grupo, resumen y campos",
         ),
     },
@@ -666,7 +753,7 @@ function registerMetaTools(
         group: groupFilter ?? null,
         count: scored.length,
         tools: scored,
-        next: "describe_tool(name) for full schema, then call the tool by its real name.",
+        next: "describe_tool(name) for full description and input fields, then call the tool by its real name.",
       });
     },
   );
@@ -676,6 +763,8 @@ function registerMetaTools(
     "describe_tool",
     {
       title: "Describe tool",
+      ...oauthConfig,
+      ...metaConfig("describe_tool"),
       description:
         "Return the full original description, group, read-only flag and input field names for a specific " +
         "Frihet ERP tool by its exact name (as returned by search_tools). Use this to load a tool's full " +
@@ -683,27 +772,10 @@ function registerMetaTools(
         "[openWorldHint: false — reads the in-process tool catalog only.] " +
         "/ Devuelve la descripción completa de una herramienta por su nombre exacto.",
       annotations: META_ANNOTATIONS,
-      ...(capabilityTruth
-        ? {
-            _meta: {
-              [capabilityTruth.metaKey]: capabilityTruth.localDiscovery(
-                "describe_tool",
-              ),
-            },
-          }
-        : {}),
-      inputSchema: {
-        name: z
-          .string()
-          .describe(
-            "Exact tool name as returned by search_tools (e.g. 'create_invoice') / " +
-              "Nombre exacto de la herramienta devuelto por search_tools.",
-          ),
-      },
-      outputSchema: z
-        .object({})
-        .passthrough()
-        .describe(
+      inputSchema: securitySchemes
+        ? z.object(describeToolInputShape).strict()
+        : describeToolInputShape,
+      outputSchema: describeToolOutput.describe(
           "A tool's full description, group, read-only flag and input field names / Descripción completa de una herramienta",
         ),
     },
