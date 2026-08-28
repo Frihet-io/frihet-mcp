@@ -22,21 +22,40 @@ jobs:
           node-version: 20
           cache: npm
 
+      # This runs before npm reads either lockfile. The parser-backed gate also
+      # pins the same hashes, but cannot load TypeScript until dependencies have
+      # been installed. Exact pre-install hashes close that bootstrap gap.
+      - name: Lockfile integrity (pre-install)
+        run: |
+          test ! -e npm-shrinkwrap.json
+          test ! -e .npmrc
+          test ! -e workers/remote-mcp/npm-shrinkwrap.json
+          test ! -e workers/remote-mcp/.npmrc
+          echo "5b470bfb050e31694d7d0239cd93e001ccee4d998295be19faf7801925c4711c  package-lock.json" | sha256sum --check --strict -
+          echo "52a7213f179d74b6865b6eab7dd432d498e870cb380c688baa4db14de802d735  workers/remote-mcp/package-lock.json" | sha256sum --check --strict -
+
       - name: Install
-        run: npm ci
+        # Lifecycle hooks are executable supply-chain surface. Install the
+        # parser dependency inertly; the analytics gate below first scans and
+        # freezes the one published postinstall entrypoint.
+        run: npm ci --ignore-scripts
 
       - name: No public leak (competitor comparison / business secret)
         run: bash scripts/no-public-leak.sh
 
-      # Tripwire: this repo has NO analytics contract. Any PostHog/ingest
-      # emitter reference in src/ or workers/ turns CI red until the emitter
-      # is registered in the Frihet-ERP contract (surface mcp) with its own
-      # snapshot+gate, like Frihet-Saas-Website.
+      # Parser-backed and fail-closed: ordinary processor disclosure prose is
+      # legal, while executable analytics SDK/config/endpoint/emitter shapes or
+      # any drift from the reviewed outbound-sink inventory turn CI red.
       - name: Analytics tripwire (no unregistered emitters)
-        run: bash scripts/analytics-tripwire.sh
+        run: |
+          node --test scripts/__tests__/analytics-tripwire.test.mjs
+          node scripts/check-no-analytics-emitters.mjs
 
       - name: Build
         run: npm run build
+
+      - name: Analytics tripwire (published build artifacts)
+        run: node scripts/check-no-analytics-emitters.mjs --built
 
       - name: Test
         run: npm test
