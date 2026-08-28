@@ -40,6 +40,7 @@ describe("OAuth consent copy", () => {
     assert.match(html, /protected draft is refused and left unchanged/);
     assert.match(html, /deleting a non-draft quote cancels it/);
     assert.match(html, /expense updates cannot change amount or supplier identity/);
+    assert.match(html, /new vendor is needed, its separate creation step may persist even if the later expense write fails/);
     assert.match(html, /existing identity and contact details internally/);
     assert.doesNotMatch(html, /Updating a quote cannot set lifecycle status/);
     assert.doesNotMatch(html, /Deleting an expense changes internal accounting/);
@@ -65,6 +66,17 @@ describe("OAuth consent copy", () => {
     assert.match(html, /<code>https:\/\/example\.com<\/code>/);
   });
 
+  test("credential fields and external links carry safe browser metadata", () => {
+    const html = getLoginPage({ ...baseOptions, accessProfile: "openai" });
+
+    assert.match(html, /id="email" name="email"[^>]*autocomplete="email"/u);
+    assert.match(html, /id="password" name="password"[^>]*autocomplete="current-password"/u);
+    assert.equal(
+      (html.match(/target="_blank" rel="noopener noreferrer"/gu) ?? []).length,
+      2,
+    );
+  });
+
   test("Firebase auth helper origin is allowed by both frame and connection CSP", () => {
     assert.match(
       openAIProfileSource,
@@ -74,6 +86,19 @@ describe("OAuth consent copy", () => {
       openAIProfileSource,
       /"frame-src https:\/\/auth\.frihet\.io[^;]*; "/u,
     );
+  });
+
+  test("reviewed login CSP has no scheme wildcard or unrelated service origins", () => {
+    assert.match(openAIProfileSource, /"base-uri 'none'; "/u);
+    assert.match(openAIProfileSource, /"object-src 'none'; "/u);
+    assert.match(openAIProfileSource, /"frame-ancestors 'none'; "/u);
+    assert.match(openAIProfileSource, /"img-src 'self' data:; "/u);
+    assert.match(openAIProfileSource, /"font-src 'self'"/u);
+    assert.doesNotMatch(openAIProfileSource, /img-src[^;]*https:/u);
+    assert.doesNotMatch(openAIProfileSource, /connect-src[^;]*api\.frihet\.io/u);
+    assert.doesNotMatch(openAIProfileSource, /connect-src[^;]*cloudfunctions\.net/u);
+    assert.doesNotMatch(openAIProfileSource, /connect-src[^;]*www\.gstatic\.com/u);
+    assert.doesNotMatch(openAIProfileSource, /font-src[^;]*www\.frihet\.io/u);
   });
 
   test("full deployment preserves its existing broad-access disclosure", () => {

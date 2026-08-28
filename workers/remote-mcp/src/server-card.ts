@@ -64,7 +64,7 @@ export function buildServerCard(input: ServerCardInput): Record<string, unknown>
     iconUrl: "https://www.frihet.io/logo.png",
     documentationUrl:
       input.documentationUrl ?? "https://docs.frihet.io/desarrolladores/mcp-server",
-    homepage: "https://frihet.io",
+    homepage: "https://www.frihet.io",
     transport: {
       type: "streamable-http",
       endpoint: `${input.host}/mcp`,

@@ -358,21 +358,11 @@ export function resolveToolMode(
  * @param server  The McpServer (typed loosely to match the openai-profile shim).
  * @param options.allowlist  When provided, ONLY tools whose name is in this set
  *   are catalogued + collapsed; any other tool is passed through untouched.
- *   This is the OpenAI-composition path: it pins the grouped catalog (and the
- *   tools search_tools / describe_tool / list_tool_groups surface) to EXACTLY
- *   the reviewed allow-list, so progressive disclosure can never reveal or
- *   describe a tool outside the 33-tool ChatGPT-reviewed business surface. Omit (default)
- *   for the open mcp.frihet.io surface, which catalogs every registered tool.
- *
- *   COMPOSITION ORDERING (openai-mcp): apply this profile FIRST so its
- *   originalRegisterTool is the REAL server.registerTool — the three meta-tools
- *   are then registered straight onto the real server and BYPASS the OpenAI
- *   allow-list gate entirely (so they always materialise without polluting the
- *   OpenAI includeTools set / its advertised 33-tool count). Apply
- *   applyOpenAIProfile() SECOND (outermost) so a business-tool registration is
- *   first redacted + annotated + openWorldHint-justified by OpenAI, and only
- *   THEN collapsed here — making the terse line the final description while the
- *   OpenAI redaction wrapper around the handler survives intact.
+ *   This supports a deliberately restricted grouped surface without allowing
+ *   discovery to reveal or describe tools outside that surface. Omit (default)
+ *   for mcp.frihet.io, which catalogs every registered tool. The reviewed
+ *   OpenAI host does not use grouped exposure: it publishes the exact 33-tool
+ *   allow-list with complete descriptions and no discovery meta-tools.
  * @returns a handle exposing the live catalog (useful for tests/logging).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

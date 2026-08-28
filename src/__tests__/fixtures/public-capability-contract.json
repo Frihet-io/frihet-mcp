@@ -1,5 +1,5 @@
 {
-  "contractVersion": 1,
+  "contractVersion": 2,
   "catalogue": {
     "canonicalOperations": 157,
     "aliasNames": 5,
@@ -5823,7 +5823,7 @@
         }
       }
     },
-    "openaiGrouped": {
+    "openaiFull": {
       "tools": [
         {
           "name": "create_client",
@@ -5922,15 +5922,6 @@
             "destructiveHint": true,
             "idempotentHint": false,
             "openWorldHint": true
-          }
-        },
-        {
-          "name": "describe_tool",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
           }
         },
         {
@@ -6069,15 +6060,6 @@
           }
         },
         {
-          "name": "list_tool_groups",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
           "name": "list_vendors",
           "annotations": {
             "readOnlyHint": true,
@@ -6097,15 +6079,6 @@
         },
         {
           "name": "search_invoices",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "search_tools",
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,

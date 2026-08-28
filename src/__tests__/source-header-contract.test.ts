@@ -101,6 +101,13 @@ before(async () => {
     // Drain the body so the socket stays reusable.
     req.resume();
 
+    if (req.method === "GET" && url.pathname === "/invoices/inv_pdf/pdf") {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/pdf");
+      res.end("%PDF-1.4\n%%EOF");
+      return;
+    }
+
     res.setHeader("Content-Type", "application/json");
 
     // List reads need the `{ data: [...] }` envelope requestPaginated validates.
@@ -135,6 +142,40 @@ beforeEach(() => {
 });
 
 const client = () => new FrihetClient("fri_test_key", `${baseUrl}`);
+const oauthClient = () => new FrihetClient("fri_oauth_key", "https://api.frihet.io/v1", {
+  oauthServiceSecret: "s".repeat(32),
+});
+
+async function withCapturedTrustedFetch(run: () => Promise<void>): Promise<void> {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const headers: Record<string, string> = {};
+    new Headers(init?.headers).forEach((value, key) => {
+      headers[key.toLowerCase()] = value;
+    });
+    captured.push({ method: init?.method ?? "GET", path: url.pathname, headers });
+
+    if (init?.method === "GET" && url.pathname === "/v1/invoices/inv_pdf/pdf") {
+      return new Response("%PDF-1.4\n%%EOF", {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" },
+      });
+    }
+    if (init?.method === "GET" && url.pathname === "/v1/invoices") {
+      return Response.json({ data: [], total: 0, limit: 20, offset: 0 });
+    }
+    return Response.json({
+      data: { id: "inv_1", documentNumber: "F-2026-001" },
+      meta: { requestId: "req_1", timestamp: "2026-08-06T00:00:00.000Z" },
+    }, { status: 201 });
+  };
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
 
 describe("MCP origin-marker wire contract", () => {
   test("createInvoice sends X-Frihet-Source: mcp", async () => {
@@ -162,6 +203,65 @@ describe("MCP origin-marker wire contract", () => {
         `${req.method} ${req.path} carried no source marker`,
       );
     }
+  });
+
+  test("ordinary API keys never receive the internal OAuth second factor", async () => {
+    await client().getInvoice("inv_direct");
+
+    assert.equal(captured[0].headers["x-frihet-oauth-key"], undefined);
+  });
+
+  test("OAuth-bound JSON and binary requests carry the second factor", async () => {
+    await withCapturedTrustedFetch(async () => {
+      const c = oauthClient();
+      await c.listInvoices({ limit: 1 });
+      await c.createInvoice({ clientId: "cli_oauth", items: [] });
+      await c.getInvoicePdf("inv_pdf");
+    });
+
+    assert.equal(captured.length, 3);
+    for (const req of captured) {
+      assert.equal(req.headers["x-frihet-oauth-key"], "s".repeat(32));
+    }
+  });
+
+  test("malformed OAuth service secrets fail before any request", () => {
+    assert.throws(
+      () => new FrihetClient("fri_oauth_key", "https://api.frihet.io/v1", {
+        oauthServiceSecret: "too-short",
+      }),
+      /service authentication is not configured/u,
+    );
+    assert.throws(
+      () => new FrihetClient("fri_oauth_key", "https://api.frihet.io/v1", {
+        oauthServiceSecret: `${"s".repeat(32)}\nleak`,
+      }),
+      /service authentication is not configured/u,
+    );
+  });
+
+  test("OAuth service secrets reject arbitrary, lookalike, and non-canonical API authorities", () => {
+    for (const candidate of [
+      `${baseUrl}`,
+      "https://api.frihet.io/v1/",
+      "https://api.frihet.io/v1?redirect=evil",
+      "https://api.frihet.io.evil.example/v1",
+      "https://attacker-project.cloudfunctions.net/publicApi/api/v1",
+    ]) {
+      assert.throws(
+        () => new FrihetClient("fri_oauth_key", candidate, {
+          oauthServiceSecret: "s".repeat(32),
+        }),
+        /service authority is not trusted/u,
+        candidate,
+      );
+    }
+
+    assert.doesNotThrow(() => new FrihetClient(
+      "fri_oauth_key",
+      "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1",
+      { oauthServiceSecret: "s".repeat(32) },
+    ));
   });
 
   test("the User-Agent identifies the MCP server", async () => {

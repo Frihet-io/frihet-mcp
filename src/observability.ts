@@ -100,7 +100,10 @@ function getConfig(): LangfuseConfig | null {
 
 // ── Worker env injection (for Cloudflare Workers) ───────────────────────────
 
-let workerEnv: LangfuseConfig | null = null;
+// `undefined` means no Worker-specific decision was made, so Node.js may read
+// process.env. `null` is an explicit Worker-side opt-out and must never fall
+// back to process.env (Workers using nodejs_compat expose that global too).
+let workerEnv: LangfuseConfig | null | undefined;
 
 /**
  * Called once from FrihetMCP.init() in the Worker to inject env vars.
@@ -115,7 +118,7 @@ export function initLangfuse(config: {
 }
 
 function resolveConfig(): LangfuseConfig | null {
-  return workerEnv ?? getConfig();
+  return workerEnv === undefined ? getConfig() : workerEnv;
 }
 
 // ── Langfuse ingestion types ─────────────────────────────────────────────────

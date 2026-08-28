@@ -157,6 +157,41 @@ describe("telemetry data minimization", () => {
     assert.equal(calls, 0);
   });
 
+  test("explicit Worker opt-out cannot fall back to populated process telemetry env", async () => {
+    const envKeys = [
+      "LANGFUSE_PUBLIC_KEY",
+      "LANGFUSE_SECRET_KEY",
+      "LANGFUSE_BASE_URL",
+    ] as const;
+    const originalEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+
+    process.env.LANGFUSE_PUBLIC_KEY = "pk_process_fallback";
+    process.env.LANGFUSE_SECRET_KEY = "sk_process_fallback";
+    process.env.LANGFUSE_BASE_URL = "https://langfuse.frihet.io";
+    initLangfuse({});
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response(null, { status: 204 });
+    };
+
+    try {
+      const result = await traceMCPTool("get_client", {}, async () => ({ ok: true }));
+      assert.deepEqual(result, { ok: true });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    } finally {
+      globalThis.fetch = originalFetch;
+      for (const key of envKeys) {
+        const value = originalEnv[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+
+    assert.equal(calls, 0);
+  });
+
   test("Langfuse payload is an operational allowlist, never a redacted business payload", () => {
     const now = new Date("2026-08-16T00:00:00.000Z");
     const untrustedParams = {

@@ -28,7 +28,7 @@ routes = [{ pattern = "mcp.frihet.io/*", zone_name = "frihet.io" }]
 # Read by resolveToolMode() in src/index.ts. npm package stays "full" (local
 # clients manage their own context). Rollback = remove this var + redeploy.
 # NOTE: top-level [vars] are NOT inherited by [env.openai] (it defines its own
-# [env.openai.vars]) — openai-mcp grouped must be set explicitly there.
+# [env.openai.vars]); the reviewed host explicitly selects full descriptions.
 [vars]
 FRIHET_TOOL_MODE = "grouped"
 # Explicit fail-closed profile binding. The Worker refuses any missing or
@@ -77,19 +77,12 @@ preview_urls = false
 
 [env.openai.vars]
 FRIHET_OPENAI_MODE = "true"
-# "grouped" — the two profiles NOW COMPOSE (see src/index.ts init wiring +
-# src/__tests__/openai-grouped-compose.test.ts). applyToolExposureProfile runs
-# FIRST (allowlist = the 33 reviewed tools) so its 3 discovery meta-tools
-# (search_tools / describe_tool / list_tool_groups) register on the REAL server
-# and BYPASS the OpenAI allow-list gate; applyOpenAIProfile runs SECOND so each
-# business tool is redacted + safety-annotated, THEN collapsed (the
-# collapse re-derives the openWorldHint rationale so it survives, and the OpenAI
-# handler-redaction wrapper is preserved). The grouped catalog is pinned to the
-# allow-list, so progressive disclosure can never surface a tool outside the 36.
-# Live surface = 33 reviewed business tools + 3 read-only closed-world meta-tools
-# (36 total). Meta-tools are discovery plumbing, not business capability.
+# "full" — the reviewed host exposes the 33 allow-listed business tools with
+# complete descriptions. It deliberately does not register grouped discovery
+# meta-tools, which keeps ChatGPT routing and the declared test tool unambiguous.
+# The default full host retains its independently configured grouped surface.
 # Any semantic descriptor change requires a new OpenAI draft, scan, and review.
-FRIHET_TOOL_MODE = "grouped"
+FRIHET_TOOL_MODE = "full"
 
 # DO and KV are NOT inherited — must be redeclared
 [env.openai.durable_objects]

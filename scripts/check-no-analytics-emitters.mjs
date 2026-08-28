@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "d2ce16ee2412084b8ac7c5c416397404ea7d5e6d49754f6858f3a3e2ffa1f05b",
+  "package.json": "083b30d76162ba2e9b3e50a25ebe8c89fb7a207e188171ac38aff9ef09cfae73",
   "workers/remote-mcp/package.json": "82a0e907af6fe858e91f62482bd93a382b89d8b09f28572e7654bc068f533e7c",
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -51,6 +51,11 @@ export const APPROVED_WORKER_MAINS = Object.freeze({
 });
 export const APPROVED_PLATFORM_TELEMETRY = Object.freeze({
   "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
+});
+export const APPROVED_DIST_IMPORTS = Object.freeze({
+  "workers/remote-mcp/scripts/capture-openai-review.mjs": Object.freeze([
+    "../../../dist/openai-review-contract.js",
+  ]),
 });
 export const APPROVED_PACKAGE_RUNTIME_METADATA = Object.freeze({
   "package.json": {
@@ -94,7 +99,7 @@ export const APPROVED_PACKAGE_RUNTIME_METADATA = Object.freeze({
 export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
   "package.json": {
     dependencies: { "@modelcontextprotocol/sdk": "^1.27.0" },
-    devDependencies: { "@types/node": "^22.0.0", typescript: "^5.7.0", zod: "^3.25.1" },
+    devDependencies: { "@types/node": "^22.0.0", ajv: "8.18.0", typescript: "^5.7.0", zod: "^3.25.1" },
     optionalDependencies: {},
     overrides: { hono: "~4.12.34" },
     peerDependencies: { zod: ">=3.25.1" },
@@ -102,9 +107,9 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
   },
   "workers/remote-mcp/package.json": {
     dependencies: {
-      "@cloudflare/workers-oauth-provider": "^0.3.0",
+      "@cloudflare/workers-oauth-provider": "0.3.0",
       "@modelcontextprotocol/sdk": "^1.30.0",
-      agents: "^0.7.5",
+      agents: "0.7.5",
       "firebase-auth-cloudflare-workers": "^2.0.6",
       hono: "~4.12.34",
       zod: "^3.25.0",
@@ -188,9 +193,18 @@ export const APPROVED_NETWORK_SINKS = Object.freeze({
   "workers/api-proxy/worker.js|fetch|fetch|upstream.toString()": 2,
   "workers/remote-mcp/src/index.ts|fetch|env.ASSETS.fetch|assetReq": 2,
   "workers/remote-mcp/src/index.ts|fetch|fetch|UPSTREAM_HEALTH": 1,
-  "workers/remote-mcp/src/index.ts|fetch|oauthProvider.fetch|request": 1,
+  "workers/remote-mcp/src/index.ts|fetch|selectedProvider.fetch|providerRequest": 1,
   "workers/remote-mcp/src/index.ts|fetch|Response.redirect|\"https://frihet.io/favicon.ico\"": 1,
+  "workers/remote-mcp/src/mcp-session-binding.ts|fetch|unboundHandler.fetch|sdkRequest": 1,
   "workers/remote-mcp/src/oauth-provisioning.ts|provisionOAuthApiKey|fetchImpl|provisioningUrl": 1,
+  "workers/remote-mcp/src/oauth-provisioning.ts|revokeOAuthApiKey|fetchImpl|provisioningUrl": 1,
+  "workers/remote-mcp/src/oauth-state-store.ts|consumeOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/consume`": 1,
+  "workers/remote-mcp/src/oauth-state-store.ts|storeOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/state`": 1,
+  "workers/remote-mcp/src/oauth-token-family.ts|beginOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/begin`": 1,
+  "workers/remote-mcp/src/oauth-token-family.ts|checkOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/check`": 1,
+  "workers/remote-mcp/src/oauth-token-family.ts|commitOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/commit`": 1,
+  "workers/remote-mcp/src/oauth-token-family.ts|initializeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family`": 1,
+  "workers/remote-mcp/src/oauth-token-family.ts|revokeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/revoke`": 1,
   "workers/remote-mcp/src/login-page.ts#inline-script|signIn|fetch|\"/callback\"": 1,
   "workers/remote-mcp/src/login-page.ts#inline-script|signIn|window.location.href|data.redirectTo": 1,
   "workers/remote-mcp/src/login-page.ts#inline-script|signInWithEmail|fetch|\"/callback\"": 1,
@@ -214,11 +228,16 @@ export const APPROVED_EMBEDDED_RESOURCES = Object.freeze({
  */
 export const APPROVED_STATIC_BINDINGS = Object.freeze({
   "src/client.ts|BASE_URL": "https://api.frihet.io/v1",
+  "src/client.ts|OAUTH_CLOUD_FUNCTION_BASE_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1",
   "src/observability.ts|CANONICAL_LANGFUSE_ORIGIN": "https://langfuse.frihet.io",
   "workers/api-proxy/worker.js|DEFAULT_UPSTREAM": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api",
   "workers/remote-mcp/src/index.ts|UPSTREAM_HEALTH": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/health",
   "workers/remote-mcp/src/api-url.ts|DEFAULT_API_BASE": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api",
   "workers/remote-mcp/src/api-url.ts|TRUSTED_CLOUD_FUNCTION_HOST": "europe-west1-gen-lang-client-0335716041.cloudfunctions.net",
+  "workers/remote-mcp/src/oauth-provisioning.ts|FRIHET_OAUTH_API_KEY_URL": "https://api.frihet.io/oauth/api-key",
+  "workers/remote-mcp/src/oauth-provisioning.ts|CLOUD_FUNCTION_OAUTH_API_KEY_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/oauth/api-key",
+  "workers/remote-mcp/src/oauth-state-store.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
+  "workers/remote-mcp/src/oauth-token-family.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
 });
 
 /**
@@ -228,42 +247,48 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "c9984b9a28f716f76cedfb092b508d744e460f9d0e48f0eebbe2a847ee54f902",
-  "src/observability.ts": "a35b8e3e848aa47de1f533c5aa2ff348993f28eaace3b2111cdd3818e447526d",
+  "src/client.ts": "30fb7b559bf1d755911ad8843d75373cc8ac5d1d2a35709c27510d8aec145b88",
+  "src/observability.ts": "d0bd50c57843f59d0ab61b18b59c1e2ccfcc9dcb83ab76a00a34882d6d1d7cd6",
+  "src/openai-review-oauth.ts": "388035b1b9952b5c1f0ecc82dcac962a93320b1076dc23d3e4a155dbf9bf263f",
   "workers/api-proxy/worker.js": "1838e99f60d15c13ffa1fbd6dc3a87ae827c86c61154b508f84377a601c75a54",
-  "workers/remote-mcp/src/api-url.ts": "7896449847b2f6805b5dcd1f351366784a6edfd4e1817de01c097efc1f8c6c99",
-  "workers/remote-mcp/src/auth-handler.ts": "30bb832c8e72fa9bd06ded988465d7190bfb185e765fd28f637efce49dc8e392",
-  "workers/remote-mcp/src/index.ts": "fe4b78952873416c99de85840144bba98a758c5ef240024f8806e744c63c9785",
-  "workers/remote-mcp/src/login-page.ts": "6914eb16c24990188c89d351df2863b0c7030a32ef89c9887720d3463864143b",
-  "workers/remote-mcp/src/oauth-provisioning.ts": "7ee28a0f8bfc376db48d75d9b1c6b5db46f2c82cafc5d90cba85a6eb84106f2f",
+  "workers/remote-mcp/src/api-url.ts": "6603350d3dde02e0a8139f216320a055df79f1bbba45ff2e1bf2fe7f40f32f23",
+  "workers/remote-mcp/src/auth-handler.ts": "7de5521aae87c2785fabf4703a37a3ecc803bad5bdb6913aa1504d53f4c6b6d1",
+  "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
+  "workers/remote-mcp/src/index.ts": "2a8bc5f8bf29bfeb6efe49a8d679d558f1f0ae140469f84d1841199ce6fe246e",
+  "workers/remote-mcp/src/login-page.ts": "1c4d6dcacbbcdc47db152242a4ca4adfb83b4f0229903e0550c63b973ab00ff5",
+  "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
+  "workers/remote-mcp/src/oauth-provisioning.ts": "38900057cb8b7189a473ff8318b8789103c8a4a943b3aef62a2a83d085a29d26",
+  "workers/remote-mcp/src/oauth-state-store.ts": "d1ad31081873e7c53b59037bae3ed0141c6b8c9bbba5e5f06abcdc7c47f5a6ab",
+  "workers/remote-mcp/src/oauth-token-family.ts": "2bd6a60def82138c95b9fa6696661945cb97bb08b917865f7c6aa98812a6a0f8",
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "5b470bfb050e31694d7d0239cd93e001ccee4d998295be19faf7801925c4711c",
-  "workers/remote-mcp/package-lock.json": "52a7213f179d74b6865b6eab7dd432d498e870cb380c688baa4db14de802d735",
+  "package-lock.json": "78d5e7f445f2f9021f90a3e89ee1280121293b290d4cdf09921b7e966a77afbc",
+  "workers/remote-mcp/package-lock.json": "66040d178a412ff938c23793e161bc56dee36ef258dcfed89c87ff31dee17d09",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
-  "workers/remote-mcp/wrangler.toml": "d02daa20a11e32a6b2a8fb82634b44fa65109987fcbec8b323e97191bd212bf2",
+  "workers/remote-mcp/wrangler.toml": "c04ee0033b2d0c53cebfd562ccc3da27810bd1ef5b49e52beeb5d50b218100e5",
 });
 export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner.svg": "2b32a68014580c334f8b180d8812d842c744a9a59bd2298a586bb95bd6179ebc",
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
-  "docs/agent-onboarding.json": "3c51aa0888fe1fce39d18bcc2267d43e96fad9673dc19da597721c3969de8d1e",
-  "README.md": "878e9de954f2ce2ccce71e61036908b6ae43f5ad1b1d8ba79833f7765084de33",
+  "docs/agent-onboarding.json": "f72849573b25aae1a0ae5ac29e97d175e98bf29a7d842c2d424ebcc99bff55a1",
+  "README.md": "8fb65836483467e58fd07536d9b3b131d0f792e5d2d668b8b33e991dcaa2760c",
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  ".github/workflows/ci.yml": "6b87790db04a86b204fe7539851f839d7733cbaea771b400ac56d17a3a802cf2",
+  ".github/workflows/ci.yml": "6edb27f7f2c51b42667e881ed911db694f2e63c5e560504a073a50568ba12548",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
+  "scripts/__tests__/openai-worker-review-wire.test.mjs": "6799c971a773f04cd39d8e134c042474d23bfb1e949348df2e382b6fceb10023",
   "scripts/__tests__/published-artifact-drift.test.mjs": "43903f8ba4c21dc2643579366dbc3fabb5b7aa173c197128ff3551081a0c452a",
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "8ed876e5db6612a4a0b8bf228ecfc7fcdce3306774b543b252773ccef6cf9c91",
   "scripts/audit-mcp-refs.mjs": "afd2486b3cf3c268636f7eb4ddbd3c1140d140f4486d178f688a694361f35600",
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
-  "scripts/check-openai-review-descriptor.mjs": "191237a1e1b882b97b13a71839a9ad6817e9e4d295bc83f4d03474d86921ec42",
+  "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",
   "scripts/conformance/applicability.json": "a561dcb009c695cd3d5287aaa1aef6f0c43518b38a377c6ed5770b1f4d68eb25",
   "scripts/conformance/classify.mjs": "5e6980e479636d4dbd15601f7c025ce1ec01cb5b9d4ee515d791ef080f876609",
   "scripts/conformance/evidence.mjs": "4803463b4d93398887082ef2d682893c9b52f97ccd51d58ae6d8aa19db56d79e",
@@ -274,15 +299,29 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/conformance/run-phase0.mjs": "8298c4dc4c586622b79caa6a7f86d6376b3970d52c2b8a8af1dcb74585b112f7",
   "scripts/conformance/validate-baseline.mjs": "8acd56c5364c488280280af7b39e6f94091e3544103fb6bd56b1cc954af555e7",
   "scripts/generate-agent-onboarding.mjs": "64c195c341c9c822f17026617db56326b34282a90f5c16a10ddf5bb195360e06",
-  "scripts/generate-public-capability-contract.mjs": "81347e1ac5d148e95add9b8f5d5e7e542284f1d283c546bbdb5c374aa61120d9",
+  "scripts/generate-openai-submission.mjs": "fd5fe26e6b5d19cbdeed80326d2abadb695c7c966a68e2796649d43938c23aff",
+  "scripts/generate-public-capability-contract.mjs": "7c6f08e3a28c9bc2cd50a9e791571eaf4987b2c618f4c614ae55c9ed811cf1f2",
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
   "scripts/no-public-leak.sh": "b1f545a1bce2fc8f3e227f9bff41e737ea398ef5f15001403e4b8c7bfc684855",
   "scripts/postinstall.js": "02947d11d324048f69bc92d253d7c41f947aa338d1d6315b1579492689d462e3",
   "scripts/published-artifact-drift.mjs": "29435fd9b25625db5f6835e0b11b0528daf7345eef1421c6c826879be00b4f95",
-  "scripts/sync-openapi.mjs": "54be53d61c159babe7bca7db3eb5632659e106890ec7019c7ef1ac69c5593a02",
-  "scripts/test-openai-grouped-compose.mjs": "c379e026a63a17f600b85f3801c0184258df69c930919abf1710866a33543472",
+  "scripts/sync-openapi.mjs": "3d72c61a014b53887906fade05a13631e06d47977891b4b4fdb9a337322a4f32",
+  "scripts/test-openai-full-compose.mjs": "726217ac19463dfba5243fb5bc4843b19913969ea6e0d76316dbc7a7d1010865",
+  "scripts/validate-openai-submission-schema.mjs": "a3fa908a5ea83d6468f2d77345e464f1832845f45677df2627d2eebb423c548a",
   "tsconfig.json": "fee86899bb77179611ed16b73572159d567e76a4717522e567900dbb17ac0804",
+  "workers/remote-mcp/scripts/capture-openai-review.mjs": "155921985f9df2f9ed029691b7baf021c8737a7d9cb485dc366ab7ff9c890be2",
   "workers/remote-mcp/tsconfig.json": "03d5bac68efb117ed224ec2091bb0918370cb4453ae2fa04bd5fd1d7aff26f54",
+});
+export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
+  "marketplace/openai/SUBMISSION.md": "e12e0ba723c42c09d7fff01c6f7eeca158750bb88d573ed21a7aab03494eccb7",
+  "marketplace/openai/chatgpt-app-submission.json": "3b80cf9422bb7e2779497cb81b1638fae253f0af32d5445aeddd2e0e27d9f1cf",
+  "marketplace/openai/chatgpt-app-submission.v1.schema.json": "aa7d1bd554e6c615d411c03e5b73bb464816be603461eb5813bb589645550304",
+  "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
+  "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
+  "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
+  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "799b5e628ee0baacd1f50d61f2e584fce3931c9f0e87cbb7b6ab77be63b47088",
+  "src/__tests__/fixtures/public-capability-contract.json": "f52dae2fca4800da9c61833a14166875af9bac5c1c822b0e786a961e89b34628",
+  "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
 
 const CODE_EXTENSION_SET = new Set(CODE_EXTENSIONS);
@@ -347,6 +386,10 @@ const NETWORK_GLOBAL_MEMBER_NAMES = new Set([
 const NAVIGATION_RECEIVER_RE = /^(?:(?:globalThis|parent|self|top|window)\.)*(?:document\.)?location$/u;
 const DANGEROUS_EXECUTION_MODULE_RE = /^(?:node:)?(?:child_process|module|vm|worker_threads)$/u;
 const TEST_PATH_RE = /(?:^|\/)(?:\.wrangler|__tests__|coverage|dist|node_modules)(?:\/|$)|\.(?:spec|test)(?:\.[cm]?[jt]sx?)?(?:$|[/?#])/iu;
+
+function isApprovedDistImport(file, moduleValue) {
+  return APPROVED_DIST_IMPORTS[file]?.includes(moduleValue) === true;
+}
 
 function isAnalyticsModule(value) {
   return ANALYTICS_MODULE_PATTERNS.some((pattern) => pattern.test(value));
@@ -1870,7 +1913,11 @@ export function analyzeCode(file, source, { embedded = false } = {}) {
     if (moduleValue !== null && /^(?:blob|data|https?):/iu.test(moduleValue)) {
       addFinding(findings, sourceFile, node, "DYNAMIC_EXECUTION", `remote/data module ${moduleValue.slice(0, 80)}`);
     }
-    if (moduleValue !== null && TEST_PATH_RE.test(moduleValue)) {
+    if (
+      moduleValue !== null
+      && TEST_PATH_RE.test(moduleValue)
+      && !isApprovedDistImport(file, moduleValue)
+    ) {
       addFinding(findings, sourceFile, node, "TEST_CODE_IMPORT", moduleValue);
     }
 
@@ -2287,11 +2334,44 @@ export function analyzeManifest(file, source) {
 
 export function inspectToml(file, source) {
   const findings = [];
+  let code = "";
+  let inComment = false;
+  let commentQuote = null;
+  let commentEscaped = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (inComment) {
+      if (char === "\n" || char === "\r") {
+        inComment = false;
+        code += char;
+      } else {
+        code += " ";
+      }
+      continue;
+    }
+    if (commentQuote) {
+      code += char;
+      if (commentEscaped) commentEscaped = false;
+      else if (char === "\\" && commentQuote === '\"') commentEscaped = true;
+      else if (char === commentQuote) commentQuote = null;
+      continue;
+    }
+    if (char === '\"' || char === "'") {
+      commentQuote = char;
+      code += char;
+    } else if (char === "#") {
+      inComment = true;
+      code += " ";
+    } else {
+      code += char;
+    }
+  }
+
   let brackets = 0;
   let quote = null;
   let escaped = false;
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index];
+  for (let index = 0; index < code.length; index += 1) {
+    const char = code[index];
     if (quote) {
       if (escaped) escaped = false;
       else if (char === "\\" && quote === '"') escaped = true;
@@ -2307,13 +2387,13 @@ export function inspectToml(file, source) {
     findings.push({ file, line: 1, column: 1, code: "PARSE_ERROR", detail: "unbalanced TOML quote/bracket" });
   }
   const keyRe = /^\s*([A-Za-z0-9_."'-]+)\s*=/gmu;
-  for (const match of source.matchAll(keyRe)) {
+  for (const match of code.matchAll(keyRe)) {
     const key = match[1].replace(/["']/gu, "");
     if (isAnalyticsConfigIdentifier(key)) {
       findings.push({ file, line: 1, column: 1, code: "ANALYTICS_CONFIG", detail: key });
     }
   }
-  const workerMains = [...source.matchAll(/^\s*main\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))/gimu)]
+  const workerMains = [...code.matchAll(/^\s*main\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))/gimu)]
     .map((match) => match[1] ?? match[2] ?? match[3] ?? "");
   const expectedMain = APPROVED_WORKER_MAINS[file];
   if (workerMains.length > 0 || expectedMain !== undefined) {
@@ -2330,7 +2410,42 @@ export function inspectToml(file, source) {
       findings.push({ file, line: 1, column: 1, code: "TEST_CODE_IMPORT", detail: `Worker main ${workerMains.join(", ")}` });
     }
   }
-  const endpointReason = providerEndpointReason(source);
+  const telemetry = {};
+  let table = "";
+  for (const line of code.split(/\r?\n/u)) {
+    const tableMatch = line.match(/^\s*\[\s*([^\[\]]+?)\s*\]\s*$/u);
+    if (tableMatch) {
+      table = tableMatch[1].replace(/["']/gu, "").trim();
+      continue;
+    }
+    const assignment = line.match(/^\s*([A-Za-z0-9_."'-]+)\s*=\s*(.*?)\s*$/u);
+    if (!assignment) continue;
+    const key = assignment[1].replace(/["']/gu, "");
+    if (table === "observability" && key === "enabled") {
+      telemetry[`${file}|cloudflare-observability`] = assignment[2] === "true"
+        ? "enabled"
+        : `unexpected:${assignment[2]}`;
+    }
+  }
+  const telemetryKeys = new Set([
+    ...Object.keys(telemetry),
+    ...Object.keys(APPROVED_PLATFORM_TELEMETRY).filter((key) => key.startsWith(`${file}|`)),
+  ]);
+  for (const key of telemetryKeys) {
+    const actual = telemetry[key];
+    const expected = APPROVED_PLATFORM_TELEMETRY[key];
+    if (actual !== expected) {
+      findings.push({
+        file,
+        line: 1,
+        column: 1,
+        code: "PLATFORM_TELEMETRY_DRIFT",
+        detail: `${key} — expected ${JSON.stringify(expected)}, found ${JSON.stringify(actual)}`,
+      });
+    }
+  }
+
+  const endpointReason = providerEndpointReason(code);
   if (endpointReason) {
     findings.push({ file, line: 1, column: 1, code: "ANALYTICS_ENDPOINT", detail: endpointReason });
   }
@@ -2495,6 +2610,34 @@ export function scanRepository(root) {
       findings.push({ file: relativeFile, line: 1, column: 1, code: "READ_ERROR", detail: error.message });
     }
   }
+  for (const [relativeFile, expected] of Object.entries(APPROVED_REVIEW_FILE_HASHES)) {
+    const full = join(absoluteRoot, relativeFile);
+    try {
+      const stat = lstatSync(full);
+      if (stat.isSymbolicLink() || !stat.isFile()) {
+        findings.push({
+          file: relativeFile,
+          line: 1,
+          column: 1,
+          code: "REVIEW_ARTIFACT_DRIFT",
+          detail: stat.isSymbolicLink() ? "symbolic link" : "non-regular file",
+        });
+        continue;
+      }
+      const actual = createHash("sha256").update(readFileSync(full)).digest("hex");
+      if (actual !== expected) {
+        findings.push({
+          file: relativeFile,
+          line: 1,
+          column: 1,
+          code: "REVIEW_ARTIFACT_DRIFT",
+          detail: `expected ${expected}, found ${actual}`,
+        });
+      }
+    } catch (error) {
+      findings.push({ file: relativeFile, line: 1, column: 1, code: "READ_ERROR", detail: error.message });
+    }
+  }
 
   const sinks = [];
   const resources = [];
@@ -2557,6 +2700,18 @@ export function scanRepository(root) {
 
   findings.push(...compareInventory(sinks, APPROVED_NETWORK_SINKS, "NETWORK_SINK_DRIFT"));
   findings.push(...compareInventory(resources, APPROVED_EMBEDDED_RESOURCES, "EMBEDDED_RESOURCE_DRIFT"));
+  const sinkSourceOwners = new Set(sinks.map((sink) => sink.split("|")[0].split("#")[0]));
+  for (const owner of [...sinkSourceOwners].sort()) {
+    if (!Object.hasOwn(APPROVED_SOURCE_FILE_HASHES, owner)) {
+      findings.push({
+        file: owner,
+        line: 1,
+        column: 1,
+        code: "UNFROZEN_SINK_SOURCE",
+        detail: "network sink owner lacks a full reviewed source hash",
+      });
+    }
+  }
   return { findings: deduplicateFindings(findings), sinks, resources, codeFileCount };
 }
 

@@ -125,3 +125,13 @@ describe("Pagination cursor wire param — every list/search method must send `c
     });
   }
 });
+
+describe("Product active filter wire contract", () => {
+  for (const value of [true, false] as const) {
+    test(`listProducts({ isActive: ${value} }) sends the literal boolean string`, async () => {
+      const client = makeClient();
+      await client.listProducts({ isActive: value });
+      assert.equal(lastRequest().query.get("isActive"), String(value));
+    });
+  }
+});

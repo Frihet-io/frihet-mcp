@@ -2,7 +2,7 @@
  * Generated public-surface contract captured through the real MCP SDK.
  *
  * This is the mechanical source for catalogue, alias, discovery, resource, and
- * prompt truth across the npm/full, remote/grouped, and OpenAI/grouped profiles.
+ * prompt truth across the npm/full, remote/grouped, and OpenAI/full profiles.
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -22,7 +22,7 @@ import {
 } from "./server-composition.js";
 import { GROUPED_META_TOOL_COUNT } from "./tool-exposure.js";
 
-export const PUBLIC_CAPABILITY_CONTRACT_VERSION = 1;
+export const PUBLIC_CAPABILITY_CONTRACT_VERSION = 2;
 
 export interface CompactPublicTool {
   name: string;
@@ -50,7 +50,7 @@ export interface PublicCapabilityContract {
   surfaces: {
     localFull: CompactPublicSurface;
     remoteGrouped: CompactPublicSurface;
-    openaiGrouped: CompactPublicSurface;
+    openaiFull: CompactPublicSurface;
   };
 }
 
@@ -198,11 +198,11 @@ export async function capturePublicCapabilityContract(): Promise<PublicCapabilit
     true,
   );
 
-  const openaiGrouped = await captureSurface((server, client) => {
+  const openaiFull = await captureSurface((server, client) => {
     registerMcpSurface(
       server,
       client,
-      remoteMcpSurfaceComposition(true, true),
+      remoteMcpSurfaceComposition(true, false),
     );
   });
 
@@ -228,7 +228,7 @@ export async function capturePublicCapabilityContract(): Promise<PublicCapabilit
       aliasNames: aliases.size,
       discoveryNames: GROUPED_META_TOOL_COUNT,
     },
-    surfaces: { localFull, remoteGrouped, openaiGrouped },
+    surfaces: { localFull, remoteGrouped, openaiFull },
   };
 }
 

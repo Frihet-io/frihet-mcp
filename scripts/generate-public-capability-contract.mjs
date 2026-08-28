@@ -23,7 +23,7 @@ if (process.argv.includes("--check")) {
     `Public capability contract matches: ${actual.catalogue.canonicalOperations} catalogue operations; ` +
       `${actual.surfaces.remoteGrouped.tools.length} grouped remote names; ` +
       `${actual.surfaces.remoteGrouped.resources.length} remote resources; ` +
-      `${actual.surfaces.openaiGrouped.tools.length} OpenAI names`,
+      `${actual.surfaces.openaiFull.tools.length} OpenAI names`,
   );
 } else {
   await writeFile(fixturePath, serialized);

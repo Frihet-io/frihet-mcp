@@ -33,11 +33,6 @@ import { correctToolAnnotations } from "./capability-truth.js";
 import { MCP_RESOURCE_COUNT } from "./resources/register-all.js";
 import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
 import { FRIHET_CONNECTOR_SCOPE } from "./openai-review-oauth.js";
-import {
-  applyToolExposureProfile,
-  type GroupMeta,
-  type ToolGroupId,
-} from "./tool-exposure.js";
 
 /* ------------------------------------------------------------------ */
 /*  Profile definition                                                 */
@@ -190,10 +185,10 @@ const PROFILE: OpenAIProfile = {
       "y reserva un numero interno; puede crear y vincular el cliente si no existe una coincidencia exacta, pero no emite, envia, marca como pagada, cancela, firma ni presenta la factura.",
 
     create_expense:
-      "Record an expense with an explicit date and tax-deductible choice; both affect Frihet's accounting and future tax-report inputs, but this tool files nothing. " +
-      "A supplied vendor name may create and link a vendor record when no exact match exists. " +
+      "Record an expense on an explicit date; its tax-deductible choice affects Frihet's accounting, files nothing, and a new vendor may persist if the expense fails. " +
+      "A supplied vendor name may create and link a vendor record when no exact match exists. Vendor creation is a separate backend step, so a newly created vendor may remain if the later expense write fails. " +
       "Active owner-configured webhooks may receive the resulting full business events. Frihet may create in-app and Novu notifications for eligible workspace admins or accountants whose preferences allow them. For a referred workspace's first expense, Frihet may award activation credits to the referring Frihet account. " +
-      "/ Registra un gasto tras confirmacion explicita. Puede crear y vincular un proveedor, y la clasificacion deducible afecta los calculos internos pero no presenta declaraciones.",
+      "/ Registra un gasto tras confirmacion explicita. La creacion del proveedor es un paso separado y el proveedor nuevo puede permanecer si despues falla la creacion del gasto; la clasificacion deducible afecta los calculos internos pero no presenta declaraciones.",
 
     update_expense:
       "Update an expense description, category, date, or tax-deductible classification, which affects Frihet's internal accounting; this tool files nothing. " +
@@ -362,7 +357,7 @@ const PROFILE: OpenAIProfile = {
   ],
 };
 
-/** OAuth requirement advertised on every reviewed tool, including discovery. */
+/** OAuth requirement advertised on every reviewed business tool. */
 export const OPENAI_OAUTH_SECURITY_SCHEMES = [
   { type: "oauth2" as const, scopes: [FRIHET_CONNECTOR_SCOPE] },
 ] as const;
@@ -590,29 +585,6 @@ const PROFILE_FORCED_INPUT_VALUES: Readonly<Record<string, Readonly<Record<strin
   create_quote: { status: "draft" },
 };
 
-const OPENAI_REVIEW_GROUP_METADATA: Partial<Record<ToolGroupId, GroupMeta>> = {
-  invoicing: {
-    label: "Invoicing & receivables / Facturacion y cobros",
-    blurb: "Read invoices, prepare invoice drafts, and manage quotes without email delivery.",
-  },
-  expenses: {
-    label: "Expenses & vendors / Gastos y proveedores",
-    blurb: "Read, create, and update expense and vendor records.",
-  },
-  crm: {
-    label: "CRM & clients / CRM y clientes",
-    blurb: "Clients, contacts, activities, and notes on the reviewed CRM surface.",
-  },
-  intelligence: {
-    label: "Business context / Contexto del negocio",
-    blurb: "Workspace defaults, plan usage, recent activity, top clients, and current-month totals.",
-  },
-  catalog: {
-    label: "Products / Productos",
-    blurb: "Product and service catalogue records with pricing.",
-  },
-};
-
 /* ------------------------------------------------------------------ */
 /*  Deep field redaction — shared policy in redaction.ts               */
 /* ------------------------------------------------------------------ */
@@ -786,6 +758,33 @@ export const OPENAI_REVIEW_LIST_OUTPUT_FIELDS: Readonly<
 export const OPENAI_REVIEW_LIST_LIMIT_MAX = 50;
 export const OPENAI_REVIEW_OFFSET_MAX = 10_000;
 export const OPENAI_REVIEW_PAGINATION_DEFAULT = 20;
+export const OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX = 100;
+export const OPENAI_REVIEW_BUSINESS_CONTEXT_TOP_CLIENTS_MAX = 5;
+
+export const OPENAI_REVIEW_FREE_TEXT_WARNING =
+  "Do not include passwords, credentials, payment-card data, health data, or official/government identifiers in this free-text field / No incluyas contrasenas, credenciales, datos de tarjetas, datos de salud ni identificadores oficiales en este campo de texto libre";
+
+/** Dot paths whose persisted or query text needs an explicit model-facing warning. */
+export const OPENAI_REVIEW_FREE_TEXT_WARNING_PATHS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  search_invoices: ["query"],
+  list_expenses: ["category"],
+  list_products: ["q"],
+  create_invoice: ["clientName", "items[].description", "notes"],
+  create_quote: ["clientName", "items[].description", "notes"],
+  create_expense: ["description", "category", "vendor"],
+  update_expense: ["description", "category"],
+  create_client: ["name"],
+  update_client: ["name"],
+  create_client_contact: ["name", "role"],
+  create_client_note: ["content"],
+  create_product: ["name", "description"],
+  update_product: ["name", "description"],
+  create_vendor: ["name"],
+  update_vendor: ["name"],
+  log_client_activity: ["title", "description"],
+};
 
 export const OPENAI_REVIEW_PAGINATION_LIMITS: Readonly<Record<string, number>> = {
   list_invoices: OPENAI_REVIEW_LIST_LIMIT_MAX,
@@ -878,20 +877,40 @@ function omitReviewedLineItemIds(schema: z.ZodObject): z.ZodObject {
   if (!(array instanceof z.ZodArray) || !(array.element instanceof z.ZodObject)) {
     throw new Error("Reviewed document detail output must expose an item-object array");
   }
-  const projectedItems = z.array(array.element.omit({ id: true }));
+  let projectedItems = z
+    .array(array.element.omit({ id: true }))
+    .max(OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX);
+  if (typeof array.description === "string") {
+    projectedItems = projectedItems.describe(array.description);
+  }
   return schema.extend({
     items: items instanceof z.ZodOptional ? projectedItems.optional() : projectedItems,
   });
 }
 
-function omitReviewedActivityCreator(name: string, schema: z.ZodObject): z.ZodObject {
-  if (name === "log_client_activity") return schema.omit({ createdBy: true });
+function omitReviewedActivityMetadata(name: string, schema: z.ZodObject): z.ZodObject {
+  if (name === "log_client_activity") return schema.omit({ id: true, createdBy: true });
   if (name !== "list_client_activities") return schema;
   const data = (schema.shape as Record<string, z.ZodTypeAny>).data;
   if (!(data instanceof z.ZodArray) || !(data.element instanceof z.ZodObject)) {
     throw new Error("Reviewed activity list output must expose an object array");
   }
-  return schema.extend({ data: z.array(data.element.omit({ createdBy: true })) });
+  return schema.extend({ data: z.array(data.element.omit({ id: true, createdBy: true })) });
+}
+
+function capReviewedBusinessContext(name: string, schema: z.ZodObject): z.ZodObject {
+  if (name !== "get_business_context") return schema;
+  const topClients = (schema.shape as Record<string, z.ZodTypeAny>).topClients;
+  if (!(topClients instanceof z.ZodArray)) {
+    throw new Error("Reviewed business context must expose a topClients array");
+  }
+  let capped = z.array(topClients.element).max(
+    OPENAI_REVIEW_BUSINESS_CONTEXT_TOP_CLIENTS_MAX,
+  );
+  if (typeof topClients.description === "string") {
+    capped = capped.describe(topClients.description);
+  }
+  return schema.extend({ topClients: capped });
 }
 
 /** Contextual reviewed DTO refinements after the generic closed projection. */
@@ -921,7 +940,32 @@ function customizeReviewedOutputSchema(name: string, schema: unknown): unknown {
   if (REVIEWED_DOCUMENT_DETAIL_OUTPUT_TOOLS.has(name)) {
     reviewed = omitReviewedLineItemIds(reviewed);
   }
-  reviewed = omitReviewedActivityCreator(name, reviewed);
+
+  // Create handlers have stronger invariants than the shared read/update
+  // schemas. Publish only fields that can occur on their successful wire
+  // result and require the values the backend always materializes.
+  if (name === "create_client") {
+    reviewed = reviewed.omit({ stage: true });
+  } else if (name === "create_expense") {
+    reviewed = requireObjectFields(
+      reviewed.omit({ paidDate: true }),
+      ["date", "taxDeductible"],
+    );
+  } else if (name === "create_invoice") {
+    reviewed = requireObjectFields(
+      reviewed.omit({ total: true }),
+      ["clientId", "clientName", "items", "issueDate", "dueDate"],
+    );
+  } else if (name === "create_quote") {
+    reviewed = requireObjectFields(
+      reviewed.omit({ total: true }),
+      ["clientId", "clientName", "items", "issueDate"],
+    );
+  } else if (name === "create_product") {
+    reviewed = reviewed.omit({ isActive: true });
+  }
+  reviewed = omitReviewedActivityMetadata(name, reviewed);
+  reviewed = capReviewedBusinessContext(name, reviewed);
 
   const summaryFields = OPENAI_REVIEW_LIST_OUTPUT_FIELDS[name];
   if (summaryFields) {
@@ -951,20 +995,36 @@ function customizeReviewedOutputSchema(name: string, schema: unknown): unknown {
     reviewed = reviewed.extend({ status: z.literal("draft") });
   }
 
-  // delete_quote always returns one of two explicit outcomes. A successful
-  // non-draft path is retained with status=cancelled; a safe draft path is
-  // destroyed and therefore has no status field.
-  if (name === "delete_quote") {
-    reviewed = reviewed.extend({
-      success: z.literal(true),
-      outcome: z.enum(["deleted", "cancelled"]),
-      status: z.literal("cancelled").optional(),
-      previousStatus: z.string().nullable().optional(),
-    });
+  if (OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS.has(name) && name !== "delete_quote") {
+    reviewed = reviewed.extend({ externalEffects: z.array(z.string()) });
   }
 
-  if (OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS.has(name)) {
-    reviewed = reviewed.extend({ externalEffects: z.array(z.string()) });
+  // delete_quote has two mutually exclusive wire results. Keep this a strict
+  // discriminated union so a deleted row can never claim a cancellation status
+  // and a retained/cancelled row can never omit status=cancelled.
+  if (name === "delete_quote") {
+    const {
+      outcome: _outcome,
+      status: _status,
+      previousStatus: _previousStatus,
+      cancelledVia: _cancelledVia,
+      externalEffects: _externalEffects,
+      ...shared
+    } = reviewed.shape as Record<string, z.ZodTypeAny>;
+    const deleted = z.object({
+      outcome: z.literal("deleted"),
+    }).strict();
+    const cancelled = z.object({
+      outcome: z.literal("cancelled"),
+      status: z.literal("cancelled"),
+      previousStatus: z.string().nullable().optional(),
+      externalEffects: z.array(z.string()),
+    }).strict();
+    return z.object({
+      ...shared,
+      success: z.literal(true),
+      result: z.discriminatedUnion("outcome", [deleted, cancelled]),
+    }).strict();
   }
   return reviewed;
 }
@@ -976,6 +1036,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Convert internal names/maps into explicit reviewed DTO fields before redaction. */
 function customizeReviewedOutputValue(name: string, value: unknown): unknown {
   if (!isRecord(value)) return value;
+
+  if (name === "delete_quote") {
+    const details = value.outcome === "cancelled"
+      ? {
+          outcome: "cancelled",
+          status: "cancelled",
+          ...(typeof value.previousStatus === "string"
+            ? { previousStatus: value.previousStatus }
+            : value.previousStatus === null
+              ? { previousStatus: null }
+              : {}),
+          externalEffects: [
+            "One or more active webhook endpoints previously configured by the workspace owner may receive the full resulting quote.updated event.",
+          ],
+        }
+      : { outcome: "deleted" };
+    delete value.outcome;
+    delete value.status;
+    delete value.previousStatus;
+    delete value.cancelledVia;
+    delete value.externalEffects;
+    value.result = details;
+    return value;
+  }
 
   const alias = REVIEWED_INVOICE_OUTPUT_TOOLS.has(name)
     ? "invoiceNumber"
@@ -993,7 +1077,10 @@ function customizeReviewedOutputValue(name: string, value: unknown): unknown {
     }
   }
 
-  if (OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS.has(name)) {
+  if (
+    OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS.has(name)
+    && name !== "delete_quote"
+  ) {
     const effects = [name === "log_client_activity"
       ? "For call, meeting, or email entries, active webhook endpoints previously configured by the workspace owner may receive the full resulting client.updated event; task entries do not update the parent client."
       : "One or more active webhook endpoints previously configured by the workspace owner may receive the full resulting business event."];
@@ -1145,6 +1232,73 @@ function constrainReviewedTextInputs(
   throw new Error("Reviewed text input schema must be an object");
 }
 
+function appendReviewedFreeTextWarning(schema: z.ZodTypeAny): z.ZodTypeAny {
+  const prefix = typeof schema.description === "string" && schema.description.length > 0
+    ? `${schema.description} — `
+    : "";
+  return schema.describe(`${prefix}${OPENAI_REVIEW_FREE_TEXT_WARNING}`);
+}
+
+function warnReviewedRootTextFields(
+  schema: unknown,
+  name: string,
+  fields: readonly string[],
+): unknown {
+  const shape = schema instanceof z.ZodObject
+    ? schema.shape as Record<string, z.ZodTypeAny>
+    : schema !== null && typeof schema === "object" && !Array.isArray(schema)
+      ? schema as Record<string, z.ZodTypeAny>
+      : undefined;
+  if (!shape) {
+    throw new Error(`${name} reviewed free-text warnings require a Zod object`);
+  }
+  const warned: Record<string, z.ZodTypeAny> = {};
+  for (const field of fields) {
+    const value = shape[field];
+    if (!value) throw new Error(`${name} reviewed free-text field is missing: ${field}`);
+    warned[field] = appendReviewedFreeTextWarning(value);
+  }
+  return schema instanceof z.ZodObject
+    ? schema.extend(warned)
+    : { ...shape, ...warned };
+}
+
+function constrainReviewedDocumentLineItems(
+  schema: unknown,
+  name: string,
+): unknown {
+  const shape = schema instanceof z.ZodObject
+    ? schema.shape as Record<string, z.ZodTypeAny>
+    : schema !== null && typeof schema === "object" && !Array.isArray(schema)
+      ? schema as Record<string, z.ZodTypeAny>
+      : undefined;
+  if (!shape) {
+    throw new Error(`${name} reviewed line items require a Zod object`);
+  }
+  const items = shape.items;
+  if (!(items instanceof z.ZodArray) || !(items.element instanceof z.ZodObject)) {
+    throw new Error(`${name} reviewed line items must be an object array`);
+  }
+  const itemShape = items.element.shape as Record<string, z.ZodTypeAny>;
+  const description = itemShape.description;
+  if (!description) {
+    throw new Error(`${name} reviewed line-item description is missing`);
+  }
+  const warnedItem = items.element.extend({
+    description: appendReviewedFreeTextWarning(description),
+  });
+  let constrained = z
+    .array(warnedItem)
+    .min(1)
+    .max(OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX);
+  if (typeof items.description === "string") {
+    constrained = constrained.describe(items.description);
+  }
+  return schema instanceof z.ZodObject
+    ? schema.extend({ items: constrained })
+    : { ...shape, items: constrained };
+}
+
 function reviewedConfirmationDescription(name: string): string {
   if (name === "create_invoice") {
     return "Set true only after the user authorizes creating a numbered draft, advancing the numbering counter, consuming monthly invoice usage, sending invoice-creation analytics to PostHog's EU-hosted analytics service, possibly creating/linking the client, delivering owner-configured webhooks, notifying eligible workspace admins/accountants, and possibly awarding first-use referral credits.";
@@ -1153,7 +1307,7 @@ function reviewedConfirmationDescription(name: string): string {
     return "Set true only after the user authorizes creating a numbered draft, advancing the numbering counter, possibly creating/linking the client, and delivering owner-configured webhooks.";
   }
   if (name === "create_expense") {
-    return "Set true only after the user authorizes recording the expense on the supplied date and using the explicit deductible classification, possibly creating/linking the vendor, delivering owner-configured webhooks, notifying eligible workspace admins/accountants, and possibly awarding first-use referral credits.";
+    return "Set true only after the user authorizes recording the expense on the supplied date and using the explicit deductible classification, possibly creating/linking the vendor in a separate step that may persist if the later expense write fails, delivering owner-configured webhooks, notifying eligible workspace admins/accountants, and possibly awarding first-use referral credits.";
   }
   if (name === "update_expense") {
     return "Set true only after the user authorizes changing the supplied description, category, date, or deductible classification and any accounting or future tax-report effect; amount and supplier identity cannot be changed here, and owner-configured webhooks may receive the resulting business event.";
@@ -1204,13 +1358,16 @@ const EXCLUDE_RESOURCES = new Set([
  */
 export const OPENAI_CSP =
   "default-src 'self'; " +
+  "base-uri 'none'; " +
+  "object-src 'none'; " +
+  "frame-ancestors 'none'; " +
   "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com; " +
   "style-src 'self' 'unsafe-inline'; " +
-  "connect-src 'self' https://api.frihet.io https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net " +
-    "https://auth.frihet.io https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://www.gstatic.com; " +
+  "connect-src 'self' https://auth.frihet.io https://identitytoolkit.googleapis.com " +
+    "https://securetoken.googleapis.com https://www.googleapis.com; " +
   "frame-src https://auth.frihet.io https://accounts.google.com https://github.com https://login.microsoftonline.com; " +
-  "img-src 'self' data: https:; " +
-  "font-src 'self' https://www.frihet.io";
+  "img-src 'self' data:; " +
+  "font-src 'self'";
 
 /* ------------------------------------------------------------------ */
 /*  Profile applicator                                                 */
@@ -1342,6 +1499,18 @@ export function applyOpenAIProfile(server: any): void {
         textInputLimits,
       );
     }
+    const warningPaths = OPENAI_REVIEW_FREE_TEXT_WARNING_PATHS[name] ?? [];
+    const rootWarningFields = warningPaths.filter((path) => !path.includes("[]"));
+    if (rootWarningFields.length > 0) {
+      config.inputSchema = warnReviewedRootTextFields(
+        config.inputSchema,
+        name,
+        rootWarningFields,
+      );
+    }
+    if (name === "create_invoice" || name === "create_quote") {
+      config.inputSchema = constrainReviewedDocumentLineItems(config.inputSchema, name);
+    }
     config.inputSchema = closeReviewedInputSchema(config.inputSchema ?? {});
 
     // 4a. Strip sensitive fields from the OUTPUT schema descriptor too.
@@ -1454,10 +1623,13 @@ export function applyOpenAIProfile(server: any): void {
           || result._meta?.["io.frihet/transportOutcomeUnknown"] === true
         )
       ) {
+        const vendorResidual = name === "create_expense"
+          ? " A vendor created while handling this request may remain even if the expense itself was not created."
+          : "";
         return {
           content: [{
             type: "text" as const,
-            text: "Frihet could not confirm the result of this write. It may already have completed. Do not retry automatically; first verify the record with the corresponding read or list tool.",
+            text: `Frihet could not confirm the result of this write. It may already have completed.${vendorResidual} Do not retry automatically; first verify the record with the corresponding read or list tool.`,
           }],
           isError: true,
           _meta: {
@@ -1466,6 +1638,14 @@ export function applyOpenAIProfile(server: any): void {
             "io.frihet/operationMayHaveCompleted": true,
           },
         };
+      }
+
+      if (result.isError === true && name === "create_expense") {
+        for (const block of result.content ?? []) {
+          if (block.type === "text" && typeof block.text === "string") {
+            block.text += " A vendor created while handling this request may remain even if the expense itself was not created.";
+          }
+        }
       }
 
       // Redact structuredContent, then project it through the closed reviewed
@@ -1487,7 +1667,7 @@ export function applyOpenAIProfile(server: any): void {
               return {
                 content: [{
                   type: "text" as const,
-                  text: `Frihet may already have completed this write, but its response did not match the reviewed output contract.${operationId} Do not retry automatically; verify the record with the corresponding read or list tool.`,
+                  text: `Frihet may already have completed this write, but its response did not match the reviewed output contract.${operationId}${name === "create_expense" ? " A vendor created while handling this request may remain even if the expense itself was not created." : ""} Do not retry automatically; verify the record with the corresponding read or list tool.`,
                 }],
                 isError: true,
                 _meta: {
@@ -1537,7 +1717,7 @@ export function applyOpenAIProfile(server: any): void {
   server.registerResource = (name: string, ...rest: any[]) => {
     // Public ChatGPT Apps do not need MCP resources. Several full-server
     // resources contain broad fiscal/compliance reference material or raw
-    // workspace lists that are outside the reviewed 36-tool MCP surface.
+    // workspace lists that are outside the reviewed 33-tool MCP surface.
     if (PROFILE.excludeResources) return;
 
     // Skip resources that expose too much raw PII
@@ -1588,41 +1768,17 @@ export const OPENAI_EXCLUDED_COUNT = PROFILE.excludeTools.size;
 /** Number of tools explicitly allowed in OpenAI mode. */
 export const OPENAI_ALLOWED_TOOL_COUNT = PROFILE.includeTools.size;
 
-/**
- * The reviewed OpenAI tool allow-list (the 33 business tools), exposed read-only
- * so the grouped tool-exposure profile can pin its catalog to EXACTLY this set
- * when the two profiles are composed on openai-mcp.frihet.io. The progressive-
- * disclosure meta-tools (search_tools / describe_tool / list_tool_groups) must
- * never surface a tool outside this allow-list; passing it as the grouped
- * `allowlist` enforces that statically. This is the SAME object used to gate
- * registerTool, so the two can never drift apart.
- *
- * NOTE: this is the 33 BUSINESS tools only. It deliberately does NOT contain the
- * 3 grouped meta-tools — those are registered directly on the real server
- * (bypassing the OpenAI gate) by applyToolExposureProfile when it runs first, so
- * OPENAI_ALLOWED_TOOL_COUNT stays correct while the live tools/list still
- * materialises 33 + 3 = 36 tools.
- */
+/** The exact 33-tool allow-list reviewed for the OpenAI connector. */
 export const OPENAI_REVIEWED_TOOL_ALLOWLIST: ReadonlySet<string> =
   PROFILE.includeTools;
 
 /**
- * Apply the exact profile composition used by the ChatGPT review Worker.
- *
- * Keep this helper as the single source for the security-sensitive ordering:
- * grouped exposure first (with the reviewed allow-list), OpenAI profile second.
- * Tool registration happens afterwards through registerAllTools().
+ * Backwards-compatible helper for tests and gates that capture the exact
+ * ChatGPT review profile. The reviewed host deliberately uses full tool
+ * descriptions and exposes no grouped discovery meta-tools.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function applyOpenAIReviewProfiles(server: any): void {
-  // The grouped profile registers its three discovery tools immediately, so
-  // patch tools/list before composing either registration interceptor.
-  installOpenAIToolsListSecurityProjection(server);
-  applyToolExposureProfile(server, {
-    allowlist: OPENAI_REVIEWED_TOOL_ALLOWLIST,
-    groupMetadata: OPENAI_REVIEW_GROUP_METADATA,
-    securitySchemes: OPENAI_OAUTH_SECURITY_SCHEMES,
-  });
   applyOpenAIProfile(server);
 }
 

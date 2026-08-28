@@ -7,11 +7,16 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { buildServerCard, MCP_PROTOCOL_VERSION } from "../server-card.ts";
 
 const VERSION = "1.16.0";
 const FULL_REMOTE_TOOL_COUNT = 165;
-const OPENAI_LIVE_TOOL_COUNT = 40;
+const reviewedDescriptor = JSON.parse(readFileSync(
+  new URL("../../../../src/__tests__/fixtures/openai-review-descriptor.snapshot.json", import.meta.url),
+  "utf8",
+)) as { tools: unknown[] };
+const OPENAI_LIVE_TOOL_COUNT = reviewedDescriptor.tools.length;
 
 const card = buildServerCard({
   name: "io.frihet/erp",
@@ -51,6 +56,7 @@ test("card pins schema, protocol version, docs, and tool count", () => {
   assert.equal(card.$schema, "https://static.modelcontextprotocol.io/schemas/mcp-server-card/v1.json");
   assert.equal(card.protocolVersion, MCP_PROTOCOL_VERSION);
   assert.equal(card.documentationUrl, "https://docs.frihet.io/desarrolladores/mcp-server");
+  assert.equal(card.homepage, "https://www.frihet.io");
   assert.equal(card.tools_count, FULL_REMOTE_TOOL_COUNT);
   assert.deepEqual(card.capabilities, {
     tools: { listChanged: true },

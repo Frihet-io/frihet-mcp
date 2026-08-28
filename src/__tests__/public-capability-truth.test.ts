@@ -128,8 +128,8 @@ test("known deferred and unavailable operations fail closed", () => {
 test("generated remote profiles match the committed Worker configuration", () => {
   assert.equal(
     [...WRANGLER_TOML.matchAll(/^FRIHET_TOOL_MODE\s*=\s*"grouped"$/gm)].length,
-    2,
-    "both full and OpenAI Worker profiles must opt into grouped mode",
+    1,
+    "only the full Worker profile opts into grouped mode",
   );
   assert.match(
     WRANGLER_TOML,
@@ -142,7 +142,7 @@ test("generated remote profiles match the committed Worker configuration", () =>
   );
   assert.match(
     WORKER_INDEX_SOURCE,
-    /remoteMcpSurfaceComposition\(openaiMode, toolMode === "grouped"\)/,
+    /const groupedMode = !openaiMode && toolMode === "grouped"/,
   );
 });
 
@@ -185,7 +185,7 @@ test("real SDK surfaces match the generated public capability contract", async (
     {
       localFull: { tools: 162, resources: 11, prompts: 10 },
       remoteGrouped: { tools: 165, resources: 7, prompts: 10 },
-      openaiGrouped: { tools: 36, resources: 0, prompts: 0 },
+      openaiFull: { tools: 33, resources: 0, prompts: 0 },
     },
   );
 });

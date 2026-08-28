@@ -11,12 +11,17 @@
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
 import {
-  parseProvisionedApiKey,
+  parseProvisionedOAuthApiKey,
   provisionOAuthApiKey,
+  revokeOAuthApiKey,
 } from "./oauth-provisioning.js";
 import { resolveOAuthApiKeyUrl } from "./api-url.js";
 import { getLoginPage } from "./login-page.js";
 import { consumeOAuthState, storeOAuthState } from "./oauth-state-store.js";
+import {
+  BoundedRequestBodyError,
+  readBoundedTextRequest,
+} from "./bounded-request-body.js";
 import { log } from "../../../src/logger.js";
 import {
   MCP_SERVER_VERSION,
@@ -30,6 +35,7 @@ import { GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
 import { OPENAI_ALLOWED_TOOL_COUNT } from "../../../src/openai-profile.js";
 import {
   FRIHET_CONNECTOR_SCOPE,
+  FULL_MCP_ORIGIN,
   isValidS256CodeChallenge,
   OPENAI_REVIEW_ORIGIN,
   resolveFrihetAccessProfile,
@@ -37,6 +43,7 @@ import {
 } from "../../../src/openai-review-oauth.js";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
+const OAUTH_CALLBACK_MAX_BODY_BYTES = 20 * 1024;
 
 const app = new Hono<{ Bindings: AuthEnv }>();
 
@@ -91,7 +98,7 @@ app.get("/", (c) => {
       authorization_server: `${host}/.well-known/oauth-authorization-server`,
     },
     tools: openai
-      ? OPENAI_ALLOWED_TOOL_COUNT + GROUPED_META_TOOL_COUNT
+      ? OPENAI_ALLOWED_TOOL_COUNT
       : FULL_REMOTE_TOOL_COUNT,
     ...(openai
       ? { reviewedBusinessOperations: OPENAI_ALLOWED_TOOL_COUNT }
@@ -100,7 +107,7 @@ app.get("/", (c) => {
           aliasNames: FISCAL_ALIAS_TOOL_COUNT,
           capabilityMetadata: "io.frihet/capability",
         }),
-    discoveryNames: GROUPED_META_TOOL_COUNT,
+    discoveryNames: openai ? 0 : GROUPED_META_TOOL_COUNT,
     resources: openai ? 0 : FULL_REMOTE_RESOURCE_COUNT,
     prompts: openai ? 0 : FULL_REMOTE_PROMPT_COUNT,
   });
@@ -225,8 +232,22 @@ app.post("/callback", async (c) => {
     locale?: string;
   };
   try {
-    body = await c.req.json<typeof body>();
-  } catch {
+    const bounded = await readBoundedTextRequest(
+      c.req.raw,
+      OAUTH_CALLBACK_MAX_BODY_BYTES,
+    );
+    const parsed: unknown = JSON.parse(bounded.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new SyntaxError("Callback body must be an object");
+    }
+    body = parsed as typeof body;
+  } catch (error) {
+    if (
+      error instanceof BoundedRequestBodyError
+      && error.code === "too_large"
+    ) {
+      return c.json({ error: "Callback body is too large" }, 413);
+    }
     return c.json({ error: "Invalid callback body" }, 400);
   }
   if (
@@ -302,16 +323,52 @@ app.post("/callback", async (c) => {
     return c.json({ error: "Invalid Firebase token" }, 401);
   }
 
+  const oauthServiceSecret = c.env.FRIHET_OAUTH_API_KEY;
+  if (
+    typeof oauthServiceSecret !== "string"
+    || new TextEncoder().encode(oauthServiceSecret).byteLength < 32
+  ) {
+    log({
+      level: "error",
+      message: "OAuth callback: API-key lifecycle authentication is unavailable",
+      operation: "oauth_callback",
+    });
+    return c.json({ error: "OAuth credential lifecycle is unavailable" }, 503);
+  }
+
+  const provisioningUrl = resolveOAuthApiKeyUrl(c.env.FRIHET_API_BASE);
+  const provisioningBinding = {
+    uid: decoded.uid,
+    accessProfile,
+    oauthResource: accessProfile === "openai" ? OPENAI_REVIEW_ORIGIN : FULL_MCP_ORIGIN,
+  } as const;
+
   // Provision an API key for this user via the Frihet Cloud Function.
   // The provisioning endpoint lives at the API ORIGIN ROOT, never under /v1 —
   // resolveOAuthApiKeyUrl strips a trailing /v1 so a FRIHET_API_BASE configured
   // in either form (origin or /v1) resolves correctly. Passing the raw env var
   // with a /v1 suffix produced /v1/oauth/api-key → 401 → 500 for every OAuth grant.
-  const apiKeyResponse = await provisionOAuthApiKey(
-    resolveOAuthApiKeyUrl(c.env.FRIHET_API_BASE),
-    body.idToken,
-    decoded.uid,
-  );
+  let apiKeyResponse: Response;
+  try {
+    apiKeyResponse = await provisionOAuthApiKey(
+      provisioningUrl,
+      body.idToken,
+      oauthServiceSecret,
+      provisioningBinding,
+      body.stateKey,
+    );
+  } catch (error) {
+    // The POST outcome may be unknown after a timeout. The backend keeps the
+    // bound OAuth pool finite, while this callback fails closed before issuing
+    // an authorization code. Never log the Firebase token or request URL.
+    log({
+      level: "error",
+      message: "OAuth callback: API-key provisioning transport failed",
+      operation: "oauth_callback",
+      error: { message: error instanceof Error ? error.name : typeof error },
+    });
+    return c.json({ error: "Failed to provision API key" }, 502);
+  }
 
   if (!apiKeyResponse.ok) {
     const upstreamStatus = apiKeyResponse.status;
@@ -355,8 +412,11 @@ app.post("/callback", async (c) => {
     });
     return c.json({ error: "Failed to provision API key" }, 502);
   }
-  const apiKey = parseProvisionedApiKey(provisionedPayload);
-  if (!apiKey) {
+  const provisioned = parseProvisionedOAuthApiKey(
+    provisionedPayload,
+    provisioningBinding,
+  );
+  if (!provisioned) {
     // Never log the payload: even a malformed response could still contain a
     // raw credential or user data.
     log({
@@ -368,32 +428,68 @@ app.post("/callback", async (c) => {
     return c.json({ error: "Failed to provision API key" }, 502);
   }
 
-  // Complete OAuth authorization — issues access + refresh tokens
-  const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
-    request: oauthReq,
-    userId: decoded.uid,
-    metadata: {
-      label: decoded.email || decoded.uid,
-    },
-    scope: oauthReq.scope,
-    props: accessProfile === "openai"
-      ? {
-          apiKey,
-          accessProfile,
-          oauthScope: FRIHET_CONNECTOR_SCOPE,
-          oauthResource: OPENAI_REVIEW_ORIGIN,
-          authMethod: "oauth",
-        }
-      : {
-          apiKey,
-          locale: body.locale || "es",
-          userId: decoded.uid,
-          email: decoded.email,
-          name: decoded.name,
-          accessProfile,
-          authMethod: "oauth",
+  // Complete OAuth authorization. The raw API key never leaves encrypted grant
+  // props; its opaque keyId is retained so refresh-family replay or explicit
+  // grant revocation can disable the exact backend credential later.
+  let redirectTo: string;
+  try {
+    ({ redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
+      request: oauthReq,
+      userId: decoded.uid,
+      metadata: {
+        label: decoded.email || decoded.uid,
+      },
+      scope: oauthReq.scope,
+      props: accessProfile === "openai"
+        ? {
+            apiKey: provisioned.apiKey,
+            keyId: provisioned.keyId,
+            apiKeyExpiresAt: provisioned.expiresAt,
+            userId: decoded.uid,
+            accessProfile,
+            oauthScope: FRIHET_CONNECTOR_SCOPE,
+            oauthResource: OPENAI_REVIEW_ORIGIN,
+            authMethod: "oauth",
+          }
+        : {
+            apiKey: provisioned.apiKey,
+            keyId: provisioned.keyId,
+            apiKeyExpiresAt: provisioned.expiresAt,
+            locale: body.locale || "es",
+            userId: decoded.uid,
+            email: decoded.email,
+            name: decoded.name,
+            accessProfile,
+            oauthResource: FULL_MCP_ORIGIN,
+            authMethod: "oauth",
+          },
+    }));
+  } catch (error) {
+    let compensationStatus: number | undefined;
+    try {
+      const compensation = await revokeOAuthApiKey(
+        provisioningUrl,
+        oauthServiceSecret,
+        {
+          ...provisioningBinding,
+          keyId: provisioned.keyId,
         },
-  });
+      );
+      compensationStatus = compensation.status;
+    } catch {
+      compensationStatus = undefined;
+    }
+    log({
+      level: "error",
+      message: "OAuth callback: authorization completion failed after provisioning",
+      operation: "oauth_callback",
+      error: { message: error instanceof Error ? error.name : typeof error },
+      metadata: {
+        compensationStatus: compensationStatus ?? "transport_error",
+      },
+    });
+    return c.json({ error: "Failed to complete OAuth authorization" }, 502);
+  }
 
   log({
     level: "info",

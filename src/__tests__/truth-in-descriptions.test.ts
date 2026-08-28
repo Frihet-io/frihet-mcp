@@ -429,26 +429,21 @@ describe("reviewed ChatGPT surface — explicit confirmation parity", () => {
 
   test("reviewed descriptions state the consequence and never hide confirmation", async () => {
     const openai = makeOpenAIServer();
-    const describe_ = openai.tools.get("describe_tool")!;
 
     for (const name of OPENAI_REVIEW_CONFIRM_REQUIRED_TOOLS) {
       const listed = openai.tools.get(name)!;
       assert.match(listed.config.description, /confirm=true/i, `${name} must advertise confirmation`);
-
-      const payload = JSON.parse(
-        (await describe_.handler({ name })).content[0]!.text,
-      ) as { description?: string; inputFields?: string[] };
-      assert.ok(payload.inputFields?.includes("confirm"), `${name} discovery omits confirm`);
+      assert.equal(declaresRequiredConfirm(listed), true, `${name} schema must require confirm`);
       if (REVIEWED_PERMANENT_DELETES.has(name)) {
-        assert.match(payload.description ?? "", /cannot be undone/i, `${name} must warn about permanence`);
+        assert.match(listed.config.description, /cannot be undone/i, `${name} must warn about permanence`);
       } else if (OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS.has(name)) {
         assert.match(
-          payload.description ?? "",
+          listed.config.description,
           /webhook|recipient outside|external endpoints/i,
           `${name} must disclose its external effect`,
         );
       } else {
-        assert.match(payload.description ?? "", /record change/i, `${name} must disclose its write`);
+        assert.match(listed.config.description, /record change/i, `${name} must disclose its write`);
       }
     }
   });

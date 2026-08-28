@@ -4,7 +4,7 @@
   "app_info": {
     "display_name": "Frihet",
     "subtitle": "Manage business operations",
-    "description": "Frihet connects ChatGPT to a Frihet business workspace. Find invoices, quotes, expenses, clients, CRM records, products, and vendors; prepare numbered invoice and quote drafts; and record or update selected business data. Every write requires an explicit confirmation that explains lasting and external effects. Some confirmed writes may trigger webhooks previously configured in Frihet or notify workspace members. This reviewed OAuth connector deliberately excludes payment initiation, processing, or execution; invoice issuance or email delivery; tax filings; banking; payroll or HR; raw documents; webhook administration; and regulated exports. It may read stored payment-status fields and business payment dates. No API key is required.",
+    "description": "Frihet is the trade name owned and operated in Spain by VICTOR BERTHELIUS PATO. Frihet connects ChatGPT to a Frihet business workspace. Find invoices, quotes, expenses, clients, CRM records, products, and vendors; prepare numbered invoice and quote drafts; and record or update selected business data. Every write requires explicit confirmation; confirmations for operations with lasting or external effects disclose those effects. Some confirmed writes may trigger webhooks previously configured in Frihet or notify workspace members. This reviewed OAuth connector deliberately excludes payment initiation, processing, or execution; invoice issuance or email delivery; tax filings; banking; payroll or HR; raw documents; webhook administration; and regulated exports. It may read stored payment-status fields and business payment dates. No API key is required.",
     "category": "BUSINESS"
   },
   "tools": {
@@ -51,7 +51,7 @@
         "destructiveHint": true
       },
       "justifications": {
-        "read_only_justification": "The create_expense operation creates an expense record on an explicit date that determines its accounting and future tax-report period, may create and link a vendor when no exact match exists, and records an explicit tax-deductible choice without filing anything, so it changes Frihet state after explicit confirmation.",
+        "read_only_justification": "The create_expense operation creates an expense record on an explicit date that determines its accounting and future tax-report period, may first create and link a vendor in a separate step that can remain if the later expense write fails, and records an explicit tax-deductible choice without filing anything, so it changes Frihet state after explicit confirmation.",
         "open_world_justification": "The create_expense operation can deliver the resulting expense-created event to active owner-configured endpoints, notify eligible workspace admins or accountants in-app and through Novu, and possibly award referral activation credits to another Frihet account.",
         "destructive_justification": "The create_expense operation is treated as destructive because external event delivery, workspace notification, and any referral-credit award cannot be recalled."
       }
@@ -138,18 +138,6 @@
         "read_only_justification": "The delete_quote operation permanently removes only a clean draft with no delivery, response, attachment, or conversion evidence, refuses a protected draft, or cancels a non-draft quote after explicit confirmation.",
         "open_world_justification": "The delete_quote operation can also deliver a quote-updated event when a non-draft quote is cancelled to active endpoints previously configured by the workspace owner.",
         "destructive_justification": "The delete_quote operation is destructive because eligible clean-draft deletion is permanent, while cancellation changes lifecycle status and its external event cannot be recalled."
-      }
-    },
-    "describe_tool": {
-      "annotations": {
-        "readOnlyHint": true,
-        "openWorldHint": false,
-        "destructiveHint": false
-      },
-      "justifications": {
-        "read_only_justification": "The describe_tool operation only reads the reviewed description and input field names for one allowed tool and changes no Frihet record.",
-        "open_world_justification": "The describe_tool operation has no user-directed external effect and only reads the in-process reviewed tool catalog.",
-        "destructive_justification": "The describe_tool operation cannot delete or overwrite workspace data."
       }
     },
     "get_business_context": {
@@ -332,18 +320,6 @@
         "destructive_justification": "The list_quotes operation cannot delete or overwrite workspace data."
       }
     },
-    "list_tool_groups": {
-      "annotations": {
-        "readOnlyHint": true,
-        "openWorldHint": false,
-        "destructiveHint": false
-      },
-      "justifications": {
-        "read_only_justification": "The list_tool_groups operation only reads the reviewed tool groups and their exact tool counts and changes no Frihet record.",
-        "open_world_justification": "The list_tool_groups operation has no user-directed external effect and only reads the in-process reviewed tool catalog.",
-        "destructive_justification": "The list_tool_groups operation cannot delete or overwrite workspace data."
-      }
-    },
     "list_vendors": {
       "annotations": {
         "readOnlyHint": true,
@@ -378,18 +354,6 @@
         "read_only_justification": "The search_invoices operation only reads invoice records matching a text query and selected filters and changes no Frihet record.",
         "open_world_justification": "The search_invoices operation has no user-directed external effect and only reads the authenticated Frihet workspace.",
         "destructive_justification": "The search_invoices operation cannot delete or overwrite workspace data."
-      }
-    },
-    "search_tools": {
-      "annotations": {
-        "readOnlyHint": true,
-        "openWorldHint": false,
-        "destructiveHint": false
-      },
-      "justifications": {
-        "read_only_justification": "The search_tools operation only reads the names of reviewed tools matching a capability query and changes no Frihet record.",
-        "open_world_justification": "The search_tools operation has no user-directed external effect and only reads the in-process reviewed tool catalog.",
-        "destructive_justification": "The search_tools operation cannot delete or overwrite workspace data."
       }
     },
     "update_client": {
@@ -460,18 +424,18 @@
     },
     {
       "description": "Create a numbered invoice draft after explicit authorization without using a stored client identifier.",
-      "user_prompt": "I confirm: prepare an invoice draft for Acme SL with 5 hours of consulting at 100 EUR per hour and a 21 percent tax rate.",
+      "user_prompt": "I authorize Frihet to create a numbered invoice draft, advance the numbering counter, consume monthly invoice usage, send invoice-creation analytics to PostHog's EU-hosted service, possibly create or link the client, deliver owner-configured webhooks, notify eligible admins or accountants, and possibly award first-use referral credits. Prepare it for Acme SL with 5 hours of consulting at 100 EUR per hour and a 21 percent tax rate.",
       "file_attachment_urls": null,
       "tools_triggered": "create_invoice",
-      "expected_output": "A newly numbered invoice draft with stored line items and clear notes that the numbering counter advanced, monthly invoice usage increased, Frihet may have created and linked the client, PostHog's EU-hosted analytics service may have received invoice-creation analytics, owner-configured webhooks may receive resulting business events, eligible admins or accountants may receive Frihet and Novu notifications, and first-use referral credits may be awarded; a calculated total may be absent.",
+      "expected_output": "The reviewed response contains the new record ID, linked client ID and name, the requested line item, issue and due dates, draft status, a reserved invoice number, and external-effects disclosures. It clearly notes that the numbering counter advanced, monthly invoice usage increased, Frihet may have created and linked the client, PostHog's EU-hosted analytics service may have received invoice-creation analytics, owner-configured webhooks may receive resulting business events, eligible admins or accountants may receive Frihet and Novu notifications, and first-use referral credits may be awarded. It does not claim that the invoice was issued, emailed, filed, or paid.",
       "expected_output_url": null
     },
     {
       "description": "Create an office expense after explicit authorization.",
-      "user_prompt": "I confirm: record a 45.99 EUR office-supplies expense dated 2026-08-28 in the office category and mark it as not tax deductible.",
+      "user_prompt": "I authorize Frihet to record this expense on 2026-08-28 as not tax deductible and create or link the vendor Office Depot Canarias in a separate step that may remain if expense creation fails, deliver owner-configured webhooks, notify eligible admins or accountants, and possibly award first-use referral credits. Record 45.99 EUR of office supplies in the office category.",
       "file_attachment_urls": null,
       "tools_triggered": "create_expense",
-      "expected_output": "A confirmed 45.99 EUR office expense dated 2026-08-28 and explicitly marked not tax deductible, with clear notes that the date selects its accounting and future tax-report period, owner-configured webhooks may receive resulting business events, eligible admins or accountants may receive Frihet and Novu notifications, and first-use referral credits may be awarded.",
+      "expected_output": "The reviewed response contains a new record ID, description, amount 45.99 EUR, date 2026-08-28, taxDeductible=false, and external-effects disclosures; category or vendor fields appear only when stored. It clearly notes that the date selects the accounting and future tax-report period, a separately created vendor may remain after a later expense failure, owner-configured webhooks may receive resulting business events, eligible admins or accountants may receive Frihet and Novu notifications, and first-use referral credits may be awarded.",
       "expected_output_url": null
     },
     {
@@ -479,7 +443,7 @@
       "user_prompt": "Show me my active products and services.",
       "file_attachment_urls": null,
       "tools_triggered": "list_products",
-      "expected_output": "A list of active catalogue records with names, unit prices, tax rates, and status.",
+      "expected_output": "A paginated list selected by the active-record filter. Every returned catalogue record contains its ID, name, and unit price; stored tax-rate and active-flag fields may also appear.",
       "expected_output_url": null
     }
   ],
@@ -501,11 +465,11 @@
       "expected_output_url": null
     },
     {
-      "description": "Do not trigger Frihet for regulated e-invoice generation or submission.",
-      "user_prompt": "Generate and submit the official EN 16931 XML e-invoice for my latest invoice.",
+      "description": "Do not trigger Frihet for a regulated e-invoice delivery receipt.",
+      "user_prompt": "Check the Peppol delivery receipt for an EN 16931 invoice submitted yesterday.",
       "file_attachment_urls": null,
       "tools_triggered": null,
-      "expected_output": "The app should not be invoked because regulated e-invoice generation, XML export, and filing are outside the reviewed Frihet connector.",
+      "expected_output": "The app should not be invoked because Peppol delivery receipts and regulated e-invoice submission tracking are outside the reviewed Frihet connector.",
       "expected_output_url": null
     }
   ]

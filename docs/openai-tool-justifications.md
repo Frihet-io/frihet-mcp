@@ -1,9 +1,9 @@
 # OpenAI tool justifications
 
-The reviewed ChatGPT surface contains 33 business tools and 3 read-only
-discovery tools. Every business write requires literal `confirm=true`. Each tool
-has explicit read-only, destructive, and open-world annotations; the runtime
-descriptor also declares idempotence explicitly.
+The reviewed ChatGPT surface contains exactly 33 business tools with complete
+descriptions and no discovery meta-tools. Every business write requires literal
+`confirm=true`. Each tool has explicit read-only, destructive, and open-world
+annotations; the runtime descriptor also declares idempotence explicitly.
 
 ## Read-only business tools (17)
 
@@ -38,7 +38,7 @@ Important per-tool consequences:
   activation/usage analytics to PostHog's EU-hosted analytics service, may notify
   eligible admins/accountants in-app and through Novu, and may award a first-use
   referral credit to another Frihet account.
-- `create_expense` requires an explicit expense date and deductible choice, may create/link a vendor, may notify eligible
+- `create_expense` requires an explicit expense date and deductible choice, may create/link a vendor in a separate backend step that can remain if the later expense write fails, may notify eligible
   admins/accountants, and may award a first-use referral credit. Its date
   determines its accounting/future tax-report period and its classification
   affects internal accounting, but it cannot mark the expense paid, choose a
@@ -71,13 +71,6 @@ effect.
 `delete_client_contact` and `delete_client_note` permanently remove one selected
 record. They are destructive,
 cannot be undone by this connector, and have no user-directed external effect.
-
-## Discovery tools (3)
-
-`list_tool_groups`, `search_tools`, and `describe_tool` read only the in-process
-reviewed catalogue. They perform no network call, mutate no data, and cannot
-reveal tools outside the allowlist. Discovery advertises only `invoicing`,
-`expenses`, `crm`, `intelligence`, and `catalog`.
 
 ## Explicitly excluded capabilities
 

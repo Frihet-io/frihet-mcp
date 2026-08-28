@@ -15,6 +15,7 @@ import { afterEach, describe, test } from "node:test";
 import {
   ANALYTICS_MODULE_PATTERNS,
   APPROVED_BUILT_NETWORK_SINKS,
+  APPROVED_DIST_IMPORTS,
   APPROVED_EMBEDDED_RESOURCES,
   APPROVED_LIFECYCLE_SCRIPTS,
   APPROVED_LOCKFILE_HASHES,
@@ -23,6 +24,7 @@ import {
   APPROVED_PACKAGE_RUNTIME_METADATA,
   APPROVED_PACKAGE_SCRIPT_HASHES,
   APPROVED_PLATFORM_TELEMETRY,
+  APPROVED_REVIEW_FILE_HASHES,
   APPROVED_SOURCE_FILE_HASHES,
   APPROVED_STATIC_BINDINGS,
   APPROVED_WORKER_MAINS,
@@ -145,9 +147,17 @@ describe("anti-defang contract", () => {
       "track",
       "unregister",
     ]);
-    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 6);
-    assert.equal(Object.keys(APPROVED_SOURCE_FILE_HASHES).length, 8);
+    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 11);
+    assert.equal(Object.keys(APPROVED_SOURCE_FILE_HASHES).length, 13);
     assert.equal(Object.values(APPROVED_SOURCE_FILE_HASHES).every((hash) => /^[a-f0-9]{64}$/u.test(hash)), true);
+    for (const sink of Object.keys(APPROVED_NETWORK_SINKS)) {
+      const owner = sink.split("|")[0].split("#")[0];
+      assert.equal(
+        Object.hasOwn(APPROVED_SOURCE_FILE_HASHES, owner),
+        true,
+        `${owner} must be frozen with a complete reviewed source hash`,
+      );
+    }
     assert.deepEqual(Object.keys(APPROVED_LOCKFILE_HASHES).sort(), [
       "package-lock.json",
       "workers/remote-mcp/package-lock.json",
@@ -155,10 +165,26 @@ describe("anti-defang contract", () => {
     assert.deepEqual(APPROVED_PLATFORM_TELEMETRY, {
       "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
     });
+    assert.deepEqual(APPROVED_DIST_IMPORTS, {
+      "workers/remote-mcp/scripts/capture-openai-review.mjs": [
+        "../../../dist/openai-review-contract.js",
+      ],
+    });
+    assert.deepEqual(Object.keys(APPROVED_REVIEW_FILE_HASHES).sort(), [
+      "marketplace/openai/SUBMISSION.md",
+      "marketplace/openai/chatgpt-app-submission.json",
+      "marketplace/openai/chatgpt-app-submission.v1.schema.json",
+      "marketplace/openai/frihet-composer-dark.png",
+      "marketplace/openai/frihet-composer.png",
+      "marketplace/openai/frihet-directory-dark.png",
+      "src/__tests__/fixtures/openai-review-descriptor.snapshot.json",
+      "src/__tests__/fixtures/public-capability-contract.json",
+      "workers/remote-mcp/public-openai/releases.json",
+    ]);
   });
 
   test("pins exact source, built, navigation, and resource inventories", () => {
-    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 15);
+    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 24);
     assert.deepEqual(APPROVED_NETWORK_SINKS, {
       "src/client.ts|request|fetch|url.toString()": 1,
       "src/client.ts|fetchRaw|fetch|url.toString()": 1,
@@ -166,9 +192,18 @@ describe("anti-defang contract", () => {
       "workers/api-proxy/worker.js|fetch|fetch|upstream.toString()": 2,
       "workers/remote-mcp/src/index.ts|fetch|env.ASSETS.fetch|assetReq": 2,
       "workers/remote-mcp/src/index.ts|fetch|fetch|UPSTREAM_HEALTH": 1,
-      "workers/remote-mcp/src/index.ts|fetch|oauthProvider.fetch|request": 1,
+      "workers/remote-mcp/src/index.ts|fetch|selectedProvider.fetch|providerRequest": 1,
       "workers/remote-mcp/src/index.ts|fetch|Response.redirect|\"https://frihet.io/favicon.ico\"": 1,
+      "workers/remote-mcp/src/mcp-session-binding.ts|fetch|unboundHandler.fetch|sdkRequest": 1,
       "workers/remote-mcp/src/oauth-provisioning.ts|provisionOAuthApiKey|fetchImpl|provisioningUrl": 1,
+      "workers/remote-mcp/src/oauth-provisioning.ts|revokeOAuthApiKey|fetchImpl|provisioningUrl": 1,
+      "workers/remote-mcp/src/oauth-state-store.ts|consumeOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/consume`": 1,
+      "workers/remote-mcp/src/oauth-state-store.ts|storeOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/state`": 1,
+      "workers/remote-mcp/src/oauth-token-family.ts|beginOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/begin`": 1,
+      "workers/remote-mcp/src/oauth-token-family.ts|checkOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/check`": 1,
+      "workers/remote-mcp/src/oauth-token-family.ts|commitOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/commit`": 1,
+      "workers/remote-mcp/src/oauth-token-family.ts|initializeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family`": 1,
+      "workers/remote-mcp/src/oauth-token-family.ts|revokeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/revoke`": 1,
       "workers/remote-mcp/src/login-page.ts#inline-script|signIn|fetch|\"/callback\"": 1,
       "workers/remote-mcp/src/login-page.ts#inline-script|signIn|window.location.href|data.redirectTo": 1,
       "workers/remote-mcp/src/login-page.ts#inline-script|signInWithEmail|fetch|\"/callback\"": 1,
@@ -445,6 +480,51 @@ describe("executable analytics shapes fail closed", () => {
     assert.ok(result.findings.some((finding) => finding.code === "UNSUPPORTED_FILE"));
   });
 
+  test("permits only the frozen Worker descriptor bridge to import its built contract", () => {
+    const bridge = `import { captureOpenAIReviewMcpSurfaceWithRuntime } from "../../../dist/openai-review-contract.js";`;
+    assert.equal(
+      analyzeCode("workers/remote-mcp/scripts/capture-openai-review.mjs", bridge).findings
+        .some((finding) => finding.code === "TEST_CODE_IMPORT"),
+      false,
+    );
+    assert.equal(
+      analyzeCode("workers/remote-mcp/scripts/other.mjs", bridge).findings
+        .some((finding) => finding.code === "TEST_CODE_IMPORT"),
+      true,
+    );
+    assert.equal(
+      analyzeCode(
+        "workers/remote-mcp/scripts/capture-openai-review.mjs",
+        `import x from "../../../dist/other.js";`,
+      ).findings.some((finding) => finding.code === "TEST_CODE_IMPORT"),
+      true,
+    );
+  });
+
+  test("TOML comments are inert while real syntax and telemetry drift fail closed", () => {
+    assert.deepEqual(
+      inspectToml("fixture.toml", "# it's only a comment with [ and \\\"quotes\\\"\nname = 'safe'\n"),
+      [],
+    );
+    assert.ok(
+      inspectToml("fixture.toml", 'name = "unterminated\n')
+        .some((finding) => finding.code === "PARSE_ERROR"),
+    );
+    assert.equal(
+      inspectToml(
+        "workers/remote-mcp/wrangler.toml",
+        'main = "src/index.ts"\n[observability]\nenabled = true\n',
+      ).some((finding) => finding.code === "PLATFORM_TELEMETRY_DRIFT"),
+      false,
+    );
+    assert.ok(
+      inspectToml(
+        "workers/remote-mcp/wrangler.toml",
+        'main = "src/index.ts"\n[observability]\nenabled = false\n',
+      ).some((finding) => finding.code === "PLATFORM_TELEMETRY_DRIFT"),
+    );
+  });
+
   test("scans final built artifacts against a separate exact inventory", () => {
     const root = temporaryRoot();
     mkdirSync(join(root, "dist"));
@@ -463,7 +543,7 @@ describe("executable analytics shapes fail closed", () => {
   test("the current source repository satisfies the complete gate", () => {
     const result = scanRepository(REPOSITORY_ROOT);
     assert.deepEqual(result.findings, []);
-    assert.equal(result.sinks.length, 15);
+    assert.equal(result.sinks.length, 24);
     assert.equal(result.resources.length, 2);
   });
 });

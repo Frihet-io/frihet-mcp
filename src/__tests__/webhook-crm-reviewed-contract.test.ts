@@ -418,7 +418,7 @@ describe("real MCP SDK — reviewed webhook contract", () => {
 });
 
 describe("OpenAI reviewed profile excludes webhook configuration — real MCP SDK", () => {
-  test("tools/list, search_tools, and describe_tool cannot reveal webhook tools", async () => {
+  test("tools/list contains neither webhook operations nor discovery meta-tools", async () => {
     const harness = await makeHarness(true);
     try {
       const { tools } = await harness.client.listTools();
@@ -432,22 +432,10 @@ describe("OpenAI reviewed profile excludes webhook configuration — real MCP SD
       const names = new Set(tools.map((tool) => tool.name));
       for (const name of forbidden) {
         assert.equal(names.has(name), false, `${name} must not appear in reviewed tools/list`);
-        const described = await harness.client.callTool({
-          name: "describe_tool",
-          arguments: { name },
-        });
-        assert.equal(described.isError, true, `${name} must not resolve through discovery`);
       }
-
-      const searched = await harness.client.callTool({
-        name: "search_tools",
-        arguments: { query: "webhook", limit: 100 },
-      });
-      const payload = searched.structuredContent as { tools?: Array<{ name: string }> };
-      assert.ok(
-        (payload.tools ?? []).every((tool) => !forbidden.includes(tool.name)),
-        "search_tools must not leak excluded webhook names",
-      );
+      for (const name of ["list_tool_groups", "search_tools", "describe_tool"]) {
+        assert.equal(names.has(name), false, `${name} must not appear on OpenAI`);
+      }
       assert.equal(calls("POST", "/webhooks").length, 0);
       assert.equal(calls("PATCH", "/webhooks/wh_139").length, 0);
     } finally {

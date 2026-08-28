@@ -42,8 +42,10 @@ function makeApiClient(calls: CapturedCall[]): IFrihetClient {
     calls.push({ method, input: structuredClone(input) });
     return {
       id: `${method}_139`,
+      clientId: "cli_139",
+      issueDate: "2026-08-28",
       ...(method.endsWith("Invoice")
-        ? { invoiceNumber: "INV-139" }
+        ? { invoiceNumber: "INV-139", dueDate: "2026-09-27" }
         : { quoteNumber: "QUO-139" }),
       status: "draft",
       clientName: "Contract Test Client",
@@ -118,21 +120,13 @@ describe("#139 reviewed clientTaxId policy — real MCP SDK", () => {
     const harness = await makeHarness(true);
     try {
       const { tools } = await harness.client.listTools();
-      assert.equal(tools.length, 36, "reviewed surface remains 33 business + 3 discovery");
+      assert.equal(tools.length, 33, "reviewed surface remains exactly 33 business tools");
       assert.equal(tools.some((tool) => tool.name === "update_invoice"), false);
       assert.equal(tools.some((tool) => tool.name === "update_quote"), false);
       for (const name of REVIEWED_TAX_ID_TOOLS) {
         const tool = tools.find((candidate) => candidate.name === name);
         assert.ok(tool, `${name} remains reviewed`);
         assert.equal("clientTaxId" in schemaProperties(tool), false, `${name} must not declare clientTaxId`);
-
-        const described = await harness.client.callTool({
-          name: "describe_tool",
-          arguments: { name },
-        });
-        assert.equal(described.isError, undefined);
-        const inputFields = (described.structuredContent as { inputFields?: string[] }).inputFields ?? [];
-        assert.equal(inputFields.includes("clientTaxId"), false, `${name} discovery detail must omit clientTaxId`);
       }
     } finally {
       await dispose(harness);

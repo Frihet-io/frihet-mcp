@@ -150,11 +150,13 @@ test("OpenAI agents.json uses the canonical runtime server version", () => {
   assert.doesNotMatch(indexSrc, /const AGENTS_JSON_OPENAI = JSON\.stringify\(\{[\s\S]*?version: "0\.1\.0",/);
 });
 
-test("OpenAI discovery copy distinguishes business and discovery tool counts", () => {
+test("OpenAI discovery copy fixes the exact 33-tool surface without meta-tools", () => {
   assert.match(
     indexSrc,
-    /reviewed business tools plus \$\{GROUPED_META_TOOL_COUNT\} read-only discovery tools/,
+    /exactly \$\{OPENAI_ALLOWED_TOOL_COUNT\} reviewed business tools with complete descriptions/,
   );
+  const openAIBlock = indexSrc.slice(indexSrc.indexOf("const OPENAI_HOST"));
+  assert.doesNotMatch(openAIBlock, /plus \$\{GROUPED_META_TOOL_COUNT\} read-only discovery tools/);
 });
 
 test("both remote-mcp ai.txt License lines source the canonical terms constant", () => {
@@ -200,15 +202,12 @@ test("OpenAI discovery never advertises the excluded legacy monthly summary", ()
 });
 
 test("OpenAI release metadata matches the frozen reviewed surface", () => {
-  const discoveryNames = new Set(["list_tool_groups", "search_tools", "describe_tool"]);
   const expectedTotal = openAIReviewSnapshot.tools.length;
-  const expectedBusiness = openAIReviewSnapshot.tools.filter(
-    (tool) => !discoveryNames.has(tool.name),
-  ).length;
+  const expectedBusiness = openAIReviewSnapshot.tools.length;
 
   assert.equal(openAIReleases.mcpToolCount, expectedTotal);
   assert.equal(openAIReleases.reviewedBusinessToolCount, expectedBusiness);
-  assert.equal(openAIReleases.discoveryMetaToolCount, discoveryNames.size);
+  assert.equal(openAIReleases.discoveryMetaToolCount, 0);
   for (const release of openAIReleases.releases) {
     assert.equal(release.mcpToolCount, expectedTotal);
   }
@@ -295,7 +294,7 @@ test("OpenAI mode serves its scoped MCP descriptor at the root before OAuth fall
   assert.doesNotMatch(rootRoute, /WELL_KNOWN_MCP\b/);
 
   const routeIndex = indexSrc.indexOf('if (pathname === "/" && openai)');
-  const fallbackIndex = indexSrc.indexOf("await (openai ? openAIOAuthProvider : fullOAuthProvider).fetch(");
+  const fallbackIndex = indexSrc.indexOf("await selectedProvider.fetch(providerRequest, env, ctx)");
   assert.ok(routeIndex >= 0 && fallbackIndex > routeIndex, "scoped root route must run before OAuthProvider fallback");
 });
 
@@ -321,8 +320,26 @@ test("OpenAI discovery points to dedicated scoped support and privacy pages", ()
   assert.match(indexSrc, /if \(openai && \(pathname === "\/support" \|\| pathname === "\/privacy"\)\)/);
   assert.match(indexSrc, /VICTOR BERTHELIUS PATO/);
   assert.match(indexSrc, /advances the workspace numbering counter/);
+  assert.match(indexSrc, /vendor is created in a separate backend step and may remain even if the later expense write fails/);
   assert.doesNotMatch(
     indexSrc.match(/const OPENAI_SUPPORT_HTML = `[\s\S]*?`;/)?.[0] ?? "",
     /157 tools|raw invoice PDFs|webhook administration is available/i,
   );
+});
+
+test("OpenAI public surfaces bind the Frihet trade name to the exact verified owner", () => {
+  const openAIBlock = indexSrc.slice(
+    indexSrc.indexOf('const OPENAI_HOST = "https://openai-mcp.frihet.io"'),
+    indexSrc.indexOf("// Frihet favicon"),
+  );
+  assert.match(openAIBlock, /const OPENAI_VERIFIED_OWNER_NAME = "VICTOR BERTHELIUS PATO"/);
+  assert.match(openAIBlock, /trade name owned and operated in Spain by <strong>\$\{OPENAI_VERIFIED_OWNER_NAME\}<\/strong>/);
+  assert.match(openAIBlock, /The controller is \$\{OPENAI_VERIFIED_OWNER_NAME\}, who owns and operates the trade name Frihet in Spain/);
+  assert.match(openAIBlock, /publisher: \{ name: "Frihet", legalName: OPENAI_VERIFIED_OWNER_NAME, country: "ES" \}/);
+  assert.match(openAIBlock, /legal_name: OPENAI_VERIFIED_OWNER_NAME/);
+  assert.match(openAIBlock, /"legalName": OPENAI_VERIFIED_OWNER_NAME/);
+  assert.match(openAIBlock, /mailto:ayuda@frihet\.io/);
+  assert.match(openAIBlock, /https:\/\/www\.frihet\.io/);
+  assert.doesNotMatch(openAIBlock, /support@frihet\.io|https:\/\/frihet\.io(?:["'`/])/);
+  assert.doesNotMatch(openAIBlock, /Viktor Berthelius Pato/);
 });

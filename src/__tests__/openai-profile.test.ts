@@ -17,6 +17,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   applyOpenAIProfile,
   applyOpenAIReviewProfiles,
+  OPENAI_REVIEW_BUSINESS_CONTEXT_TOP_CLIENTS_MAX,
+  OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX,
+  OPENAI_REVIEW_FREE_TEXT_WARNING,
+  OPENAI_REVIEW_FREE_TEXT_WARNING_PATHS,
   OPENAI_REVIEW_LIST_LIMIT_MAX,
   OPENAI_REVIEW_LIST_OUTPUT_FIELDS,
   OPENAI_REVIEW_OFFSET_MAX,
@@ -280,9 +284,11 @@ describe("OpenAI profile", () => {
       ["create_invoice", { clientName: "Acme", items: [{ description: "Service", quantity: 1, unitPrice: 10 }], issueDate: "2026-02-29", confirm: true }],
       ["create_invoice", { clientName: "Acme", items: [{ description: "Service", quantity: 1, unitPrice: 10 }], dueDate: "2026-04-31", confirm: true }],
       ["create_invoice", { clientName: "Acme", items: [{ description: "Service", quantity: 1, unitPrice: 10 }], notes: "x".repeat(10_001), confirm: true }],
+      ["create_invoice", { clientName: "Acme", items: Array.from({ length: OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX + 1 }, () => ({ description: "Service", quantity: 1, unitPrice: 10 })), confirm: true }],
       ["create_quote", { clientName: "Acme", items: [{ description: "Service", quantity: 1, unitPrice: -1 }], confirm: true }],
       ["create_quote", { clientName: "Acme", items: [{ description: "Service", quantity: 1, unitPrice: 10 }], validUntil: "2026-02-29", confirm: true }],
       ["create_quote", { clientName: "Acme", items: [{ description: "Service", quantity: 1, unitPrice: 10 }], notes: "x".repeat(10_001), confirm: true }],
+      ["create_quote", { clientName: "Acme", items: Array.from({ length: OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX + 1 }, () => ({ description: "Service", quantity: 1, unitPrice: 10 })), confirm: true }],
       ["create_expense", { description: "Supplies", amount: 10, date: "2026-08-28", taxDeductible: true, category: "x".repeat(101), confirm: true }],
       ["update_expense", { id: "exp_1", description: "x".repeat(1_001), confirm: true }],
       ["update_expense", { id: "exp_1", category: "x".repeat(101), confirm: true }],
@@ -337,6 +343,33 @@ describe("OpenAI profile", () => {
     assert.doesNotMatch(createInvoiceDesc, /openWorldHint: false/);
   });
 
+  test("every reviewed free-text path carries the model-facing sensitive-data warning", () => {
+    const server = makeOpenAIServer();
+
+    for (const [name, paths] of Object.entries(OPENAI_REVIEW_FREE_TEXT_WARNING_PATHS)) {
+      for (const path of paths) {
+        let shape = inputShape(server.tools.get(name)!);
+        let fieldSchema: z.ZodTypeAny | undefined;
+        for (const rawSegment of path.split(".")) {
+          const isArray = rawSegment.endsWith("[]");
+          const segment = isArray ? rawSegment.slice(0, -2) : rawSegment;
+          fieldSchema = shape[segment] as z.ZodTypeAny | undefined;
+          assert.ok(fieldSchema, `${name}.${path} must exist`);
+          if (isArray) {
+            assert.ok(fieldSchema instanceof z.ZodArray, `${name}.${path} must traverse an array`);
+            assert.ok(fieldSchema.element instanceof z.ZodObject, `${name}.${path} array items must be objects`);
+            shape = fieldSchema.element.shape as Record<string, unknown>;
+          }
+        }
+        assert.match(
+          fieldSchema?.description ?? "",
+          new RegExp(OPENAI_REVIEW_FREE_TEXT_WARNING.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+          `${name}.${path} lost its warning`,
+        );
+      }
+    }
+  });
+
   test("reviewed intelligence tools expose concrete output properties", () => {
     const server = makeOpenAIServer();
     const expectedProperties: Record<string, string[]> = {
@@ -367,63 +400,163 @@ describe("OpenAI profile", () => {
     assert.match(deleteQuoteConfirm.description ?? "", /retain and cancel/i);
     assert.match(deleteQuoteConfirm.description ?? "", /webhooks/i);
 
+    const createExpenseConfirm = inputShape(
+      server.tools.get("create_expense")!,
+    ).confirm as z.ZodTypeAny;
+    assert.match(createExpenseConfirm.description ?? "", /separate step/i);
+    assert.match(createExpenseConfirm.description ?? "", /may persist/i);
+    assert.match(createExpenseConfirm.description ?? "", /expense write fails/i);
+
     for (const [name, numberField] of [
       ["create_invoice", "invoiceNumber"],
       ["create_quote", "quoteNumber"],
     ] as const) {
       const schema = server.tools.get(name)!.config.outputSchema as z.ZodTypeAny;
-      assert.equal(schema.safeParse({
+      const guaranteed = name === "create_invoice"
+        ? {
+            clientId: "client_1",
+            clientName: "Acme",
+            items: [{ description: "Service", quantity: 1, unitPrice: 10 }],
+            issueDate: "2026-08-28",
+            dueDate: "2026-09-27",
+          }
+        : {
+            clientId: "client_1",
+            clientName: "Acme",
+            items: [{ description: "Service", quantity: 1, unitPrice: 10 }],
+            issueDate: "2026-08-28",
+          };
+      const valid = {
         id: `${name}_1`,
         [numberField]: "2026-0001",
         status: "draft",
         externalEffects: [],
-      }).success, true);
+        ...guaranteed,
+      };
+      assert.equal(schema.safeParse(valid).success, true);
       assert.equal(schema.safeParse({
-        id: `${name}_1`,
-        status: "draft",
-        externalEffects: [],
+        ...valid,
+        [numberField]: undefined,
       }).success, false, `${name} accepted a missing reserved document number`);
       assert.equal(schema.safeParse({
-        id: `${name}_1`,
-        [numberField]: "2026-0001",
+        ...valid,
         status: "sent",
-        externalEffects: [],
       }).success, false, `${name} accepted a non-draft reviewed result`);
+      for (const field of Object.keys(guaranteed)) {
+        assert.equal(schema.safeParse({ ...valid, [field]: undefined }).success, false,
+          `${name} accepted missing guaranteed field ${field}`);
+      }
+      assert.equal(
+        "total" in (schema as z.ZodObject).shape,
+        false,
+        `${name} declared the impossible create total field`,
+      );
     }
+
+    const createClient = server.tools.get("create_client")!.config.outputSchema as z.ZodObject;
+    assert.equal("stage" in createClient.shape, false);
+    const createProduct = server.tools.get("create_product")!.config.outputSchema as z.ZodObject;
+    assert.equal("isActive" in createProduct.shape, false);
+    const createExpense = server.tools.get("create_expense")!.config.outputSchema as z.ZodObject;
+    const expenseResult = {
+      id: "expense_1",
+      description: "Supplies",
+      amount: 10,
+      date: "2026-08-28",
+      taxDeductible: true,
+      externalEffects: [],
+    };
+    assert.equal(createExpense.safeParse(expenseResult).success, true);
+    assert.equal(createExpense.safeParse({ ...expenseResult, date: undefined }).success, false);
+    assert.equal(createExpense.safeParse({ ...expenseResult, taxDeductible: undefined }).success, false);
+    assert.equal("paidDate" in createExpense.shape, false);
 
     const deleteQuote = server.tools.get("delete_quote")!.config.outputSchema as z.ZodTypeAny;
     assert.equal(deleteQuote.safeParse({
       success: true,
       id: "quote_draft",
-      outcome: "deleted",
-      externalEffects: [],
+      result: { outcome: "deleted" },
     }).success, true);
     assert.equal(deleteQuote.safeParse({
       success: true,
       id: "quote_sent",
-      outcome: "cancelled",
-      status: "cancelled",
-      previousStatus: null,
-      externalEffects: [],
+      result: {
+        outcome: "cancelled",
+        status: "cancelled",
+        previousStatus: null,
+        externalEffects: [],
+      },
     }).success, true);
     assert.equal(deleteQuote.safeParse({
       success: true,
       id: "quote_unknown",
-      externalEffects: [],
+      result: {},
     }).success, false, "delete_quote accepted a missing outcome");
     assert.equal(deleteQuote.safeParse({
       success: true,
       id: "quote_sent",
-      outcome: "cancelled",
-      status: "sent",
-      externalEffects: [],
+      result: { outcome: "cancelled", status: "sent", externalEffects: [] },
     }).success, false, "delete_quote accepted an impossible post-cancel status");
+    assert.equal(deleteQuote.safeParse({
+      success: true,
+      id: "quote_draft",
+      result: { outcome: "deleted", status: "cancelled" },
+    }).success, false, "delete_quote accepted cancellation fields for a deleted row");
+    assert.equal(deleteQuote.safeParse({
+      success: true,
+      id: "quote_draft",
+      result: { outcome: "deleted", externalEffects: [] },
+    }).success, false, "delete_quote advertised a webhook effect for hard deletion");
+    assert.equal(deleteQuote.safeParse({
+      success: true,
+      id: "quote_sent",
+      result: { outcome: "cancelled", externalEffects: [] },
+    }).success, false, "delete_quote accepted cancellation without status=cancelled");
 
     for (const name of ["get_invoice", "create_invoice", "get_quote", "create_quote"]) {
       const output = server.tools.get(name)!.config.outputSchema as z.ZodObject;
-      const items = output.shape.items as z.ZodOptional<z.ZodArray<z.ZodObject>>;
-      assert.equal("id" in items.unwrap().element.shape, false, `${name} exposed an unusable line-item id`);
+      const items = output.shape.items as z.ZodOptional<z.ZodArray<z.ZodObject>> | z.ZodArray<z.ZodObject>;
+      const itemArray = items instanceof z.ZodOptional ? items.unwrap() : items;
+      assert.equal("id" in itemArray.element.shape, false, `${name} exposed an unusable line-item id`);
+      const row = { description: "Service", quantity: 1, unitPrice: 10 };
+      assert.equal(
+        itemArray.safeParse(Array.from({ length: OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX }, () => row)).success,
+        true,
+      );
+      assert.equal(
+        itemArray.safeParse(Array.from({ length: OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX + 1 }, () => row)).success,
+        false,
+        `${name} accepted an oversized reviewed line-item output`,
+      );
     }
+
+    for (const name of ["create_invoice", "create_quote"]) {
+      const inputItems = inputShape(server.tools.get(name)!).items as z.ZodArray<z.ZodObject>;
+      const row = { description: "Service", quantity: 1, unitPrice: 10 };
+      assert.equal(
+        inputItems.safeParse(Array.from({ length: OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX }, () => row)).success,
+        true,
+      );
+      assert.equal(
+        inputItems.safeParse(Array.from({ length: OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX + 1 }, () => row)).success,
+        false,
+        `${name} accepted an oversized reviewed line-item input`,
+      );
+    }
+
+    const topClients = (
+      server.tools.get("get_business_context")!.config.outputSchema as z.ZodObject
+    ).shape.topClients as z.ZodArray<z.ZodObject>;
+    const topClient = { name: "Acme", totalRevenue: 100, invoiceCount: 1 };
+    assert.equal(
+      topClients.safeParse(Array.from({ length: OPENAI_REVIEW_BUSINESS_CONTEXT_TOP_CLIENTS_MAX }, () => topClient)).success,
+      true,
+    );
+    assert.equal(
+      topClients.safeParse(Array.from({ length: OPENAI_REVIEW_BUSINESS_CONTEXT_TOP_CLIENTS_MAX + 1 }, () => topClient)).success,
+      false,
+      "get_business_context accepted more than five top clients",
+    );
   });
 
   test("reviewed lists expose only summary fields and cap each page", () => {
@@ -588,6 +721,7 @@ describe("OpenAI profile", () => {
       assert.equal(serialized.includes("_demo"), false);
       assert.equal(serialized.includes("Simulated — not persisted"), false);
       assert.equal(serialized.includes("createdBy"), false);
+      assert.equal(serialized.includes("activity_1"), false);
     }
   });
 
@@ -701,8 +835,11 @@ describe("OpenAI profile", () => {
             id: "inv_draft",
             documentNumber: "INV-2026-0001",
             status: "draft",
+            clientId: "client_1",
             clientName: "Acme",
             items: [],
+            issueDate: "2026-08-28",
+            dueDate: "2026-09-27",
           };
         }
         return { data: [], total: 0, limit: 10, offset: 0 };
@@ -768,7 +905,13 @@ describe("OpenAI profile", () => {
         if (prop === "createExpense") {
           writes += 1;
           captured = input;
-          return { id: "exp_explicit", description: "Supplies", amount: 25 };
+          return {
+            id: "exp_explicit",
+            description: "Supplies",
+            amount: 25,
+            date: input.date,
+            taxDeductible: input.taxDeductible,
+          };
         }
         return { data: [], total: 0, limit: 10, offset: 0 };
       },
@@ -850,8 +993,10 @@ describe("OpenAI profile", () => {
             id: "quo_effects",
             documentNumber: "QUO-2026-0001",
             status: "draft",
+            clientId: "client_1",
             clientName: "Acme",
             items: [],
+            issueDate: "2026-08-28",
           };
         }
         if (prop === "createInvoice") {
@@ -859,12 +1004,22 @@ describe("OpenAI profile", () => {
             id: "inv_effects",
             documentNumber: "INV-2026-0002",
             status: "draft",
+            clientId: "client_1",
             clientName: "Acme",
             items: [],
+            issueDate: "2026-08-28",
+            dueDate: "2026-09-27",
           };
         }
         if (prop === "createExpense") {
-          return { id: "exp_effects", description: "Supplies", amount: 25, vendor: "Vendor" };
+          return {
+            id: "exp_effects",
+            description: "Supplies",
+            amount: 25,
+            date: "2026-08-28",
+            taxDeductible: false,
+            vendor: "Vendor",
+          };
         }
         if (prop === "logClientActivity") {
           return { id: "act_effects", type: "call", title: "Follow-up", timestamp: "2026-08-28T00:00:00Z" };
@@ -921,6 +1076,54 @@ describe("OpenAI profile", () => {
     assert.match(activityText, /full resulting client\.updated event/);
     assert.match(activityText, /task entries do not update the parent client/);
 
+  });
+
+  test("delete_quote wire result separates webhook-free deletion from cancellation effects", async () => {
+    const client = new Proxy({}, {
+      get: (_target, prop) => async (id: string) => {
+        if (prop === "deleteQuote") {
+          return id === "quote_sent"
+            ? { status: "cancelled", previousStatus: "sent", cancelledVia: "soft_cancel" }
+            : undefined;
+        }
+        return { data: [], total: 0, limit: 10, offset: 0 };
+      },
+    }) as IFrihetClient;
+    const server = new StubMcpServer();
+    applyOpenAIProfile(server);
+    registerAllTools(
+      server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
+      client,
+    );
+
+    const deleted = await server.tools.get("delete_quote")!.handler({
+      id: "quote_draft",
+      confirm: true,
+    });
+    assert.notEqual(deleted.isError, true);
+    assert.deepEqual(deleted.structuredContent, {
+      success: true,
+      id: "quote_draft",
+      result: { outcome: "deleted" },
+    });
+
+    const cancelled = await server.tools.get("delete_quote")!.handler({
+      id: "quote_sent",
+      confirm: true,
+    });
+    assert.notEqual(cancelled.isError, true);
+    assert.deepEqual(cancelled.structuredContent, {
+      success: true,
+      id: "quote_sent",
+      result: {
+        outcome: "cancelled",
+        status: "cancelled",
+        previousStatus: "sent",
+        externalEffects: [
+          "One or more active webhook endpoints previously configured by the workspace owner may receive the full resulting quote.updated event.",
+        ],
+      },
+    });
   });
 
   test("post-write output mismatch is explicit and marked non-retryable", async () => {
@@ -990,6 +1193,37 @@ describe("OpenAI profile", () => {
     assert.equal(result._meta?.["io.frihet/transportOutcomeUnknown"], true);
     assert.equal(result._meta?.["io.frihet/retryable"], false);
     assert.equal(result._meta?.["io.frihet/operationMayHaveCompleted"], true);
+  });
+
+  test("create_expense ambiguity discloses that a separately created vendor may remain", async () => {
+    const client = new Proxy({}, {
+      get: (_target, prop) => async () => {
+        if (prop === "createExpense") {
+          throw new FrihetApiError(500, "internal_error", "Internal server error");
+        }
+        return { data: [], total: 0, limit: 10, offset: 0 };
+      },
+    }) as IFrihetClient;
+    const server = new StubMcpServer();
+    applyOpenAIProfile(server);
+    registerAllTools(
+      server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
+      client,
+    );
+
+    const result = await server.tools.get("create_expense")!.handler({
+      description: "Supplies",
+      amount: 25,
+      date: "2026-08-28",
+      vendor: "Supplier",
+      taxDeductible: false,
+      confirm: true,
+    });
+
+    assert.equal(result.isError, true);
+    assert.match(result.content[0]!.text, /vendor created while handling this request may remain/i);
+    assert.match(result.content[0]!.text, /expense itself was not created/i);
+    assert.match(result.content[0]!.text, /Do not retry automatically/i);
   });
 
   test("ambiguous write server, body, and idempotency failures are never auto-retried", async () => {

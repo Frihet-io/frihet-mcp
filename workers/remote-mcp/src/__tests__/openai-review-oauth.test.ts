@@ -194,14 +194,17 @@ test("reviewed provider cannot resolve direct API keys or cross host/scope/auth 
   )?.[0];
   assert.ok(options);
   assert.doesNotMatch(options, /resolveExternalToken/u);
-  assert.match(options, /accessProfile !== "openai"/u);
-  assert.match(options, /oauthResource !== OPENAI_REVIEW_ORIGIN/u);
-  assert.match(options, /oauthScope !== FRIHET_CONNECTOR_SCOPE/u);
-  assert.match(options, /authMethod !== "oauth"/u);
-  assert.match(
-    workerSource,
-    /\(openai \? openAIOAuthProvider : fullOAuthProvider\)\.fetch/u,
-  );
+  assert.match(options, /validateReviewedTokenExchange\(options\)/u);
+  assert.match(workerSource, /reviewedProps\?\.accessProfile !== "openai"/u);
+  assert.match(workerSource, /reviewedProps\.oauthResource !== OPENAI_REVIEW_ORIGIN/u);
+  assert.match(workerSource, /reviewedProps\.oauthScope !== FRIHET_CONNECTOR_SCOPE/u);
+  assert.match(workerSource, /reviewedProps\.authMethod !== "oauth"/u);
+  assert.match(workerSource, /reviewedProps\.apiKeyExpiresAt/u);
+  assert.match(workerSource, /refreshTokenTTL: credentialTtlSeconds/u);
+  assert.match(workerSource, /function createGuardedOpenAIProvider/u);
+  assert.match(workerSource, /await exchange\.reserve\(options, apiKeyBinding\)/u);
+  assert.match(workerSource, /selectedProvider\.fetch\(providerRequest, env, ctx\)/u);
+  assert.match(workerSource, /tokenFamilyExchange\.settle\(response\)/u);
 });
 
 test("reviewed authorize/callback source enforces exact state, PKCE, client lookup and atomic consumption", () => {

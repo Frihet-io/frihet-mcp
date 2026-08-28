@@ -9,11 +9,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 import type { IFrihetClient } from "./client-interface.js";
 import {
-  applyOpenAIReviewProfiles,
+  OPENAI_REVIEW_BUSINESS_CONTEXT_TOP_CLIENTS_MAX,
+  OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX,
+  OPENAI_REVIEW_FREE_TEXT_WARNING,
+  OPENAI_REVIEW_FREE_TEXT_WARNING_PATHS,
   OPENAI_REVIEW_LIST_OUTPUT_FIELDS,
   OPENAI_REVIEW_OFFSET_MAX,
   OPENAI_REVIEW_PAGINATION_LIMITS,
@@ -24,18 +25,14 @@ import {
 } from "./openai-profile.js";
 import { SENSITIVE_FIELD_NAMES } from "./redaction.js";
 import { FRIHET_CONNECTOR_SCOPE } from "./openai-review-oauth.js";
-import { registerAllPrompts } from "./prompts/register-all.js";
-import { registerAllResources } from "./resources/register-all.js";
-import { registerAllTools } from "./tools/register-all.js";
+import {
+  registerMcpSurface,
+  remoteMcpSurfaceComposition,
+} from "./server-composition.js";
 
-export const OPENAI_REVIEW_CONTRACT_VERSION = 4;
+export const OPENAI_REVIEW_CONTRACT_VERSION = 6;
 export const OPENAI_REVIEW_BUSINESS_TOOL_COUNT = 33;
-export const OPENAI_REVIEW_DISCOVERY_TOOLS = [
-  "describe_tool",
-  "list_tool_groups",
-  "search_tools",
-] as const;
-export const OPENAI_REVIEW_TOTAL_TOOL_COUNT = 36;
+export const OPENAI_REVIEW_TOTAL_TOOL_COUNT = OPENAI_REVIEW_BUSINESS_TOOL_COUNT;
 
 const FORBIDDEN_REVIEW_TOOLS = [
   "get_invoice_pdf",
@@ -59,8 +56,6 @@ const FORBIDDEN_REVIEW_TOOLS = [
   "update_webhook",
   "delete_webhook",
 ] as const;
-
-const HIDDEN_REVIEW_GROUPS = ["fiscal", "banking", "hr", "stay", "pos"] as const;
 
 export type JsonValue =
   | null
@@ -97,23 +92,10 @@ function makeRegistrationClient(): IFrihetClient {
   ) as IFrihetClient;
 }
 
-function loadReviewedWorkerSdk(): {
+export interface OpenAIReviewSdkRuntime {
   Client: typeof Client;
   InMemoryTransport: typeof InMemoryTransport;
   McpServer: typeof McpServer;
-} {
-  const workerRequire = createRequire(
-    fileURLToPath(
-      new URL("../workers/remote-mcp/package.json", import.meta.url),
-    ),
-  );
-  return {
-    Client: workerRequire("@modelcontextprotocol/sdk/client/index.js").Client as typeof Client,
-    InMemoryTransport: workerRequire("@modelcontextprotocol/sdk/inMemory.js")
-      .InMemoryTransport as typeof InMemoryTransport,
-    McpServer: workerRequire("@modelcontextprotocol/sdk/server/mcp.js")
-      .McpServer as typeof McpServer,
-  };
 }
 
 function isMethodNotFound(error: unknown): boolean {
@@ -157,23 +139,21 @@ async function listResourcesOrEmpty(client: Client): Promise<JsonValue[]> {
   return resources;
 }
 
-/**
- * Capture the exact OpenAI grouped surface over the deployed Worker's own SDK.
- * The Worker intentionally has a separate dependency tree, so using the root
- * SDK here would miss module-identity bugs that only exist in the real bundle.
- */
-export async function captureOpenAIReviewMcpSurface(): Promise<OpenAIReviewMcpSurface> {
-  const workerSdk = loadReviewedWorkerSdk();
-  const server = new workerSdk.McpServer({
+/** Capture the exact OpenAI full-description surface with a caller-selected SDK tree. */
+export async function captureOpenAIReviewMcpSurfaceWithRuntime(
+  sdkRuntime: OpenAIReviewSdkRuntime,
+): Promise<OpenAIReviewMcpSurface> {
+  const server = new sdkRuntime.McpServer({
     name: "frihet-openai-review-contract",
     version: "1.0.0",
   });
-  applyOpenAIReviewProfiles(server);
-  registerAllTools(server, makeRegistrationClient());
-  registerAllResources(server);
-  registerAllPrompts(server);
+  registerMcpSurface(
+    server as unknown as McpServer,
+    makeRegistrationClient(),
+    remoteMcpSurfaceComposition(true, false),
+  );
 
-  const [clientTransport, serverTransport] = workerSdk.InMemoryTransport.createLinkedPair();
+  const [clientTransport, serverTransport] = sdkRuntime.InMemoryTransport.createLinkedPair();
   // The MCP SDK client parses tools/list through the generic MCP ToolSchema,
   // which currently strips OpenAI's top-level `securitySchemes` extension.
   // Capture the server's actual wire result so this contract proves what the
@@ -195,7 +175,7 @@ export async function captureOpenAIReviewMcpSurface(): Promise<OpenAIReviewMcpSu
     }
     await originalServerSend(message, options);
   };
-  const client = new workerSdk.Client(
+  const client = new sdkRuntime.Client(
     { name: "frihet-openai-review-contract-client", version: "1.0.0" },
     { capabilities: {} },
   );
@@ -221,6 +201,15 @@ export async function captureOpenAIReviewMcpSurface(): Promise<OpenAIReviewMcpSu
   } finally {
     await Promise.allSettled([client.close(), server.close()]);
   }
+}
+
+/** Capture the package-local surface; deploy gates inject the Worker runtime. */
+export async function captureOpenAIReviewMcpSurface(): Promise<OpenAIReviewMcpSurface> {
+  return captureOpenAIReviewMcpSurfaceWithRuntime({
+    Client,
+    InMemoryTransport,
+    McpServer,
+  });
 }
 
 export function buildOpenAIReviewContract(
@@ -351,6 +340,14 @@ function preview(value: JsonValue | undefined): string {
   return serialized.length > 180 ? `${serialized.slice(0, 177)}...` : serialized;
 }
 
+function jsonObject(
+  value: JsonValue | undefined,
+): { [key: string]: JsonValue } | undefined {
+  return value !== null && value !== undefined && !Array.isArray(value) && typeof value === "object"
+    ? value
+    : undefined;
+}
+
 function assertClosedReviewedOutputSchema(value: JsonValue | undefined, path: string): void {
   if (value === undefined || value === null || typeof value !== "object") return;
   if (Array.isArray(value)) {
@@ -416,6 +413,34 @@ function assertReviewedOAuthSecuritySchemes(
   }
 }
 
+function reviewedInputFieldSchema(
+  tool: OpenAIReviewTool | undefined,
+  path: string,
+): Record<string, JsonValue> | undefined {
+  let current: JsonValue | undefined = tool?.inputSchema;
+  for (const rawSegment of path.split(".")) {
+    const arraySegment = rawSegment.endsWith("[]");
+    const segment = arraySegment ? rawSegment.slice(0, -2) : rawSegment;
+    if (current === null || Array.isArray(current) || typeof current !== "object") {
+      return undefined;
+    }
+    const properties = current.properties;
+    if (properties === null || Array.isArray(properties) || typeof properties !== "object") {
+      return undefined;
+    }
+    current = properties[segment];
+    if (arraySegment) {
+      if (current === null || Array.isArray(current) || typeof current !== "object") {
+        return undefined;
+      }
+      current = current.items;
+    }
+  }
+  return current !== null && !Array.isArray(current) && typeof current === "object"
+    ? current
+    : undefined;
+}
+
 /**
  * Fail closed on any semantic drift from the reviewed descriptor snapshot.
  */
@@ -436,18 +461,11 @@ export function assertOpenAIReviewContract(
   if (new Set(names).size !== names.length) {
     throw new Error("OpenAI review surface contains duplicate tool names");
   }
-  const discovery = new Set<string>(OPENAI_REVIEW_DISCOVERY_TOOLS);
-  const businessNames = names.filter((name) => !discovery.has(name));
+  const businessNames = names;
   if (businessNames.length !== OPENAI_REVIEW_BUSINESS_TOOL_COUNT) {
     throw new Error(
       `OpenAI review surface must expose exactly ${OPENAI_REVIEW_BUSINESS_TOOL_COUNT} business tools; got ${businessNames.length}`,
     );
-  }
-  const missingDiscovery = OPENAI_REVIEW_DISCOVERY_TOOLS.filter(
-    (name) => !names.includes(name),
-  );
-  if (missingDiscovery.length > 0) {
-    throw new Error(`Missing discovery tools: ${missingDiscovery.join(", ")}`);
   }
   const forbidden = FORBIDDEN_REVIEW_TOOLS.filter((name) => names.includes(name));
   if (forbidden.length > 0) {
@@ -658,6 +676,54 @@ export function assertOpenAIReviewContract(
     }
   }
 
+  for (const [name, paths] of Object.entries(OPENAI_REVIEW_FREE_TEXT_WARNING_PATHS)) {
+    for (const path of paths) {
+      const fieldSchema = reviewedInputFieldSchema(byName.get(name), path);
+      if (
+        !fieldSchema
+        || typeof fieldSchema.description !== "string"
+        || !fieldSchema.description.includes(OPENAI_REVIEW_FREE_TEXT_WARNING)
+      ) {
+        throw new Error(`${name}.${path} must warn against sensitive free-text input`);
+      }
+    }
+  }
+
+  for (const name of ["create_invoice", "create_quote"]) {
+    const items = reviewedInputFieldSchema(byName.get(name), "items");
+    if (
+      !items
+      || items.minItems !== 1
+      || items.maxItems !== OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX
+    ) {
+      throw new Error(
+        `${name}.items must contain 1-${OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX} reviewed line items`,
+      );
+    }
+  }
+
+  const businessContextOutput = byName.get("get_business_context")?.outputSchema;
+  const businessContextProperties =
+    businessContextOutput !== null
+    && !Array.isArray(businessContextOutput)
+    && typeof businessContextOutput === "object"
+    && businessContextOutput.properties !== null
+    && !Array.isArray(businessContextOutput.properties)
+    && typeof businessContextOutput.properties === "object"
+      ? businessContextOutput.properties
+      : undefined;
+  const topClients = businessContextProperties?.topClients;
+  if (
+    topClients === null
+    || Array.isArray(topClients)
+    || typeof topClients !== "object"
+    || topClients.maxItems !== OPENAI_REVIEW_BUSINESS_CONTEXT_TOP_CLIENTS_MAX
+  ) {
+    throw new Error(
+      `get_business_context.topClients must cap reviewed output at ${OPENAI_REVIEW_BUSINESS_CONTEXT_TOP_CLIENTS_MAX}`,
+    );
+  }
+
   for (const name of ["get_invoice", "create_invoice", "get_quote", "create_quote"]) {
     const output = byName.get(name)?.outputSchema;
     const outputProperties =
@@ -685,8 +751,17 @@ export function assertOpenAIReviewContract(
       && typeof lineItem?.properties === "object"
         ? lineItem.properties
         : undefined;
-    if (!lineItemProperties || "id" in lineItemProperties) {
-      throw new Error(`${name} must omit unusable reviewed line-item ids`);
+    if (
+      !lineItemProperties
+      || "id" in lineItemProperties
+      || items === null
+      || Array.isArray(items)
+      || typeof items !== "object"
+      || items.maxItems !== OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX
+    ) {
+      throw new Error(
+        `${name} must omit unusable reviewed line-item ids and cap output at ${OPENAI_REVIEW_DOCUMENT_LINE_ITEM_MAX} items`,
+      );
     }
   }
 
@@ -723,8 +798,8 @@ export function assertOpenAIReviewContract(
       && typeof record.properties === "object"
         ? record.properties
         : undefined;
-    if (!recordProperties || "createdBy" in recordProperties) {
-      throw new Error(`${name} must omit the unnecessary reviewed activity creator marker`);
+    if (!recordProperties || "id" in recordProperties || "createdBy" in recordProperties) {
+      throw new Error(`${name} must omit unnecessary reviewed activity identifiers and creator markers`);
     }
   }
 
@@ -780,52 +855,72 @@ export function assertOpenAIReviewContract(
     if (typeof tool?.description !== "string" || /permanently delete/i.test(tool.description)) {
       throw new Error(`${name} must describe draft deletion versus non-draft cancellation truthfully`);
     }
-    const outputSchema = tool.outputSchema;
-    const outputProperties =
-      outputSchema !== null
-      && !Array.isArray(outputSchema)
-      && typeof outputSchema === "object"
-      && outputSchema.properties !== null
-      && !Array.isArray(outputSchema.properties)
-      && typeof outputSchema.properties === "object"
-        ? outputSchema.properties
-        : undefined;
-    const outputRequired =
-      outputSchema !== null
-      && !Array.isArray(outputSchema)
-      && typeof outputSchema === "object"
-        ? outputSchema.required
-        : undefined;
-    const outcome = outputProperties?.outcome;
-    const success = outputProperties?.success;
-    const status = outputProperties?.status;
+    const outputSchema = jsonObject(tool.outputSchema);
+    const outputProperties = jsonObject(outputSchema?.properties);
+    const outputRequired = outputSchema?.required;
+    const success = jsonObject(outputProperties?.success);
+    const result = jsonObject(outputProperties?.result);
+    const branches = result?.anyOf;
+    const branchObjects = Array.isArray(branches)
+      ? branches.map((branch) => jsonObject(branch))
+      : [];
+    const branchByOutcome = new Map<string, { [key: string]: JsonValue }>();
+    for (const branch of branchObjects) {
+      const properties = jsonObject(branch?.properties);
+      const outcome = jsonObject(properties?.outcome)?.const;
+      if (branch && typeof outcome === "string") branchByOutcome.set(outcome, branch);
+    }
+    const deleted = branchByOutcome.get("deleted");
+    const deletedProperties = jsonObject(deleted?.properties);
+    const cancelled = branchByOutcome.get("cancelled");
+    const cancelledProperties = jsonObject(cancelled?.properties);
+    const deletedRequired = deleted?.required;
+    const cancelledRequired = cancelled?.required;
+    const cancelledStatus = jsonObject(cancelledProperties?.status);
+    const cancelledEffects = jsonObject(cancelledProperties?.externalEffects);
+    const cancelledEffectItems = jsonObject(cancelledEffects?.items);
     if (
-      outputSchema === null ||
-      Array.isArray(outputSchema) ||
-      typeof outputSchema !== "object" ||
+      !outputSchema ||
+      outputSchema.type !== "object" ||
+      outputSchema.additionalProperties !== false ||
       !outputProperties ||
+      Object.keys(outputProperties).length !== 3 ||
       !Array.isArray(outputRequired) ||
-      !["success", "id", "outcome", "externalEffects"].every((field) =>
+      !["success", "id", "result"].every((field) =>
         outputRequired.includes(field)
       ) ||
-      outcome === null ||
-      Array.isArray(outcome) ||
-      typeof outcome !== "object" ||
-      !Array.isArray(outcome.enum) ||
-      outcome.enum.length !== 2 ||
-      !outcome.enum.includes("deleted") ||
-      !outcome.enum.includes("cancelled") ||
-      success === null ||
-      Array.isArray(success) ||
-      typeof success !== "object" ||
-      success.const !== true ||
-      status === null ||
-      Array.isArray(status) ||
-      typeof status !== "object" ||
-      status.const !== "cancelled"
+      outputRequired.length !== 3 ||
+      success?.const !== true ||
+      !result ||
+      branchObjects.length !== 2 ||
+      branchObjects.some((branch) => !branch) ||
+      branchByOutcome.size !== 2 ||
+      !deleted ||
+      deleted.type !== "object" ||
+      deleted.additionalProperties !== false ||
+      !deletedProperties ||
+      Object.keys(deletedProperties).length !== 1 ||
+      !Array.isArray(deletedRequired) ||
+      deletedRequired.length !== 1 ||
+      deletedRequired[0] !== "outcome" ||
+      !cancelled ||
+      cancelled.type !== "object" ||
+      cancelled.additionalProperties !== false ||
+      !cancelledProperties ||
+      Object.keys(cancelledProperties).some((field) =>
+        !["outcome", "status", "previousStatus", "externalEffects"].includes(field)
+      ) ||
+      !Array.isArray(cancelledRequired) ||
+      cancelledRequired.length !== 3 ||
+      !["outcome", "status", "externalEffects"].every((field) =>
+        cancelledRequired.includes(field)
+      ) ||
+      cancelledStatus?.const !== "cancelled" ||
+      cancelledEffects?.type !== "array" ||
+      cancelledEffectItems?.type !== "string"
     ) {
       throw new Error(
-        `${name} output schema must require a successful deleted/cancelled outcome and constrain soft-cancel status`,
+        `${name} output schema must expose exactly two closed result branches: webhook-free deleted or status=cancelled with external effects`,
       );
     }
   }
@@ -864,6 +959,44 @@ export function assertOpenAIReviewContract(
     ) {
       throw new Error(
         `${name} output schema must require its reserved number and literal draft status`,
+      );
+    }
+  }
+
+  const createOutputContracts: Record<string, {
+    required: readonly string[];
+    forbidden: readonly string[];
+  }> = {
+    create_client: { required: ["id", "name", "externalEffects"], forbidden: ["stage"] },
+    create_expense: {
+      required: ["id", "description", "amount", "date", "taxDeductible", "externalEffects"],
+      forbidden: ["paidDate"],
+    },
+    create_invoice: {
+      required: ["id", "invoiceNumber", "clientId", "clientName", "items", "issueDate", "dueDate", "status", "externalEffects"],
+      forbidden: ["total"],
+    },
+    create_product: {
+      required: ["id", "name", "unitPrice", "externalEffects"],
+      forbidden: ["isActive"],
+    },
+    create_quote: {
+      required: ["id", "quoteNumber", "clientId", "clientName", "items", "issueDate", "status", "externalEffects"],
+      forbidden: ["total"],
+    },
+  };
+  for (const [name, contract] of Object.entries(createOutputContracts)) {
+    const output = jsonObject(byName.get(name)?.outputSchema);
+    const properties = jsonObject(output?.properties);
+    const required = output?.required;
+    if (
+      !properties
+      || !Array.isArray(required)
+      || !contract.required.every((field) => required.includes(field))
+      || contract.forbidden.some((field) => field in properties)
+    ) {
+      throw new Error(
+        `${name} output schema must require guaranteed create fields and omit impossible create-only fields`,
       );
     }
   }
@@ -985,6 +1118,21 @@ export function assertOpenAIReviewContract(
   ) {
     throw new Error("create_expense must disclose its explicit accounting choices");
   }
+  const createExpenseConfirm = reviewedInputFieldSchema(
+    byName.get("create_expense"),
+    "confirm",
+  );
+  if (
+    !createExpenseConfirm
+    || typeof createExpenseConfirm.description !== "string"
+    || !/separate step[^.!?]*may persist[^.!?]*expense write fails/i.test(
+      createExpenseConfirm.description,
+    )
+  ) {
+    throw new Error(
+      "create_expense confirmation must disclose the separate vendor-write residual",
+    );
+  }
 
   const updateExpenseInput = byName.get("update_expense")?.inputSchema;
   const updateExpenseProperties =
@@ -1004,25 +1152,6 @@ export function assertOpenAIReviewContract(
     !("taxDeductible" in updateExpenseProperties)
   ) {
     throw new Error("update_expense must retain its reviewed date and deductible controls");
-  }
-
-  const searchSchema = byName.get("search_tools")?.inputSchema;
-  if (
-    searchSchema &&
-    !Array.isArray(searchSchema) &&
-    typeof searchSchema === "object" &&
-    searchSchema.properties &&
-    !Array.isArray(searchSchema.properties) &&
-    typeof searchSchema.properties === "object"
-  ) {
-    const groupSchema = searchSchema.properties.group;
-    if (groupSchema && !Array.isArray(groupSchema) && typeof groupSchema === "object") {
-      const enumValues = Array.isArray(groupSchema.enum) ? groupSchema.enum : [];
-      const hiddenGroups = HIDDEN_REVIEW_GROUPS.filter((group) => enumValues.includes(group));
-      if (hiddenGroups.length > 0) {
-        throw new Error(`search_tools advertises hidden groups: ${hiddenGroups.join(", ")}`);
-      }
-    }
   }
 
   if (actual.prompts.length !== 0 || actual.resources.length !== 0) {

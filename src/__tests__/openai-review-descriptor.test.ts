@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-
-import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 import {
   assertOpenAIReviewContract,
@@ -21,6 +18,9 @@ const SNAPSHOT_PATH = fileURLToPath(
     "../../src/__tests__/fixtures/openai-review-descriptor.snapshot.json",
     import.meta.url,
   ),
+);
+const TOOL_JUSTIFICATIONS_PATH = fileURLToPath(
+  new URL("../../docs/openai-tool-justifications.md", import.meta.url),
 );
 const EXPECTED = JSON.parse(
   readFileSync(SNAPSHOT_PATH, "utf8"),
@@ -61,21 +61,7 @@ function reverseObjectKeys(value: JsonValue): JsonValue {
   return value;
 }
 
-test("real Worker SDK tools/list exactly matches the reviewed descriptor", async () => {
-  const workerRequire = createRequire(
-    fileURLToPath(
-      new URL("../../workers/remote-mcp/package.json", import.meta.url),
-    ),
-  );
-  const workerListToolsRequestSchema = workerRequire(
-    "@modelcontextprotocol/sdk/types.js",
-  ).ListToolsRequestSchema;
-  assert.notEqual(
-    workerListToolsRequestSchema,
-    ListToolsRequestSchema,
-    "the gate must exercise the Worker's separate SDK module instance",
-  );
-
+test("package-local tools/list remains semantically identical to the reviewed descriptor", async () => {
   const surface = await captureOpenAIReviewMcpSurface();
   for (const tool of surface.tools) {
     assert.deepEqual(
@@ -86,6 +72,20 @@ test("real Worker SDK tools/list exactly matches the reviewed descriptor", async
   }
   const actual = buildOpenAIReviewContract(surface, EXPECTED.oauth);
   assert.doesNotThrow(() => assertOpenAIReviewContract(actual, EXPECTED));
+});
+
+test("OpenAI tool justifications name exactly the reviewed business surface", () => {
+  const document = readFileSync(TOOL_JUSTIFICATIONS_PATH, "utf8");
+  const reviewedSections = document.split("## Explicitly excluded capabilities", 1)[0] ?? "";
+  const documentedTools = [
+    ...reviewedSections.matchAll(/`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`/g),
+  ].map((match) => match[1]);
+
+  assert.deepEqual(
+    [...new Set(documentedTools)].sort(),
+    EXPECTED.tools.map((tool) => tool.name).sort(),
+  );
+  assert.doesNotMatch(reviewedSections, /^## Discovery tools\b/m);
 });
 
 test("canonicalization ignores only object-key and tools/list ordering noise", () => {
@@ -161,6 +161,64 @@ test("semantic gate: nested reviewed input objects must stay closed", () => {
   assert.throws(
     () => assertOpenAIReviewContract(actual, EXPECTED),
     /create_invoice\.inputSchema\.properties\.items\.items must set additionalProperties=false/,
+  );
+});
+
+test("semantic gate: reviewed document sizes and business context arrays stay bounded", () => {
+  for (const name of ["create_invoice", "create_quote"]) {
+    const actual = cloneExpected();
+    const input = asObject(findTool(actual, name).inputSchema);
+    const properties = asObject(input.properties);
+    const items = asObject(properties.items);
+    items.maxItems = 101;
+    assert.throws(
+      () => assertOpenAIReviewContract(actual, EXPECTED),
+      new RegExp(`${name}\\.items must contain 1-100 reviewed line items`),
+    );
+  }
+
+  const oversizedOutput = cloneExpected();
+  const invoiceOutput = asObject(findTool(oversizedOutput, "get_invoice").outputSchema);
+  const invoiceProperties = asObject(invoiceOutput.properties);
+  const outputItems = asObject(invoiceProperties.items);
+  delete outputItems.maxItems;
+  assert.throws(
+    () => assertOpenAIReviewContract(oversizedOutput, EXPECTED),
+    /get_invoice must omit unusable reviewed line-item ids and cap output at 100 items/,
+  );
+
+  const businessContext = cloneExpected();
+  const output = asObject(findTool(businessContext, "get_business_context").outputSchema);
+  const properties = asObject(output.properties);
+  const topClients = asObject(properties.topClients);
+  delete topClients.maxItems;
+  assert.throws(
+    () => assertOpenAIReviewContract(businessContext, EXPECTED),
+    /get_business_context\.topClients must cap reviewed output at 5/,
+  );
+});
+
+test("semantic gate: model-facing free-text warnings cannot disappear", () => {
+  const actual = cloneExpected();
+  const input = asObject(findTool(actual, "create_invoice").inputSchema);
+  const properties = asObject(input.properties);
+  const notes = asObject(properties.notes);
+  notes.description = "Additional invoice notes";
+  assert.throws(
+    () => assertOpenAIReviewContract(actual, EXPECTED),
+    /create_invoice\.notes must warn against sensitive free-text input/,
+  );
+
+  const nested = cloneExpected();
+  const nestedInput = asObject(findTool(nested, "create_quote").inputSchema);
+  const nestedProperties = asObject(nestedInput.properties);
+  const items = asObject(nestedProperties.items);
+  const item = asObject(items.items);
+  const itemDescription = asObject(asObject(item.properties).description);
+  itemDescription.description = "Quote line description";
+  assert.throws(
+    () => assertOpenAIReviewContract(nested, EXPECTED),
+    /create_quote\.items\[\]\.description must warn against sensitive free-text input/,
   );
 });
 
@@ -243,15 +301,12 @@ test("semantic gate: raw PDF and webhook tools can never re-enter the reviewed s
   }
 });
 
-test("semantic gate: discovery cannot advertise hidden business domains", () => {
+test("semantic gate: discovery meta-tools cannot enter the reviewed host", () => {
   const actual = cloneExpected();
-  const inputSchema = asObject(findTool(actual, "search_tools").inputSchema);
-  const properties = asObject(inputSchema.properties);
-  const group = asObject(properties.group);
-  group.enum = [...(group.enum as JsonValue[]), "fiscal"];
+  findTool(actual, "get_invoice").name = "search_tools";
   assert.throws(
     () => assertOpenAIReviewContract(actual, EXPECTED),
-    /search_tools advertises hidden groups: fiscal/,
+    /Non-reviewed tools leaked into OpenAI surface: search_tools/,
   );
 });
 
@@ -353,24 +408,50 @@ test("semantic gate: reviewed create outputs require number and literal draft st
   }
 });
 
+test("semantic gate: reviewed create outputs omit impossible fields and require backend invariants", () => {
+  const impossible = cloneExpected();
+  const productOutput = asObject(findTool(impossible, "create_product").outputSchema);
+  asObject(productOutput.properties).isActive = { type: "boolean" };
+  assert.throws(
+    () => assertOpenAIReviewContract(impossible, EXPECTED),
+    /create_product output schema must require guaranteed create fields and omit impossible create-only fields/,
+  );
+
+  const missing = cloneExpected();
+  const expenseOutput = asObject(findTool(missing, "create_expense").outputSchema);
+  expenseOutput.required = (expenseOutput.required as JsonValue[]).filter(
+    (field) => field !== "taxDeductible",
+  );
+  assert.throws(
+    () => assertOpenAIReviewContract(missing, EXPECTED),
+    /create_expense output schema must require guaranteed create fields and omit impossible create-only fields/,
+  );
+});
+
 test("semantic gate: delete_quote outcome cannot become optional or ambiguous", () => {
   const missingOutcome = cloneExpected();
   const output = asObject(findTool(missingOutcome, "delete_quote").outputSchema);
   output.required = (output.required as JsonValue[]).filter(
-    (field) => field !== "outcome",
+    (field) => field !== "result",
   );
   assert.throws(
     () => assertOpenAIReviewContract(missingOutcome, EXPECTED),
-    /delete_quote output schema must require a successful deleted\/cancelled outcome/,
+    /delete_quote output schema must expose exactly two closed result branches/,
   );
 
   const impossibleStatus = cloneExpected();
   const impossibleOutput = asObject(findTool(impossibleStatus, "delete_quote").outputSchema);
   const properties = asObject(impossibleOutput.properties);
-  properties.status = { type: "string" };
+  const result = asObject(properties.result);
+  const branches = result.anyOf as JsonValue[];
+  const deleted = branches
+    .map((branch) => asObject(branch))
+    .find((branch) => asObject(asObject(branch.properties).outcome).const === "deleted");
+  assert.ok(deleted);
+  asObject(deleted.properties).status = { const: "cancelled", type: "string" };
   assert.throws(
     () => assertOpenAIReviewContract(impossibleStatus, EXPECTED),
-    /delete_quote output schema must require a successful deleted\/cancelled outcome/,
+    /delete_quote output schema must expose exactly two closed result branches/,
   );
 });
 
@@ -383,18 +464,36 @@ test("semantic gate: reviewed outputs cannot reintroduce unusable item or activi
   asObject(lineItem.properties).id = { type: "string" };
   assert.throws(
     () => assertOpenAIReviewContract(lineItemLeak, EXPECTED),
-    /get_invoice must omit unusable reviewed line-item ids/,
+    /get_invoice must omit unusable reviewed line-item ids and cap output at 100 items/,
   );
 
-  const activityLeak = cloneExpected();
-  const activityOutput = asObject(findTool(activityLeak, "log_client_activity").outputSchema);
-  asObject(activityOutput.properties).createdBy = {
-    type: "string",
-    enum: ["system", "user"],
-  };
+  for (const [name, field] of [
+    ["log_client_activity", "id"],
+    ["log_client_activity", "createdBy"],
+    ["list_client_activities", "id"],
+  ] as const) {
+    const activityLeak = cloneExpected();
+    const activityOutput = asObject(findTool(activityLeak, name).outputSchema);
+    const record = name === "list_client_activities"
+      ? asObject(asObject(asObject(activityOutput.properties).data).items)
+      : activityOutput;
+    asObject(record.properties)[field] = { type: "string" };
+    assert.throws(
+      () => assertOpenAIReviewContract(activityLeak, EXPECTED),
+      new RegExp(`${name} must omit unnecessary reviewed activity identifiers`),
+    );
+  }
+});
+
+test("semantic gate: create_expense confirms the separate vendor-write residual", () => {
+  const actual = cloneExpected();
+  const input = asObject(findTool(actual, "create_expense").inputSchema);
+  const properties = asObject(input.properties);
+  const confirm = asObject(properties.confirm);
+  confirm.description = "Set true after the user authorizes creating the expense.";
   assert.throws(
-    () => assertOpenAIReviewContract(activityLeak, EXPECTED),
-    /log_client_activity must omit the unnecessary reviewed activity creator marker/,
+    () => assertOpenAIReviewContract(actual, EXPECTED),
+    /create_expense confirmation must disclose the separate vendor-write residual/,
   );
 });
 

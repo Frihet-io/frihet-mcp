@@ -3,6 +3,21 @@ type OpenApiDocument = Record<string, unknown> & {
   paths: Record<string, unknown>;
 };
 
+/** Match canonical OpenAPI paths plus case, encoding and slash lookalikes. */
+export function isOpenApiLookalikePath(pathname: string): boolean {
+  let decoded = pathname;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    // Malformed escapes cannot make a valid route; raw normalization is safe.
+  }
+  const normalized = decoded
+    .replace(/\/{2,}/gu, "/")
+    .replace(/\/+$/u, "")
+    .toLowerCase();
+  return normalized === "/openapi.json" || normalized === "/openapi.yaml";
+}
+
 const OPENAPI_ROOT_KEYS = new Set([
   "openapi", "info", "servers", "security", "tags", "paths", "components",
 ]);

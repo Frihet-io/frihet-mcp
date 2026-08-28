@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 import {
   assertOpenAIReviewContract,
   buildOpenAIReviewContract,
-  captureOpenAIReviewMcpSurface,
   serializeOpenAIReviewContract,
 } from "../dist/openai-review-contract.js";
 import { buildOpenAIReviewOAuthContract } from "../dist/openai-review-oauth.js";
+import {
+  captureOpenAIReviewMcpSurfaceFromWorker,
+} from "../workers/remote-mcp/scripts/capture-openai-review.mjs";
 
 const DESCRIPTOR_PATH = fileURLToPath(
   new URL("../src/__tests__/fixtures/openai-review-descriptor.snapshot.json", import.meta.url),
@@ -35,11 +37,6 @@ const webhookWrite = (behavior, openWorldEffect, irreversible) => ({
   irreversible,
 });
 const hardDelete = (object) => ({ kind: "hard_delete", object });
-const DISCOVERY_TOOL_NAMES = new Set([
-  "list_tool_groups",
-  "search_tools",
-  "describe_tool",
-]);
 
 // Curated from the real handlers and their downstream ERP routes; parity with
 // tools/list is enforced below so no tool can enter the submission by naming
@@ -59,7 +56,7 @@ const TOOL_FACTS = {
     "the new note is separately removable and no existing record is overwritten",
   ),
   create_expense: webhookWrite(
-    "creates an expense record on an explicit date that determines its accounting and future tax-report period, may create and link a vendor when no exact match exists, and records an explicit tax-deductible choice without filing anything",
+    "creates an expense record on an explicit date that determines its accounting and future tax-report period, may first create and link a vendor in a separate step that can remain if the later expense write fails, and records an explicit tax-deductible choice without filing anything",
     "deliver the resulting expense-created event to active owner-configured endpoints, notify eligible workspace admins or accountants in-app and through Novu, and possibly award referral activation credits to another Frihet account",
     "external event delivery, workspace notification, and any referral-credit award cannot be recalled",
   ),
@@ -89,7 +86,6 @@ const TOOL_FACTS = {
     behavior: "permanently removes only a clean draft with no delivery, response, attachment, or conversion evidence, refuses a protected draft, or cancels a non-draft quote",
     event: "a quote-updated event when a non-draft quote is cancelled",
   },
-  describe_tool: read("the reviewed description and input field names for one allowed tool"),
   get_business_context: read("workspace defaults, plan usage, recent activity, and current-month totals"),
   get_client: read("one client record through a reviewed DTO with no dedicated government-identifier or precise-address fields"),
   get_expense: read("one expense record"),
@@ -105,7 +101,6 @@ const TOOL_FACTS = {
   list_invoices: read("the paginated invoice list and selected status or date filters"),
   list_products: read("the product and service catalogue"),
   list_quotes: read("the paginated quote list and selected status or date filters"),
-  list_tool_groups: read("the reviewed tool groups and their exact tool counts"),
   list_vendors: read("the paginated vendor list through a reviewed DTO with no dedicated government-identifier or precise-address fields"),
   log_client_activity: webhookWrite(
     "adds a call, email, meeting, or task entry to one client timeline and, for call, meeting, or email entries, updates the parent client's latest-activity fields",
@@ -113,7 +108,6 @@ const TOOL_FACTS = {
     "an external webhook delivery cannot be recalled",
   ),
   search_invoices: read("invoice records matching a text query and selected filters"),
-  search_tools: read("the names of reviewed tools matching a capability query"),
   update_client: webhookWrite(
     "updates only the supplied fields on one client",
     "deliver the resulting client-updated event to active endpoints previously configured by the workspace owner",
@@ -143,12 +137,9 @@ const EXPECTED_HINTS = {
 
 function justifications(name, fact) {
   if (fact.kind === "read") {
-    const openWorldObject = DISCOVERY_TOOL_NAMES.has(name)
-      ? "the in-process reviewed tool catalog"
-      : "the authenticated Frihet workspace";
     return {
       read_only_justification: `The ${name} operation only reads ${fact.object} and changes no Frihet record.`,
-      open_world_justification: `The ${name} operation has no user-directed external effect and only reads ${openWorldObject}.`,
+      open_world_justification: `The ${name} operation has no user-directed external effect and only reads the authenticated Frihet workspace.`,
       destructive_justification: `The ${name} operation cannot delete or overwrite workspace data.`,
     };
   }
@@ -210,7 +201,7 @@ async function resolvedOAuthProviderVersion() {
 }
 
 async function captureCurrentContract() {
-  const surface = await captureOpenAIReviewMcpSurface();
+  const surface = await captureOpenAIReviewMcpSurfaceFromWorker();
   return buildOpenAIReviewContract(surface, {
     providerPackageVersion: await resolvedOAuthProviderVersion(),
     ...buildOpenAIReviewOAuthContract(),
@@ -269,18 +260,18 @@ function buildSubmission(contract) {
     },
     {
       description: "Create a numbered invoice draft after explicit authorization without using a stored client identifier.",
-      user_prompt: "I confirm: prepare an invoice draft for Acme SL with 5 hours of consulting at 100 EUR per hour and a 21 percent tax rate.",
+      user_prompt: "I authorize Frihet to create a numbered invoice draft, advance the numbering counter, consume monthly invoice usage, send invoice-creation analytics to PostHog's EU-hosted service, possibly create or link the client, deliver owner-configured webhooks, notify eligible admins or accountants, and possibly award first-use referral credits. Prepare it for Acme SL with 5 hours of consulting at 100 EUR per hour and a 21 percent tax rate.",
       file_attachment_urls: null,
       tools_triggered: "create_invoice",
-      expected_output: "A newly numbered invoice draft with stored line items and clear notes that the numbering counter advanced, monthly invoice usage increased, Frihet may have created and linked the client, PostHog's EU-hosted analytics service may have received invoice-creation analytics, owner-configured webhooks may receive resulting business events, eligible admins or accountants may receive Frihet and Novu notifications, and first-use referral credits may be awarded; a calculated total may be absent.",
+      expected_output: "The reviewed response contains the new record ID, linked client ID and name, the requested line item, issue and due dates, draft status, a reserved invoice number, and external-effects disclosures. It clearly notes that the numbering counter advanced, monthly invoice usage increased, Frihet may have created and linked the client, PostHog's EU-hosted analytics service may have received invoice-creation analytics, owner-configured webhooks may receive resulting business events, eligible admins or accountants may receive Frihet and Novu notifications, and first-use referral credits may be awarded. It does not claim that the invoice was issued, emailed, filed, or paid.",
       expected_output_url: null,
     },
     {
       description: "Create an office expense after explicit authorization.",
-      user_prompt: "I confirm: record a 45.99 EUR office-supplies expense dated 2026-08-28 in the office category and mark it as not tax deductible.",
+      user_prompt: "I authorize Frihet to record this expense on 2026-08-28 as not tax deductible and create or link the vendor Office Depot Canarias in a separate step that may remain if expense creation fails, deliver owner-configured webhooks, notify eligible admins or accountants, and possibly award first-use referral credits. Record 45.99 EUR of office supplies in the office category.",
       file_attachment_urls: null,
       tools_triggered: "create_expense",
-      expected_output: "A confirmed 45.99 EUR office expense dated 2026-08-28 and explicitly marked not tax deductible, with clear notes that the date selects its accounting and future tax-report period, owner-configured webhooks may receive resulting business events, eligible admins or accountants may receive Frihet and Novu notifications, and first-use referral credits may be awarded.",
+      expected_output: "The reviewed response contains a new record ID, description, amount 45.99 EUR, date 2026-08-28, taxDeductible=false, and external-effects disclosures; category or vendor fields appear only when stored. It clearly notes that the date selects the accounting and future tax-report period, a separately created vendor may remain after a later expense failure, owner-configured webhooks may receive resulting business events, eligible admins or accountants may receive Frihet and Novu notifications, and first-use referral credits may be awarded.",
       expected_output_url: null,
     },
     {
@@ -288,7 +279,7 @@ function buildSubmission(contract) {
       user_prompt: "Show me my active products and services.",
       file_attachment_urls: null,
       tools_triggered: "list_products",
-      expected_output: "A list of active catalogue records with names, unit prices, tax rates, and status.",
+      expected_output: "A paginated list selected by the active-record filter. Every returned catalogue record contains its ID, name, and unit price; stored tax-rate and active-flag fields may also appear.",
       expected_output_url: null,
     },
   ];
@@ -310,11 +301,11 @@ function buildSubmission(contract) {
       expected_output_url: null,
     },
     {
-      description: "Do not trigger Frihet for regulated e-invoice generation or submission.",
-      user_prompt: "Generate and submit the official EN 16931 XML e-invoice for my latest invoice.",
+      description: "Do not trigger Frihet for a regulated e-invoice delivery receipt.",
+      user_prompt: "Check the Peppol delivery receipt for an EN 16931 invoice submitted yesterday.",
       file_attachment_urls: null,
       tools_triggered: null,
-      expected_output: "The app should not be invoked because regulated e-invoice generation, XML export, and filing are outside the reviewed Frihet connector.",
+      expected_output: "The app should not be invoked because Peppol delivery receipts and regulated e-invoice submission tracking are outside the reviewed Frihet connector.",
       expected_output_url: null,
     },
   ];
@@ -329,7 +320,7 @@ function buildSubmission(contract) {
       display_name: "Frihet",
       subtitle: "Manage business operations",
       description:
-        "Frihet connects ChatGPT to a Frihet business workspace. Find invoices, quotes, expenses, clients, CRM records, products, and vendors; prepare numbered invoice and quote drafts; and record or update selected business data. Every write requires an explicit confirmation that explains lasting and external effects. Some confirmed writes may trigger webhooks previously configured in Frihet or notify workspace members. This reviewed OAuth connector deliberately excludes payment initiation, processing, or execution; invoice issuance or email delivery; tax filings; banking; payroll or HR; raw documents; webhook administration; and regulated exports. It may read stored payment-status fields and business payment dates. No API key is required.",
+        "Frihet is the trade name owned and operated in Spain by VICTOR BERTHELIUS PATO. Frihet connects ChatGPT to a Frihet business workspace. Find invoices, quotes, expenses, clients, CRM records, products, and vendors; prepare numbered invoice and quote drafts; and record or update selected business data. Every write requires explicit confirmation; confirmations for operations with lasting or external effects disclose those effects. Some confirmed writes may trigger webhooks previously configured in Frihet or notify workspace members. This reviewed OAuth connector deliberately excludes payment initiation, processing, or execution; invoice issuance or email delivery; tax filings; banking; payroll or HR; raw documents; webhook administration; and regulated exports. It may read stored payment-status fields and business payment dates. No API key is required.",
       category: "BUSINESS",
     },
     tools,

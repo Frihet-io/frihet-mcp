@@ -5,10 +5,27 @@ import { fileURLToPath } from "node:url";
 
 import {
   assertValidOpenApiDocument,
+  isOpenApiLookalikePath,
   openApiUnavailableResponse,
   parseOpenApiDocument,
   serveOpenApiAsset,
 } from "../openapi-safety.ts";
+
+test("OpenAI containment recognizes encoded, cased and slash OpenAPI lookalikes", () => {
+  for (const path of [
+    "/openapi.json",
+    "/openapi.json/",
+    "/openapi%2Ejson",
+    "//openapi.json",
+    "/OpenAPI.JSON",
+    "/openapi.yaml",
+  ]) {
+    assert.equal(isOpenApiLookalikePath(path), true, path);
+  }
+  for (const path of ["/", "/mcp.json", "/docs/openapi.json", "/openapi.jsonx"]) {
+    assert.equal(isOpenApiLookalikePath(path), false, path);
+  }
+});
 
 const validFullSpec = JSON.stringify({
   openapi: "3.1.0",

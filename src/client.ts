@@ -24,6 +24,12 @@ import { sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
+const OAUTH_CLOUD_FUNCTION_BASE_URL =
+  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1";
+const OAUTH_SERVICE_TRUSTED_BASE_URLS = new Set([
+  BASE_URL,
+  OAUTH_CLOUD_FUNCTION_BASE_URL,
+]);
 
 const MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
@@ -316,12 +322,19 @@ export interface FrihetClientOptions {
    * Cloudflare Workers should pass ≤25000 to leave margin under the ~30s limit.
    */
   timeoutMs?: number;
+  /**
+   * Internal second factor for API keys provisioned by Frihet OAuth Workers.
+   * Ordinary dashboard/API keys must omit it. The value is sent only to the
+   * already-normalized API origin and is never included in logs or errors.
+   */
+  oauthServiceSecret?: string;
 }
 
 export class FrihetClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
+  private readonly oauthServiceSecret?: string;
 
   constructor(apiKey: string, baseUrl?: string, options?: FrihetClientOptions) {
     if (!apiKey) {
@@ -329,9 +342,26 @@ export class FrihetClient {
         "FRIHET_API_KEY is required. Set it as an environment variable or pass it to the constructor.",
       );
     }
+    const resolvedBaseUrl = baseUrl ?? BASE_URL;
     this.apiKey = apiKey;
-    this.baseUrl = baseUrl ?? BASE_URL;
+    this.baseUrl = resolvedBaseUrl;
     this.timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    if (options?.oauthServiceSecret !== undefined) {
+      if (
+        new TextEncoder().encode(options.oauthServiceSecret).byteLength < 32
+        || /[\r\n\0]/u.test(options.oauthServiceSecret)
+      ) {
+        throw new Error("OAuth API-key service authentication is not configured");
+      }
+      // A dashboard/API-key caller may still use a custom API base. The
+      // internal OAuth second factor may not: pin its authority at the sink so
+      // a future caller cannot exfiltrate both credentials by changing only
+      // constructor input while leaving the approved fetch fingerprint intact.
+      if (!OAUTH_SERVICE_TRUSTED_BASE_URLS.has(resolvedBaseUrl)) {
+        throw new Error("OAuth API-key service authority is not trusted");
+      }
+      this.oauthServiceSecret = options.oauthServiceSecret;
+    }
   }
 
   // ------------------------------------------------------------------ HTTP
@@ -371,6 +401,9 @@ export class FrihetClient {
       "X-Frihet-Source": SOURCE_MARKER,
       "User-Agent": SOURCE_USER_AGENT,
     };
+    if (this.oauthServiceSecret) {
+      headers["x-frihet-oauth-key"] = this.oauthServiceSecret;
+    }
 
     if (resolvedIdempotencyKey) {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
@@ -533,6 +566,9 @@ export class FrihetClient {
       "X-Frihet-Source": SOURCE_MARKER,
       "User-Agent": SOURCE_USER_AGENT,
     };
+    if (this.oauthServiceSecret) {
+      headers["x-frihet-oauth-key"] = this.oauthServiceSecret;
+    }
     if (resolvedIdempotencyKey) {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
     }
@@ -965,7 +1001,9 @@ export class FrihetClient {
       cursor: params?.after,
       fields: params?.fields,
       q: params?.q,
-      isActive: params?.isActive !== undefined ? (params.isActive ? 1 : 0) : undefined,
+      // Public API accepts the literal strings "true"/"false". Numeric 1/0
+      // makes `isActive=true` evaluate as false in the backend parser.
+      isActive: params?.isActive !== undefined ? String(params.isActive) : undefined,
     });
   }
 

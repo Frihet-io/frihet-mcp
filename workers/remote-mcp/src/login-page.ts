@@ -49,6 +49,7 @@ export function getLoginPage(opts: {
         <li>Invoice drafts consume monthly invoice usage and may send invoice-creation analytics to PostHog's EU-hosted analytics service</li>
         <li>Ten confirmed writes may deliver one or more full business events to active endpoints already configured by the workspace owner; those deliveries are outside the reviewed ChatGPT response schema and can include the complete underlying record, including fields this connector does not expose to ChatGPT</li>
         <li>Creating an invoice or expense may notify eligible workspace admins or accountants in-app and through Novu, including recipient identity/contact fields and relevant workspace/document text needed to deliver that notification</li>
+        <li>If expense creation needs a new vendor, that vendor is created in a separate backend step and may remain even if the later expense write fails</li>
         <li>A referred workspace's first invoice or expense may award activation credits to the referring Frihet account</li>`
     : `<li>Invoices, quotes, recurring billing and deposits</li>
         <li>Expenses and vendors</li>
@@ -64,7 +65,7 @@ export function getLoginPage(opts: {
         quote-email delivery, raw invoice PDFs, e-invoicing, regulated filing, or fiscal export workflows.
         Updating an existing quote, deleting an expense, deleting a client parent record, deleting a product, deleting a vendor,
         and the legacy monthly summary are not available. Selected client contacts and client notes can be permanently deleted. A quote is permanently deleted only when it is a clean draft with no delivery, response, attachment, or conversion evidence; a protected draft is refused and left unchanged, while deleting a non-draft quote cancels it.
-        Creating an expense requires an explicit date and deductible choice; expense updates cannot change amount or supplier identity. Creating or updating an expense affects internal accounting and future tax-report inputs but files nothing.
+        Creating an expense requires an explicit date and deductible choice; expense updates cannot change amount or supplier identity. Creating or updating an expense affects internal accounting and future tax-report inputs but files nothing. If a new vendor is needed, its separate creation step may persist even if the later expense write fails.
         When an invoice, quote, or expense is linked by a stored client or vendor name, Frihet may use that record's existing identity and contact details internally to link or snapshot the new record even though dedicated identifiers and precise addresses are absent from this connector's input and output schemas.
         User-entered names, labels and free text may still contain personal data.`
     : `In short: near-complete access to your account. Not included:
@@ -287,8 +288,8 @@ export function getLoginPage(opts: {
 
       <div class="divider">or</div>
 
-      <input type="email" id="email" class="input" placeholder="Email address" autocomplete="email" />
-      <input type="password" id="password" class="input" placeholder="Password" autocomplete="current-password" />
+      <input type="email" id="email" name="email" class="input" placeholder="Email address" autocomplete="email" />
+      <input type="password" id="password" name="password" class="input" placeholder="Password" autocomplete="current-password" />
       <button class="btn btn-primary" onclick="signInWithEmail()">
         Sign in with email
       </button>
@@ -300,9 +301,9 @@ export function getLoginPage(opts: {
     </div>
 
     <div class="footer">
-      <a href="${openAIProfile ? "https://openai-mcp.frihet.io/privacy" : "https://www.frihet.io/es/privacy"}" target="_blank">Privacy Policy</a>
+      <a href="${openAIProfile ? "https://openai-mcp.frihet.io/privacy" : "https://www.frihet.io/es/privacy"}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
       &middot;
-      <a href="${openAIProfile ? "https://openai-mcp.frihet.io/support" : "https://docs.frihet.io"}" target="_blank">Documentation</a>
+      <a href="${openAIProfile ? "https://openai-mcp.frihet.io/support" : "https://docs.frihet.io"}" target="_blank" rel="noopener noreferrer">Documentation</a>
     </div>
   </div>
 

@@ -47,6 +47,35 @@ function makeStore(): { store: OAuthStateStore; state: FakeState } {
   };
 }
 
+const OPENAI_BINDING = {
+  uid: "firebase-user",
+  keyId: "AbCdEfGhIjKlMnOpQrSt",
+  accessProfile: "openai",
+  oauthResource: "https://openai-mcp.frihet.io",
+} as const;
+
+function familyRequest(path: string, body?: unknown, method = "POST"): Request {
+  return new Request(`https://oauth-state.internal${path}`, {
+    method,
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+  });
+}
+
+async function familyJson(
+  store: OAuthStateStore,
+  path: string,
+  body: unknown,
+): Promise<Record<string, unknown>> {
+  const response = await store.fetch(familyRequest(path, body));
+  assert.equal(response.status, 200);
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
 test("OAuth state is stored once, non-cacheable, and consumed exactly once", async () => {
   const { store, state } = makeStore();
   const payload = JSON.stringify({ clientId: "client_test", scope: ["frihet:workspace.manage"] });
@@ -97,4 +126,128 @@ test("OAuth state store rejects empty payloads and unknown methods", async () =>
     (await store.fetch(new Request("https://oauth-state.internal/state", { method: "DELETE" }))).status,
     405,
   );
+});
+
+test("token family rotates once and revokes the family when a spent token reappears", async () => {
+  const { store } = makeStore();
+  const authorizationCodeHash = "a".repeat(64);
+  const firstRefreshHash = "b".repeat(64);
+
+  const initialized = await store.fetch(familyRequest("/token-family", {
+    currentKind: "authorization_code",
+    currentHash: authorizationCodeHash,
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: OPENAI_BINDING,
+  }, "PUT"));
+  assert.equal(initialized.status, 204);
+
+  const first = await familyJson(store, "/token-family/begin", {
+    kind: "authorization_code",
+    credentialHash: authorizationCodeHash,
+  });
+  assert.equal(first.outcome, "started");
+  assert.equal(typeof first.leaseId, "string");
+
+  const committed = await familyJson(store, "/token-family/commit", {
+    leaseId: first.leaseId,
+    newRefreshTokenHash: firstRefreshHash,
+  });
+  assert.equal(committed.outcome, "committed");
+
+  const replay = await familyJson(store, "/token-family/begin", {
+    kind: "authorization_code",
+    credentialHash: authorizationCodeHash,
+  });
+  assert.equal(replay.outcome, "replay");
+  assert.deepEqual(replay.apiKeyBinding, OPENAI_BINDING);
+
+  const activeTokenAfterReplay = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: firstRefreshHash,
+  });
+  assert.equal(activeTokenAfterReplay.outcome, "revoked");
+});
+
+test("two concurrent accepted uses tombstone the family before either response can escape", async () => {
+  const { store } = makeStore();
+  const currentHash = "1".repeat(64);
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash,
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: OPENAI_BINDING,
+  }, "PUT"))).status, 204);
+
+  const first = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: currentHash,
+  });
+  assert.equal(first.outcome, "started");
+  const second = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: currentHash,
+  });
+  assert.equal(second.outcome, "replay");
+
+  const firstCommit = await familyJson(store, "/token-family/commit", {
+    leaseId: first.leaseId,
+    newRefreshTokenHash: "2".repeat(64),
+  });
+  assert.equal(firstCommit.outcome, "revoked");
+});
+
+test("unknown token hashes fail without revoking the active family", async () => {
+  const { store } = makeStore();
+  const currentHash = "c".repeat(64);
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash,
+    expiresAtMs: Date.now() + 60_000,
+  }, "PUT"))).status, 204);
+
+  const unknown = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: "d".repeat(64),
+  });
+  assert.equal(unknown.outcome, "invalid");
+
+  const current = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: currentHash,
+  });
+  assert.equal(current.outcome, "started");
+  assert.equal(typeof current.leaseId, "string");
+});
+
+test("token family initialization is idempotent only for the exact bound credential", async () => {
+  const { store } = makeStore();
+  const body = {
+    currentKind: "authorization_code",
+    currentHash: "e".repeat(64),
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: OPENAI_BINDING,
+  };
+  assert.equal((await store.fetch(familyRequest("/token-family", body, "PUT"))).status, 204);
+  assert.equal((await store.fetch(familyRequest("/token-family", body, "PUT"))).status, 204);
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    ...body,
+    currentHash: "f".repeat(64),
+  }, "PUT"))).status, 409);
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    ...body,
+    apiKeyBinding: { ...OPENAI_BINDING, keyId: "too-short" },
+  }, "PUT"))).status, 400);
+});
+
+test("token family bindings accept the full provider-valid Firebase UID segment", async () => {
+  for (const uid of ["tenant/user", ".", "..", "with space", "usuario-ñ", "nul\0uid"]) {
+    const { store } = makeStore();
+    const response = await store.fetch(familyRequest("/token-family", {
+      currentKind: "authorization_code",
+      currentHash: "a".repeat(64),
+      expiresAtMs: Date.now() + 60_000,
+      apiKeyBinding: { ...OPENAI_BINDING, uid },
+    }, "PUT"));
+    assert.equal(response.status, 204, JSON.stringify(uid));
+  }
 });
