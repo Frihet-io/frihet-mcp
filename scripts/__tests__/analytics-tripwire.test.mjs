@@ -160,12 +160,12 @@ describe("anti-defang contract", () => {
       );
     }
     assert.deepEqual(APPROVED_LOCKFILE_HASHES, {
-      "package-lock.json": "a34179e8ab54e9689996641c981fb12fbd6e02ea483682bde6d19040b76e78ba",
+      "package-lock.json": "ebf5ce3c3b9207fb07cfc2856c1ca3d3232e154133406435511fe99f08e6ae18",
       "workers/remote-mcp/package-lock.json": "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191",
     });
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES[".github/workflows/ci.yml"],
-      "284e4177a7b73f82b6fe7d963037e2b73c3a43b41a597c920e8d879699de55ea",
+      "afb5a58808a20cb512a071210c38f02f551251a9b35297b6540a5a966440978d",
     );
     assert.deepEqual(APPROVED_PLATFORM_TELEMETRY, {
       "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
