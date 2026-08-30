@@ -30,6 +30,7 @@
     },
     "agents": {
       "@modelcontextprotocol/sdk": "1.30.0"
-    }
+    },
+    "nanoid": "5.1.16"
   }
 }
