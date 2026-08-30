@@ -326,16 +326,60 @@ describe("the package it guards", () => {
 
 describe("publish anchor guard", () => {
   test("a clean tree passes", () => {
-    const result = classifyPublishAnchor({ porcelain: "", headSha: HEAD, headOnRemote: true });
+    const result = classifyPublishAnchor({
+      porcelain: "",
+      headSha: HEAD,
+      headMatchesRemote: true,
+      gitMetadataIsDirectory: true,
+      buildTreePresent: false,
+    });
     assert.equal(result.fatal, null);
     assert.deepEqual(result.warnings, []);
+  });
+
+  test("a linked worktree is fatal because npm may omit gitHead", () => {
+    const result = classifyPublishAnchor({
+      porcelain: "",
+      headSha: HEAD,
+      headMatchesRemote: true,
+      gitMetadataIsDirectory: false,
+    });
+    assert.deepEqual(result.fatal, [
+      ".git is not a directory; publish from a full clone because npm may omit gitHead",
+    ]);
+  });
+
+  test("a branch or stale commit is fatal even when it is reachable from main", () => {
+    const result = classifyPublishAnchor({
+      porcelain: "",
+      headSha: HEAD,
+      headMatchesRemote: false,
+      gitMetadataIsDirectory: true,
+      buildTreePresent: false,
+    });
+    assert.deepEqual(result.fatal, [
+      `HEAD ${HEAD.slice(0, 7)} is not the exact origin/main release commit`,
+    ]);
+  });
+
+  test("an ignored pre-existing dist tree is fatal", () => {
+    const result = classifyPublishAnchor({
+      porcelain: "",
+      headSha: HEAD,
+      headMatchesRemote: true,
+      gitMetadataIsDirectory: true,
+      buildTreePresent: true,
+    });
+    assert.deepEqual(result.fatal, [
+      "dist exists before prepublish build; use a fresh full clone to exclude stale ignored bytes",
+    ]);
   });
 
   test("a modified tracked file is fatal", () => {
     const result = classifyPublishAnchor({
       porcelain: " M src/index.ts\n",
       headSha: HEAD,
-      headOnRemote: true,
+      headMatchesRemote: true,
     });
     assert.deepEqual(result.fatal, [" M src/index.ts"]);
   });
@@ -346,20 +390,17 @@ describe("publish anchor guard", () => {
     const result = classifyPublishAnchor({
       porcelain: "?? src/backdoor.ts\n",
       headSha: HEAD,
-      headOnRemote: true,
+      headMatchesRemote: true,
     });
     assert.deepEqual(result.fatal, ["?? src/backdoor.ts"]);
   });
 
   test("trailing whitespace and blank lines do not fabricate a dirty tree", () => {
-    const result = classifyPublishAnchor({ porcelain: "\n  \n", headSha: HEAD, headOnRemote: true });
+    const result = classifyPublishAnchor({
+      porcelain: "\n  \n",
+      headSha: HEAD,
+      headMatchesRemote: true,
+    });
     assert.equal(result.fatal, null);
-  });
-
-  test("publishing off origin/main warns without blocking", () => {
-    const result = classifyPublishAnchor({ porcelain: "", headSha: HEAD, headOnRemote: false });
-    assert.equal(result.fatal, null);
-    assert.equal(result.warnings.length, 1);
-    assert.match(result.warnings[0], /not reachable from origin\/main/);
   });
 });
