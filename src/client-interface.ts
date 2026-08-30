@@ -124,7 +124,11 @@ export interface IFrihetClient {
   exportDatev(params: { periodStart: string; periodEnd: string; format: string }): Promise<{ fileUrl: string; filename: string; rowCount: number; fiscalPeriod: string; encoding: "cp1252" }>;
 
   // E-Invoicing Day 4 endpoints (PR #414 + FACe PR #411 + TicketBAI PR #356; 404 → stub fallback)
-  exportEInvoice(params: { invoiceId: string; format: string; signed?: boolean }): Promise<{ xmlUrl: string; filename: string; format: string; signed: boolean }>;
+  exportEInvoice(params: {
+    invoiceId: string;
+    format: import("./client.js").McpEInvoiceExportFormat;
+    signed?: boolean;
+  }): Promise<import("./client.js").EInvoiceExportResult>;
   faceSubmit(params: { invoiceId: string; mode: "mock" | "sandbox" | "production" }): Promise<{ registroFACe: string; status: "submitted" | "error"; submittedAt: string; mode: string }>;
   faceStatus(params: { invoiceId: string }): Promise<{ registroFACe: string; statusCode: string; statusDescription: string; rejectionReason?: string }>;
   ticketbaiSubmit(params: { invoiceId: string; sandbox: boolean }): Promise<{ tbaiId: string; territory: "bizkaia" | "gipuzkoa" | "araba"; status: "submitted" | "accepted" | "rejected" | "error"; sandbox: boolean; qrUrl?: string }>;

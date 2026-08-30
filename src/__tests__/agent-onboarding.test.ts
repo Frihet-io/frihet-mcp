@@ -208,6 +208,12 @@ describe("agent onboarding — docs/agent-onboarding.json", () => {
     }
   });
 
+  test("confirm is described as a local interlock, never as attestation", () => {
+    assert.match(AGENT_SERVER_INSTRUCTIONS, /local client\/agent interlock/i);
+    assert.match(AGENT_SERVER_INSTRUCTIONS, /not.*attestation/i);
+    assert.doesNotMatch(AGENT_SERVER_INSTRUCTIONS, /records? the human(?:'s)? decision/i);
+  });
+
   test("the safe workflow only calls tools that are read-only or draft-defaulting", async () => {
     const tools = new Map((await liveSurface()).map((tool) => [tool.name, tool]));
     const descriptor = await captureAgentOnboardingDescriptor();

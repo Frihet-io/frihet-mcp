@@ -596,7 +596,7 @@
         {
           "name": "einvoice_export",
           "annotations": {
-            "readOnlyHint": true,
+            "readOnlyHint": false,
             "destructiveHint": false,
             "idempotentHint": true,
             "openWorldHint": false
@@ -605,7 +605,7 @@
             "registered": true,
             "callability": "runtime_checked",
             "canonicalOperation": "einvoice_export",
-            "writesFrihet": false,
+            "writesFrihet": true,
             "externalInteraction": false,
             "externalSideEffects": []
           }
@@ -3476,7 +3476,7 @@
         {
           "name": "einvoice_export",
           "annotations": {
-            "readOnlyHint": true,
+            "readOnlyHint": false,
             "destructiveHint": false,
             "idempotentHint": true,
             "openWorldHint": false
@@ -3485,7 +3485,7 @@
             "registered": true,
             "callability": "runtime_checked",
             "canonicalOperation": "einvoice_export",
-            "writesFrihet": false,
+            "writesFrihet": true,
             "externalInteraction": false,
             "externalSideEffects": []
           }

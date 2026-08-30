@@ -26,7 +26,13 @@ import type {
   UpdateWebhookInput,
   Webhook,
 } from "./types.js";
-import type { BinaryDocument, EInvoiceDocument } from "./client.js";
+import {
+  toApiEInvoiceExportFormat,
+  type BinaryDocument,
+  type EInvoiceDocument,
+  type EInvoiceExportResult,
+  type McpEInvoiceExportFormat,
+} from "./client.js";
 import { Buffer } from "node:buffer";
 import {
   READ_STAMP,
@@ -472,8 +478,20 @@ export class DemoFrihetClient implements IFrihetClient {
   async exportDatev(params: { periodStart: string; periodEnd: string; format: string }): Promise<{ fileUrl: string; filename: string; rowCount: number; fiscalPeriod: string; encoding: "cp1252" }> {
     return { fileUrl: "https://app.frihet.io/demo/datev.csv", filename: "demo-datev.csv", rowCount: 24, fiscalPeriod: `${params.periodStart}..${params.periodEnd}`, encoding: "cp1252" as const, ...FISCAL_STAMP };
   }
-  async exportEInvoice(params: { invoiceId: string; format: string; signed?: boolean }): Promise<{ xmlUrl: string; filename: string; format: string; signed: boolean }> {
-    return { xmlUrl: "https://app.frihet.io/demo/einvoice.xml", filename: `${params.invoiceId}.xml`, format: params.format, signed: params.signed ?? false, ...FISCAL_STAMP };
+  async exportEInvoice(params: {
+    invoiceId: string;
+    format: McpEInvoiceExportFormat;
+    signed?: boolean;
+  }): Promise<EInvoiceExportResult> {
+    const format = toApiEInvoiceExportFormat(params.format);
+    return {
+      xml: `<?xml version="1.0" encoding="UTF-8"?><DemoEInvoice format="${format}"/>`,
+      contentType: "application/xml",
+      filename: `${params.invoiceId}.xml`,
+      format,
+      signed: params.signed ?? false,
+      ...FISCAL_STAMP,
+    };
   }
   async faceSubmit(params: { invoiceId: string; mode: "mock" | "sandbox" | "production" }): Promise<{ registroFACe: string; status: "submitted" | "error"; submittedAt: string; mode: string }> {
     return { registroFACe: "DEMO-FACE-0001", status: "submitted" as const, submittedAt: DEMO_NOW, mode: params.mode, ...FISCAL_STAMP };

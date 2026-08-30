@@ -70,7 +70,7 @@ THE SAFE WORKFLOW — draft, show, stop
 
 HUMAN AUTHORITY — do not call unprompted
 - Any tool whose capability shows a non-empty externalSideEffects reaches outside Frihet — email to a client, webhook delivery, money movement, or a submission to AEAT / VeriFactu / TicketBAI / FACe. You cannot undo those.
-- Several also take confirm=true. That flag records the human's decision. Never set it to satisfy your own plan; ask, then pass what you were told.
+- Several also take confirm=true. It is a local client/agent interlock, not server-verifiable human attestation and not actor/resource/payload/expiry-bound. Never set it to satisfy your own plan; ask, then pass what you were told.
 - delete_invoice does not always delete: an issued invoice is CANCELLED (status=cancelled) because VeriFactu forbids breaking the hash chain. Same for quotes.
 
 WHEN A CALL FAILS
