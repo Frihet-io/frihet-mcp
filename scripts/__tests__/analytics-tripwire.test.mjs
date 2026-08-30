@@ -161,11 +161,11 @@ describe("anti-defang contract", () => {
     }
     assert.deepEqual(APPROVED_LOCKFILE_HASHES, {
       "package-lock.json": "a34179e8ab54e9689996641c981fb12fbd6e02ea483682bde6d19040b76e78ba",
-      "workers/remote-mcp/package-lock.json": "66040d178a412ff938c23793e161bc56dee36ef258dcfed89c87ff31dee17d09",
+      "workers/remote-mcp/package-lock.json": "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191",
     });
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES[".github/workflows/ci.yml"],
-      "47934cbcaa47298b3cbbecbecc43ff1a845ea1b6aba3d3cf7cfe1b542dfdbc7a",
+      "284e4177a7b73f82b6fe7d963037e2b73c3a43b41a597c920e8d879699de55ea",
     );
     assert.deepEqual(APPROVED_PLATFORM_TELEMETRY, {
       "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
@@ -186,6 +186,24 @@ describe("anti-defang contract", () => {
       "src/__tests__/fixtures/public-capability-contract.json",
       "workers/remote-mcp/public-openai/releases.json",
     ]);
+  });
+
+  test("pins the fixed Worker nanoid without upgrading agents or duplicating the package", () => {
+    const workerPackage = JSON.parse(
+      readFileSync(join(REPOSITORY_ROOT, "workers/remote-mcp/package.json"), "utf8"),
+    );
+    const workerLock = JSON.parse(
+      readFileSync(join(REPOSITORY_ROOT, "workers/remote-mcp/package-lock.json"), "utf8"),
+    );
+    assert.equal(workerPackage.dependencies.agents, "0.7.5");
+    assert.equal(workerPackage.overrides.nanoid, "5.1.16");
+    assert.equal(workerLock.packages["node_modules/agents"].version, "0.7.5");
+    assert.deepEqual(
+      Object.entries(workerLock.packages)
+        .filter(([path]) => path === "node_modules/nanoid" || path.endsWith("/node_modules/nanoid"))
+        .map(([path, metadata]) => [path, metadata.version]),
+      [["node_modules/nanoid", "5.1.16"]],
+    );
   });
 
   test("pins exact source, built, navigation, and resource inventories", () => {

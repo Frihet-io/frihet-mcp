@@ -123,6 +123,7 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
     overrides: {
       "@modelcontextprotocol/sdk": { "@hono/node-server": "2.0.12", hono: "~4.12.34" },
       agents: { "@modelcontextprotocol/sdk": "1.30.0" },
+      nanoid: "5.1.16",
     },
     peerDependencies: {},
     resolutions: {},
@@ -265,7 +266,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
   "package-lock.json": "a34179e8ab54e9689996641c981fb12fbd6e02ea483682bde6d19040b76e78ba",
-  "workers/remote-mcp/package-lock.json": "66040d178a412ff938c23793e161bc56dee36ef258dcfed89c87ff31dee17d09",
+  "workers/remote-mcp/package-lock.json": "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
@@ -280,7 +281,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  ".github/workflows/ci.yml": "47934cbcaa47298b3cbbecbecc43ff1a845ea1b6aba3d3cf7cfe1b542dfdbc7a",
+  ".github/workflows/ci.yml": "284e4177a7b73f82b6fe7d963037e2b73c3a43b41a597c920e8d879699de55ea",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "6799c971a773f04cd39d8e134c042474d23bfb1e949348df2e382b6fceb10023",
