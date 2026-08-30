@@ -181,7 +181,12 @@ const NON_IDEMPOTENT = new Set([
   "resume_recurring_invoice",
 ]);
 
-const WRITE_OVERRIDES = new Set(["frihet_portal_domain_verify"]);
+const WRITE_OVERRIDES = new Set([
+  "frihet_portal_domain_verify",
+  // signed=true exercises a workspace certificate. MCP annotations are
+  // static, so classify the whole export tool conservatively.
+  "einvoice_export",
+]);
 
 const EXTERNAL_SIDE_EFFECTS: Readonly<Record<string, readonly ExternalSideEffect[]>> = {
   create_invoice: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],

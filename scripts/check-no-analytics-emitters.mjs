@@ -250,7 +250,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "30fb7b559bf1d755911ad8843d75373cc8ac5d1d2a35709c27510d8aec145b88",
+  "src/client.ts": "dc16d4a3f0d4d6329266debc5991305387d758d6fcad57c5f7a4a236dbc4fc5d",
   "src/observability.ts": "d0bd50c57843f59d0ab61b18b59c1e2ccfcc9dcb83ab76a00a34882d6d1d7cd6",
   "src/openai-review-oauth.ts": "388035b1b9952b5c1f0ecc82dcac962a93320b1076dc23d3e4a155dbf9bf263f",
   "workers/api-proxy/worker.js": "1838e99f60d15c13ffa1fbd6dc3a87ae827c86c61154b508f84377a601c75a54",
@@ -276,7 +276,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner.svg": "2b32a68014580c334f8b180d8812d842c744a9a59bd2298a586bb95bd6179ebc",
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
-  "docs/agent-onboarding.json": "f72849573b25aae1a0ae5ac29e97d175e98bf29a7d842c2d424ebcc99bff55a1",
+  "docs/agent-onboarding.json": "a33f553f953223c79f4b44340fac0d02db7b09900eaab3accafc4c49e3c42473",
   "README.md": "8fb65836483467e58fd07536d9b3b131d0f792e5d2d668b8b33e991dcaa2760c",
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
@@ -323,7 +323,7 @@ export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
   "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "799b5e628ee0baacd1f50d61f2e584fce3931c9f0e87cbb7b6ab77be63b47088",
-  "src/__tests__/fixtures/public-capability-contract.json": "f52dae2fca4800da9c61833a14166875af9bac5c1c822b0e786a961e89b34628",
+  "src/__tests__/fixtures/public-capability-contract.json": "31c5d6a416c506f7068190f35b62a63abc6b6bd3f0921df19061d885065d03a7",
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
 

@@ -35,6 +35,10 @@ import {
   OPENAI_REVIEW_CONFIRM_REQUIRED_TOOLS,
   OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS,
 } from "../openai-profile.js";
+import {
+  localMcpSurfaceComposition,
+  registerMcpSurface,
+} from "../server-composition.js";
 
 /** dist/__tests__/x.test.js → repo root. */
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -115,6 +119,18 @@ function makeServer(overrides: Record<string, unknown> = {}): {
   const { client, calls } = makeRecordingClient(overrides);
   const server = new StubMcpServer();
   registerAllTools(asMcp(server), client);
+  return { server, calls };
+}
+
+/** The semantic public surface agents actually receive, including the
+ * post-registration annotation corrections from applyPublicCapabilityTruth. */
+function makePublicServer(overrides: Record<string, unknown> = {}): {
+  server: StubMcpServer;
+  calls: string[];
+} {
+  const { client, calls } = makeRecordingClient(overrides);
+  const server = new StubMcpServer();
+  registerMcpSurface(asMcp(server), client, localMcpSurfaceComposition(false, false));
   return { server, calls };
 }
 
@@ -326,6 +342,27 @@ describe("GAP-04 — confirm COVERAGE over the whole registry", () => {
       stale,
       [],
       `these tools are confirm-gated now — delete them from UNGATED_RISK_DEBT: ${stale.join(", ")}`,
+    );
+  });
+
+  test("post-truth destructive submit tools cannot evade the raw registry predicate", (t) => {
+    const { server } = makePublicServer();
+    const publicSubmitRisks = [...server.tools.values()].filter((entry) =>
+      entry.name.endsWith("_submit") &&
+      (entry.config.annotations ?? {})["destructiveHint"] === true,
+    );
+    t.diagnostic(
+      `scan scope: ${server.tools.size} tools after applyPublicCapabilityTruth; ` +
+        `${publicSubmitRisks.length} destructive *_submit operations.`,
+    );
+    assert.ok(publicSubmitRisks.length > 0, "post-truth submit-risk probe found no tools");
+    assert.deepEqual(
+      publicSubmitRisks
+        .filter((entry) => !declaresRequiredConfirm(entry))
+        .map((entry) => entry.name)
+        .sort(),
+      [],
+      "a destructive submit tool reached the agent-facing semantic surface without required confirm",
     );
   });
 });

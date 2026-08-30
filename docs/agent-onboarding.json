@@ -69,8 +69,8 @@
     },
     "counts": {
       "toolNames": 162,
-      "readOnly": 82,
-      "writesFrihet": 80,
+      "readOnly": 81,
+      "writesFrihet": 81,
       "externalInteraction": 36,
       "destructive": 61,
       "resources": 11,
@@ -109,6 +109,7 @@
       "delete_quote",
       "delete_recurring_invoice",
       "delete_time_entry",
+      "face_submit",
       "match_transaction_to_invoice",
       "period_close",
       "period_reopen",
@@ -117,6 +118,7 @@
       "remove_team_member",
       "send_invoice",
       "send_quote",
+      "ticketbai_submit",
       "verifactu_resubmit"
     ],
     "externalSideEffects": [

@@ -91,6 +91,70 @@ export interface XmlDocument {
 /** `/invoices/:id/xml` serves XML or a Factur-X PDF, depending on storage MIME. */
 export type EInvoiceDocument = XmlDocument | BinaryDocument;
 
+/** Ergonomic values accepted by the MCP `einvoice_export` tool. This is
+ * deliberately narrower than the asynchronous dispatch/validation format
+ * family: the public export API exposes only the EN16931 Factur-X profile. */
+export type McpEInvoiceExportFormat =
+  | "facturae"
+  | "xrechnung-cii"
+  | "xrechnung-ubl"
+  | "facturx-en16931"
+  | "fatturapa"
+  | "peppol-bis-3"
+  | "fa-2-ksef"
+  | "ubl"
+  | "cii";
+
+/** Exact, case-sensitive enum accepted by the ERP export endpoint. */
+export type ApiEInvoiceExportFormat =
+  | "Facturae"
+  | "XRechnung-CII"
+  | "XRechnung-UBL"
+  | "Factur-X"
+  | "FatturaPA"
+  | "PEPPOL-BIS-3"
+  | "FA-2-KSeF"
+  | "UBL"
+  | "CII";
+
+export interface EInvoiceExportResult {
+  xml: string;
+  contentType: string;
+  filename: string;
+  signed: boolean;
+  format: ApiEInvoiceExportFormat;
+}
+
+/** One exhaustive translation at the HTTP boundary. Never send the MCP's
+ * lowercase convenience values to the strict API. Factur-X Extended, Basic
+ * and Minimum are intentionally absent: collapsing them to EN16931 would lie
+ * about the generated profile. */
+const E_INVOICE_EXPORT_API_FORMAT: Readonly<
+  Record<McpEInvoiceExportFormat, ApiEInvoiceExportFormat>
+> = {
+  facturae: "Facturae",
+  "xrechnung-cii": "XRechnung-CII",
+  "xrechnung-ubl": "XRechnung-UBL",
+  "facturx-en16931": "Factur-X",
+  fatturapa: "FatturaPA",
+  "peppol-bis-3": "PEPPOL-BIS-3",
+  "fa-2-ksef": "FA-2-KSeF",
+  ubl: "UBL",
+  cii: "CII",
+};
+
+export function toApiEInvoiceExportFormat(format: string): ApiEInvoiceExportFormat {
+  if (!Object.hasOwn(E_INVOICE_EXPORT_API_FORMAT, format)) {
+    throw new FrihetApiError(
+      400,
+      "unsupported_einvoice_export_format",
+      `Unsupported e-invoice export format: ${format}. ` +
+        "Factur-X export supports the EN16931 profile only.",
+    );
+  }
+  return E_INVOICE_EXPORT_API_FORMAT[format as McpEInvoiceExportFormat];
+}
+
 /**
  * HTTP methods for which the backend treats the request as a mutation and
  * therefore accepts (and for some endpoints REQUIRES) an `Idempotency-Key`
@@ -1475,15 +1539,14 @@ export class FrihetClient {
 
   async exportEInvoice(params: {
     invoiceId: string;
-    format: string;
+    format: McpEInvoiceExportFormat;
     signed?: boolean;
-  }): Promise<{
-    xmlUrl: string;
-    filename: string;
-    format: string;
-    signed: boolean;
-  }> {
-    const { invoiceId, ...body } = params;
+  }): Promise<EInvoiceExportResult> {
+    const { invoiceId, format, signed } = params;
+    const body = {
+      format: toApiEInvoiceExportFormat(format),
+      ...(signed === undefined ? {} : { signed }),
+    };
     return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(invoiceId)}/einvoice/export`, body);
   }
 

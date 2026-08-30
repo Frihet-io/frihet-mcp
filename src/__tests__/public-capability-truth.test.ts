@@ -214,6 +214,13 @@ test("full-surface action hints expose destructive and external effects", async 
       openWorldHint: true,
     });
   }
+  assert.deepEqual(byName.get("einvoice_export")?.annotations, {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  });
+  assert.equal(byName.get("einvoice_export")?.capability?.writesFrihet, true);
   assert.equal(byName.get("delete_webhook")?.annotations?.openWorldHint, true);
   assert.equal(byName.get("refund_sale")?.capability?.externalInteraction, true);
   assert.deepEqual(byName.get("refund_sale")?.capability?.externalSideEffects, [
