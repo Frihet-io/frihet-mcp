@@ -111,11 +111,41 @@ async function initializeOAuthTokenFamily(
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ userId, grantId, ...input }),
     },
   );
   if (!response.ok) {
     throw new Error(`OAuth token family initialization failed (${response.status})`);
+  }
+}
+
+/**
+ * Strongly-consistent guard for an access token already accepted from OAuth KV.
+ * KV revocation is eventually consistent, so the Durable Object tombstone is
+ * checked before the token can reach the MCP session or backend credential.
+ */
+export async function isOAuthAccessTokenFamilyActive(
+  namespace: DurableObjectNamespace,
+  request: Request,
+  expectedUserId: string | undefined,
+): Promise<boolean> {
+  const authorization = request.headers.get("authorization");
+  if (!authorization?.startsWith("Bearer ") || !expectedUserId) return false;
+  const credential = parseStructuredOAuthCredential(authorization.slice(7));
+  if (!credential || credential.userId !== expectedUserId) return false;
+  const response = await (await tokenFamilyStub(
+    namespace,
+    credential.userId,
+    credential.grantId,
+  )).fetch(`${INTERNAL_ORIGIN}/token-family/status`);
+  if (!response.ok) return false;
+  try {
+    const body = await response.json<unknown>();
+    return isRecord(body)
+      && Object.keys(body).length === 1
+      && body.outcome === "active";
+  } catch {
+    return false;
   }
 }
 
@@ -430,7 +460,24 @@ export class OAuthTokenFamilyExchange {
         throw new OAuthTokenFamilyGuardError("replay", apiKeyBinding);
       } else {
         // The provider validated a credential that a second KV read cannot
-        // confirm. Eventual-consistency ambiguity must not issue new tokens.
+        // confirm. Persist a tombstone/outbox before withholding the response;
+        // eventual-consistency ambiguity must not issue or retain tokens.
+        await initializeOAuthTokenFamily(
+          this.namespace,
+          this.credential.userId,
+          this.credential.grantId,
+          {
+            currentKind: this.kind,
+            currentHash: familyHash,
+            expiresAtMs: expiryFromGrant(grant),
+            apiKeyBinding,
+          },
+        );
+        await revokeOAuthTokenFamily(
+          this.namespace,
+          this.credential.userId,
+          this.credential.grantId,
+        );
         throw new OAuthTokenFamilyGuardError("revoked", apiKeyBinding);
       }
     }

@@ -4733,44 +4733,6 @@
             "$ref": "#/components/responses/RateLimited"
           }
         }
-      },
-      "post": {
-        "operationId": "createReservation",
-        "summary": "Create a reservation",
-        "tags": [
-          "Reservations"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReservationCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Reservation created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Reservation"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
       }
     },
     "/v1/reservations/{reservationId}": {
@@ -4803,54 +4765,6 @@
                 }
               }
             }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateReservation",
-        "summary": "Update a reservation",
-        "tags": [
-          "Reservations"
-        ],
-        "parameters": [
-          {
-            "name": "reservationId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReservationCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Reservation updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Reservation"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -4926,41 +4840,6 @@
             "$ref": "#/components/responses/RateLimited"
           }
         }
-      },
-      "post": {
-        "operationId": "createProperty",
-        "summary": "Create a property",
-        "tags": [
-          "Properties"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PropertyCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Property created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Property"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          }
-        }
       }
     },
     "/v1/properties/{propertyId}": {
@@ -4993,54 +4872,6 @@
                 }
               }
             }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateProperty",
-        "summary": "Update a property",
-        "tags": [
-          "Properties"
-        ],
-        "parameters": [
-          {
-            "name": "propertyId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PropertyCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Property updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Property"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -7222,7 +7053,7 @@
       "get": {
         "operationId": "listTeamMembers",
         "summary": "List team members",
-        "description": "Returns active team members and pending invitations for the workspace.",
+        "description": "Returns active team members plus every non-terminal invitation for the workspace, each labelled with its effective state computed at read time (`pending`, `expired`, or `invalid`). Accepted and revoked invitations are not listed. This endpoint is the recovery path for `invalid` rows: list them, then revoke via DELETE /v1/team/members/{memberId}.",
         "tags": [
           "Team"
         ],
@@ -7253,9 +7084,12 @@
               "type": "string",
               "enum": [
                 "active",
-                "pending"
+                "pending",
+                "expired",
+                "invalid"
               ]
-            }
+            },
+            "description": "Filter by effective state. `active` = joined member. `pending` = invitation not yet accepted and not yet past its expiry. `expired` = invitation proven past `expiresAt` (holds no seat). `invalid` = invitation whose validity cannot be proven (missing or unparseable `expiresAt`, unknown persisted status, or a role that is not an assignable team role). An `invalid` invitation conservatively HOLDS its seat and can only be released by revoking it via DELETE /v1/team/members/{memberId}."
           },
           {
             "name": "limit",
@@ -7304,6 +7138,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -7440,7 +7277,7 @@
             "description": "Member or invitation not found"
           },
           "409": {
-            "description": "Invitation is no longer pending"
+            "description": "Invitation is no longer revocable. Only the terminal states (`accepted`, `revoked`) refuse revocation; `pending`, `expired` and `invalid` invitations are all revocable so the owner can release the seat."
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -11100,81 +10937,6 @@
           "error"
         ]
       },
-      "ReservationCreate": {
-        "type": "object",
-        "required": [
-          "guestName",
-          "propertyId",
-          "checkIn",
-          "checkOut"
-        ],
-        "properties": {
-          "guestName": {
-            "type": "string",
-            "description": "Guest full name",
-            "example": "Maria Lopez"
-          },
-          "guestEmail": {
-            "type": "string",
-            "format": "email",
-            "example": "maria@example.com"
-          },
-          "propertyId": {
-            "type": "string",
-            "description": "ID of the property"
-          },
-          "checkIn": {
-            "type": "string",
-            "format": "date",
-            "description": "Check-in date (ISO 8601)",
-            "example": "2026-05-01"
-          },
-          "checkOut": {
-            "type": "string",
-            "format": "date",
-            "description": "Check-out date (ISO 8601)",
-            "example": "2026-05-05"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ReservationStatus"
-          },
-          "amount": {
-            "type": "number",
-            "description": "Total amount in EUR",
-            "example": 450
-          },
-          "channel": {
-            "type": "string",
-            "enum": [
-              "Direct",
-              "Airbnb",
-              "Booking.com",
-              "Vrbo"
-            ],
-            "example": "Airbnb"
-          },
-          "confirmationCode": {
-            "type": "string",
-            "example": "HM4X7K"
-          },
-          "complianceStatus": {
-            "type": "string",
-            "enum": [
-              "Not Started",
-              "In Progress",
-              "Completed",
-              "Failed"
-            ]
-          },
-          "nights": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "notes": {
-            "type": "string"
-          }
-        }
-      },
       "Reservation": {
         "type": "object",
         "properties": {
@@ -11229,62 +10991,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          }
-        }
-      },
-      "PropertyCreate": {
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Property name",
-            "example": "Sunset Villa"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "Apartment",
-              "Villa",
-              "Studio",
-              "House",
-              "Room"
-            ],
-            "example": "Villa"
-          },
-          "address": {
-            "type": "string",
-            "example": "Calle Sol 12, Santa Cruz"
-          },
-          "status": {
-            "$ref": "#/components/schemas/PropertyStatus"
-          },
-          "ownerName": {
-            "type": "string",
-            "example": "Carlos Martinez"
-          },
-          "ownerEmail": {
-            "type": "string",
-            "format": "email"
-          },
-          "commissionRate": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100,
-            "description": "Commission percentage (0-100)",
-            "example": 15
-          },
-          "licenseNumber": {
-            "type": "string",
-            "description": "Tourism license number",
-            "example": "VV-38-001234"
-          },
-          "maxGuests": {
-            "type": "integer",
-            "minimum": 1,
-            "example": 6
           }
         }
       },
@@ -11472,20 +11178,25 @@
           },
           "role": {
             "type": "string",
+            "nullable": true,
             "enum": [
               "owner",
               "admin",
               "viewer",
               "editor",
               "accountant"
-            ]
+            ],
+            "description": "Null only on an invitation row whose persisted role is not an assignable team role. Such a row is always reported with `status: invalid`; the API will not invent a valid role for it. Revoke the row via DELETE /v1/team/members/{memberId} to release the seat it holds."
           },
           "status": {
             "type": "string",
             "enum": [
               "active",
-              "pending"
-            ]
+              "pending",
+              "expired",
+              "invalid"
+            ],
+            "description": "Effective state computed at read time, not merely the persisted field. `expired` is only reported when expiry is PROVEN and the row holds no seat; `invalid` means validity could not be proven and the row conservatively still holds its seat."
           },
           "joinedAt": {
             "type": "string",

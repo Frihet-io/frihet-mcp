@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "npm --prefix ../.. run gate:analytics && wrangler deploy",
+    "deploy": "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:openapi-fresh && wrangler deploy && npm --prefix ../.. run gate:openapi-fresh:live",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test 'src/__tests__/*.test.ts' 'src/__tests__/*.test.mjs'"
   },

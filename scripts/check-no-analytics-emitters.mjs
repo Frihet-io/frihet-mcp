@@ -43,7 +43,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
   "package.json": "083b30d76162ba2e9b3e50a25ebe8c89fb7a207e188171ac38aff9ef09cfae73",
-  "workers/remote-mcp/package.json": "82a0e907af6fe858e91f62482bd93a382b89d8b09f28572e7654bc068f533e7c",
+  "workers/remote-mcp/package.json": "c7025291c46b023fac162d1a0e0a010d1173bf7bc5d218c6faaab515aba97c6b",
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
   "workers/api-proxy/wrangler.toml": "worker.js",
@@ -193,6 +193,7 @@ export const APPROVED_NETWORK_SINKS = Object.freeze({
   "workers/api-proxy/worker.js|fetch|fetch|upstream.toString()": 2,
   "workers/remote-mcp/src/index.ts|fetch|env.ASSETS.fetch|assetReq": 2,
   "workers/remote-mcp/src/index.ts|fetch|fetch|UPSTREAM_HEALTH": 1,
+  "workers/remote-mcp/src/index.ts|fetch|mcpApiHandler.fetch|request": 1,
   "workers/remote-mcp/src/index.ts|fetch|selectedProvider.fetch|providerRequest": 1,
   "workers/remote-mcp/src/index.ts|fetch|Response.redirect|\"https://frihet.io/favicon.ico\"": 1,
   "workers/remote-mcp/src/mcp-session-binding.ts|fetch|unboundHandler.fetch|sdkRequest": 1,
@@ -204,6 +205,7 @@ export const APPROVED_NETWORK_SINKS = Object.freeze({
   "workers/remote-mcp/src/oauth-token-family.ts|checkOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/check`": 1,
   "workers/remote-mcp/src/oauth-token-family.ts|commitOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/commit`": 1,
   "workers/remote-mcp/src/oauth-token-family.ts|initializeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family`": 1,
+  "workers/remote-mcp/src/oauth-token-family.ts|isOAuthAccessTokenFamilyActive|(awaittokenFamilyStub(namespace,credential.userId,credential.grantId,)).fetch|`${INTERNAL_ORIGIN}/token-family/status`": 1,
   "workers/remote-mcp/src/oauth-token-family.ts|revokeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/revoke`": 1,
   "workers/remote-mcp/src/login-page.ts#inline-script|signIn|fetch|\"/callback\"": 1,
   "workers/remote-mcp/src/login-page.ts#inline-script|signIn|window.location.href|data.redirectTo": 1,
@@ -254,12 +256,12 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/api-url.ts": "6603350d3dde02e0a8139f216320a055df79f1bbba45ff2e1bf2fe7f40f32f23",
   "workers/remote-mcp/src/auth-handler.ts": "7de5521aae87c2785fabf4703a37a3ecc803bad5bdb6913aa1504d53f4c6b6d1",
   "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
-  "workers/remote-mcp/src/index.ts": "2a8bc5f8bf29bfeb6efe49a8d679d558f1f0ae140469f84d1841199ce6fe246e",
+  "workers/remote-mcp/src/index.ts": "a63033e9b79621f6758b7732fda0c88f13e8d229acb3a77f406295ef5faccd52",
   "workers/remote-mcp/src/login-page.ts": "1c4d6dcacbbcdc47db152242a4ca4adfb83b4f0229903e0550c63b973ab00ff5",
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "38900057cb8b7189a473ff8318b8789103c8a4a943b3aef62a2a83d085a29d26",
-  "workers/remote-mcp/src/oauth-state-store.ts": "d1ad31081873e7c53b59037bae3ed0141c6b8c9bbba5e5f06abcdc7c47f5a6ab",
-  "workers/remote-mcp/src/oauth-token-family.ts": "2bd6a60def82138c95b9fa6696661945cb97bb08b917865f7c6aa98812a6a0f8",
+  "workers/remote-mcp/src/oauth-state-store.ts": "9785c628b2a01d80c06267a0c39beb93f9d9b7a11b26369d48aa2cc705bf7906",
+  "workers/remote-mcp/src/oauth-token-family.ts": "fc0cb5c82b0d698139a0caf3dfae34d267e7366b6d073b4d1b901c8267af0eb6",
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
   "package-lock.json": "78d5e7f445f2f9021f90a3e89ee1280121293b290d4cdf09921b7e966a77afbc",

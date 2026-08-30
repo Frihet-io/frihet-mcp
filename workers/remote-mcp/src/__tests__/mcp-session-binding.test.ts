@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   bindMcpSessionId,
@@ -207,4 +209,18 @@ test("handler rejects route confusion, raw legacy ids, and response identity cha
     ctx,
   );
   assert.equal(changed.status, 502);
+});
+
+test("the reviewed provider wires the durable token-family guard before MCP sessions", () => {
+  const source = readFileSync(fileURLToPath(new URL("../index.ts", import.meta.url)), "utf8");
+  const handler = source.match(
+    /const reviewedMcpApiHandler = \{[\s\S]*?\n\};/u,
+  )?.[0];
+  assert.ok(handler);
+  assert.match(handler, /isOAuthAccessTokenFamilyActive\(/u);
+  assert.match(handler, /return mcpApiHandler\.fetch\(request, env, ctx\)/u);
+  assert.match(
+    source,
+    /const openAIProviderOptions:[\s\S]*?apiHandler: reviewedMcpApiHandler/u,
+  );
 });

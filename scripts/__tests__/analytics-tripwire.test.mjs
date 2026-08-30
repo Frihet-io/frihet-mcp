@@ -105,7 +105,7 @@ describe("anti-defang contract", () => {
     );
     assert.equal(
       workerScripts.deploy,
-      "npm --prefix ../.. run gate:analytics && wrangler deploy",
+      "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:openapi-fresh && wrangler deploy && npm --prefix ../.. run gate:openapi-fresh:live",
     );
   });
 
@@ -184,7 +184,7 @@ describe("anti-defang contract", () => {
   });
 
   test("pins exact source, built, navigation, and resource inventories", () => {
-    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 24);
+    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 26);
     assert.deepEqual(APPROVED_NETWORK_SINKS, {
       "src/client.ts|request|fetch|url.toString()": 1,
       "src/client.ts|fetchRaw|fetch|url.toString()": 1,
@@ -192,6 +192,7 @@ describe("anti-defang contract", () => {
       "workers/api-proxy/worker.js|fetch|fetch|upstream.toString()": 2,
       "workers/remote-mcp/src/index.ts|fetch|env.ASSETS.fetch|assetReq": 2,
       "workers/remote-mcp/src/index.ts|fetch|fetch|UPSTREAM_HEALTH": 1,
+      "workers/remote-mcp/src/index.ts|fetch|mcpApiHandler.fetch|request": 1,
       "workers/remote-mcp/src/index.ts|fetch|selectedProvider.fetch|providerRequest": 1,
       "workers/remote-mcp/src/index.ts|fetch|Response.redirect|\"https://frihet.io/favicon.ico\"": 1,
       "workers/remote-mcp/src/mcp-session-binding.ts|fetch|unboundHandler.fetch|sdkRequest": 1,
@@ -203,6 +204,7 @@ describe("anti-defang contract", () => {
       "workers/remote-mcp/src/oauth-token-family.ts|checkOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/check`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|commitOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/commit`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|initializeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family`": 1,
+      "workers/remote-mcp/src/oauth-token-family.ts|isOAuthAccessTokenFamilyActive|(awaittokenFamilyStub(namespace,credential.userId,credential.grantId,)).fetch|`${INTERNAL_ORIGIN}/token-family/status`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|revokeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/revoke`": 1,
       "workers/remote-mcp/src/login-page.ts#inline-script|signIn|fetch|\"/callback\"": 1,
       "workers/remote-mcp/src/login-page.ts#inline-script|signIn|window.location.href|data.redirectTo": 1,
@@ -543,7 +545,7 @@ describe("executable analytics shapes fail closed", () => {
   test("the current source repository satisfies the complete gate", () => {
     const result = scanRepository(REPOSITORY_ROOT);
     assert.deepEqual(result.findings, []);
-    assert.equal(result.sinks.length, 24);
+    assert.equal(result.sinks.length, 26);
     assert.equal(result.resources.length, 2);
   });
 });

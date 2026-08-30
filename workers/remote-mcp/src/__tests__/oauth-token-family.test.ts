@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import type { TokenExchangeCallbackOptions } from "@cloudflare/workers-oauth-provider";
 import {
+  isOAuthAccessTokenFamilyActive,
   OAuthTokenFamilyExchange,
   OAuthTokenFamilyGuardError,
   OAuthTokenFamilyRevocation,
@@ -13,11 +14,29 @@ class FakeStorage {
   readonly values = new Map<string, unknown>();
 
   async get<T>(key: string): Promise<T | undefined> {
-    return this.values.get(key) as T | undefined;
+    const value = this.values.get(key);
+    return value === undefined ? undefined : structuredClone(value) as T;
   }
 
   async put(key: string, value: unknown): Promise<void> {
     this.values.set(key, structuredClone(value));
+  }
+
+  async delete(key: string): Promise<boolean> {
+    return this.values.delete(key);
+  }
+
+  async transaction<T>(callback: (transaction: DurableObjectTransaction) => Promise<T>): Promise<T> {
+    const snapshot = new Map(
+      [...this.values].map(([key, value]) => [key, structuredClone(value)]),
+    );
+    try {
+      return await callback(this as unknown as DurableObjectTransaction);
+    } catch (error) {
+      this.values.clear();
+      for (const [key, value] of snapshot) this.values.set(key, value);
+      throw error;
+    }
   }
 
   async setAlarm(): Promise<void> {}
@@ -315,6 +334,52 @@ test("two accepted uses of one current refresh token tombstone before either 200
   const winningSettlement = await winner.settle(tokenResponse(REFRESH_1));
   assert.equal(winningSettlement.response.status, 400);
   assert.equal(winningSettlement.revokeGrant, true);
+});
+
+test("access tokens fail closed against the durable family tombstone even while KV may be stale", async () => {
+  const namespace = new FakeDurableObjectNamespace();
+  const kv = new FakeKv();
+  await initializeThroughAuthorizationCode(namespace, kv);
+  const accessRequest = new Request("https://openai-mcp.frihet.io/mcp", {
+    headers: { Authorization: `Bearer ${ACCESS_0}` },
+  });
+  assert.equal(await isOAuthAccessTokenFamilyActive(
+    namespace as unknown as DurableObjectNamespace,
+    accessRequest,
+    USER_ID,
+  ), true);
+
+  const first = exchangeFor("refresh_token", REFRESH_0, namespace, kv);
+  const replay = exchangeFor("refresh_token", REFRESH_0, namespace, kv);
+  await first.reserve(callbackOptions("refresh_token"), BINDING);
+  await assert.rejects(
+    () => replay.reserve(callbackOptions("refresh_token"), BINDING),
+    (error: unknown) => error instanceof OAuthTokenFamilyGuardError
+      && error.reason === "replay",
+  );
+
+  assert.equal(await isOAuthAccessTokenFamilyActive(
+    namespace as unknown as DurableObjectNamespace,
+    accessRequest,
+    USER_ID,
+  ), false);
+  assert.equal(await isOAuthAccessTokenFamilyActive(
+    namespace as unknown as DurableObjectNamespace,
+    accessRequest,
+    "another-user",
+  ), false);
+
+  const malformedNamespace = {
+    idFromName: () => ({}) as DurableObjectId,
+    get: () => ({
+      fetch: async () => new Response("not-json", { status: 200 }),
+    }) as unknown as DurableObjectStub,
+  } as unknown as DurableObjectNamespace;
+  assert.equal(await isOAuthAccessTokenFamilyActive(
+    malformedNamespace,
+    accessRequest,
+    USER_ID,
+  ), false);
 });
 
 test("a spent authorization code detected after the provider rejects it revokes the family", async () => {

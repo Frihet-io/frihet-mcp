@@ -25,7 +25,7 @@
  * caught by JSON-RPC or OAuth routing.
  */
 
-import OAuthProvider, { getOAuthApi, GrantType } from "@cloudflare/workers-oauth-provider";
+import OAuthProvider, { GrantType } from "@cloudflare/workers-oauth-provider";
 import type {
   OAuthProviderOptions,
   ResolveExternalTokenInput,
@@ -75,15 +75,12 @@ import {
   isMcpRouteConfusion,
 } from "./mcp-session-binding.js";
 import {
+  isOAuthAccessTokenFamilyActive,
   OAuthTokenFamilyExchange,
   OAuthTokenFamilyRevocation,
   type OAuthTokenFamilySettlement,
 } from "./oauth-token-family.js";
-import {
-  isValidOAuthServiceSecret,
-  revokeOAuthApiKey,
-} from "./oauth-provisioning.js";
-import { resolveOAuthApiKeyUrl } from "./api-url.js";
+import { isValidOAuthServiceSecret } from "./oauth-provisioning.js";
 import type { OAuthApiKeyBinding } from "./oauth-state-store.js";
 import {
   BoundedRequestBodyError,
@@ -880,6 +877,29 @@ const unboundMcpApiHandler = FrihetMCP.serve("/mcp", { transport: "streamable-ht
  */
 const mcpApiHandler = createPrincipalBoundMcpHandler(unboundMcpApiHandler);
 
+const reviewedMcpApiHandler = {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const props = (ctx as ExecutionContext & { props?: AuthProps }).props;
+    if (
+      !(await isOAuthAccessTokenFamilyActive(
+        env.OAUTH_STATE,
+        request,
+        props?.userId,
+      ))
+    ) {
+      return new Response(JSON.stringify({ error: "invalid_token" }), {
+        status: 401,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Pragma": "no-cache",
+        },
+      });
+    }
+    return mcpApiHandler.fetch(request, env, ctx);
+  },
+};
+
 const resolveFullHostExternalToken = async ({
   token,
   request,
@@ -1011,7 +1031,7 @@ function buildReviewedTokenExchangeResult(
 
 const openAIProviderOptions: OAuthProviderOptions<Env> = {
   ...OAUTH_PROVIDER_REVIEW_OPTIONS,
-  apiHandler: mcpApiHandler,
+  apiHandler: reviewedMcpApiHandler,
   defaultHandler: authHandler,
   tokenExchangeCallback: (options: TokenExchangeCallbackOptions) => {
     const { reviewedProps, credentialTtlSeconds } = validateReviewedTokenExchange(options);
@@ -1040,64 +1060,6 @@ function createGuardedOpenAIProvider(exchange: OAuthTokenFamilyExchange): OAuthP
       );
     },
   });
-}
-
-async function revokeReviewedOAuthFamily(
-  env: Env,
-  family: { userId: string; grantId: string },
-  apiKeyBinding?: OAuthApiKeyBinding,
-): Promise<void> {
-  const { userId, grantId } = family;
-  // Attempt both authority revocations concurrently. Provider grant cleanup
-  // can page through access-token KV records; it must never delay disabling the
-  // bound backend credential after replay has already tombstoned the family.
-  const grantCleanup = (async () => {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        await getOAuthApi(openAIProviderOptions, env).revokeGrant(grantId, userId);
-        return true;
-      } catch {
-        // Retry once below. The Durable Object tombstone already blocks refresh.
-      }
-    }
-    return false;
-  })();
-
-  const backendCleanup = (async () => {
-    if (!apiKeyBinding || apiKeyBinding.uid !== userId) {
-      return apiKeyBinding === undefined;
-    }
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const response = await revokeOAuthApiKey(
-          resolveOAuthApiKeyUrl(env.FRIHET_API_BASE),
-          env.FRIHET_OAUTH_API_KEY,
-          apiKeyBinding,
-        );
-        if (response.ok || response.status === 404) return true;
-      } catch {
-        // Retry once. Never log the service secret or credential-bearing body.
-      }
-    }
-    return false;
-  })();
-
-  const [grantRevoked, backendRevoked] = await Promise.all([
-    grantCleanup,
-    backendCleanup,
-  ]);
-
-  if (!grantRevoked || !backendRevoked) {
-    log({
-      level: "error",
-      message: "OAuth token-family cleanup was incomplete",
-      operation: "oauth_token_family_revoke",
-      metadata: {
-        grantRevoked,
-        backendRevoked,
-      },
-    });
-  }
 }
 
 // Frihet favicon — black circle (#171717)
@@ -1780,16 +1742,6 @@ export default {
       response = tokenSettlement.response;
     }
 
-    const reviewedFamily = tokenFamilyExchange?.family ?? tokenFamilyRevocation?.family;
-    if (reviewedFamily && tokenSettlement?.revokeGrant) {
-      await revokeReviewedOAuthFamily(
-        env,
-        reviewedFamily,
-        tokenSettlement.apiKeyBinding
-          ?? tokenFamilyExchange?.apiKeyBinding
-          ?? tokenFamilyRevocation?.apiKeyBinding,
-      );
-    }
     if (openai && url.pathname === OAUTH_PROVIDER_REVIEW_OPTIONS.apiRoute && response.status === 401) {
       const headers = new Headers(response.headers);
       headers.set("WWW-Authenticate", buildOpenAIUnauthorizedChallenge());
