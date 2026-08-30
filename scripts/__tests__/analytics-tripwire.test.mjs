@@ -20,6 +20,7 @@ import {
   APPROVED_LIFECYCLE_SCRIPTS,
   APPROVED_LOCKFILE_HASHES,
   APPROVED_NETWORK_SINKS,
+  APPROVED_OPERATIONAL_FILE_HASHES,
   APPROVED_PACKAGE_DEPENDENCIES,
   APPROVED_PACKAGE_RUNTIME_METADATA,
   APPROVED_PACKAGE_SCRIPT_HASHES,
@@ -158,10 +159,14 @@ describe("anti-defang contract", () => {
         `${owner} must be frozen with a complete reviewed source hash`,
       );
     }
-    assert.deepEqual(Object.keys(APPROVED_LOCKFILE_HASHES).sort(), [
-      "package-lock.json",
-      "workers/remote-mcp/package-lock.json",
-    ]);
+    assert.deepEqual(APPROVED_LOCKFILE_HASHES, {
+      "package-lock.json": "a34179e8ab54e9689996641c981fb12fbd6e02ea483682bde6d19040b76e78ba",
+      "workers/remote-mcp/package-lock.json": "66040d178a412ff938c23793e161bc56dee36ef258dcfed89c87ff31dee17d09",
+    });
+    assert.equal(
+      APPROVED_OPERATIONAL_FILE_HASHES[".github/workflows/ci.yml"],
+      "47934cbcaa47298b3cbbecbecc43ff1a845ea1b6aba3d3cf7cfe1b542dfdbc7a",
+    );
     assert.deepEqual(APPROVED_PLATFORM_TELEMETRY, {
       "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
     });
