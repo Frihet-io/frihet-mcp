@@ -13,10 +13,32 @@ const TRUSTED_OAUTH_API_KEY_URLS = new Set([
   CLOUD_FUNCTION_OAUTH_API_KEY_URL,
 ]);
 
+/**
+ * Cross-repo golden shared with the ERP provisioning authority.
+ *
+ * Keep this literal byte-for-byte aligned with ERP's exported golden. Runtime
+ * checks below consume its response/lifetime/key-id fields so a contract edit
+ * cannot turn this into inert documentation.
+ */
+export const OAUTH_PROVISIONING_CONTRACT = {
+  contractVersion: "2026-08-30",
+  candidateRequestKeys: ["accessProfile", "correlationId", "oauthResource", "uid"],
+  legacyRequestKeys: ["uid"],
+  responseKeys: ["apiKey", "expiresAt", "keyId"],
+  candidateLifetimeDays: 30,
+  legacyLifetimeDays: 365,
+  keyIdPattern: "^[A-Za-z0-9]{20}$",
+  bindings: {
+    openai: "https://openai-mcp.frihet.io",
+    full: "https://mcp.frihet.io",
+  },
+  permissions: ["read", "write"],
+} as const;
+
 export type OAuthProvisioningBinding = {
   uid: string;
   accessProfile: "openai" | "full";
-  oauthResource: "https://openai-mcp.frihet.io" | "https://mcp.frihet.io";
+  oauthResource: (typeof OAUTH_PROVISIONING_CONTRACT.bindings)["openai" | "full"];
 };
 
 export type ProvisionedOAuthApiKey = OAuthProvisioningBinding & {
@@ -50,7 +72,11 @@ export function parseProvisionedOAuthApiKey(
   binding: OAuthProvisioningBinding,
 ): ProvisionedOAuthApiKey | undefined {
   if (!isRecord(payload)) return undefined;
-  if (Object.keys(payload).some((key) => !["apiKey", "keyId", "expiresAt"].includes(key))) {
+  const payloadKeys = Object.keys(payload).sort();
+  if (
+    payloadKeys.length !== OAUTH_PROVISIONING_CONTRACT.responseKeys.length
+    || payloadKeys.some((key, index) => key !== OAUTH_PROVISIONING_CONTRACT.responseKeys[index])
+  ) {
     return undefined;
   }
   const { apiKey, keyId, expiresAt } = payload;
@@ -60,13 +86,13 @@ export function parseProvisionedOAuthApiKey(
     typeof apiKey !== "string"
     || !/^fri_[A-Za-z0-9_-]{43}$/u.test(apiKey)
     || typeof keyId !== "string"
-    || !/^[A-Za-z0-9]{20}$/u.test(keyId)
+    || !new RegExp(OAUTH_PROVISIONING_CONTRACT.keyIdPattern, "u").test(keyId)
     || typeof expiresAt !== "string"
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(expiresAt)
     || !Number.isFinite(expiresAtMs)
     || new Date(expiresAtMs).toISOString() !== expiresAt
     || remainingMs <= 60_000
-    || remainingMs > 31 * 24 * 60 * 60 * 1000
+    || remainingMs > (OAUTH_PROVISIONING_CONTRACT.candidateLifetimeDays + 1) * 24 * 60 * 60 * 1000
   ) {
     return undefined;
   }

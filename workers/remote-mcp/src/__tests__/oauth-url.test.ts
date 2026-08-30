@@ -15,6 +15,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { resolveApiBaseUrl, resolveOAuthApiKeyUrl } from "../api-url.ts";
 import {
+  OAUTH_PROVISIONING_CONTRACT,
   isTrustedOAuthApiKeyUrl,
   parseProvisionedOAuthApiKey,
   provisionOAuthApiKey,
@@ -29,6 +30,23 @@ const OPENAI_BINDING = {
   accessProfile: "openai",
   oauthResource: "https://openai-mcp.frihet.io",
 } as const;
+
+test("OAuth provisioning golden matches the ERP two-phase contract", () => {
+  assert.deepEqual(OAUTH_PROVISIONING_CONTRACT, {
+    contractVersion: "2026-08-30",
+    candidateRequestKeys: ["accessProfile", "correlationId", "oauthResource", "uid"],
+    legacyRequestKeys: ["uid"],
+    responseKeys: ["apiKey", "expiresAt", "keyId"],
+    candidateLifetimeDays: 30,
+    legacyLifetimeDays: 365,
+    keyIdPattern: "^[A-Za-z0-9]{20}$",
+    bindings: {
+      openai: "https://openai-mcp.frihet.io",
+      full: "https://mcp.frihet.io",
+    },
+    permissions: ["read", "write"],
+  });
+});
 
 test("resolveOAuthApiKeyUrl strips /v1 suffix (the production bug)", () => {
   assert.equal(resolveOAuthApiKeyUrl("https://api.frihet.io/v1"), EXPECTED);
