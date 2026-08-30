@@ -8,37 +8,6 @@ import type { IFrihetClient } from "../client-interface.js";
 import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, expenseItemOutput } from "./shared.js";
 
 /**
- * Strict calendar-valid ISO date (YYYY-MM-DD). Regex gates the SHAPE
- * (exactly 4-2-2 digits, zero-padded) and `isStrictIsoDate` proves the date
- * exists on the calendar — JS Date overflow silently rolls `2026-02-29`
- * forward to `2026-03-01` and `2026-04-31` to `2026-05-01`, so a round-trip
- * via `getUTCDate()` catches both cases. `2028-02-29` (leap year) passes.
- * Non-zero-padded forms (`2026-4-1`) are rejected by the regex.
- */
-const STRICT_ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-function isStrictIsoDate(value: unknown): value is string {
-  // The field is optional; Zod calls the refine predicate with the post-
-  // optional value, which can be `undefined` for the absent case. Accept and
-  // treat undefined as "valid" — Zod's optional() short-circuits before refine
-  // for the undefined input in practice, but the type contract requires us to
-  // handle it defensively.
-  if (typeof value !== "string") return false;
-  if (!STRICT_ISO_DATE.test(value)) return false;
-  const [y, m, d] = value.split("-").map(Number);
-  // Construct at UTC midnight to dodge local-timezone day-shift (e.g. parsing
-  // 2026-02-29 in a +01 zone can flip to 2026-02-28 if the constructor is
-  // local). Then compare every component back so any overflow (Feb 30, Apr 31)
-  // is detected as a mismatch.
-  const parsed = new Date(Date.UTC(y, m - 1, d));
-  return (
-    parsed.getUTCFullYear() === y &&
-    parsed.getUTCMonth() === m - 1 &&
-    parsed.getUTCDate() === d
-  );
-}
-
-/**
  * Public Zod schema for `create_expense` input — exported for tests so the
  * validation contract can be exercised directly without spinning up a stub
  * MCP server. The registered tool's inputSchema MUST wrap this exact object
@@ -46,32 +15,29 @@ function isStrictIsoDate(value: unknown): value is string {
  */
 export const createExpenseInputSchema = z
   .object({
-    description: z.string().describe("Expense description / Descripcion del gasto"),
-    amount: z.number().describe("Amount in EUR / Importe en EUR"),
+    description: z.string().trim().min(1).max(1000).describe("Expense description / Descripcion del gasto"),
+    amount: z.number().finite().min(0.01).max(10_000_000).describe("Amount in EUR / Importe en EUR"),
     category: z
       .string()
+      .max(10_000)
       .optional()
       .describe("Expense category (e.g. 'office', 'travel', 'software') / Categoria"),
     date: z
-      .string()
+      .iso.date()
       .optional()
       .describe("Expense date in ISO 8601 (YYYY-MM-DD) / Fecha del gasto"),
-    vendor: z.string().optional().describe("Vendor/supplier name / Nombre del proveedor"),
+    vendor: z.string().trim().max(200).optional().describe("Vendor/supplier name / Nombre del proveedor"),
     taxDeductible: z
       .boolean()
       .optional()
       .describe("Whether the expense is tax deductible / Si el gasto es deducible fiscalmente"),
     paidDate: z
-      .string()
+      .iso.date()
       .optional()
-      .refine(isStrictIsoDate, {
-        message:
-          "paidDate must be a calendar-valid ISO 8601 date (YYYY-MM-DD, zero-padded) / Fecha de pago invalida",
-      })
       .describe(
-        "Optional payment date in ISO 8601 (YYYY-MM-DD). Drives the Modelo 111/115/130 cash-basis period selector. " +
+        "Optional payment date in ISO 8601 (YYYY-MM-DD). Determines when the expense is treated as paid. " +
           "Must be a real calendar date (2028-02-29 is valid, 2026-02-29 is not). " +
-          "/ Fecha de pago opcional en ISO 8601 (YYYY-MM-DD). Determina el periodo de caja del Modelo 111/115/130.",
+          "/ Fecha de pago opcional en ISO 8601 (YYYY-MM-DD). Determina cuando se considera pagado el gasto.",
       ),
   })
   .strict();
@@ -196,10 +162,10 @@ export function registerExpenseTools(server: McpServer, client: IFrihetClient): 
       annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Expense ID / ID del gasto"),
-        description: z.string().optional().describe("Description / Descripcion"),
+        description: z.string().max(10_000).optional().describe("Description / Descripcion"),
         amount: z.number().optional().describe("Amount in EUR / Importe"),
-        category: z.string().optional().describe("Category / Categoria"),
-        date: z.string().optional().describe("Date (YYYY-MM-DD) / Fecha"),
+        category: z.string().max(10_000).optional().describe("Category / Categoria"),
+        date: z.iso.date().optional().describe("Date (YYYY-MM-DD) / Fecha"),
         vendor: z.string().optional().describe("Vendor / Proveedor"),
         taxDeductible: z.boolean().optional().describe("Tax deductible / Deducible"),
       },

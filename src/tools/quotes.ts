@@ -8,10 +8,10 @@ import type { IFrihetClient } from "../client-interface.js";
 import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, quoteItemOutput, actionResultOutput } from "./shared.js";
 
 const quoteItemSchema = z.object({
-  description: z.string().describe("Description of the line item / Descripcion del concepto"),
-  quantity: z.number().describe("Quantity / Cantidad"),
-  unitPrice: z.number().describe("Unit price in EUR / Precio unitario en EUR"),
-});
+  description: z.string().trim().min(1).max(500).describe("Description of the line item / Descripcion del concepto"),
+  quantity: z.number().finite().min(0.0001).max(1_000_000).describe("Quantity / Cantidad"),
+  unitPrice: z.number().finite().min(0).max(10_000_000).describe("Unit price in EUR / Precio unitario en EUR"),
+}).strict();
 
 // Optional client-identity + ES fiscal fields the Frihet API accepts on quote
 // create+update (mirrors the invoice subset the backend supports for quotes).
@@ -19,7 +19,7 @@ const quoteOptionalFields = {
   clientId: z
     .string()
     .optional()
-    .describe("Existing client ID — server back-fills taxId/address / ID de cliente existente"),
+    .describe("Existing client ID — stored client details are used for the document / ID de cliente existente"),
   clientTaxId: z
     .string()
     .optional()
@@ -29,11 +29,11 @@ const quoteOptionalFields = {
     .optional()
     .describe("Client billing address / Direccion fiscal del cliente"),
   issueDate: z
-    .string()
+    .iso.date()
     .optional()
     .describe("Issue date in ISO 8601 (YYYY-MM-DD), defaults to today / Fecha de emision"),
   dueDate: z
-    .string()
+    .iso.date()
     .optional()
     .describe("Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento"),
   taxRate: z
@@ -156,17 +156,17 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
         "Los presupuestos se pueden convertir en facturas despues.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
-        clientName: z.string().describe("Client name / Nombre del cliente"),
+        clientName: z.string().trim().min(1).max(200).describe("Client name / Nombre del cliente"),
         ...quoteOptionalFields,
         items: z
           .array(quoteItemSchema)
           .min(1)
           .describe("Line items (each with description, quantity, unitPrice) / Conceptos del presupuesto"),
         validUntil: z
-          .string()
+          .iso.date()
           .optional()
           .describe("Expiry date in ISO 8601 (YYYY-MM-DD) / Fecha de validez"),
-        notes: z.string().optional().describe("Additional notes shown on the quote / Notas adicionales"),
+        notes: z.string().max(10_000).optional().describe("Additional notes shown on the quote / Notas adicionales"),
         status: z
           .enum(["draft", "sent", "accepted", "rejected", "expired"])
           .optional()
@@ -226,12 +226,12 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
       title: "Delete Quote",
       description:
         "Delete a quote by its ID. Requires confirm=true. " +
-        "Only a DRAFT quote is removed permanently. A sent/accepted/rejected/expired quote is NOT " +
+        "Only a clean DRAFT with no delivery, response, attachment, or conversion evidence is removed permanently; a protected draft is refused and left unchanged. A sent/accepted/rejected/expired quote is NOT " +
         "destroyed: the backend CANCELS it (status=cancelled) — the same non-destructive path invoices " +
         "take — and it stays readable via get_quote. The result reports which happened in `outcome` " +
         "(\"deleted\" or \"cancelled\"). " +
-        "/ Elimina un presupuesto por su ID. Requiere confirm=true. Solo un presupuesto en BORRADOR se " +
-        "elimina de forma permanente. Uno ya enviado/aceptado/rechazado NO se destruye: se CANCELA " +
+        "/ Elimina un presupuesto por su ID. Requiere confirm=true. Solo un BORRADOR limpio sin evidencia de entrega, respuesta, adjuntos o conversion se " +
+        "elimina de forma permanente; un borrador protegido se rechaza sin cambios. Uno ya enviado/aceptado/rechazado NO se destruye: se CANCELA " +
         "(status=cancelled) y sigue consultable con get_quote.",
       annotations: DELETE_ANNOTATIONS,
       inputSchema: {
@@ -249,7 +249,7 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
             {
               type: "text" as const,
               text: "Error: confirm=true is required to delete a quote. " +
-                "A draft quote is removed permanently; a sent/accepted quote is CANCELLED " +
+                "A clean draft without delivery, response, attachment, or conversion evidence is removed permanently; a protected draft is refused; a sent/accepted quote is CANCELLED " +
                 "(status=cancelled) instead and remains in the record. " +
                 "Set confirm=true to proceed. / " +
                 "Se requiere confirm=true para eliminar un presupuesto.",
@@ -288,18 +288,66 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
     {
       title: "Send Quote",
       description:
-        "Send a quote/estimate to the client via email. Optionally override the recipient email address. " +
+        "Send a quote/estimate to the client via email. Requires confirm=true. " +
+        "Optionally override the recipient email address. " +
         "The quote must exist and should not already be expired or rejected. " +
-        "/ Envia un presupuesto al cliente por email. Opcionalmente se puede cambiar el email destinatario.",
+        "Sending reaches a third party and cannot be recalled. " +
+        "/ Envia un presupuesto al cliente por email. Requiere confirm=true. " +
+        "Opcionalmente se puede cambiar el email destinatario. El envio llega a un tercero y no se puede anular.",
       annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Quote ID / ID del presupuesto"),
         to: z.string().optional().describe("Override recipient email / Email destinatario alternativo"),
+        confirm: z
+          .boolean()
+          .describe("Must be true to confirm sending / Debe ser true para confirmar el envio"),
       },
       outputSchema: actionResultOutput,
     },
-    async ({ id, to }) => withToolLogging("send_quote", async () => {
-      const result = await client.sendQuote(id, to);
+    async ({ id, to, confirm }) => withToolLogging("send_quote", async () => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Error: confirm=true is required to send a quote. " +
+                "This delivers an email to the client — a third party outside this workspace — " +
+                "and it cannot be recalled once sent. Set confirm=true to proceed. / " +
+                "Se requiere confirm=true para enviar un presupuesto por email a un tercero.",
+            },
+          ],
+          isError: true,
+        };
+      }
+      const quote = await client.getQuote(id);
+      const status = typeof quote["status"] === "string" ? quote["status"] : undefined;
+      if (status && ["expired", "rejected", "cancelled"].includes(status)) {
+        return {
+          content: [{ type: "text" as const, text: `Error: a ${status} quote cannot be sent.` }],
+          isError: true,
+        };
+      }
+      let recipientEmail = to;
+      if (!recipientEmail) {
+        const clientId = typeof quote["clientId"] === "string" ? quote["clientId"] : undefined;
+        if (!clientId) {
+          return {
+            content: [{ type: "text" as const, text: "Error: this quote has no linked client with a saved email address." }],
+            isError: true,
+          };
+        }
+        const linkedClient = await client.getClient(clientId);
+        recipientEmail = typeof linkedClient["email"] === "string" && linkedClient["email"].trim()
+          ? linkedClient["email"].trim()
+          : undefined;
+        if (!recipientEmail) {
+          return {
+            content: [{ type: "text" as const, text: "Error: the linked client has no saved email address." }],
+            isError: true,
+          };
+        }
+      }
+      const result = await client.sendQuote(id, recipientEmail);
       return {
         content: [mutateContent(formatRecord("Quote sent", result))],
         structuredContent: result as unknown as Record<string, unknown>,

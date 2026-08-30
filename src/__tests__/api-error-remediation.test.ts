@@ -13,7 +13,7 @@ import { FrihetApiError, FrihetClient } from "../client.js";
 import { handleToolError, withToolLogging } from "../tools/shared.js";
 
 const GENERIC_403 =
-  "Access denied. Your API key does not have permission for this action. / Acceso denegado.";
+  "Access denied. Reconnect Frihet or use configured credentials with permission for this action. / Acceso denegado. Vuelve a conectar Frihet o usa credenciales con permiso para esta accion.";
 const SCOPE_REMEDY =
   "This API key requires the einvoice:read or einvoice:write scope to access e-invoicing endpoints. Add the scope when creating or updating the key.";
 const REAL_FORMAT_FRIHET_KEY = `fri_${"A".repeat(43)}`;
@@ -126,6 +126,10 @@ describe("403 remediation rendering", () => {
       "Error: Bad request. Check your input parameters. / Solicitud incorrecta. Revisa los parametros.",
     );
     assert.equal(
+      rendered(new FrihetApiError(401, "unauthorized", "backend detail")),
+      "Error: Authentication failed. Reconnect Frihet or check the configured credentials. / Autenticacion fallida. Vuelve a conectar Frihet o revisa las credenciales configuradas.",
+    );
+    assert.equal(
       rendered(new FrihetApiError(404, "not_found", "backend detail")),
       "Error: Resource not found. / Recurso no encontrado.",
     );
@@ -217,6 +221,115 @@ describe("FrihetClient preserves backend 403 detail", () => {
         "/invoices/missing_error",
         "/invoices/non_string_error",
       ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("ambiguous transport failures", () => {
+  test("normalizes raw fetch failures without exposing transport internals", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new TypeError("socket failure containing internal transport detail");
+    };
+
+    try {
+      const client = new FrihetClient("fri_test_key", "https://api.example.test");
+      await assert.rejects(
+        () => client.createVendor({ name: "Network Supplier" }),
+        (error: Error & { statusCode?: number; errorCode?: string }) => {
+          assert.equal(error.statusCode, 503);
+          assert.equal(error.errorCode, "network_error");
+          assert.doesNotMatch(error.message, /socket|internal transport/i);
+          const result = handleToolError(error, "create_vendor");
+          assert.equal(result._meta?.["io.frihet/transportOutcomeUnknown"], true);
+          return true;
+        },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("marks server and idempotency responses that may follow a committed write", () => {
+    for (const error of [
+      new FrihetApiError(500, "internal_error", "Internal error"),
+      new FrihetApiError(502, "bad_gateway", "Bad gateway"),
+      new FrihetApiError(
+        409,
+        "IDEMPOTENCY_REQUEST_IN_PROGRESS",
+        "The original outcome is still being reconciled",
+      ),
+    ]) {
+      const result = handleToolError(error, "create_vendor");
+      assert.equal(result._meta?.["io.frihet/operationOutcomeUnknown"], true);
+    }
+
+    const refused = handleToolError(
+      new FrihetApiError(400, "validation_error", "Bad request"),
+      "create_vendor",
+    );
+    assert.equal(refused._meta?.["io.frihet/operationOutcomeUnknown"], undefined);
+  });
+
+  test("classifies malformed or empty 2xx bodies as post-success ambiguity", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      for (const body of ["{", "null"]) {
+        globalThis.fetch = async () => new Response(body, {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        });
+        const client = new FrihetClient("fri_test_key", "https://api.example.test");
+        await assert.rejects(
+          () => client.createVendor({ name: "Response Supplier" }),
+          (error: Error & { statusCode?: number; errorCode?: string }) => {
+            assert.equal(error.statusCode, 201);
+            assert.equal(error.errorCode, "invalid_response_after_success");
+            assert.doesNotMatch(error.message, /SyntaxError|JSON|Unexpected token/i);
+            const result = handleToolError(error, "create_vendor");
+            assert.equal(result._meta?.["io.frihet/operationOutcomeUnknown"], true);
+            return true;
+          },
+        );
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("keeps the timeout active while consuming a 2xx response body", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_input, init) => {
+      const response = new Response("{}", {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+      response.json = () => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(Object.assign(new Error("body read aborted"), { name: "AbortError" }));
+        }, { once: true });
+      });
+      return response;
+    };
+
+    try {
+      const client = new FrihetClient(
+        "fri_test_key",
+        "https://api.example.test",
+        { timeoutMs: 10 },
+      );
+      await assert.rejects(
+        () => client.createVendor({ name: "Slow Supplier" }),
+        (error: Error & { statusCode?: number; errorCode?: string }) => {
+          assert.equal(error.statusCode, 408);
+          assert.equal(error.errorCode, "response_timeout");
+          const result = handleToolError(error, "create_vendor");
+          assert.equal(result._meta?.["io.frihet/operationOutcomeUnknown"], true);
+          return true;
+        },
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }

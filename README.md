@@ -376,7 +376,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_quote` | Get quote details |
 | `create_quote` | Draft a new quote |
 | `update_quote` | Modify a quote |
-| `delete_quote` | Delete a draft quote; a sent/accepted one is cancelled, not destroyed (`confirm=true` required) |
+| `delete_quote` | Delete only a clean draft with no delivery, response, attachment, or conversion evidence; refuse protected drafts; cancel non-drafts (`confirm=true` required) |
 | `send_quote` | Email quote to client for acceptance |
 
 ### Webhooks (6)
@@ -632,7 +632,7 @@ On the full MCP surfaces, every `tools/list` entry includes `_meta["io.frihet/ca
 - `writesFrihet`, `externalInteraction`, and `externalSideEffects` distinguish state changes and calls to external entities/providers;
 - MCP action annotations remain the standard source for read-only, destructive, idempotent, and open-world hints.
 
-The ChatGPT/OpenAI host is a separately reviewed surface: 53 reviewed business operations plus 3 discovery names, with 0 prompts and 0 resources. It must not be inferred from the full catalogue.
+The ChatGPT/OpenAI host is a separately reviewed surface: exactly 33 business operations with complete descriptions, 0 discovery meta-tools, 0 prompts, and 0 resources. Its 17 reads and 16 writes are deliberately narrow, and all writes require literal `confirm=true`. Ten writes may deliver full business events to active endpoints previously configured by the workspace owner; webhook administration itself remains excluded. Direct email delivery, the legacy monthly summary, raw invoice PDFs, invoice lifecycle transitions, updating an existing quote, regulated filing, deleting client parent records, deleting expenses with their linked files, deleting products, and deleting vendors are also excluded. This surface must not be inferred from the full catalogue.
 
 ---
 
@@ -755,7 +755,7 @@ In `grouped` mode operation names, input schemas and handlers are unchanged. Des
 }
 ```
 
-> Grouped exposure changes description density, not operation behavior. The frozen OpenAI-reviewed profile is composed separately and remains independently gated.
+> Grouped exposure changes description density, not operation behavior. The versioned OpenAI-reviewed profile is composed separately and remains independently gated.
 
 ---
 

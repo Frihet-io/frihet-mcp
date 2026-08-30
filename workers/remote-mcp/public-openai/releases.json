@@ -1,28 +1,28 @@
 {
-  "version": "1.16.4",
-  "releasedAt": "2026-07-21",
+  "version": "1.16.6",
+  "releasedAt": "2026-08-28",
   "surface": "openai-chatgpt",
-  "mcpToolCount": 56,
-  "reviewedBusinessToolCount": 53,
-  "discoveryMetaToolCount": 3,
+  "mcpToolCount": 33,
+  "reviewedBusinessToolCount": 33,
+  "discoveryMetaToolCount": 0,
   "promptsCount": 0,
   "resourcesCount": 0,
-  "notes": "ChatGPT connector metadata is scoped to reviewed invoices, expenses, clients/CRM, products, quotes, vendors, webhooks, and monthly summaries. Hidden product modules, regulated identifiers, credentials, and diagnostic metadata are excluded.",
+  "notes": "ChatGPT connector metadata is scoped to reviewed invoices, expenses, clients/CRM, products, quotes, vendors, and current business context/current-month totals. Selected client contacts and client notes can be permanently deleted after explicit confirmation. A quote draft is eligible for permanent deletion only when it has no delivery, response, attachment, or conversion evidence; a protected draft is refused, while deleting a non-draft quote cancels it. Raw documents, webhook administration, hidden product modules, dedicated regulated-identifier fields, credentials, and diagnostic metadata are excluded; ten confirmed writes may still deliver business events to endpoints previously configured by the workspace owner.",
   "products": {
     "mcp_server": {
-      "status": "live",
-      "version": "1.16.4"
+      "status": "candidate",
+      "version": "1.16.6"
     }
   },
   "releases": [
     {
-      "version": "1.16.4",
-      "releasedAt": "2026-07-21",
-      "mcpToolCount": 56,
+      "version": "1.16.6",
+      "releasedAt": "2026-08-28",
+      "mcpToolCount": 33,
       "resourcesCount": 0,
       "promptsCount": 0,
       "delta": "OpenAI ChatGPT scoped connector surface",
-      "notes": "OpenAI mode exposes 53 reviewed business tools plus 3 read-only discovery meta-tools. Prompts and hidden full-server modules are not part of this surface."
+      "notes": "OpenAI mode exposes exactly 33 reviewed business tools with complete descriptions and no discovery meta-tools. Selected client contacts and client notes can be permanently deleted after explicit confirmation. A quote draft is eligible for permanent deletion only when it has no delivery, response, attachment, or conversion evidence; a protected draft is refused, while deleting a non-draft quote cancels it. Direct email delivery, the legacy monthly summary, update of existing quotes, incomplete client-parent or expense-attachment deletion, product or vendor deletion, prompts, raw documents, invoice lifecycle/credit tools, webhook administration, and hidden full-server modules are not part of this surface; ten confirmed writes may still deliver business events to endpoints previously configured by the workspace owner."
     }
   ]
 }

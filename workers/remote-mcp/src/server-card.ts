@@ -36,6 +36,12 @@ export interface ServerCardInput {
   readonly resourceCount: number;
   /** Static MCP prompt count for this host's profile. */
   readonly promptCount: number;
+  /** Host-specific documentation page. */
+  readonly documentationUrl?: string;
+  /** Authentication methods that really work on this host. */
+  readonly authenticationSchemes?: readonly ("oauth2" | "bearer")[];
+  /** Whether to advertise the full local npm package. Defaults to true. */
+  readonly includeNpm?: boolean;
 }
 
 /**
@@ -56,8 +62,9 @@ export function buildServerCard(input: ServerCardInput): Record<string, unknown>
     },
     description: input.description,
     iconUrl: "https://www.frihet.io/logo.png",
-    documentationUrl: "https://docs.frihet.io/desarrolladores/mcp-server",
-    homepage: "https://frihet.io",
+    documentationUrl:
+      input.documentationUrl ?? "https://docs.frihet.io/desarrolladores/mcp-server",
+    homepage: "https://www.frihet.io",
     transport: {
       type: "streamable-http",
       endpoint: `${input.host}/mcp`,
@@ -71,10 +78,10 @@ export function buildServerCard(input: ServerCardInput): Record<string, unknown>
       required: true,
       // oauth2 = remote browser flow (mcp.frihet.io); bearer = API-key token
       // used by the local @frihet/mcp-server (FRIHET_API_KEY).
-      schemes: ["oauth2", "bearer"],
+      schemes: input.authenticationSchemes ?? ["oauth2", "bearer"],
       authorizationServer: `${input.host}/.well-known/oauth-authorization-server`,
     },
-    npm: "@frihet/mcp-server",
+    ...(input.includeNpm === false ? {} : { npm: "@frihet/mcp-server" }),
     tools_count: input.toolCount,
     resources_count: input.resourceCount,
     prompts_count: input.promptCount,

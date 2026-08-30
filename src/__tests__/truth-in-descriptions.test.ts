@@ -3,8 +3,8 @@
  *
  * Pins the three defects found by the MCP audit (GAP-04, GAP-12, GAP-13, C38):
  *
- *   GAP-04 — four irreversible / third-party-visible tools (delete_invoice,
- *            delete_quote, refund_deposit, send_invoice) carried NO confirm
+ *   GAP-04 — five irreversible / third-party-visible tools (delete_invoice,
+ *            delete_quote, refund_deposit, send_invoice, send_quote) carried NO confirm
  *            guard while eight less consequential tools did. The old C43 sweep
  *            checked `confirm-declared ⊆ confirm-enforced` and never asked
  *            `confirm-needed ⊆ confirm-declared`.
@@ -25,11 +25,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod/v4";
 
 import type { IFrihetClient } from "../client-interface.js";
 import { registerAllTools } from "../tools/register-all.js";
 import { applyToolExposureProfile, GROUPS } from "../tool-exposure.js";
-import { applyOpenAIReviewProfiles } from "../openai-profile.js";
+import {
+  applyOpenAIReviewProfiles,
+  OPENAI_REVIEW_CONFIRM_REQUIRED_TOOLS,
+  OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS,
+} from "../openai-profile.js";
 
 /** dist/__tests__/x.test.js → repo root. */
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -91,7 +96,9 @@ function makeRecordingClient(overrides: Record<string, unknown> = {}): {
           calls.push(name);
           if (Object.prototype.hasOwnProperty.call(overrides, name)) {
             const value = overrides[name];
-            return typeof value === "function" ? (value as () => unknown)() : value;
+            return typeof value === "function"
+              ? (value as (...args: unknown[]) => unknown)(..._args)
+              : value;
           }
           return { data: [], total: 0, limit: 10, offset: 0 };
         };
@@ -137,7 +144,10 @@ function isRequired(schemaField: unknown): boolean {
 
 /** Does this tool declare `confirm` as a REQUIRED input? */
 function declaresRequiredConfirm(t: RegisteredTool): boolean {
-  const shape = t.config.inputSchema ?? {};
+  const inputSchema = t.config.inputSchema;
+  const shape = inputSchema instanceof z.ZodObject
+    ? inputSchema.shape as Record<string, unknown>
+    : inputSchema ?? {};
   return (
     Object.prototype.hasOwnProperty.call(shape, "confirm") && isRequired(shape["confirm"])
   );
@@ -163,6 +173,7 @@ const NEWLY_GUARDED: Array<{ tool: string; consequence: RegExp }> = [
   { tool: "delete_quote", consequence: /cancel/i },
   { tool: "refund_deposit", consequence: /refund/i },
   { tool: "send_invoice", consequence: /email/i },
+  { tool: "send_quote", consequence: /email/i },
 ];
 
 describe("GAP-04 — irreversible tools declare a required confirm", () => {
@@ -259,7 +270,6 @@ const UNGATED_RISK_DEBT: ReadonlySet<string> = new Set([
   "frihet_portal_domain_remove",
   // third-party dispatch, no confirm
   "send_einvoice",
-  "send_quote",
 ]);
 
 describe("GAP-04 — confirm COVERAGE over the whole registry", () => {
@@ -386,202 +396,99 @@ describe("GAP-04 — every confirm-gated tool announces confirm where the agent 
 });
 
 /* ------------------------------------------------------------------ */
-/*  Frozen-descriptor DIVERGENCE — the reviewed ChatGPT surface         */
+/*  Reviewed ChatGPT surface — confirmation and description parity     */
 /* ------------------------------------------------------------------ */
 
-/**
- * The reviewed ChatGPT descriptor is frozen mid-review
- * (docs/openai-review-descriptor-freeze.md). Adding a required `confirm` and
- * rewriting the delete prose would have drifted it, so on the OpenAI surface —
- * and ONLY there — `confirm` is stripped from the advertised schema and the
- * wrapped handler FAIL-CLOSES the affected tools, while the first sentence of
- * each description is pinned byte-identical to the approved text.
- *
- * Earlier this lane used `impliedInputValues: { confirm: true }` to bridge
- * the stripping. That manufactured user authorization (especially for
- * `send_invoice`, where ChatGPT does NOT prompt for a destructiveHint: false
- * tool). The current design refuses any call without an explicit `confirm:
- * true` and tells the agent the operation is temporarily unavailable on this
- * surface pending OpenAI app review approval. Pinned by the FAIL CLOSED tests
- * below and the static guard that bans any reintroduction of
- * `impliedInputValues`.
- *
- * That divergence is load-bearing and silent: nothing about it is visible in the
- * base tool files. These tests are what stop it from rotting.
- */
-const FROZEN_DIVERGENCE = {
-  delete_invoice: /cancel/i,
-  delete_quote: /cancel/i,
-  send_invoice: /recall/i,
-} as const;
+const REVIEWED_PERMANENT_DELETES = new Set([
+  "delete_client_contact",
+  "delete_client_note",
+]);
 
-interface FrozenDescriptor {
-  tools: Array<{
-    name: string;
-    description: string;
-    inputSchema: { properties?: Record<string, unknown>; required?: string[] };
-  }>;
-}
-
-describe("frozen-descriptor divergence — reviewed ChatGPT surface stays byte-identical", () => {
-  test("the divergence set is exactly the tools that need it", (t) => {
+describe("reviewed ChatGPT surface — explicit confirmation parity", () => {
+  test("the reviewed confirmation set is exact on both base and OpenAI surfaces", (t) => {
     const { server: base } = makeServer();
     const openai = makeOpenAIServer();
-
-    // DERIVED: base requires confirm AND the tool is on the reviewed surface.
-    const needDivergence = [...base.tools.values()]
+    const expected = [...OPENAI_REVIEW_CONFIRM_REQUIRED_TOOLS].sort();
+    const baseConfirmed = [...base.tools.values()]
       .filter(declaresRequiredConfirm)
-      .filter((x) => openai.tools.has(x.name))
-      .map((x) => x.name)
+      .filter((tool) => openai.tools.has(tool.name))
+      .map((tool) => tool.name)
+      .sort();
+    const openAIConfirmed = [...openai.tools.values()]
+      .filter(declaresRequiredConfirm)
+      .map((tool) => tool.name)
       .sort();
 
     t.diagnostic(
       `scan scope: ${base.tools.size} base tools ∩ ${openai.tools.size} reviewed tools; ` +
-        `${needDivergence.length} require confirm on the base surface.`,
+        `${openAIConfirmed.length} reviewed tools require explicit confirm.`,
     );
-    assert.deepEqual(
-      needDivergence,
-      Object.keys(FROZEN_DIVERGENCE).sort(),
-      `a confirm-gated tool entered/left the reviewed OpenAI surface. Every such tool ` +
-        `needs a stripInputFields + failClosedTools + descriptionOverride entry in ` +
-        `openai-profile.ts, or the frozen descriptor drifts and CI goes red.`,
-    );
+    assert.deepEqual(baseConfirmed, ["delete_quote"]);
+    assert.deepEqual(openAIConfirmed, expected);
   });
 
-  test("tools/list description is byte-identical to the frozen fixture", () => {
-    const frozen = JSON.parse(
-      readRepoFile("src/__tests__/fixtures/openai-review-descriptor.snapshot.json"),
-    ) as FrozenDescriptor;
+  test("reviewed descriptions state the consequence and never hide confirmation", async () => {
     const openai = makeOpenAIServer();
 
-    for (const name of Object.keys(FROZEN_DIVERGENCE)) {
-      const pinned = frozen.tools.find((x) => x.name === name);
-      assert.ok(pinned, `${name} missing from the frozen fixture`);
-      assert.equal(
-        openai.tools.get(name)!.config.description,
-        pinned.description,
-        `${name}: the composed ChatGPT description drifted from the frozen fixture. The ` +
-          `FIRST SENTENCE of its descriptionOverride is a byte contract — corrections go ` +
-          `in the sentences AFTER it (those reach describe_tool, which is not frozen).`,
-      );
+    for (const name of OPENAI_REVIEW_CONFIRM_REQUIRED_TOOLS) {
+      const listed = openai.tools.get(name)!;
+      assert.match(listed.config.description, /confirm=true/i, `${name} must advertise confirmation`);
+      assert.equal(declaresRequiredConfirm(listed), true, `${name} schema must require confirm`);
+      if (REVIEWED_PERMANENT_DELETES.has(name)) {
+        assert.match(listed.config.description, /cannot be undone/i, `${name} must warn about permanence`);
+      } else if (OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS.has(name)) {
+        assert.match(
+          listed.config.description,
+          /webhook|recipient outside|external endpoints/i,
+          `${name} must disclose its external effect`,
+        );
+      } else {
+        assert.match(listed.config.description, /record change/i, `${name} must disclose its write`);
+      }
     }
   });
 
-  test("confirm is absent from the reviewed schema but REQUIRED on the base surface", () => {
-    const { server: base } = makeServer();
-    const openai = makeOpenAIServer();
-
-    for (const name of Object.keys(FROZEN_DIVERGENCE)) {
-      assert.equal(
-        declaresRequiredConfirm(base.tools.get(name)!),
-        true,
-        `${name} lost its confirm guard on the base surface — the divergence is supposed ` +
-          `to hide confirm from ChatGPT only, never to remove the protection`,
-      );
-      assert.ok(
-        !Object.prototype.hasOwnProperty.call(
-          openai.tools.get(name)!.config.inputSchema ?? {},
-          "confirm",
-        ),
-        `${name} advertises confirm on the reviewed surface — that drifts the frozen descriptor`,
-      );
-    }
-  });
-
-  test("FAIL CLOSED: a reviewed tool whose confirm was stripped REFUSES without real confirm", async () => {
-    // The previous design bridged `confirm` stripping with impliedInputValues
-    // ({ confirm: true }), which manufactured user authorization. The current
-    // design FAIL-CLOSES the affected tools on the reviewed surface: any call
-    // without an explicit `confirm: true` is refused with isError BEFORE the
-    // side-effecting handler runs. This test is BOTH the fail-closed gate and
-    // the mutation detector for the old impliedInputValues mechanism — if
-    // someone re-adds `confirm: true` to impliedInputValues, the wrapped
-    // handler would silently authorize the call, the API would be invoked, and
-    // the `calls === []` assertion below would go red.
-    for (const name of Object.keys(FROZEN_DIVERGENCE)) {
+  test("confirm=false refuses every reviewed side effect before any API call", async () => {
+    for (const name of OPENAI_REVIEW_CONFIRM_REQUIRED_TOOLS) {
       const { client, calls } = makeRecordingClient();
       const server = new StubMcpServer();
       applyOpenAIReviewProfiles(server);
       registerAllTools(asMcp(server), client);
+      const result = await server.tools.get(name)!.handler({ id: "test_id_1", confirm: false });
 
-      // Exactly what ChatGPT can send: the advertised schema, nothing more.
-      // `confirm` is not in the schema, so the caller cannot send it.
-      const result = await server.tools.get(name)!.handler({ id: "test_id_1" });
-
-      assert.equal(
-        result.isError,
-        true,
-        `${name} accepted a call without explicit confirm: impliedInputValues (or any other ` +
-          `mechanism) is manufacturing user authorization. Manufacturing consent is a ` +
-          `hard rule violation.`,
-      );
-      const text = result.content[0]!.text;
-      assert.match(
-        text,
-        /confirm/i,
-        `${name} failure must name confirm so the agent can recover`,
-      );
-      assert.match(
-        text,
-        /(temporarily|unavailable|review|approval)/i,
-        `${name} failure must explain the temporary disposition (ChatGPT surface pending ` +
-          `OpenAI app review)`,
-      );
-      assert.deepEqual(
-        calls,
-        [],
-        `${name} must NOT reach the side-effecting handler on the reviewed surface ` +
-          `(called: ${calls.join(",")}). Implied consent is forbidden.`,
-      );
+      assert.equal(result.isError, true, `${name} accepted confirm=false`);
+      assert.match(result.content[0]!.text, /confirm=true/i);
+      assert.deepEqual(calls, [], `${name} touched the API without consent`);
     }
   });
 
-  test("FAIL CLOSED: explicit confirm:true is treated as proven consent (defense-in-depth)", async () => {
-    // The schema strips `confirm` from the advertised input, so ChatGPT can
-    // never send it. This test exercises the defense-in-depth path: if a
-    // caller (or a future bypass) supplies `confirm: true` explicitly, the
-    // gate must let it through. The recorded client is invoked exactly once
-    // (the side-effecting handler runs). If a future regression tightens the
-    // gate so far that even an explicit `confirm: true` is refused, this
-    // test catches it.
-    for (const name of Object.keys(FROZEN_DIVERGENCE)) {
-      const { client, calls } = makeRecordingClient();
-      const server = new StubMcpServer();
-      applyOpenAIReviewProfiles(server);
-      registerAllTools(asMcp(server), client);
+  test("confirm=true reaches the intended closed-world write without forwarding confirm", async () => {
+    const captured: unknown[][] = [];
+    const { client, calls } = makeRecordingClient({
+      createVendor: (...args: unknown[]) => {
+        captured.push(args);
+        return { id: "ven_1", name: "Supplier" };
+      },
+    });
+    const server = new StubMcpServer();
+    applyOpenAIReviewProfiles(server);
+    registerAllTools(asMcp(server), client);
+    const result = await server.tools.get("create_vendor")!.handler({ name: "Supplier", confirm: true });
 
-      const result = await server.tools.get(name)!.handler({ id: "test_id_1", confirm: true });
-
-      assert.notEqual(
-        result.isError,
-        true,
-        `${name} refused an explicit confirm:true — proven consent must be honored. ` +
-          `(called: ${calls.join(",")})`,
-      );
-      assert.ok(
-        calls.length >= 1,
-        `${name} never reached the side-effecting handler on an explicit confirm:true ` +
-          `(called: ${calls.join(",")})`,
-      );
-    }
+    assert.notEqual(result.isError, true);
+    assert.deepEqual(calls, ["createVendor"]);
+    assert.equal("confirm" in (captured[0]![0] as Record<string, unknown>), false);
   });
 
-  test("NO impliedInputValues code pattern remains in openai-profile.ts (static guard)", () => {
-    // Regression tripwire: the old mechanism used
-    //   impliedInputValues: { delete_invoice: { confirm: true }, … }
-    // to manufacture consent. If anyone re-adds that exact code pattern —
-    // a property assignment whose object value contains `confirm: true` —
-    // this test goes red. It is deliberately tighter than a name match: it
-    // only fires on the actual code-level shape that would re-introduce the
-    // bug, so explanatory comments in the new code (which mention the old
-    // design) are not flagged.
+  test("outbound quote email is excluded from the reviewed surface", () => {
+    const openai = makeOpenAIServer();
+    assert.equal(openai.tools.has("send_quote"), false);
+  });
+
+  test("NO impliedInputValues code pattern remains in openai-profile.ts", () => {
     const src = readRepoFile("src/openai-profile.ts");
-    // Code-level pattern: `impliedInputValues: {` followed (within the same
-    // object literal, up to the first balanced `}`) by a `confirm: true`
-    // entry. We allow nested braces by using a depth counter instead of a
-    // single regex.
     const start = src.search(/impliedInputValues\s*:\s*\{/);
-    if (start === -1) return; // name not present at all — pass
+    if (start === -1) return;
     let depth = 0;
     let i = src.indexOf("{", start);
     let end = -1;
@@ -596,45 +503,13 @@ describe("frozen-descriptor divergence — reviewed ChatGPT surface stays byte-i
         }
       }
     }
-    if (end === -1) return; // unbalanced — let the parser deal with it
+    if (end === -1) return;
     const block = src.slice(start, end + 1);
     assert.equal(
       /confirm\s*:\s*true/.test(block),
       false,
-      `openai-profile.ts ships an impliedInputValues code block that contains ` +
-        `confirm:true: \`${block}\`. Manufacturing user authorization is a hard ` +
-        `rule violation. Re-introducing this is a fail-closed test failure.`,
+      `openai-profile.ts must never manufacture authorization: ${block}`,
     );
-  });
-
-  test("describe_tool carries the correction the frozen first sentence cannot", async () => {
-    const openai = makeOpenAIServer();
-    const describe_ = openai.tools.get("describe_tool")!;
-
-    for (const [name, mustSay] of Object.entries(FROZEN_DIVERGENCE)) {
-      const payload = JSON.parse(
-        (await describe_.handler({ name })).content[0]!.text,
-      ) as { description?: string };
-      const desc = payload.description ?? "";
-      assert.match(
-        desc,
-        mustSay,
-        `describe_tool('${name}') is the ONLY place the reviewed surface can tell the truth ` +
-          `(tools/list is frozen). Its description must match ${mustSay}.`,
-      );
-      // The full description (served by describe_tool, not frozen) must also
-      // explain the temporary disposition: this tool is FAIL-CLOSED on the
-      // reviewed ChatGPT surface pending OpenAI app review. Without this the
-      // agent has no prose basis to recover from the isError returned by the
-      // fail-closed gate.
-      assert.match(
-        desc,
-        /(temporarily|unavailable|review|approval)/i,
-        `describe_tool('${name}') must explain the temporary disposition (ChatGPT surface ` +
-          `pending OpenAI app review). Without it, the agent has no prose basis to recover ` +
-          `from the isError returned by the fail-closed gate.`,
-      );
-    }
   });
 });
 
@@ -809,17 +684,12 @@ const PUBLISHED_PROSE_SURFACES = [
 ];
 
 /** The two tools whose backend soft-CANCELS instead of destroying (GAP-12). */
-const SOFT_CANCEL_TOOLS = ["delete_invoice", "delete_quote"];
+const SOFT_CANCEL_TOOLS = ["delete_quote"];
 
-/** Delete tools that really do destroy the row — their prose must NOT be watered down. */
-const TRUE_HARD_DELETE_TOOLS = [
-  "delete_expense",
-  "delete_client",
+/** Reviewed delete tools that really destroy the row — their warnings must stay explicit. */
+const REVIEWED_HARD_DELETE_TOOLS = [
   "delete_client_contact",
   "delete_client_note",
-  "delete_product",
-  "delete_vendor",
-  "delete_webhook",
 ];
 
 const PERMANENCE_CLAIM = /permanently delete|cannot be undone|permanent(ly)? (removed|destroy)/i;
@@ -891,7 +761,7 @@ describe("GAP-12 — no published surface still promises a permanent delete", ()
     t.diagnostic(
       `scan scope: ${Object.keys(submission.tools).length} tools in the submission; ` +
         `${SOFT_CANCEL_TOOLS.length} asserted truthful, ` +
-        `${TRUE_HARD_DELETE_TOOLS.length} asserted UNCHANGED (they really are hard deletes).`,
+        `${REVIEWED_HARD_DELETE_TOOLS.length} asserted UNCHANGED (they really are hard deletes).`,
     );
 
     for (const name of SOFT_CANCEL_TOOLS) {
@@ -910,9 +780,9 @@ describe("GAP-12 — no published surface still promises a permanent delete", ()
       );
     }
 
-    // Guard against over-correction: the seven genuine hard deletes must KEEP
+    // Guard against over-correction: the reviewed genuine hard deletes must KEEP
     // their accurate irreversibility warning.
-    for (const name of TRUE_HARD_DELETE_TOOLS) {
+    for (const name of REVIEWED_HARD_DELETE_TOOLS) {
       assert.match(
         submission.tools[name]?.justifications?.["destructive_justification"] ?? "",
         /cannot be undone/i,

@@ -6,14 +6,14 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:openapi-fresh && wrangler deploy && npm --prefix ../.. run gate:openapi-fresh:live",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test 'src/__tests__/*.test.ts' 'src/__tests__/*.test.mjs'"
   },
   "dependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.3.0",
+    "@cloudflare/workers-oauth-provider": "0.3.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "agents": "^0.7.5",
+    "agents": "0.7.5",
     "firebase-auth-cloudflare-workers": "^2.0.6",
     "hono": "~4.12.34",
     "zod": "^3.25.0"

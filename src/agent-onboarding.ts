@@ -304,7 +304,7 @@ export async function captureAgentOnboardingDescriptor(): Promise<AgentOnboardin
     },
     safeWorkflow: {
       description:
-        "Discover → orient → retrieve → draft → hand back. No step issues a document or reaches a third party.",
+        "Discover → orient → retrieve → propose → hand back. No step mutates data or reaches a third party.",
       steps: [
         {
           call: "get_business_context",
@@ -322,19 +322,9 @@ export async function captureAgentOnboardingDescriptor(): Promise<AgentOnboardin
           note: "Resolve the client by name before referencing an id.",
         },
         {
-          call: "create_invoice",
-          kind: "draft",
-          note: "Defaults to status=draft — no fiscal number, no hash, no AEAT submission.",
-        },
-        {
-          call: "get_invoice",
-          kind: "read",
-          note: "Read the draft back and present the computed totals to the human.",
-        },
-        {
           call: "STOP",
           kind: "handoff",
-          note: "Issuing and sending are human-authorised. Report the draft id and the exact next action; do not take it.",
+          note: "Present the proposed draft inputs and all disclosed effects. Creating, issuing, sending, or submitting is a separate human decision.",
         },
       ],
     },

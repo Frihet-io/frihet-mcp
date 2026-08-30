@@ -8,10 +8,10 @@ import type { IFrihetClient } from "../client-interface.js";
 import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, invoiceItemOutput, actionResultOutput, creditNoteResultOutput, pdfResultOutput, einvoiceResultOutput } from "./shared.js";
 
 const invoiceItemSchema = z.object({
-  description: z.string().describe("Description of the line item / Descripcion del concepto"),
-  quantity: z.number().describe("Quantity / Cantidad"),
-  unitPrice: z.number().describe("Unit price in EUR / Precio unitario en EUR"),
-});
+  description: z.string().trim().min(1).max(500).describe("Description of the line item / Descripcion del concepto"),
+  quantity: z.number().finite().min(0.0001).max(1_000_000).describe("Quantity / Cantidad"),
+  unitPrice: z.number().finite().min(0).max(10_000_000).describe("Unit price in EUR / Precio unitario en EUR"),
+}).strict();
 
 function documentResultMetadata(result: {
   id: string;
@@ -28,13 +28,13 @@ function documentResultMetadata(result: {
 }
 
 // Optional client-identity fields the Frihet API accepts on invoice/quote
-// create+update. When clientId is supplied the server back-fills taxId/address
-// from the stored client; clientTaxId/clientAddress override per-document.
+// create+update. When clientId is supplied the server snapshots the stored
+// client record; the other fields can override document-specific details.
 const clientIdentityFields = {
   clientId: z
     .string()
     .optional()
-    .describe("Existing client ID — server back-fills taxId/address / ID de cliente existente"),
+    .describe("Existing client ID — stored client details are used for the document / ID de cliente existente"),
   clientTaxId: z
     .string()
     .optional()
@@ -204,18 +204,18 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
         "Soporta retencion IRPF (autonomos ES), recargo de equivalencia, serie, anticipo y descuento global.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
-        clientName: z.string().describe("Client/customer name / Nombre del cliente"),
+        clientName: z.string().trim().min(1).max(200).describe("Client/customer name / Nombre del cliente"),
         ...clientIdentityFields,
         items: z
           .array(invoiceItemSchema)
           .min(1)
           .describe("Line items (each with description, quantity, unitPrice) / Conceptos de la factura"),
         issueDate: z
-          .string()
+          .iso.date()
           .optional()
           .describe("Issue date in ISO 8601 format (YYYY-MM-DD), defaults to today / Fecha de emision"),
         dueDate: z
-          .string()
+          .iso.date()
           .optional()
           .describe("Due date in ISO 8601 format (YYYY-MM-DD) / Fecha de vencimiento"),
         status: z
@@ -224,6 +224,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           .describe("Invoice status (default: draft) / Estado de la factura"),
         notes: z
           .string()
+          .max(10_000)
           .optional()
           .describe("Additional notes shown on the invoice / Notas adicionales"),
         taxRate: z
@@ -451,7 +452,34 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           isError: true,
         };
       }
-      const result = await client.sendInvoice(id, to);
+      const invoice = await client.getInvoice(id);
+      if (invoice["status"] === "cancelled") {
+        return {
+          content: [{ type: "text" as const, text: "Error: a cancelled invoice cannot be sent." }],
+          isError: true,
+        };
+      }
+      let recipientEmail = to;
+      if (!recipientEmail) {
+        const clientId = typeof invoice["clientId"] === "string" ? invoice["clientId"] : undefined;
+        if (!clientId) {
+          return {
+            content: [{ type: "text" as const, text: "Error: this invoice has no linked client with a saved email address." }],
+            isError: true,
+          };
+        }
+        const linkedClient = await client.getClient(clientId);
+        recipientEmail = typeof linkedClient["email"] === "string" && linkedClient["email"].trim()
+          ? linkedClient["email"].trim()
+          : undefined;
+        if (!recipientEmail) {
+          return {
+            content: [{ type: "text" as const, text: "Error: the linked client has no saved email address." }],
+            isError: true,
+          };
+        }
+      }
+      const result = await client.sendInvoice(id, recipientEmail);
       return {
         content: [mutateContent(formatRecord("Invoice sent", result))],
         structuredContent: result as unknown as Record<string, unknown>,
