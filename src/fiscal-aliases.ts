@@ -18,12 +18,12 @@
  * pointing an alias key at the SAME registered-tool object makes it callable
  * with zero duplication and zero drift risk.
  *
- * This intentionally does NOT touch `src/tools/*.ts` (where the 157-tool
+ * This intentionally does NOT touch `src/tools/*.ts` (where the 158-tool
  * audit / pin tests count literal `registerTool(` call sites) and is applied
  * to the REAL `McpServer` instance only, AFTER `registerAllTools()` — the
  * `tool-exposure.test.ts` / `openai-*.test.ts` suites exercise
  * `registerAllTools()` against a bare `StubMcpServer` and never call
- * `applyFiscalAliases`, so the 157-tool pins are untouched by design.
+ * `applyFiscalAliases`, so the 158-tool pins are untouched by design.
  *
  * KNOWN LIMITATION: this relies on the SDK's internal (unprefixed-by-type,
  * but underscore-private) `_registeredTools` field. It is FAIL-OPEN — if a

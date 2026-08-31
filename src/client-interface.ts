@@ -89,6 +89,26 @@ export interface IFrihetClient {
   updateWebhook(id: string, data: UpdateWebhookInput): Promise<Webhook>;
   deleteWebhook(id: string): Promise<void>;
 
+  // Cross-resource search (/v1/search/global) — read-only fan-out across
+  // invoices / expenses / vendors / clients / products, all workspace-scoped.
+  // Phase 10 second-wave safe parity. No mutating counterpart; SDK does not
+  // expose this convenience because it is purely read-side.
+  globalSearch(params: {
+    q: string;
+    types?: ReadonlyArray<"invoices" | "expenses" | "vendors" | "clients" | "products">;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    data: Record<string, unknown>[];
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+    query: string;
+    types: ReadonlyArray<"invoices" | "expenses" | "vendors" | "clients" | "products">;
+    truncated?: boolean;
+  }>;
+
   // CRM: Contacts (subcollection of clients)
   listClientContacts(clientId: string, params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
   createClientContact(clientId: string, data: Record<string, unknown>): Promise<Record<string, unknown>>;

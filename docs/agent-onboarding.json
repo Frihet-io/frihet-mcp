@@ -68,8 +68,8 @@
       "FRIHET_TOOL_MODE": "grouped"
     },
     "counts": {
-      "toolNames": 162,
-      "readOnly": 81,
+      "toolNames": 163,
+      "readOnly": 82,
       "writesFrihet": 81,
       "externalInteraction": 36,
       "destructive": 61,
