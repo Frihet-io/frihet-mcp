@@ -1,46 +1,44 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
   assertValidOpenApiDocument,
+  isOpenApiLookalikePath,
   openApiUnavailableResponse,
   parseOpenApiDocument,
   serveOpenApiAsset,
 } from "../openapi-safety.ts";
+
+test("OpenAI containment recognizes encoded, cased and slash OpenAPI lookalikes", () => {
+  for (const path of [
+    "/openapi.json",
+    "/openapi.json/",
+    "/openapi%2Ejson",
+    "//openapi.json",
+    "/OpenAPI.JSON",
+    "/openapi.yaml",
+  ]) {
+    assert.equal(isOpenApiLookalikePath(path), true, path);
+  }
+  for (const path of ["/", "/mcp.json", "/docs/openapi.json", "/openapi.jsonx"]) {
+    assert.equal(isOpenApiLookalikePath(path), false, path);
+  }
+});
 
 const validFullSpec = JSON.stringify({
   openapi: "3.1.0",
   info: { title: "Frihet", version: "1.0.0" },
   paths: {
     "/v1/invoices": {
-      get: {
-        responses: { "200": { description: "ok" } },
-        description: "Invoice with taxId and IBAN",
-      },
-    },
-    "/v1/guests": {
-      get: { responses: { "200": { description: "hidden" } } },
+      get: { responses: { "200": { description: "ok" } } },
     },
   },
-  components: {
-    securitySchemes: { ApiKeyAuth: { type: "apiKey" } },
-    schemas: {
-      Invoice: {
-        type: "object",
-        properties: { id: { type: "string" }, taxId: { type: "string" } },
-      },
-    },
-  },
-  security: [{ ApiKeyAuth: [] }],
 });
 
-test("OpenAI runtime scoper fails closed for malformed or structurally invalid assets", () => {
-  const rejected = [
+test("OpenAPI parser fails closed for malformed or non-spec payloads", () => {
+  for (const source of [
     "not-json business-payload-marker",
     "null",
     "[]",
@@ -51,73 +49,27 @@ test("OpenAI runtime scoper fails closed for malformed or structurally invalid a
       info: {},
       paths: { "/v1/invoices": "business-payload-marker" },
     }),
-    JSON.stringify({
-      openapi: "3.1.0",
-      info: {},
-      paths: { "/v1/invoices": { get: {} } },
-      arbitraryPayload: "business-payload-marker",
-    }),
-    JSON.stringify({
-      openapi: "3.1.0",
-      info: {},
-      paths: { "/v1/invoices": { get: {} } },
-      components: "business-payload-marker",
-    }),
-    JSON.stringify({
-      openapi: "3.1.0",
-      info: {},
-      paths: { "/v1/invoices": { get: {} } },
-      tags: "business-payload-marker",
-    }),
-  ];
-
-  for (const source of rejected) {
-    assert.throws(() => parseOpenApiDocument(source), source);
+  ]) {
+    assert.throws(() => parseOpenApiDocument(source));
   }
-});
-
-test("valid source parses and an emptied scoped document fails closed", () => {
-  const source = parseOpenApiDocument(validFullSpec);
-  assert.equal(Object.keys(source.paths).length, 2);
   assert.throws(
     () => assertValidOpenApiDocument({ openapi: "3.1.0", info: {}, paths: {} }, "scoped"),
     /Empty scoped OpenAPI paths/u,
   );
 });
 
-test("the real OpenAI asset boundary fails closed and reduces valid full input", async () => {
-  const malicious = JSON.stringify({
-    openapi: "3.1.0",
-    info: { title: "Frihet", version: "1.0.0" },
-    paths: { "/v1/invoices": "business-payload-marker" },
-  });
-  const rejected = await serveOpenApiAsset(new Response(malicious), true);
+test("the full MCP host only serves a structurally valid asset", async () => {
+  const accepted = await serveOpenApiAsset(new Response(validFullSpec), false);
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(await accepted.json(), JSON.parse(validFullSpec));
+
+  const rejected = await serveOpenApiAsset(
+    new Response("not-json business-payload-marker"),
+    false,
+  );
   assert.equal(rejected.status, 502);
   assert.equal(rejected.headers.get("cache-control"), "no-store");
   assert.ok(!(await rejected.text()).includes("business-payload-marker"));
-
-  for (const invalidRoot of [
-    { components: "business-payload-marker" },
-    { tags: "business-payload-marker" },
-  ]) {
-    const response = await serveOpenApiAsset(new Response(JSON.stringify({
-      openapi: "3.1.0",
-      info: { title: "Frihet", version: "1.0.0" },
-      paths: { "/v1/invoices": { get: {} } },
-      ...invalidRoot,
-    })), true);
-    assert.equal(response.status, 502);
-    assert.ok(!(await response.text()).includes("business-payload-marker"));
-  }
-
-  const accepted = await serveOpenApiAsset(new Response(validFullSpec), true);
-  assert.equal(accepted.status, 200);
-  const scoped = await accepted.json() as { paths: Record<string, unknown> };
-  assert.deepEqual(Object.keys(scoped.paths), ["/v1/invoices"]);
-  const serialized = JSON.stringify(scoped);
-  assert.ok(!serialized.includes("/v1/guests"));
-  assert.ok(!serialized.includes("taxId"));
-  assert.ok(!serialized.includes("ApiKeyAuth"));
 });
 
 test("controlled failure response is fixed, non-cacheable, and contains no source bytes", async () => {
@@ -126,138 +78,41 @@ test("controlled failure response is fixed, non-cacheable, and contains no sourc
   assert.equal(response.headers.get("cache-control"), "no-store");
   const body = await response.text();
   assert.equal(body, JSON.stringify({ error: "OpenAPI spec temporarily unavailable" }));
-  assert.ok(!body.includes("business-payload-marker"));
   assert.ok(!body.includes("api.frihet.io/openapi.json"));
 });
 
-test("OpenAI assets route through the Worker before openapi.json can be served", () => {
-  const wrangler = readFileSync(
-    fileURLToPath(new URL("../../wrangler.toml", import.meta.url)),
-    "utf8",
-  );
+test("the reviewed OpenAI host retires OpenAPI at the Worker boundary", () => {
+  const workerRoot = fileURLToPath(new URL("../..", import.meta.url));
+  const wrangler = readFileSync(fileURLToPath(new URL("../../wrangler.toml", import.meta.url)), "utf8");
   assert.match(
     wrangler,
     /\[env\.openai\.assets\][\s\S]*?directory\s*=\s*"\.\/public-openai"[\s\S]*?run_worker_first\s*=\s*\["\/openapi\.json"\]/u,
   );
-  const runtime = readFileSync(
-    fileURLToPath(new URL("../index.ts", import.meta.url)),
-    "utf8",
+
+  const runtime = readFileSync(fileURLToPath(new URL("../index.ts", import.meta.url)), "utf8");
+  const jsonRoute = runtime.match(/if \(pathname === "\/openapi\.json"\) \{[\s\S]*?\n\s{6}\}/u)?.[0];
+  assert.ok(jsonRoute, "index.ts must define the /openapi.json route");
+  assert.match(jsonRoute, /if \(openai\)[\s\S]*?status:\s*404/u);
+  assert.match(jsonRoute, /OpenAPI is not part of the reviewed ChatGPT connector/u);
+
+  const yamlRoute = runtime.match(/if \(pathname === "\/openapi\.yaml"\) \{[\s\S]*?\n\s{6}\}/u)?.[0];
+  assert.ok(yamlRoute, "index.ts must define the /openapi.yaml route");
+  assert.match(yamlRoute, /if \(openai\)[\s\S]*?status:\s*404/u);
+
+  assert.equal(
+    existsSync(`${workerRoot}/public-openai/openapi.json`),
+    false,
+    "defence in depth: the OpenAI asset directory must not contain an OpenAPI document",
   );
-  assert.match(runtime, /return serveOpenApiAsset\(assetResp, openai, BASE_SECURITY_HEADERS\);/u);
-  assert.match(runtime, /if \(openai\) return openApiUnavailableResponse\(BASE_SECURITY_HEADERS\);/u);
+
+  const descriptor = runtime.match(/const OPENAI_MCP_DESCRIPTOR = \{[\s\S]*?\n\};/u)?.[0];
+  assert.ok(descriptor);
+  assert.doesNotMatch(descriptor, /openapi/iu);
 });
 
-test("generator rejects structurally invalid input without writing a scoped artifact", () => {
-  const scratch = mkdtempSync(join(tmpdir(), "frihet-openapi-containment-"));
-  const sourceDir = join(scratch, "source");
-  const outputDir = join(scratch, "output");
-  try {
-    mkdirSync(sourceDir, { recursive: true });
-    writeFileSync(
-      join(sourceDir, "openapi.json"),
-      JSON.stringify({
-        openapi: "3.1.0",
-        info: { title: "Frihet", version: "1.0.0" },
-        paths: { "/v1/invoices": "business-payload-marker" },
-      }),
-    );
-    const script = fileURLToPath(new URL("../../scripts/scope-openai-openapi.mjs", import.meta.url));
-    const result = spawnSync(process.execPath, [script], {
-      cwd: fileURLToPath(new URL("../..", import.meta.url)),
-      env: { ...process.env, SCOPE_SRC_DIR: sourceDir, SCOPE_OUT_DIR: outputDir },
-      encoding: "utf8",
-    });
-    assert.notEqual(result.status, 0);
-    assert.equal(existsSync(join(outputDir, "openapi.json")), false);
-    assert.ok(!result.stdout.includes("business-payload-marker"));
-    assert.ok(!result.stderr.includes("business-payload-marker"));
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
-});
-
-test("generator rejects scalar known-root fields without writing a scoped artifact", () => {
-  for (const invalidRoot of [
-    { components: "business-payload-marker" },
-    { tags: "business-payload-marker" },
-  ]) {
-    const scratch = mkdtempSync(join(tmpdir(), "frihet-openapi-root-shape-"));
-    const sourceDir = join(scratch, "source");
-    const outputDir = join(scratch, "output");
-    try {
-      mkdirSync(sourceDir, { recursive: true });
-      writeFileSync(join(sourceDir, "openapi.json"), JSON.stringify({
-        openapi: "3.1.0",
-        info: { title: "Frihet", version: "1.0.0" },
-        paths: { "/v1/invoices": { get: {} } },
-        ...invalidRoot,
-      }));
-      const script = fileURLToPath(new URL("../../scripts/scope-openai-openapi.mjs", import.meta.url));
-      const result = spawnSync(process.execPath, [script], {
-        cwd: fileURLToPath(new URL("../..", import.meta.url)),
-        env: { ...process.env, SCOPE_SRC_DIR: sourceDir, SCOPE_OUT_DIR: outputDir },
-        encoding: "utf8",
-      });
-      assert.notEqual(result.status, 0);
-      assert.equal(existsSync(join(outputDir, "openapi.json")), false);
-      assert.ok(!result.stdout.includes("business-payload-marker"));
-      assert.ok(!result.stderr.includes("business-payload-marker"));
-    } finally {
-      rmSync(scratch, { recursive: true, force: true });
-    }
-  }
-});
-
-test("generator fails when filtering would leave zero reviewed paths", () => {
-  const scratch = mkdtempSync(join(tmpdir(), "frihet-openapi-empty-scope-"));
-  const sourceDir = join(scratch, "source");
-  const outputDir = join(scratch, "output");
-  try {
-    mkdirSync(sourceDir, { recursive: true });
-    writeFileSync(
-      join(sourceDir, "openapi.json"),
-      JSON.stringify({
-        openapi: "3.1.0",
-        info: { title: "Frihet", version: "1.0.0" },
-        paths: { "/v1/guests": { get: {} } },
-      }),
-    );
-    const script = fileURLToPath(new URL("../../scripts/scope-openai-openapi.mjs", import.meta.url));
-    const result = spawnSync(process.execPath, [script], {
-      cwd: fileURLToPath(new URL("../..", import.meta.url)),
-      env: { ...process.env, SCOPE_SRC_DIR: sourceDir, SCOPE_OUT_DIR: outputDir },
-      encoding: "utf8",
-    });
-    assert.notEqual(result.status, 0);
-    assert.equal(existsSync(join(outputDir, "openapi.json")), false);
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
-});
-
-test("generator reduces a valid full input to the reviewed path set", () => {
-  const scratch = mkdtempSync(join(tmpdir(), "frihet-openapi-valid-"));
-  const sourceDir = join(scratch, "source");
-  const outputDir = join(scratch, "output");
-  try {
-    mkdirSync(sourceDir, { recursive: true });
-    writeFileSync(join(sourceDir, "openapi.json"), validFullSpec);
-    const script = fileURLToPath(new URL("../../scripts/scope-openai-openapi.mjs", import.meta.url));
-    const result = spawnSync(process.execPath, [script], {
-      cwd: fileURLToPath(new URL("../..", import.meta.url)),
-      env: { ...process.env, SCOPE_SRC_DIR: sourceDir, SCOPE_OUT_DIR: outputDir },
-      encoding: "utf8",
-    });
-    assert.equal(result.status, 0, result.stderr);
-    const scoped = JSON.parse(readFileSync(join(outputDir, "openapi.json"), "utf8")) as {
-      paths: Record<string, unknown>;
-    };
-    assert.deepEqual(Object.keys(scoped.paths), ["/v1/invoices"]);
-    const serialized = JSON.stringify(scoped);
-    assert.ok(!serialized.includes("/v1/guests"));
-    assert.ok(!serialized.includes("taxId"));
-    assert.ok(!serialized.includes("ApiKeyAuth"));
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
+test("the OpenAPI asset helper also fails closed for reviewed mode", async () => {
+  const response = await serveOpenApiAsset(new Response(validFullSpec), true);
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.match(await response.text(), /not part of the reviewed ChatGPT connector/u);
 });

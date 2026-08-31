@@ -1,5 +1,5 @@
 {
-  "contractVersion": 1,
+  "contractVersion": 2,
   "catalogue": {
     "canonicalOperations": 157,
     "aliasNames": 5,
@@ -114,17 +114,19 @@
           "name": "create_client",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_client",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -165,17 +167,19 @@
           "name": "create_credit_note",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_credit_note",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -199,68 +203,77 @@
           "name": "create_expense",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_expense",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
           "name": "create_invoice",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_invoice",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
           "name": "create_product",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_product",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
           "name": "create_quote",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_quote",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -440,16 +453,19 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "delete_invoice",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
@@ -474,16 +490,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "delete_quote",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -560,23 +578,25 @@
           "name": "duplicate_invoice",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "duplicate_invoice",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
           "name": "einvoice_export",
           "annotations": {
-            "readOnlyHint": true,
+            "readOnlyHint": false,
             "destructiveHint": false,
             "idempotentHint": true,
             "openWorldHint": false
@@ -585,7 +605,7 @@
             "registered": true,
             "callability": "runtime_checked",
             "canonicalOperation": "einvoice_export",
-            "writesFrihet": false,
+            "writesFrihet": true,
             "externalInteraction": false,
             "externalSideEffects": []
           }
@@ -2075,17 +2095,19 @@
           "name": "log_client_activity",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "log_client_activity",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -2093,16 +2115,19 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "mark_invoice_paid",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
@@ -2447,7 +2472,9 @@
             "writesFrihet": true,
             "externalInteraction": true,
             "externalSideEffects": [
-              "email_or_invitation"
+              "email_or_invitation",
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
             ]
           }
         },
@@ -2466,7 +2493,8 @@
             "writesFrihet": true,
             "externalInteraction": true,
             "externalSideEffects": [
-              "email_or_invitation"
+              "email_or_invitation",
+              "webhook_delivery_or_configuration"
             ]
           }
         },
@@ -2549,16 +2577,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_client",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -2583,16 +2613,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_expense",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -2600,16 +2632,19 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_invoice",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
@@ -2634,16 +2669,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_product",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -2651,16 +2688,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_quote",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -2719,7 +2758,7 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
+            "idempotentHint": false,
             "openWorldHint": false
           },
           "capability": {
@@ -2938,17 +2977,19 @@
           "name": "create_client",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_client",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -2989,17 +3030,19 @@
           "name": "create_credit_note",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_credit_note",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -3023,68 +3066,77 @@
           "name": "create_expense",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_expense",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
           "name": "create_invoice",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_invoice",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
           "name": "create_product",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_product",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
           "name": "create_quote",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "create_quote",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -3264,16 +3316,19 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "delete_invoice",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
@@ -3298,16 +3353,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "delete_quote",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -3401,23 +3458,25 @@
           "name": "duplicate_invoice",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "duplicate_invoice",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
           "name": "einvoice_export",
           "annotations": {
-            "readOnlyHint": true,
+            "readOnlyHint": false,
             "destructiveHint": false,
             "idempotentHint": true,
             "openWorldHint": false
@@ -3426,7 +3485,7 @@
             "registered": true,
             "callability": "runtime_checked",
             "canonicalOperation": "einvoice_export",
-            "writesFrihet": false,
+            "writesFrihet": true,
             "externalInteraction": false,
             "externalSideEffects": []
           }
@@ -4933,17 +4992,19 @@
           "name": "log_client_activity",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "log_client_activity",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -4951,16 +5012,19 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "mark_invoice_paid",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
@@ -5322,7 +5386,9 @@
             "writesFrihet": true,
             "externalInteraction": true,
             "externalSideEffects": [
-              "email_or_invitation"
+              "email_or_invitation",
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
             ]
           }
         },
@@ -5341,7 +5407,8 @@
             "writesFrihet": true,
             "externalInteraction": true,
             "externalSideEffects": [
-              "email_or_invitation"
+              "email_or_invitation",
+              "webhook_delivery_or_configuration"
             ]
           }
         },
@@ -5424,16 +5491,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_client",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -5458,16 +5527,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_expense",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -5475,16 +5546,19 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_invoice",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
@@ -5509,16 +5583,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_product",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -5526,16 +5602,18 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "idempotentHint": false,
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "update_quote",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration"
+            ]
           }
         },
         {
@@ -5594,7 +5672,7 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
+            "idempotentHint": false,
             "openWorldHint": false
           },
           "capability": {
@@ -5716,7 +5794,9 @@
             "writesFrihet": true,
             "externalInteraction": true,
             "externalSideEffects": [
-              "email_or_invitation"
+              "email_or_invitation",
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
             ]
           }
         },
@@ -5735,30 +5815,23 @@
             "writesFrihet": true,
             "externalInteraction": true,
             "externalSideEffects": [
-              "email_or_invitation"
+              "email_or_invitation",
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
             ]
           }
         }
       }
     },
-    "openaiGrouped": {
+    "openaiFull": {
       "tools": [
-        {
-          "name": "apply_late_fee",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
-          }
-        },
         {
           "name": "create_client",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           }
         },
         {
@@ -5780,48 +5853,39 @@
           }
         },
         {
-          "name": "create_credit_note",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": false
-          }
-        },
-        {
           "name": "create_expense",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           }
         },
         {
           "name": "create_invoice",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           }
         },
         {
           "name": "create_product",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           }
         },
         {
           "name": "create_quote",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           }
         },
         {
@@ -5830,24 +5894,6 @@
             "readOnlyHint": false,
             "destructiveHint": false,
             "idempotentHint": false,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "create_webhook",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": false,
-            "openWorldHint": true
-          }
-        },
-        {
-          "name": "delete_client",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": true,
-            "idempotentHint": true,
             "openWorldHint": false
           }
         },
@@ -5870,75 +5916,12 @@
           }
         },
         {
-          "name": "delete_expense",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "delete_invoice",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "delete_product",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
           "name": "delete_quote",
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "delete_vendor",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "delete_webhook",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": true,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "describe_tool",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "duplicate_invoice",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           }
         },
         {
@@ -5978,24 +5961,6 @@
           }
         },
         {
-          "name": "get_invoice_pdf",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "get_monthly_summary",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
           "name": "get_product",
           "annotations": {
             "readOnlyHint": true,
@@ -6015,15 +5980,6 @@
         },
         {
           "name": "get_vendor",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "get_webhook",
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -6104,25 +6060,7 @@
           }
         },
         {
-          "name": "list_tool_groups",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
           "name": "list_vendors",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "list_webhooks",
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -6134,18 +6072,9 @@
           "name": "log_client_activity",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
+            "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "mark_invoice_paid",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "openWorldHint": true
           }
         },
         {
@@ -6158,93 +6087,39 @@
           }
         },
         {
-          "name": "search_tools",
-          "annotations": {
-            "readOnlyHint": true,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "send_invoice",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": true
-          }
-        },
-        {
-          "name": "send_quote",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": true
-          }
-        },
-        {
           "name": "update_client",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true
           }
         },
         {
           "name": "update_expense",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "update_invoice",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true
           }
         },
         {
           "name": "update_product",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
-          }
-        },
-        {
-          "name": "update_quote",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": false
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true
           }
         },
         {
           "name": "update_vendor",
           "annotations": {
             "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
+            "destructiveHint": true,
+            "idempotentHint": false,
             "openWorldHint": false
-          }
-        },
-        {
-          "name": "update_webhook",
-          "annotations": {
-            "readOnlyHint": false,
-            "destructiveHint": false,
-            "idempotentHint": true,
-            "openWorldHint": true
           }
         }
       ],

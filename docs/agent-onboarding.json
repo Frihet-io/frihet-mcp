@@ -69,16 +69,16 @@
     },
     "counts": {
       "toolNames": 162,
-      "readOnly": 82,
-      "writesFrihet": 80,
-      "externalInteraction": 20,
-      "destructive": 53,
+      "readOnly": 81,
+      "writesFrihet": 81,
+      "externalInteraction": 36,
+      "destructive": 61,
       "resources": 11,
       "prompts": 10
     }
   },
   "safeWorkflow": {
-    "description": "Discover → orient → retrieve → draft → hand back. No step issues a document or reaches a third party.",
+    "description": "Discover → orient → retrieve → propose → hand back. No step mutates data or reaches a third party.",
     "steps": [
       {
         "call": "get_business_context",
@@ -96,19 +96,9 @@
         "note": "Resolve the client by name before referencing an id."
       },
       {
-        "call": "create_invoice",
-        "kind": "draft",
-        "note": "Defaults to status=draft — no fiscal number, no hash, no AEAT submission."
-      },
-      {
-        "call": "get_invoice",
-        "kind": "read",
-        "note": "Read the draft back and present the computed totals to the human."
-      },
-      {
         "call": "STOP",
         "kind": "handoff",
-        "note": "Issuing and sending are human-authorised. Report the draft id and the exact next action; do not take it."
+        "note": "Present the proposed draft inputs and all disclosed effects. Creating, issuing, sending, or submitting is a separate human decision."
       }
     ]
   },
@@ -119,6 +109,7 @@
       "delete_quote",
       "delete_recurring_invoice",
       "delete_time_entry",
+      "face_submit",
       "match_transaction_to_invoice",
       "period_close",
       "period_reopen",
@@ -126,9 +117,48 @@
       "refund_sale",
       "remove_team_member",
       "send_invoice",
+      "send_quote",
+      "ticketbai_submit",
       "verifactu_resubmit"
     ],
     "externalSideEffects": [
+      {
+        "tool": "create_client",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "create_credit_note",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "create_expense",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "create_invoice",
+        "effects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
+        ]
+      },
+      {
+        "tool": "create_product",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "create_quote",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
       {
         "tool": "create_webhook",
         "effects": [
@@ -136,7 +166,26 @@
         ]
       },
       {
+        "tool": "delete_invoice",
+        "effects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
+        ]
+      },
+      {
+        "tool": "delete_quote",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
         "tool": "delete_webhook",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "duplicate_invoice",
         "effects": [
           "webhook_delivery_or_configuration"
         ]
@@ -197,6 +246,19 @@
         ]
       },
       {
+        "tool": "log_client_activity",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "mark_invoice_paid",
+        "effects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
+        ]
+      },
+      {
         "tool": "refund_sale",
         "effects": [
           "money_movement"
@@ -211,13 +273,16 @@
       {
         "tool": "send_invoice",
         "effects": [
-          "email_or_invitation"
+          "email_or_invitation",
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
         ]
       },
       {
         "tool": "send_quote",
         "effects": [
-          "email_or_invitation"
+          "email_or_invitation",
+          "webhook_delivery_or_configuration"
         ]
       },
       {
@@ -236,6 +301,37 @@
         "tool": "ticketbai_submit",
         "effects": [
           "fiscal_or_einvoice_submission"
+        ]
+      },
+      {
+        "tool": "update_client",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "update_expense",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "update_invoice",
+        "effects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
+        ]
+      },
+      {
+        "tool": "update_product",
+        "effects": [
+          "webhook_delivery_or_configuration"
+        ]
+      },
+      {
+        "tool": "update_quote",
+        "effects": [
+          "webhook_delivery_or_configuration"
         ]
       },
       {

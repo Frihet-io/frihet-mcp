@@ -13,8 +13,12 @@
  *   6. Stub response shapes match declared outputSchema fields
  */
 
-import { test, describe, beforeEach } from "node:test";
+import { test, describe, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { createServer, type IncomingMessage, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+
+import { FrihetClient } from "../client.js";
 
 // ── Minimal McpServer stub ───────────────────────────────────────────────────
 
@@ -29,6 +33,7 @@ interface ToolConfig {
 type ToolHandler = (args: Record<string, unknown>) => Promise<{
   content: Array<{ type: string; text: string }>;
   structuredContent?: Record<string, unknown>;
+  isError?: boolean;
 }>;
 
 interface RegisteredTool {
@@ -104,9 +109,10 @@ function make500Client(): import("../client-interface.js").IFrihetClient {
 function makeLiveClient(): import("../client-interface.js").IFrihetClient {
   return {
     exportEInvoice: async () => ({
-      xmlUrl: "https://storage.frihet.io/live/einvoice/inv_123-facturae.xml",
+      xml: "<?xml version=\"1.0\"?><Facturae>live</Facturae>",
+      contentType: "application/xml",
       filename: "inv_123-facturae.xml",
-      format: "facturae",
+      format: "Facturae",
       signed: true,
     }),
     faceSubmit: async () => ({
@@ -146,6 +152,55 @@ async function makeServer(client: import("../client-interface.js").IFrihetClient
   registerEInvoiceTools(server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, client);
   return server;
 }
+
+interface CapturedExportRequest {
+  method: string;
+  path: string;
+  body: Record<string, unknown>;
+}
+
+const capturedExportRequests: CapturedExportRequest[] = [];
+let exportBoundaryServer: Server;
+let exportBoundaryBaseUrl: string;
+
+function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => resolve(raw ? JSON.parse(raw) as Record<string, unknown> : {}));
+  });
+}
+
+before(async () => {
+  exportBoundaryServer = createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const body = await readJsonBody(req);
+    capturedExportRequests.push({
+      method: req.method ?? "",
+      path: url.pathname,
+      body,
+    });
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({
+      data: {
+        xml: `<?xml version="1.0"?><Invoice format="${String(body["format"])}"/>`,
+        contentType: "application/xml",
+        filename: "INV-1.xml",
+        signed: body["signed"] === true,
+        format: body["format"],
+      },
+    }));
+  });
+  await new Promise<void>((resolve) => exportBoundaryServer.listen(0, "127.0.0.1", resolve));
+  const { port } = exportBoundaryServer.address() as AddressInfo;
+  exportBoundaryBaseUrl = `http://127.0.0.1:${port}`;
+});
+
+after(async () => {
+  await new Promise<void>((resolve, reject) =>
+    exportBoundaryServer.close((error) => error ? reject(error) : resolve()),
+  );
+});
 
 // ── Registration tests ────────────────────────────────────────────────────────
 
@@ -220,15 +275,101 @@ describe("einvoice_export — 404 returns honest unavailable (no fabrication)", 
 });
 
 describe("einvoice_export — live client", () => {
-  test("live → real xmlUrl from CF, no _stub flag", async () => {
+  test("live → real inline XML from CF, no fabricated URL", async () => {
     const server = await makeServer(makeLiveClient());
     const tool = server.tools.get("einvoice_export")!;
     const result = await tool.handler({ invoiceId: "inv_123", format: "facturae", signed: true });
     const sc = result.structuredContent!;
-    assert.ok((sc["xmlUrl"] as string).includes("live"));
-    assert.equal(sc["format"], "facturae");
+    assert.match(sc["xml"] as string, /Facturae>live/);
+    assert.equal(sc["contentType"], "application/xml");
+    assert.equal(sc["xmlUrl"], undefined);
+    assert.equal(sc["format"], "Facturae");
     assert.equal(sc["signed"], true);
     assert.equal(sc["_stub"], undefined);
+    const { einvoiceExportOutput } = await import("../tools/einvoice.js");
+    assert.equal(einvoiceExportOutput.safeParse(sc).success, true);
+    assert.equal(einvoiceExportOutput.safeParse({
+      xmlUrl: "https://stale.invalid/invoice.xml",
+      filename: "invoice.xml",
+      format: "facturae",
+      signed: true,
+    }).success, false, "the stale URL response shape must fail output validation");
+  });
+
+  test("export schema accepts every mapped format and refuses unsupported Factur-X profiles", async () => {
+    const server = await makeServer(makeLiveClient());
+    const field = server.tools.get("einvoice_export")!.config.inputSchema["format"] as {
+      safeParse(value: unknown): { success: boolean };
+    };
+    for (const format of [
+      "facturae",
+      "xrechnung-cii",
+      "xrechnung-ubl",
+      "facturx-en16931",
+      "fatturapa",
+      "peppol-bis-3",
+      "fa-2-ksef",
+      "ubl",
+      "cii",
+    ]) {
+      assert.equal(field.safeParse(format).success, true, `${format} must be exposed by the tool schema`);
+    }
+    for (const profile of ["facturx-extended", "facturx-basic", "facturx-minimum"]) {
+      assert.equal(field.safeParse(profile).success, false, `${profile} must fail closed`);
+    }
+  });
+});
+
+describe("einvoice_export — real HTTP boundary", () => {
+  const formatCases = [
+    ["facturae", "Facturae"],
+    ["xrechnung-cii", "XRechnung-CII"],
+    ["xrechnung-ubl", "XRechnung-UBL"],
+    ["facturx-en16931", "Factur-X"],
+    ["fatturapa", "FatturaPA"],
+    ["peppol-bis-3", "PEPPOL-BIS-3"],
+    ["fa-2-ksef", "FA-2-KSeF"],
+    ["ubl", "UBL"],
+    ["cii", "CII"],
+  ] as const;
+
+  test("maps every supported ergonomic value to the strict ERP enum and returns inline XML", async () => {
+    capturedExportRequests.length = 0;
+    const client = new FrihetClient("fri_test_key", exportBoundaryBaseUrl);
+    for (const [mcpFormat, apiFormat] of formatCases) {
+      const result = await client.exportEInvoice({
+        invoiceId: "inv/strict",
+        format: mcpFormat,
+        signed: mcpFormat === "facturae",
+      });
+      const output = result as unknown as Record<string, unknown>;
+      const request = capturedExportRequests.at(-1)!;
+      assert.equal(request.method, "POST");
+      assert.equal(request.path, "/invoices/inv%2Fstrict/einvoice/export");
+      assert.deepEqual(request.body, {
+        format: apiFormat,
+        signed: mcpFormat === "facturae",
+      });
+      assert.equal(output["format"], apiFormat);
+      assert.equal(output["contentType"], "application/xml");
+      assert.match(output["xml"] as string, new RegExp(`format="${apiFormat}"`));
+      assert.equal("xmlUrl" in output, false);
+    }
+  });
+
+  test("unsupported Factur-X profiles fail before any HTTP request", async () => {
+    const client = new FrihetClient("fri_test_key", exportBoundaryBaseUrl);
+    for (const profile of ["facturx-extended", "facturx-basic", "facturx-minimum"]) {
+      const beforeCount = capturedExportRequests.length;
+      await assert.rejects(
+        (client.exportEInvoice as (params: {
+          invoiceId: string;
+          format: string;
+        }) => Promise<unknown>)({ invoiceId: "inv_1", format: profile }),
+        /unsupported e-invoice export format/i,
+      );
+      assert.equal(capturedExportRequests.length, beforeCount, `${profile} reached the API`);
+    }
   });
 });
 
@@ -238,7 +379,7 @@ describe("face_submit — 404 returns honest unavailable (no fabrication)", () =
   test("404 → isError + _unavailable, NO _stub, NO fabricated registroFACe", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("face_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_face_001", mode: "production" });
+    const result = await tool.handler({ invoiceId: "inv_face_001", mode: "production", confirm: true });
     assert.equal((result as Record<string, unknown>)["isError"], true);
     const sc = result.structuredContent!;
     assert.equal(sc["_unavailable"], true);
@@ -250,7 +391,7 @@ describe("face_submit — 404 returns honest unavailable (no fabrication)", () =
   test("403 error returns isError response (not stub)", async () => {
     const server = await makeServer(make403Client());
     const tool = server.tools.get("face_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_face_403", mode: "production" });
+    const result = await tool.handler({ invoiceId: "inv_face_403", mode: "production", confirm: true });
     assert.equal((result as Record<string, unknown>)["isError"], true, "403 should produce isError response");
   });
 });
@@ -259,11 +400,81 @@ describe("face_submit — live client", () => {
   test("live → real registroFACe, no _stub flag", async () => {
     const server = await makeServer(makeLiveClient());
     const tool = server.tools.get("face_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_face_live", mode: "production" });
+    const result = await tool.handler({ invoiceId: "inv_face_live", mode: "production", confirm: true });
     const sc = result.structuredContent!;
     assert.equal(sc["registroFACe"], "RCF_LIVE_20260513_001");
     assert.equal(sc["status"], "submitted");
     assert.equal(sc["_stub"], undefined);
+  });
+});
+
+describe("fiscal submit interlocks", () => {
+  for (const name of ["face_submit", "ticketbai_submit"] as const) {
+    test(`${name} declares required confirm and refuses false/missing with zero calls`, async () => {
+      const calls: string[] = [];
+      const client = new Proxy({}, {
+        get: (_target, property) => async () => {
+          calls.push(String(property));
+          return {};
+        },
+      }) as import("../client-interface.js").IFrihetClient;
+      const server = await makeServer(client);
+      const tool = server.tools.get(name)!;
+      const confirm = tool.config.inputSchema["confirm"] as {
+        safeParse(value: unknown): { success: boolean };
+      };
+      assert.equal(confirm.safeParse(undefined).success, false);
+
+      for (const args of [
+        { invoiceId: "inv_interlock", confirm: false },
+        { invoiceId: "inv_interlock" },
+      ]) {
+        const result = await tool.handler(args);
+        assert.equal(result.isError, true);
+        assert.match(result.content[0]!.text, /confirm=true/i);
+      }
+      assert.deepEqual(calls, []);
+    });
+  }
+
+  test("confirm is consumed locally and never forwarded to either API method", async () => {
+    const received: Array<Record<string, unknown>> = [];
+    const client = {
+      faceSubmit: async (params: Record<string, unknown>) => {
+        received.push(params);
+        return {
+          registroFACe: "RCF_1",
+          status: "submitted",
+          submittedAt: "2026-08-30T00:00:00.000Z",
+          mode: "sandbox",
+        };
+      },
+      ticketbaiSubmit: async (params: Record<string, unknown>) => {
+        received.push(params);
+        return {
+          tbaiId: "TBAI_1",
+          territory: "bizkaia",
+          status: "accepted",
+          sandbox: true,
+          qrUrl: "https://example.test/qr",
+        };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+    const server = await makeServer(client);
+    await server.tools.get("face_submit")!.handler({
+      invoiceId: "inv_face",
+      mode: "sandbox",
+      confirm: true,
+    });
+    await server.tools.get("ticketbai_submit")!.handler({
+      invoiceId: "inv_tbai",
+      sandbox: true,
+      confirm: true,
+    });
+    assert.deepEqual(received, [
+      { invoiceId: "inv_face", mode: "sandbox" },
+      { invoiceId: "inv_tbai", sandbox: true },
+    ]);
   });
 });
 
@@ -307,7 +518,7 @@ describe("ticketbai_submit — 404 returns honest unavailable (no fabrication)",
   test("404 → isError + _unavailable, NO fabricated tbaiId / qrUrl", async () => {
     const server = await makeServer(make404Client());
     const tool = server.tools.get("ticketbai_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_tbai_001" });
+    const result = await tool.handler({ invoiceId: "inv_tbai_001", confirm: true });
     assert.equal((result as Record<string, unknown>)["isError"], true);
     const sc = result.structuredContent!;
     assert.equal(sc["_unavailable"], true);
@@ -319,7 +530,7 @@ describe("ticketbai_submit — 404 returns honest unavailable (no fabrication)",
   test("403 error returns isError response (not stub)", async () => {
     const server = await makeServer(make403Client());
     const tool = server.tools.get("ticketbai_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_tbai_403" });
+    const result = await tool.handler({ invoiceId: "inv_tbai_403", confirm: true });
     assert.equal((result as Record<string, unknown>)["isError"], true, "403 should produce isError response");
   });
 });
@@ -328,7 +539,7 @@ describe("ticketbai_submit — live client", () => {
   test("live → real tbaiId, status=accepted, qrUrl present", async () => {
     const server = await makeServer(makeLiveClient());
     const tool = server.tools.get("ticketbai_submit")!;
-    const result = await tool.handler({ invoiceId: "inv_tbai_live" });
+    const result = await tool.handler({ invoiceId: "inv_tbai_live", confirm: true });
     const sc = result.structuredContent!;
     assert.equal(sc["tbaiId"], "TBAI-00001-20260513-LIVE");
     assert.equal(sc["status"], "accepted");
@@ -389,11 +600,11 @@ const LIVE_TOOLS: Array<{
   {
     name: "einvoice_export",
     args: { invoiceId: "inv_smoke", format: "facturae", signed: true },
-    liveAssert: (sc) => assert.ok((sc["xmlUrl"] as string).includes("live")),
+    liveAssert: (sc) => assert.match(sc["xml"] as string, /Facturae>live/),
   },
   {
     name: "face_submit",
-    args: { invoiceId: "inv_smoke", mode: "production" },
+    args: { invoiceId: "inv_smoke", mode: "production", confirm: true },
     liveAssert: (sc) => assert.equal(sc["registroFACe"], "RCF_LIVE_20260513_001"),
   },
   {
@@ -403,7 +614,7 @@ const LIVE_TOOLS: Array<{
   },
   {
     name: "ticketbai_submit",
-    args: { invoiceId: "inv_smoke" },
+    args: { invoiceId: "inv_smoke", confirm: true },
     liveAssert: (sc) => assert.equal(sc["tbaiId"], "TBAI-00001-20260513-LIVE"),
   },
   {

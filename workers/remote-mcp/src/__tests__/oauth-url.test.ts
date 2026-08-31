@@ -14,16 +14,106 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { resolveApiBaseUrl, resolveOAuthApiKeyUrl } from "../api-url.ts";
-import { provisionOAuthApiKey } from "../oauth-provisioning.ts";
+import {
+  OAUTH_PROVISIONING_CONTRACT,
+  isTrustedOAuthApiKeyUrl,
+  parseProvisionedOAuthApiKey,
+  provisionOAuthApiKey,
+  revokeOAuthApiKey,
+} from "../oauth-provisioning.ts";
 
 const EXPECTED = "https://api.frihet.io/oauth/api-key";
+const SERVICE_SECRET = "s".repeat(32);
+const CORRELATION_ID = "123e4567-e89b-42d3-a456-426614174000";
+const OPENAI_BINDING = {
+  uid: "uid-test",
+  accessProfile: "openai",
+  oauthResource: "https://openai-mcp.frihet.io",
+} as const;
+
+test("OAuth provisioning golden matches the ERP two-phase contract", () => {
+  assert.deepEqual(OAUTH_PROVISIONING_CONTRACT, {
+    contractVersion: "2026-08-30",
+    candidateRequestKeys: ["accessProfile", "correlationId", "oauthResource", "uid"],
+    legacyRequestKeys: ["uid"],
+    responseKeys: ["apiKey", "expiresAt", "keyId"],
+    candidateLifetimeDays: 30,
+    legacyLifetimeDays: 365,
+    keyIdPattern: "^[A-Za-z0-9]{20}$",
+    bindings: {
+      openai: "https://openai-mcp.frihet.io",
+      full: "https://mcp.frihet.io",
+    },
+    permissions: ["read", "write"],
+  });
+});
 
 test("resolveOAuthApiKeyUrl strips /v1 suffix (the production bug)", () => {
   assert.equal(resolveOAuthApiKeyUrl("https://api.frihet.io/v1"), EXPECTED);
 });
 
+test("OAuth provisioning accepts only Frihet's exact one-time bound key tuple", () => {
+  const valid = `fri_${"A".repeat(43)}`;
+  const keyId = "AbCdEfGhIjKlMnOpQrSt";
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  assert.deepEqual(
+    parseProvisionedOAuthApiKey({ apiKey: valid, keyId, expiresAt }, OPENAI_BINDING),
+    { apiKey: valid, keyId, expiresAt, ...OPENAI_BINDING },
+  );
+
+  for (const payload of [
+    null,
+    [],
+    {},
+    { apiKey: undefined },
+    { apiKey: "" },
+    { apiKey: "fri_short" },
+    { apiKey: `fri_${"A".repeat(42)}` },
+    { apiKey: `fri_${"A".repeat(44)}` },
+    { apiKey: `other_${"A".repeat(43)}` },
+    { apiKey: `fri_${"A".repeat(42)}!` },
+    { apiKey: ` ${valid}`, keyId, expiresAt },
+    { apiKey: valid, keyId: "short", expiresAt },
+    { apiKey: valid, keyId, expiresAt: "not-a-date" },
+    { apiKey: valid, keyId, expiresAt: "2027-02-30T12:34:56.000Z" },
+    {
+      apiKey: valid,
+      keyId,
+      expiresAt: new Date(Date.now() + 32 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    { apiKey: valid, keyId, expiresAt, unexpected: true },
+  ]) {
+    assert.equal(
+      parseProvisionedOAuthApiKey(payload, OPENAI_BINDING),
+      undefined,
+      JSON.stringify(payload),
+    );
+  }
+});
+
 test("resolveOAuthApiKeyUrl accepts origin form", () => {
   assert.equal(resolveOAuthApiKeyUrl("https://api.frihet.io"), EXPECTED);
+});
+
+test("OAuth lifecycle leaf accepts only the two exact resolved authorities", () => {
+  assert.equal(isTrustedOAuthApiKeyUrl(EXPECTED), true);
+  assert.equal(
+    isTrustedOAuthApiKeyUrl(
+      "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/oauth/api-key",
+    ),
+    true,
+  );
+  for (const candidate of [
+    "http://api.frihet.io/oauth/api-key",
+    "https://api.frihet.io:444/oauth/api-key",
+    "https://user:password@api.frihet.io/oauth/api-key",
+    "https://api.frihet.io/oauth/api-key/",
+    "https://api.frihet.io/oauth/api-key?redirect=evil",
+    "https://api.frihet.io.evil.example/oauth/api-key",
+    "https://attacker-project.cloudfunctions.net/publicApi/api/oauth/api-key",
+  ]) {
+    assert.equal(isTrustedOAuthApiKeyUrl(candidate), false, candidate);
+  }
 });
 
 test("resolveOAuthApiKeyUrl tolerates trailing slashes", () => {
@@ -42,17 +132,20 @@ test("resolveOAuthApiKeyUrl falls back to the CF origin (NOT api.frihet.io) when
   assert.ok(!resolveOAuthApiKeyUrl(undefined).includes("api.frihet.io"));
 });
 
+test("tool requests also fall back to the direct CF origin when the env var is unset", () => {
+  const cfFallback =
+    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1";
+  assert.equal(resolveApiBaseUrl(undefined), cfFallback);
+  assert.equal(resolveApiBaseUrl(""), cfFallback);
+  assert.ok(!resolveApiBaseUrl(undefined).includes("api.frihet.io"));
+});
+
 test("resolveOAuthApiKeyUrl only strips a /v1 SEGMENT, not substrings", () => {
-  // a host literally containing v1 must not be mangled
-  assert.equal(
-    resolveOAuthApiKeyUrl("https://api-v1.frihet.io"),
-    "https://api-v1.frihet.io/oauth/api-key",
-  );
+  assert.throws(() => resolveOAuthApiKeyUrl("https://api-v1.frihet.io"));
 });
 
 test("tool and OAuth bases canonicalize trusted Frihet and exact Cloud Function origins", () => {
   assert.equal(resolveApiBaseUrl("https://API.FRIHET.IO:443/"), "https://api.frihet.io/v1");
-  assert.equal(resolveApiBaseUrl("https://mcp.frihet.io/v1/"), "https://mcp.frihet.io/v1");
   assert.equal(
     resolveApiBaseUrl("https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/"),
     "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1",
@@ -73,6 +166,9 @@ test("worker API base rejects host confusion, credentials, unsafe ports, and arb
     "https://api.frihet.io/v1?redirect=evil",
     "https://api.frihet.io/v1#fragment",
     "https://api.frihet.io/arbitrary",
+    "https://frihet.io/v1",
+    "https://mcp.frihet.io/v1",
+    "https://api-v1.frihet.io/v1",
     "https://attacker-project.cloudfunctions.net/publicApi/api",
     "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/other/path",
   ];
@@ -112,7 +208,9 @@ test("OAuth provisioning behavior blocks redirects before the bearer token reach
       () => provisionOAuthApiKey(
         EXPECTED,
         "test-id-token",
-        "uid-test",
+        SERVICE_SECRET,
+        OPENAI_BINDING,
+        CORRELATION_ID,
         remappedFetch,
       ),
       (error: Error) => {
@@ -130,4 +228,106 @@ test("OAuth provisioning behavior blocks redirects before the bearer token reach
   assert.equal(redirectRequests.length, 1);
   assert.equal(redirectRequests[0]?.authorization, "Bearer test-id-token");
   assert.deepEqual(sinkRequests, []);
+});
+
+test("OAuth provision and revoke requests send exact bound bodies without the raw key on DELETE", async () => {
+  const calls: Array<{ input: string; init?: RequestInit }> = [];
+  const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ input: String(input), init });
+    return new Response(null, { status: 200 });
+  };
+
+  await provisionOAuthApiKey(
+    EXPECTED,
+    "firebase-token",
+    SERVICE_SECRET,
+    OPENAI_BINDING,
+    CORRELATION_ID,
+    fetchImpl,
+  );
+  await revokeOAuthApiKey(
+    EXPECTED,
+    "s".repeat(32),
+    { ...OPENAI_BINDING, keyId: "AbCdEfGhIjKlMnOpQrSt" },
+    fetchImpl,
+  );
+
+  assert.equal(calls[0]?.init?.method, "POST");
+  assert.equal(calls[0]?.init?.redirect, "error");
+  assert.equal(calls[0]?.init?.body, JSON.stringify({
+    ...OPENAI_BINDING,
+    correlationId: CORRELATION_ID,
+  }));
+  assert.equal(
+    (calls[0]?.init?.headers as Record<string, string>)["x-frihet-oauth-key"],
+    SERVICE_SECRET,
+  );
+  assert.equal(calls[1]?.init?.method, "DELETE");
+  assert.equal(calls[1]?.init?.redirect, "error");
+  assert.equal(calls[1]?.init?.body, JSON.stringify({
+    ...OPENAI_BINDING,
+    keyId: "AbCdEfGhIjKlMnOpQrSt",
+  }));
+  assert.doesNotMatch(String(calls[1]?.init?.body), /fri_/u);
+  assert.equal(
+    (calls[1]?.init?.headers as Record<string, string>)["x-frihet-oauth-key"],
+    "s".repeat(32),
+  );
+  assert.throws(() => revokeOAuthApiKey(
+    EXPECTED,
+    "too-short",
+    { ...OPENAI_BINDING, keyId: "AbCdEfGhIjKlMnOpQrSt" },
+    fetchImpl,
+  ));
+  assert.throws(() => provisionOAuthApiKey(
+    EXPECTED,
+    "firebase-token",
+    "too-short",
+    OPENAI_BINDING,
+    CORRELATION_ID,
+    fetchImpl,
+  ));
+  assert.throws(() => provisionOAuthApiKey(
+    EXPECTED,
+    "firebase-token",
+    SERVICE_SECRET,
+    OPENAI_BINDING,
+    "not-a-correlation-id",
+    fetchImpl,
+  ));
+});
+
+test("OAuth lifecycle leaf rejects attacker-controlled URLs before fetch sees either secret", () => {
+  let fetchCalls = 0;
+  const fetchImpl = async () => {
+    fetchCalls += 1;
+    return new Response(null, { status: 200 });
+  };
+  const binding = { ...OPENAI_BINDING, keyId: "AbCdEfGhIjKlMnOpQrSt" };
+
+  for (const candidate of [
+    "https://evil.example/oauth/api-key",
+    "https://api.frihet.io/oauth/api-key/",
+    "https://api.frihet.io/oauth/api-key?redirect=evil",
+    "https://api.frihet.io.evil.example/oauth/api-key",
+  ]) {
+    assert.throws(
+      () => provisionOAuthApiKey(
+        candidate,
+        "firebase-token",
+        SERVICE_SECRET,
+        OPENAI_BINDING,
+        CORRELATION_ID,
+        fetchImpl,
+      ),
+      /lifecycle authority is not trusted/u,
+      candidate,
+    );
+    assert.throws(
+      () => revokeOAuthApiKey(candidate, SERVICE_SECRET, binding, fetchImpl),
+      /lifecycle authority is not trusted/u,
+      candidate,
+    );
+  }
+  assert.equal(fetchCalls, 0);
 });

@@ -15,7 +15,7 @@ This document defines the architecture and implementation-ready packaging plan f
 | **Claude Code** | `.claude-plugin/plugin.json` + `skills/` | Direct Stdio / SSE / StreamableHTTP | Prompt confirmation on tools | Supported (`FRIHET_DEMO=1` or read-only tools) |
 | **Cursor** | `.cursor-plugin/marketplace.json` + `mcp.json` | Stdio / SSE connection | User approves tool execution | Supported via read-only tools |
 | **Codex / AGY SDK** | `.agents/skills/` / `.gemini/` | Native MCP Client | RBAC & Sandbox isolation | Supported via read-only tools & Demo client |
-| **OpenAI / ChatGPT** | `openapi-profile.ts` (JSON Schema) | GPT Actions / MCP Connector | OAuth 2.0 PKCE / Static Key | Supported via 56-tool restricted safe profile |
+| **OpenAI / ChatGPT** | `openai-profile.ts` (JSON Schema) | GPT Actions / MCP Connector | OAuth 2.0 PKCE / Static Key | Supported via 45-tool restricted safe profile |
 | **Windsurf / Cline** | `~/.codeium/windsurf/mcp_config.json` | Stdio MCP | Interactive per-tool confirm | Supported via Stdio |
 
 ---

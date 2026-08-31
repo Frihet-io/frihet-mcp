@@ -37,6 +37,7 @@ import {
   getContent,
   READ_ONLY_ANNOTATIONS,
   CREATE_ANNOTATIONS,
+  UPDATE_ANNOTATIONS,
 } from "./shared.js";
 
 /* ------------------------------------------------------------------ */
@@ -124,6 +125,21 @@ export const eInvoiceFormatSchema = z.enum([
 ]);
 
 export type EInvoiceFormat = z.infer<typeof eInvoiceFormatSchema>;
+
+/** Export is narrower than dispatch/validation. The ERP public export API
+ * exposes Factur-X EN16931 only; accepting Extended/Basic/Minimum here and
+ * silently mapping them to EN16931 would produce the wrong fiscal profile. */
+export const eInvoiceExportFormatSchema = z.enum([
+  "xrechnung-cii",
+  "xrechnung-ubl",
+  "facturx-en16931",
+  "fatturapa",
+  "ubl",
+  "cii",
+  "peppol-bis-3",
+  "fa-2-ksef",
+  "facturae",
+]);
 
 /* ------------------------------------------------------------------ */
 /*  Output schemas                                                      */
@@ -502,20 +518,24 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
     {
       title: "Export E-Invoice XML",
       description:
-        "Export an invoice as e-invoicing XML in a specific format. " +
+        "Export an invoice as inline e-invoicing XML in a specific format. " +
         "Supports Facturae (ES B2G), XRechnung-CII (DE), XRechnung-UBL (DE), " +
-        "Factur-X profiles (FR), FatturaPA (IT), PEPPOL-BIS-3 (EU network), UBL and CII (generic). " +
+        "Factur-X EN16931 (FR), FatturaPA (IT), PEPPOL-BIS-3 (EU network), FA-2-KSeF (PL), UBL and CII (generic). " +
+        "Factur-X Extended, Basic and Minimum are not exposed by this endpoint and are refused rather than collapsed to a different profile. " +
         "For Facturae, set signed=true to get XAdES-enveloped XML for FACe/AEAT submission. " +
-        "Returns a signed download URL valid for 24 hours. " +
+        "Returns the generated XML inline with its MIME type and filename. " +
         "\n\n" +
         "/ Exporta una factura como XML de facturacion electronica en el formato especificado. " +
         "Para Facturae con signed=true devuelve XML firmado XAdES para envio a FACe/AEAT.",
-      annotations: READ_ONLY_ANNOTATIONS,
+      // Conservative static classification: signed=true exercises a workspace
+      // signing certificate, so the tool cannot truthfully be advertised as a
+      // read-only operation even though unsigned generation is side-effect free.
+      annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         invoiceId: z.string().describe("Frihet invoice ID to export / ID de la factura a exportar"),
-        format: eInvoiceFormatSchema.describe(
+        format: eInvoiceExportFormatSchema.describe(
           "E-invoice format. Choose based on recipient country: " +
-          "ES B2G→facturae, DE→xrechnung-cii/ubl, FR→facturx-*, IT→fatturapa, EU PEPPOL→peppol-bis-3, " +
+          "ES B2G→facturae, DE→xrechnung-cii/ubl, FR→facturx-en16931, IT→fatturapa, PL→fa-2-ksef, EU PEPPOL→peppol-bis-3, " +
           "generic→ubl or cii / Formato de factura electronica.",
         ),
         signed: z.boolean().optional().describe(
@@ -538,7 +558,8 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
                 `  Format: ${format}\n` +
                 `  Signed: ${signed ?? false}\n` +
                 `  Filename: ${result.filename}\n` +
-                `  Download URL: ${result.xmlUrl}`,
+                `  Content-Type: ${result.contentType}\n` +
+                `  XML: returned inline (${result.xml.length} characters)`,
               ),
             ],
             structuredContent: result as unknown as Record<string, unknown>,
@@ -565,7 +586,8 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
     {
       title: "Submit to FACe (Spain B2G)",
       description:
-        "Submit a Facturae-formatted invoice to the Spanish FACe (Punto General de Entrada de Facturas Electrónicas) B2G portal. " +
+        "Requires confirm=true as a local client/agent interlock before submitting a Facturae invoice to Spain's FACe B2G portal. " +
+        "This flag is not server-verifiable human attestation and is never forwarded to the API. " +
         "The invoice must have a recipient with DIR3 administrative unit codes (órgano gestor, unidad tramitadora, oficina contable). " +
         "Returns a submission reference (registro) that can be used with face_status to poll the portal. " +
         "\n\n" +
@@ -584,11 +606,27 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           "Submission mode: mock (local sim), sandbox (FACe pre-prod), production (live). Default: production. " +
           "/ Modo de envío: mock (simulación local), sandbox (pre-producción FACe), production (real). Por defecto: production.",
         ),
+        confirm: z.boolean().describe(
+          "Must be true to pass the local submission interlock in every mode, including mock and sandbox. " +
+          "This is not actor/resource/payload/expiry-bound attestation. / Debe ser true para superar el interlock local en todos los modos.",
+        ),
       },
       outputSchema: faceSubmitOutput,
     },
-    async ({ invoiceId, mode }) =>
+    async ({ invoiceId, mode, confirm }) =>
       withToolLogging("face_submit", async () => {
+        if (!confirm) {
+          return {
+            content: [{
+              type: "text" as const,
+              text:
+                "Error: face_submit requires confirm=true before any FACe submission or simulation. " +
+                "It is a local client/agent interlock, not server-verifiable human attestation. " +
+                "/ Se requiere confirm=true antes de cualquier envío o simulación FACe.",
+            }],
+            isError: true,
+          };
+        }
         const plannedEndpoint = `/v1/invoices/${invoiceId}/face/submit`;
         const resolvedMode = mode ?? "production";
         try {
@@ -687,7 +725,8 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
     {
       title: "Submit TicketBAI (Basque Country)",
       description:
-        "Submit an invoice to the Basque Country TicketBAI e-invoicing system. " +
+        "Requires confirm=true as a local client/agent interlock before submitting an invoice to TicketBAI. " +
+        "This flag is not server-verifiable human attestation and is never forwarded to the API. " +
         "Territory is auto-detected from the workspace address (Bizkaia → BATUZ/LROE, Gipuzkoa → Gipuzkoa TicketBAI, Araba → Araba TicketBAI). " +
         "Returns the submission TicketBAI ID (TBAI identifier) and QR code URL for printing on the invoice. " +
         "\n\n" +
@@ -704,11 +743,27 @@ export function registerEInvoiceTools(server: McpServer, _client: IFrihetClient)
           "If true, submits to the hacienda test endpoint instead of production. Default: false. " +
           "/ Si true, envía al entorno de pruebas de la hacienda. Por defecto: false.",
         ),
+        confirm: z.boolean().describe(
+          "Must be true to pass the local submission interlock in both sandbox and production. " +
+          "This is not actor/resource/payload/expiry-bound attestation. / Debe ser true para superar el interlock local.",
+        ),
       },
       outputSchema: ticketbaiSubmitOutput,
     },
-    async ({ invoiceId, sandbox }) =>
+    async ({ invoiceId, sandbox, confirm }) =>
       withToolLogging("ticketbai_submit", async () => {
+        if (!confirm) {
+          return {
+            content: [{
+              type: "text" as const,
+              text:
+                "Error: ticketbai_submit requires confirm=true before any TicketBAI submission. " +
+                "It is a local client/agent interlock, not server-verifiable human attestation. " +
+                "/ Se requiere confirm=true antes de cualquier envío TicketBAI.",
+            }],
+            isError: true,
+          };
+        }
         const plannedEndpoint = `/v1/invoices/${invoiceId}/ticketbai/submit`;
         const isSandbox = sandbox ?? false;
         try {
@@ -938,17 +993,6 @@ interface IFrihetClientWithEInvoice extends IFrihetClient {
  * Falls back to 404-stub if CF endpoints not yet deployed.
  */
 interface IFrihetClientWithDay4EInvoice extends IFrihetClient {
-  exportEInvoice(params: {
-    invoiceId: string;
-    format: string;
-    signed?: boolean;
-  }): Promise<{
-    xmlUrl: string;
-    filename: string;
-    format: string;
-    signed: boolean;
-  }>;
-
   faceSubmit(params: {
     invoiceId: string;
     mode: "mock" | "sandbox" | "production";

@@ -70,7 +70,7 @@ THE SAFE WORKFLOW — draft, show, stop
 
 HUMAN AUTHORITY — do not call unprompted
 - Any tool whose capability shows a non-empty externalSideEffects reaches outside Frihet — email to a client, webhook delivery, money movement, or a submission to AEAT / VeriFactu / TicketBAI / FACe. You cannot undo those.
-- Several also take confirm=true. That flag records the human's decision. Never set it to satisfy your own plan; ask, then pass what you were told.
+- Several also take confirm=true. It is a local client/agent interlock, not server-verifiable human attestation and not actor/resource/payload/expiry-bound. Never set it to satisfy your own plan; ask, then pass what you were told.
 - delete_invoice does not always delete: an issued invoice is CANCELLED (status=cancelled) because VeriFactu forbids breaking the hash chain. Same for quotes.
 
 WHEN A CALL FAILS
@@ -304,7 +304,7 @@ export async function captureAgentOnboardingDescriptor(): Promise<AgentOnboardin
     },
     safeWorkflow: {
       description:
-        "Discover → orient → retrieve → draft → hand back. No step issues a document or reaches a third party.",
+        "Discover → orient → retrieve → propose → hand back. No step mutates data or reaches a third party.",
       steps: [
         {
           call: "get_business_context",
@@ -322,19 +322,9 @@ export async function captureAgentOnboardingDescriptor(): Promise<AgentOnboardin
           note: "Resolve the client by name before referencing an id.",
         },
         {
-          call: "create_invoice",
-          kind: "draft",
-          note: "Defaults to status=draft — no fiscal number, no hash, no AEAT submission.",
-        },
-        {
-          call: "get_invoice",
-          kind: "read",
-          note: "Read the draft back and present the computed totals to the human.",
-        },
-        {
           call: "STOP",
           kind: "handoff",
-          note: "Issuing and sending are human-authorised. Report the draft id and the exact next action; do not take it.",
+          note: "Present the proposed draft inputs and all disclosed effects. Creating, issuing, sending, or submitting is a separate human decision.",
         },
       ],
     },

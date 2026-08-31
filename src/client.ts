@@ -24,6 +24,12 @@ import { sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
+const OAUTH_CLOUD_FUNCTION_BASE_URL =
+  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1";
+const OAUTH_SERVICE_TRUSTED_BASE_URLS = new Set([
+  BASE_URL,
+  OAUTH_CLOUD_FUNCTION_BASE_URL,
+]);
 
 const MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
@@ -57,9 +63,9 @@ export interface BinaryDocument {
   id: string;
   /** Verbatim `Content-Type` from the response (e.g. `application/pdf`). */
   contentType: string;
-  /** Byte length of the decoded body. Equal to `Buffer.byteLength(base64)` after round-trip. */
+  /** Byte length of the decoded body. Equal to the decoded base64 byte length. */
   sizeBytes: number;
-  /** Base64-encoded bytes. Round-trip via `Buffer.from(b64, 'base64')`. */
+  /** Base64-encoded bytes. */
   base64: string;
   /** Filename hint parsed from `Content-Disposition`, when present. */
   filename?: string;
@@ -84,6 +90,70 @@ export interface XmlDocument {
 
 /** `/invoices/:id/xml` serves XML or a Factur-X PDF, depending on storage MIME. */
 export type EInvoiceDocument = XmlDocument | BinaryDocument;
+
+/** Ergonomic values accepted by the MCP `einvoice_export` tool. This is
+ * deliberately narrower than the asynchronous dispatch/validation format
+ * family: the public export API exposes only the EN16931 Factur-X profile. */
+export type McpEInvoiceExportFormat =
+  | "facturae"
+  | "xrechnung-cii"
+  | "xrechnung-ubl"
+  | "facturx-en16931"
+  | "fatturapa"
+  | "peppol-bis-3"
+  | "fa-2-ksef"
+  | "ubl"
+  | "cii";
+
+/** Exact, case-sensitive enum accepted by the ERP export endpoint. */
+export type ApiEInvoiceExportFormat =
+  | "Facturae"
+  | "XRechnung-CII"
+  | "XRechnung-UBL"
+  | "Factur-X"
+  | "FatturaPA"
+  | "PEPPOL-BIS-3"
+  | "FA-2-KSeF"
+  | "UBL"
+  | "CII";
+
+export interface EInvoiceExportResult {
+  xml: string;
+  contentType: string;
+  filename: string;
+  signed: boolean;
+  format: ApiEInvoiceExportFormat;
+}
+
+/** One exhaustive translation at the HTTP boundary. Never send the MCP's
+ * lowercase convenience values to the strict API. Factur-X Extended, Basic
+ * and Minimum are intentionally absent: collapsing them to EN16931 would lie
+ * about the generated profile. */
+const E_INVOICE_EXPORT_API_FORMAT: Readonly<
+  Record<McpEInvoiceExportFormat, ApiEInvoiceExportFormat>
+> = {
+  facturae: "Facturae",
+  "xrechnung-cii": "XRechnung-CII",
+  "xrechnung-ubl": "XRechnung-UBL",
+  "facturx-en16931": "Factur-X",
+  fatturapa: "FatturaPA",
+  "peppol-bis-3": "PEPPOL-BIS-3",
+  "fa-2-ksef": "FA-2-KSeF",
+  ubl: "UBL",
+  cii: "CII",
+};
+
+export function toApiEInvoiceExportFormat(format: string): ApiEInvoiceExportFormat {
+  if (!Object.hasOwn(E_INVOICE_EXPORT_API_FORMAT, format)) {
+    throw new FrihetApiError(
+      400,
+      "unsupported_einvoice_export_format",
+      `Unsupported e-invoice export format: ${format}. ` +
+        "Factur-X export supports the EN16931 profile only.",
+    );
+  }
+  return E_INVOICE_EXPORT_API_FORMAT[format as McpEInvoiceExportFormat];
+}
 
 /**
  * HTTP methods for which the backend treats the request as a mutation and
@@ -196,10 +266,32 @@ function isAbortError(error: unknown): boolean {
 
 function decodeUtf8(bytes: Uint8Array, label: string): string {
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
   } catch {
     throw new FrihetApiError(200, "invalid_response", `${label} is not valid UTF-8`);
   }
+}
+
+const BASE64_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/** Encode bytes without relying on Node's Buffer in browser/Worker runtimes. */
+function encodeBase64(bytes: Uint8Array): string {
+  let encoded = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index]!;
+    const hasSecond = index + 1 < bytes.length;
+    const hasThird = index + 2 < bytes.length;
+    const second = hasSecond ? bytes[index + 1]! : 0;
+    const third = hasThird ? bytes[index + 2]! : 0;
+    const chunk = (first << 16) | (second << 8) | third;
+
+    encoded += BASE64_ALPHABET[(chunk >>> 18) & 0x3f];
+    encoded += BASE64_ALPHABET[(chunk >>> 12) & 0x3f];
+    encoded += hasSecond ? BASE64_ALPHABET[(chunk >>> 6) & 0x3f] : "=";
+    encoded += hasThird ? BASE64_ALPHABET[chunk & 0x3f] : "=";
+  }
+  return encoded;
 }
 
 export class FrihetApiError extends Error {
@@ -294,12 +386,19 @@ export interface FrihetClientOptions {
    * Cloudflare Workers should pass ≤25000 to leave margin under the ~30s limit.
    */
   timeoutMs?: number;
+  /**
+   * Internal second factor for API keys provisioned by Frihet OAuth Workers.
+   * Ordinary dashboard/API keys must omit it. The value is sent only to the
+   * already-normalized API origin and is never included in logs or errors.
+   */
+  oauthServiceSecret?: string;
 }
 
 export class FrihetClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
+  private readonly oauthServiceSecret?: string;
 
   constructor(apiKey: string, baseUrl?: string, options?: FrihetClientOptions) {
     if (!apiKey) {
@@ -307,9 +406,26 @@ export class FrihetClient {
         "FRIHET_API_KEY is required. Set it as an environment variable or pass it to the constructor.",
       );
     }
+    const resolvedBaseUrl = baseUrl ?? BASE_URL;
     this.apiKey = apiKey;
-    this.baseUrl = baseUrl ?? BASE_URL;
+    this.baseUrl = resolvedBaseUrl;
     this.timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    if (options?.oauthServiceSecret !== undefined) {
+      if (
+        new TextEncoder().encode(options.oauthServiceSecret).byteLength < 32
+        || /[\r\n\0]/u.test(options.oauthServiceSecret)
+      ) {
+        throw new Error("OAuth API-key service authentication is not configured");
+      }
+      // A dashboard/API-key caller may still use a custom API base. The
+      // internal OAuth second factor may not: pin its authority at the sink so
+      // a future caller cannot exfiltrate both credentials by changing only
+      // constructor input while leaving the approved fetch fingerprint intact.
+      if (!OAUTH_SERVICE_TRUSTED_BASE_URLS.has(resolvedBaseUrl)) {
+        throw new Error("OAuth API-key service authority is not trusted");
+      }
+      this.oauthServiceSecret = options.oauthServiceSecret;
+    }
   }
 
   // ------------------------------------------------------------------ HTTP
@@ -349,6 +465,9 @@ export class FrihetClient {
       "X-Frihet-Source": SOURCE_MARKER,
       "User-Agent": SOURCE_USER_AGENT,
     };
+    if (this.oauthServiceSecret) {
+      headers["x-frihet-oauth-key"] = this.oauthServiceSecret;
+    }
 
     if (resolvedIdempotencyKey) {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
@@ -368,6 +487,7 @@ export class FrihetClient {
         redirect: "error",
       });
     } catch (error) {
+      clearTimeout(timeoutId);
       const durationMs = Math.round(Date.now() - startTime);
       if (error instanceof Error && error.name === "AbortError") {
         logApiCall(method, path, 408, durationMs);
@@ -378,15 +498,18 @@ export class FrihetClient {
         );
       }
       logApiCall(method, path, 0, durationMs);
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
+      throw new FrihetApiError(
+        503,
+        "network_error",
+        "The network request failed before Frihet could confirm its outcome.",
+      );
     }
 
     const durationMs = Math.round(Date.now() - startTime);
 
     // Rate limit handling
     if (response.status === 429) {
+      clearTimeout(timeoutId);
       logApiCall(method, path, 429, durationMs);
 
       if (retryCount >= MAX_RETRIES) {
@@ -427,6 +550,7 @@ export class FrihetClient {
       } catch {
         errorBody = normalizeApiError(undefined, response.status, response.statusText);
       }
+      clearTimeout(timeoutId);
       throw new FrihetApiError(
         response.status,
         errorBody.error,
@@ -439,17 +563,36 @@ export class FrihetClient {
 
     // 204 No Content (e.g. DELETE)
     if (response.status === 204) {
+      clearTimeout(timeoutId);
       return undefined as T;
     }
 
-    const data = await response.json();
+    let data: unknown;
+    try {
+      // Keep the request AbortSignal live through body consumption. A server
+      // can send 2xx headers after committing a write and then stall or truncate
+      // the JSON body; clearing the timer at headers would let this hang forever
+      // and make a committed mutation look safely retryable.
+      data = await response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const timedOut = error instanceof Error && error.name === "AbortError";
+      throw new FrihetApiError(
+        timedOut ? 408 : response.status,
+        timedOut ? "response_timeout" : "invalid_response_after_success",
+        timedOut
+          ? `Response body timed out after ${this.timeoutMs / 1000} seconds`
+          : "Frihet returned an unreadable success response after processing the request.",
+      );
+    }
+    clearTimeout(timeoutId);
 
     // Basic response validation
     if (data === null || data === undefined) {
       throw new FrihetApiError(
         response.status,
-        'invalid_response',
-        'API returned empty response',
+        "invalid_response_after_success",
+        "Frihet returned an empty success response after processing the request.",
       );
     }
 
@@ -487,6 +630,9 @@ export class FrihetClient {
       "X-Frihet-Source": SOURCE_MARKER,
       "User-Agent": SOURCE_USER_AGENT,
     };
+    if (this.oauthServiceSecret) {
+      headers["x-frihet-oauth-key"] = this.oauthServiceSecret;
+    }
     if (resolvedIdempotencyKey) {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
     }
@@ -668,7 +814,14 @@ export class FrihetClient {
           `Request timed out after ${this.timeoutMs / 1000} seconds`,
         );
       }
-      throw error;
+      if (error instanceof FrihetApiError) throw error;
+      const durationMs = Math.round(Date.now() - startedAt);
+      logApiCall(method, path, 0, durationMs);
+      throw new FrihetApiError(
+        503,
+        "network_error",
+        "The network request failed before Frihet could confirm its outcome.",
+      );
     } finally {
       clearTimeout(timeoutId);
     }
@@ -912,7 +1065,9 @@ export class FrihetClient {
       cursor: params?.after,
       fields: params?.fields,
       q: params?.q,
-      isActive: params?.isActive !== undefined ? (params.isActive ? 1 : 0) : undefined,
+      // Public API accepts the literal strings "true"/"false". Numeric 1/0
+      // makes `isActive=true` evaluate as false in the backend parser.
+      isActive: params?.isActive !== undefined ? String(params.isActive) : undefined,
     });
   }
 
@@ -971,9 +1126,9 @@ export class FrihetClient {
 
   /**
    * DELETE /quotes/{id} — same two-outcome contract as {@link deleteInvoice}:
-   * the backend soft-CANCELS a non-draft quote (200 + body) and only destroys a
-   * draft (204). See `publicApi.ts` `deleteResource`, which takes the identical
-   * branch for `invoices` and `quotes`.
+   * the backend soft-CANCELS a non-draft quote (200 + body), destroys only a
+   * clean draft with no delivery/response/attachment/conversion evidence (204),
+   * and refuses a protected draft with 409.
    */
   async deleteQuote(id: string): Promise<Record<string, unknown> | undefined> {
     return this.requestUnwrapped("DELETE", `/quotes/${encodeURIComponent(id)}`);
@@ -1017,7 +1172,11 @@ export class FrihetClient {
   // ----------------------------------------------------------------
 
   async sendInvoice(id: string, to?: string): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(id)}/send`, to ? { to } : undefined);
+    return this.requestUnwrapped(
+      "POST",
+      `/invoices/${encodeURIComponent(id)}/send`,
+      to ? { recipientEmail: to } : undefined,
+    );
   }
 
   async markInvoicePaid(id: string, paidDate?: string): Promise<Record<string, unknown>> {
@@ -1054,7 +1213,7 @@ export class FrihetClient {
       id,
       contentType: doc.contentType,
       sizeBytes: doc.sizeBytes,
-      base64: Buffer.from(doc.bytes.buffer, doc.bytes.byteOffset, doc.bytes.byteLength).toString("base64"),
+      base64: encodeBase64(doc.bytes),
       ...(doc.filename ? { filename: doc.filename } : {}),
     };
   }
@@ -1086,7 +1245,7 @@ export class FrihetClient {
         id: invoiceId,
         contentType: doc.contentType,
         sizeBytes: doc.sizeBytes,
-        base64: Buffer.from(doc.bytes.buffer, doc.bytes.byteOffset, doc.bytes.byteLength).toString("base64"),
+        base64: encodeBase64(doc.bytes),
         ...(doc.filename ? { filename: doc.filename } : {}),
       };
     }
@@ -1145,7 +1304,11 @@ export class FrihetClient {
   // ----------------------------------------------------------------
 
   async sendQuote(id: string, to?: string): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", `/quotes/${encodeURIComponent(id)}/send`, to ? { to } : undefined);
+    return this.requestUnwrapped(
+      "POST",
+      `/quotes/${encodeURIComponent(id)}/send`,
+      to ? { recipientEmail: to } : undefined,
+    );
   }
 
   // ---------------------------------------------------------------- Webhooks
@@ -1376,15 +1539,14 @@ export class FrihetClient {
 
   async exportEInvoice(params: {
     invoiceId: string;
-    format: string;
+    format: McpEInvoiceExportFormat;
     signed?: boolean;
-  }): Promise<{
-    xmlUrl: string;
-    filename: string;
-    format: string;
-    signed: boolean;
-  }> {
-    const { invoiceId, ...body } = params;
+  }): Promise<EInvoiceExportResult> {
+    const { invoiceId, format, signed } = params;
+    const body = {
+      format: toApiEInvoiceExportFormat(format),
+      ...(signed === undefined ? {} : { signed }),
+    };
     return this.requestUnwrapped("POST", `/invoices/${encodeURIComponent(invoiceId)}/einvoice/export`, body);
   }
 

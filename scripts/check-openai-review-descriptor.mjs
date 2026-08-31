@@ -6,12 +6,14 @@ import { fileURLToPath } from "node:url";
 import {
   assertOpenAIReviewContract,
   buildOpenAIReviewContract,
-  captureOpenAIReviewMcpSurface,
   serializeOpenAIReviewContract,
 } from "../dist/openai-review-contract.js";
 import {
   buildOpenAIReviewOAuthContract,
 } from "../dist/openai-review-oauth.js";
+import {
+  captureOpenAIReviewMcpSurfaceFromWorker,
+} from "../workers/remote-mcp/scripts/capture-openai-review.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const snapshotPath = fileURLToPath(
@@ -35,7 +37,7 @@ async function resolvedOAuthProviderVersion() {
 }
 
 async function captureCurrentContract() {
-  const surface = await captureOpenAIReviewMcpSurface();
+  const surface = await captureOpenAIReviewMcpSurfaceFromWorker();
   const oauth = {
     providerPackageVersion: await resolvedOAuthProviderVersion(),
     ...buildOpenAIReviewOAuthContract(),
@@ -59,7 +61,7 @@ async function main() {
   const expected = JSON.parse(await readFile(snapshotPath, "utf8"));
   assertOpenAIReviewContract(actual, expected);
   console.log(
-    `OpenAI review descriptor matches the frozen 53 business + 3 discovery surface (${root})`,
+    `OpenAI review descriptor matches the reviewed ${actual.tools.length}-business-tool full-description surface (${root})`,
   );
 }
 

@@ -16,12 +16,11 @@
  * Cloud Function from the spec BUNDLED WITH ITS OWN DEPLOYED CODE. It cannot
  * describe an API other than the one it is fronting.
  *
- * `api.frihet.io` proxies it live (workers/api-proxy). The remote-mcp hosts
+ * `api.frihet.io` proxies it live (workers/api-proxy). The full remote-mcp host
  * cannot: Cloudflare Workers Assets serves files from the asset directory
- * BEFORE the Worker runs, so `mcp.frihet.io/openapi.json` and
- * `openai-mcp.frihet.io/openapi.json` must ship a real file. Those files are
- * DERIVED — generated here, never hand-edited — and `--check` fails when the
- * committed artifact no longer matches canonical.
+ * before the Worker runs, so `mcp.frihet.io/openapi.json` ships a derived file.
+ * The reviewed OpenAI host intentionally publishes no REST/OpenAPI contract;
+ * its `/openapi.json` route is pinned to 404 and MCP metadata is authoritative.
  *
  * ── Usage ──────────────────────────────────────────────────────────────────
  *   node scripts/sync-openapi.mjs            # regenerate (run before deploy)
@@ -33,10 +32,8 @@
  * turns someone else's outage into a merge block.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -98,10 +95,9 @@ async function fetchWithRetry(url, options, attempts = 3, delaysMs = [2000, 8000
   throw new OriginUnavailableError(lastErr instanceof Error ? lastErr.message : String(lastErr));
 }
 
-/** The derived artifact this repo owns. public-openai/ is produced from it. */
+/** The full-host derived artifact this repo owns. */
 const FULL_ASSET = join(root, "workers/remote-mcp/public/openapi.json");
-const SCOPED_ASSET = join(root, "workers/remote-mcp/public-openai/openapi.json");
-const SCOPE_SCRIPT = join(root, "workers/remote-mcp/scripts/scope-openai-openapi.mjs");
+const RETIRED_OPENAI_URL = "https://openai-mcp.frihet.io/openapi.json";
 
 /**
  * EVERY host that publishes an openapi.json, not just this repo's.
@@ -114,11 +110,6 @@ const SCOPE_SCRIPT = join(root, "workers/remote-mcp/scripts/scope-openai-openapi
 const LIVE_HOSTS = [
   { url: "https://api.frihet.io/openapi.json", owner: "frihet-mcp (workers/api-proxy)" },
   { url: "https://mcp.frihet.io/openapi.json", owner: "frihet-mcp (workers/remote-mcp)" },
-  {
-    url: "https://openai-mcp.frihet.io/openapi.json",
-    owner: "frihet-mcp (workers/remote-mcp --env openai)",
-    profile: "openai",
-  },
   { url: "https://www.frihet.io/openapi.json", owner: "Frihet-Saas-Website (prebuild sync)" },
   { url: "https://docs.frihet.io/openapi.json", owner: "frihet-docs (vercel-build sync)" },
   { url: "https://app.frihet.io/openapi.json", owner: "Frihet-ERP (apps/erp/public, needs a frontend deploy)" },
@@ -250,60 +241,7 @@ if (!cn) {
   process.exit(1);
 }
 
-/**
- * Regenerate public-openai/ into a scratch directory and byte-compare.
- *
- * `--check` used to read FULL_ASSET only, while openai-mcp.frihet.io publishes
- * public-openai/openapi.json AND public-openai/releases.json verbatim through
- * Workers Assets. Those are the artifacts that demonstrably drifted six weeks
- * (releases.json sat at 1.14.5 while the package shipped 1.16.4), so leaving
- * them unchecked is checking the copy that did not rot.
- *
- * The scratch source is CANONICAL, not the committed full asset: otherwise a
- * hand-edit that hit both files in the same way would validate against itself.
- */
-function checkScopedArtifacts() {
-  const tmp = mkdtempSync(join(tmpdir(), "frihet-openapi-scope-"));
-  const src = join(tmp, "public");
-  const out = join(tmp, "out");
-  mkdirSync(src, { recursive: true });
-  writeFileSync(join(src, "openapi.json"), canonicalBytes);
-
-  // releases.json is NOT derived from canonical — the scoped copy is derived
-  // from the committed one, so it has to come from the tree.
-  const committedReleases = join(root, "workers/remote-mcp/public/releases.json");
-  if (existsSync(committedReleases)) {
-    writeFileSync(join(src, "releases.json"), readFileSync(committedReleases, "utf8"));
-  }
-
-  execFileSync(process.execPath, [SCOPE_SCRIPT], {
-    stdio: "pipe",
-    env: { ...process.env, SCOPE_SRC_DIR: src, SCOPE_OUT_DIR: out },
-  });
-
-  for (const name of ["openapi.json", "releases.json"]) {
-    const committedPath = join(root, "workers/remote-mcp/public-openai", name);
-    const regenerated = join(out, name);
-    if (!existsSync(regenerated)) continue;
-    if (!existsSync(committedPath)) {
-      fail.push(`workers/remote-mcp/public-openai/${name} is missing`);
-      continue;
-    }
-    if (readFileSync(committedPath, "utf8") !== readFileSync(regenerated, "utf8")) {
-      fail.push(
-        `workers/remote-mcp/public-openai/${name} does not match what scope-openai-openapi.mjs ` +
-          "produces from canonical — regenerate with `node scripts/sync-openapi.mjs` and never hand-edit it",
-      );
-    } else {
-      note(`ok         workers/remote-mcp/public-openai/${name} matches canonical (regenerated)`);
-    }
-  }
-
-  return JSON.parse(readFileSync(join(out, "openapi.json"), "utf8"));
-}
-
 // ── committed artifacts ─────────────────────────────────────────────────────
-let canonicalScoped;
 if (CHECK) {
   if (!existsSync(FULL_ASSET)) {
     fail.push(`${relative(root, FULL_ASSET)} is missing`);
@@ -320,13 +258,9 @@ if (CHECK) {
       note(`ok         ${relative(root, FULL_ASSET)} matches canonical`);
     }
   }
-  canonicalScoped = checkScopedArtifacts();
 } else {
   writeFileSync(FULL_ASSET, canonicalBytes);
   note(`wrote      ${relative(root, FULL_ASSET)}`);
-  execFileSync(process.execPath, [SCOPE_SCRIPT], { stdio: "inherit" });
-  note(`wrote      ${relative(root, SCOPED_ASSET)} (via scope-openai-openapi.mjs)`);
-  canonicalScoped = JSON.parse(readFileSync(SCOPED_ASSET, "utf8"));
 }
 
 // ── what the hosts actually SERVE ───────────────────────────────────────────
@@ -345,17 +279,31 @@ if (LIVE) {
       }
       continue;
     }
-    const expected = host.profile === "openai" ? canonicalScoped : canonical;
-    const expectedProfile = host.profile === "openai" ? "OpenAI-scoped canonical" : "full canonical";
-    if (fingerprint(served) !== fingerprint(expected)) {
+    if (fingerprint(served) !== fingerprint(canonical)) {
       fail.push(
         `${host.url} serves ${Object.keys(served.paths ?? {}).length} paths and does not match the ` +
-          `${expectedProfile} (${Object.keys(expected.paths ?? {}).length} paths) — a committed fix still ` +
+          `full canonical (${Object.keys(canonical.paths ?? {}).length} paths) — a committed fix still ` +
           `needs the owning surface to deploy — owner: ${host.owner}`,
       );
     } else {
-      note(`ok         ${host.url} matches the ${expectedProfile}`);
+      note(`ok         ${host.url} matches the full canonical`);
     }
+  }
+
+  try {
+    const { res } = await fetchWithRetry(`${RETIRED_OPENAI_URL}?cb=${Date.now()}`, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+    });
+    if (res.status !== 404) {
+      fail.push(
+        `${RETIRED_OPENAI_URL} must return 404 because the reviewed connector publishes no REST/OpenAPI contract; got HTTP ${res.status}`,
+      );
+    } else {
+      note(`ok         ${RETIRED_OPENAI_URL} is retired (HTTP 404)`);
+    }
+  } catch (err) {
+    if (err instanceof OriginUnavailableError) outages.push(`${RETIRED_OPENAI_URL}: ${err.message}`);
+    else fail.push(`${RETIRED_OPENAI_URL}: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

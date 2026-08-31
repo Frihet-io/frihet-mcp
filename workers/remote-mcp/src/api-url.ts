@@ -60,7 +60,7 @@ function parseApiBase(apiBase: string): ParsedApiBase {
   if (hostname.split(".").some((label) => label.length === 0)) {
     throw new Error("FRIHET_API_BASE hostname is not canonical");
   }
-  const isFrihetHost = hostname === "frihet.io" || hostname.endsWith(".frihet.io");
+  const isFrihetHost = hostname === "api.frihet.io";
   if (isFrihetHost) {
     if (parsed.pathname !== "/" && parsed.pathname !== "/v1" && parsed.pathname !== "/v1/") {
       throw new Error("FRIHET_API_BASE Frihet path must be / or /v1");
@@ -90,11 +90,12 @@ function parseApiBase(apiBase: string): ParsedApiBase {
  * Normalize FRIHET_API_BASE into the /v1 base URL the request client expects.
  * Accepts both the origin form ("https://api.frihet.io") and the full
  * form ("https://api.frihet.io/v1"); trailing slashes are stripped.
- * Returns undefined for empty/missing input so the root default applies.
+ * Falls back to the direct Cloud Function origin for empty/missing input. The
+ * root client's api.frihet.io default is unsafe here because Worker-to-Worker
+ * requests on the same Cloudflare zone can fail with HTTP 522.
  */
-export function resolveApiBaseUrl(apiBase?: string): string | undefined {
-  if (!apiBase) return undefined;
-  return parseApiBase(apiBase).toolBase;
+export function resolveApiBaseUrl(apiBase?: string): string {
+  return parseApiBase(apiBase || DEFAULT_API_BASE).toolBase;
 }
 
 /**

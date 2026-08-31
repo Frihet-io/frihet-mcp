@@ -128,8 +128,8 @@ test("known deferred and unavailable operations fail closed", () => {
 test("generated remote profiles match the committed Worker configuration", () => {
   assert.equal(
     [...WRANGLER_TOML.matchAll(/^FRIHET_TOOL_MODE\s*=\s*"grouped"$/gm)].length,
-    2,
-    "both full and OpenAI Worker profiles must opt into grouped mode",
+    1,
+    "only the full Worker profile opts into grouped mode",
   );
   assert.match(
     WRANGLER_TOML,
@@ -142,7 +142,7 @@ test("generated remote profiles match the committed Worker configuration", () =>
   );
   assert.match(
     WORKER_INDEX_SOURCE,
-    /remoteMcpSurfaceComposition\(openaiMode, toolMode === "grouped"\)/,
+    /const groupedMode = !openaiMode && toolMode === "grouped"/,
   );
 });
 
@@ -157,7 +157,11 @@ test("catalogue membership never becomes an unconditional available claim", () =
 test("external side effects are explicit and closed by default", () => {
   const send = buildPublicCapabilityTruth("send_invoice", {});
   assert.equal(send.externalInteraction, true);
-  assert.deepEqual(send.externalSideEffects, ["email_or_invitation"]);
+  assert.deepEqual(send.externalSideEffects, [
+    "email_or_invitation",
+    "webhook_delivery_or_configuration",
+    "fiscal_or_einvoice_submission",
+  ]);
 
   const read = buildPublicCapabilityTruth("list_invoices", { readOnlyHint: true });
   assert.equal(read.externalInteraction, false);
@@ -181,7 +185,7 @@ test("real SDK surfaces match the generated public capability contract", async (
     {
       localFull: { tools: 162, resources: 11, prompts: 10 },
       remoteGrouped: { tools: 165, resources: 7, prompts: 10 },
-      openaiGrouped: { tools: 56, resources: 0, prompts: 0 },
+      openaiFull: { tools: 33, resources: 0, prompts: 0 },
     },
   );
 });
@@ -210,6 +214,13 @@ test("full-surface action hints expose destructive and external effects", async 
       openWorldHint: true,
     });
   }
+  assert.deepEqual(byName.get("einvoice_export")?.annotations, {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  });
+  assert.equal(byName.get("einvoice_export")?.capability?.writesFrihet, true);
   assert.equal(byName.get("delete_webhook")?.annotations?.openWorldHint, true);
   assert.equal(byName.get("refund_sale")?.capability?.externalInteraction, true);
   assert.deepEqual(byName.get("refund_sale")?.capability?.externalSideEffects, [
@@ -221,8 +232,17 @@ test("full-surface action hints expose destructive and external effects", async 
     .map((tool) => tool.name)
     .sort();
   assert.deepEqual(externalNames, [
+    "create_client",
+    "create_credit_note",
+    "create_expense",
+    "create_invoice",
+    "create_product",
+    "create_quote",
     "create_webhook",
+    "delete_invoice",
+    "delete_quote",
     "delete_webhook",
+    "duplicate_invoice",
     "face_status",
     "face_submit",
     "frihet_portal_domain_add",
@@ -232,6 +252,8 @@ test("full-surface action hints expose destructive and external effects", async 
     "gestoria_message_send",
     "gestoria_template_bulk_send",
     "invite_team_member",
+    "log_client_activity",
+    "mark_invoice_paid",
     "refund_sale",
     "send_einvoice",
     "send_invoice",
@@ -239,6 +261,11 @@ test("full-surface action hints expose destructive and external effects", async 
     "sync_channel",
     "test_webhook",
     "ticketbai_submit",
+    "update_client",
+    "update_expense",
+    "update_invoice",
+    "update_product",
+    "update_quote",
     "update_webhook",
     "verifactu_resubmit",
   ]);

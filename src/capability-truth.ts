@@ -6,8 +6,8 @@
  * authorized for the caller. This profile adds a conservative, machine-readable
  * fact to tools/list and corrects action annotations on the non-OpenAI surface.
  *
- * The frozen OpenAI review profile deliberately does not use this wrapper. Its
- * annotation corrections require a separate owner-approved descriptor review.
+ * The OpenAI review profile reuses the same annotation corrections so every
+ * public surface reports side effects consistently.
  */
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
@@ -105,6 +105,17 @@ const DEFERRED = new Set([
 const UNAVAILABLE = new Set(["ksef_submit"]);
 
 const DESTRUCTIVE_UPDATES = new Set([
+  // These writes can synchronously enqueue delivery to workspace webhooks.
+  // Once an external endpoint receives the event, that disclosure cannot be
+  // recalled even if the Frihet record itself remains editable.
+  "create_invoice",
+  "duplicate_invoice",
+  "create_credit_note",
+  "create_expense",
+  "create_quote",
+  "create_client",
+  "log_client_activity",
+  "create_product",
   "frihet_gl_entry_approve",
   "frihet_gl_entry_reject",
   "send_einvoice",
@@ -144,6 +155,23 @@ const DESTRUCTIVE_UPDATES = new Set([
 ]);
 
 const NON_IDEMPOTENT = new Set([
+  "create_invoice",
+  "duplicate_invoice",
+  "create_credit_note",
+  "update_invoice",
+  "mark_invoice_paid",
+  "delete_invoice",
+  "create_expense",
+  "update_expense",
+  "create_quote",
+  "update_quote",
+  "delete_quote",
+  "create_client",
+  "log_client_activity",
+  "update_client",
+  "create_product",
+  "update_product",
+  "update_vendor",
   "send_invoice",
   "send_quote",
   "sync_channel",
@@ -153,11 +181,36 @@ const NON_IDEMPOTENT = new Set([
   "resume_recurring_invoice",
 ]);
 
-const WRITE_OVERRIDES = new Set(["frihet_portal_domain_verify"]);
+const WRITE_OVERRIDES = new Set([
+  "frihet_portal_domain_verify",
+  // signed=true exercises a workspace certificate. MCP annotations are
+  // static, so classify the whole export tool conservatively.
+  "einvoice_export",
+]);
 
 const EXTERNAL_SIDE_EFFECTS: Readonly<Record<string, readonly ExternalSideEffect[]>> = {
-  send_invoice: ["email_or_invitation"],
-  send_quote: ["email_or_invitation"],
+  create_invoice: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
+  duplicate_invoice: ["webhook_delivery_or_configuration"],
+  create_credit_note: ["webhook_delivery_or_configuration"],
+  update_invoice: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
+  mark_invoice_paid: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
+  delete_invoice: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
+  create_expense: ["webhook_delivery_or_configuration"],
+  update_expense: ["webhook_delivery_or_configuration"],
+  create_quote: ["webhook_delivery_or_configuration"],
+  update_quote: ["webhook_delivery_or_configuration"],
+  delete_quote: ["webhook_delivery_or_configuration"],
+  create_client: ["webhook_delivery_or_configuration"],
+  log_client_activity: ["webhook_delivery_or_configuration"],
+  update_client: ["webhook_delivery_or_configuration"],
+  create_product: ["webhook_delivery_or_configuration"],
+  update_product: ["webhook_delivery_or_configuration"],
+  send_invoice: [
+    "email_or_invitation",
+    "webhook_delivery_or_configuration",
+    "fiscal_or_einvoice_submission",
+  ],
+  send_quote: ["email_or_invitation", "webhook_delivery_or_configuration"],
   invite_team_member: ["email_or_invitation"],
   create_webhook: ["webhook_delivery_or_configuration"],
   update_webhook: ["webhook_delivery_or_configuration"],
@@ -188,7 +241,7 @@ function callabilityFor(name: string): CapabilityCallability {
   return "api_dependent";
 }
 
-function correctedAnnotations(
+export function correctToolAnnotations(
   name: string,
   annotations: ToolAnnotations | undefined,
 ): ToolAnnotations {
@@ -239,7 +292,7 @@ export function applyPublicCapabilityTruth(server: any): void {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server.registerTool = (name: string, config: any, handler: any) => {
-    const annotations = correctedAnnotations(name, config?.annotations);
+    const annotations = correctToolAnnotations(name, config?.annotations);
     const capability = buildPublicCapabilityTruth(name, annotations);
     config.annotations = annotations;
     config._meta = {

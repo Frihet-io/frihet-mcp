@@ -7,7 +7,7 @@ and `package.json`. Capability counts and names are pinned by
 - 157 canonical catalogue operations;
 - local full: 162 tool names, 11 resources, 10 prompts;
 - grouped remote: 165 tool names, 7 resources, 10 prompts;
-- OpenAI reviewed: 56 tool names, 0 resources, 0 prompts.
+- OpenAI reviewed: exactly 33 business tool names with complete descriptions, 0 discovery meta-tools, 0 resources, 0 prompts.
 
 Catalogue membership is not an unconditional availability guarantee. Full
 surfaces publish conservative callability and side-effect facts under

@@ -101,9 +101,9 @@ Order of work, by actual coverage:
 Roughly one file plus four edit sites plus three tests — mechanical, no handler,
 schema or ERP change. The real cost is not the code:
 
-**Every one of these tools is inside the frozen OpenAI review descriptor or
+**Every one of these tools is inside the versioned OpenAI review descriptor or
 adjacent to it.** Appending `[NOT AVAILABLE YET]` to a registered description is
-exactly the "description drift" the freeze gate is built to reject
+exactly the "description drift" the contract gate is built to reject
 (`docs/openai-review-descriptor-freeze.md`). So step 1 — the only step that
 covers the default mode — cannot ship without an approved new review descriptor.
 

@@ -11,7 +11,8 @@
  * Worker-specific configuration:
  *  - 25s per-request timeout (Workers have a ~30s limit; leave margin).
  *  - Base URL resolved from env FRIHET_API_BASE (injected by index.ts);
- *    falls back to the root default https://api.frihet.io/v1.
+ *    falls back to the direct Cloud Function /v1 origin to avoid a same-zone
+ *    Cloudflare Worker subrequest through api.frihet.io.
  *  - Auth: per-session API key (OAuth-provisioned or Bearer fri_*) is
  *    injected by index.ts via the constructor and sent as X-API-Key on
  *    every request by the inherited request() method.
@@ -31,9 +32,10 @@ export type { PaginatedResponse, ApiError } from "../../../src/types.js";
 const WORKER_REQUEST_TIMEOUT_MS = 25000;
 
 export class FrihetClient extends BaseFrihetClient {
-  constructor(apiKey: string, baseUrl?: string) {
+  constructor(apiKey: string, baseUrl?: string, oauthServiceSecret?: string) {
     super(apiKey, resolveApiBaseUrl(baseUrl), {
       timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+      ...(oauthServiceSecret ? { oauthServiceSecret } : {}),
     });
   }
 }
