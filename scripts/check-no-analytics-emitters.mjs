@@ -253,7 +253,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "f20811cd41af15fec0af952a89a8a0df8a3630a12863ac63740fef299efd9f41",
   "src/observability.ts": "d0bd50c57843f59d0ab61b18b59c1e2ccfcc9dcb83ab76a00a34882d6d1d7cd6",
   "src/openai-review-oauth.ts": "388035b1b9952b5c1f0ecc82dcac962a93320b1076dc23d3e4a155dbf9bf263f",
-  "workers/api-proxy/worker.js": "1838e99f60d15c13ffa1fbd6dc3a87ae827c86c61154b508f84377a601c75a54",
+  "workers/api-proxy/worker.js": "640d3aa873f1a20b705f9e73cdafe368bcb0bbe43f187afe5c9583336373accb",
   "workers/remote-mcp/src/api-url.ts": "6603350d3dde02e0a8139f216320a055df79f1bbba45ff2e1bf2fe7f40f32f23",
   "workers/remote-mcp/src/auth-handler.ts": "7de5521aae87c2785fabf4703a37a3ecc803bad5bdb6913aa1504d53f4c6b6d1",
   "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
@@ -277,7 +277,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
   "docs/agent-onboarding.json": "2dd391f0c3a507b001490355e7460712fe2d19d7a210c8b37804a1fa0234aea7",
-  "README.md": "8fb65836483467e58fd07536d9b3b131d0f792e5d2d668b8b33e991dcaa2760c",
+  "README.md": "2df03c8d3548fd0076b948215691c6b73d4602895b17fe1a002d2151048b2c02",
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
