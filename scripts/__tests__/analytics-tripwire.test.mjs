@@ -102,7 +102,7 @@ describe("anti-defang contract", () => {
     );
     assert.equal(
       rootScripts.prepublishOnly,
-      "node scripts/assert-publish-anchor.mjs && npm run gate:analytics && npm run build && npm run gate:agent-onboarding && npm run gate:public-capability-truth && npm run audit:mcp-refs -- --repo frihet-mcp && npm run gate:no-legacy-region && node scripts/check-no-analytics-emitters.mjs --built",
+      "node scripts/assert-publish-anchor.mjs && npm run gate:analytics && npm run build && npm run gate:agent-onboarding && npm run gate:public-capability-truth && npm run audit:mcp-refs -- --repo frihet-mcp && npm run gate:no-legacy-region && node scripts/check-no-analytics-emitters.mjs --built && npm run gate:cross-surface-authority",
     );
     assert.equal(
       workerScripts.deploy,

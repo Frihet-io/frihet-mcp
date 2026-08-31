@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "083b30d76162ba2e9b3e50a25ebe8c89fb7a207e188171ac38aff9ef09cfae73",
+  "package.json": "a046eb8b16a48bae0325398297ac2183779423b8beb9824fa345bc104136f54e",
   "workers/remote-mcp/package.json": "c7025291c46b023fac162d1a0e0a010d1173bf7bc5d218c6faaab515aba97c6b",
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({

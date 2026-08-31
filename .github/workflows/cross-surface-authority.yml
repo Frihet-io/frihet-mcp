@@ -1,0 +1,62 @@
+name: cross-surface-authority
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Cross-surface contract authority (V2): offline, deterministic,
+# source/public-projection-bound consumer-required contract gate.
+#
+# Reads `workers/remote-mcp/public/openapi.json` (committed by sync-openapi.mjs
+# after the live canonical was verified) and `scripts/cross-surface-authority.
+# required.json` (the MCP consumer's required subset), and asserts that every
+# required operationId is still present, every required security shape is still
+# intact, every required response code is still served, and every required
+# query/path/header/body parameter is still declared.
+#
+# This gate is FAIL-CLOSED on every drift category — it does NOT call the
+# network, and it does NOT have a graceful-skip path. A missing source
+# projection, missing required contract, malformed JSON, or any drift category
+# exits 1 with concrete diagnostics. The previous contract-fetch.mjs (live
+# fetch + graceful skip) was replaced because a CI gate that turns green when
+# the network is down is observation, not authority.
+#
+# The committed `scripts/cross-surface-authority.required.json` is the single
+# source of truth for "what MCP consumers depend on." A producer (Frihet-ERP)
+# PR that breaks a required contract element will fail this gate. Update the
+# required contract in the same PR that intentionally changes the MCP consumer
+# surface.
+#
+# `@frihet/mcp-server` is published from this repo; the gate is also wired
+# into `prepublishOnly` so a broken contract cannot ship.
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run cross-surface authority gate
+        # Exit codes:
+        #   0 = OK
+        #   1 = DRIFT (operation removed, security weakened, schema narrowed,
+        #              response code lost)
+        #   2 = UNAVAILABLE (source projection missing/malformed, required
+        #                    contract missing/malformed) — fail-closed
+        run: node scripts/cross-surface-authority.mjs --check
+
+      - name: Run cross-surface authority unit tests
+        run: npm run test:cross-surface-authority

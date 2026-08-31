@@ -1,0 +1,1836 @@
+{
+  "consumer": "frihet-mcp",
+  "pinnedProjection": {
+    "source": "workers/remote-mcp/public/openapi.json",
+    "fingerprint": "6ef00ca1d2f14a427f8097297d0939be13539672f24c9082f6bd4fc1732a14e6",
+    "openapiVersion": "3.1.0",
+    "infoVersion": "2026-03-18",
+    "rootSecurity": [
+      {
+        "ApiKeyAuth": []
+      }
+    ],
+    "frozenAt": "2026-08-31"
+  },
+  "required": [
+    {
+      "operationId": "applyDeposit",
+      "method": "POST",
+      "path": "/v1/deposits/{depositId}/apply",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "applyLateFee",
+      "method": "POST",
+      "path": "/v1/invoices/{invoiceId}/late-fee",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "attachExpenseFileReference",
+      "method": "POST",
+      "path": "/v1/expenses/{expenseId}/attachments",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "batchCreate",
+      "method": "POST",
+      "path": "/v1/{resource}/batch",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "207",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "categorizeBankTransaction",
+      "method": "PATCH",
+      "path": "/v1/banking/transactions/{transactionId}/categorize",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "createBankTransaction",
+      "method": "POST",
+      "path": "/v1/banking/transactions",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createChannel",
+      "method": "POST",
+      "path": "/v1/channels",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401"
+      ]
+    },
+    {
+      "operationId": "createClient",
+      "method": "POST",
+      "path": "/v1/clients",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "409",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createClientActivity",
+      "method": "POST",
+      "path": "/v1/clients/{clientId}/activities",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createClientContact",
+      "method": "POST",
+      "path": "/v1/clients/{clientId}/contacts",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createClientNote",
+      "method": "POST",
+      "path": "/v1/clients/{clientId}/notes",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createCreditNote",
+      "method": "POST",
+      "path": "/v1/invoices/{invoiceId}/credit-note",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "403",
+        "404",
+        "409",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createDeposit",
+      "method": "POST",
+      "path": "/v1/deposits",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createExpense",
+      "method": "POST",
+      "path": "/v1/expenses",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createExpenseAttachmentUpload",
+      "method": "POST",
+      "path": "/v1/expenses/attachments/uploads",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createInvoice",
+      "method": "POST",
+      "path": "/v1/invoices",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createPosCashSessions",
+      "method": "POST",
+      "path": "/v1/pos/cash_sessions",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "createPosProducts",
+      "method": "POST",
+      "path": "/v1/pos/products",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "createPosSales",
+      "method": "POST",
+      "path": "/v1/pos/sales",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "createPosTerminals",
+      "method": "POST",
+      "path": "/v1/pos/terminals",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "createProduct",
+      "method": "POST",
+      "path": "/v1/products",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createQuote",
+      "method": "POST",
+      "path": "/v1/quotes",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createStayReservations",
+      "method": "POST",
+      "path": "/v1/stay/reservations",
+      "security": "required",
+      "responseCodes": [
+        "401",
+        "429",
+        "501"
+      ]
+    },
+    {
+      "operationId": "createVendor",
+      "method": "POST",
+      "path": "/v1/vendors",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "createWebhook",
+      "method": "POST",
+      "path": "/v1/webhooks",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deleteChannel",
+      "method": "DELETE",
+      "path": "/v1/channels/{channelId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404"
+      ]
+    },
+    {
+      "operationId": "deleteClient",
+      "method": "DELETE",
+      "path": "/v1/clients/{clientId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deleteClientContact",
+      "method": "DELETE",
+      "path": "/v1/clients/{clientId}/contacts/{contactId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deleteClientNote",
+      "method": "DELETE",
+      "path": "/v1/clients/{clientId}/notes/{noteId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deleteDeposit",
+      "method": "DELETE",
+      "path": "/v1/deposits/{depositId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deleteExpense",
+      "method": "DELETE",
+      "path": "/v1/expenses/{expenseId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deleteInvoice",
+      "method": "DELETE",
+      "path": "/v1/invoices/{invoiceId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deletePosCashSessions",
+      "method": "DELETE",
+      "path": "/v1/pos/cash_sessions/{id}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "deletePosProducts",
+      "method": "DELETE",
+      "path": "/v1/pos/products/{id}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "deletePosSales",
+      "method": "DELETE",
+      "path": "/v1/pos/sales/{id}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "deletePosTerminals",
+      "method": "DELETE",
+      "path": "/v1/pos/terminals/{id}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "deleteProduct",
+      "method": "DELETE",
+      "path": "/v1/products/{productId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deleteQuote",
+      "method": "DELETE",
+      "path": "/v1/quotes/{quoteId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deleteVendor",
+      "method": "DELETE",
+      "path": "/v1/vendors/{vendorId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "deleteWebhook",
+      "method": "DELETE",
+      "path": "/v1/webhooks/{webhookId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "exportEInvoice",
+      "method": "POST",
+      "path": "/v1/invoices/{invoiceId}/einvoice/export",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "422",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "gestoriaAgingConsolidated",
+      "method": "POST",
+      "path": "/v1/gestoria/aging",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401"
+      ]
+    },
+    {
+      "operationId": "getBankAccount",
+      "method": "GET",
+      "path": "/v1/banking/accounts/{accountId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "getBankTransactionSuggestions",
+      "method": "GET",
+      "path": "/v1/banking/transactions/{transactionId}/suggestions",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "getBusinessContext",
+      "method": "GET",
+      "path": "/v1/context",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getClient",
+      "method": "GET",
+      "path": "/v1/clients/{clientId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getClientActivity",
+      "method": "GET",
+      "path": "/v1/clients/{clientId}/activities/{activityId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getClientContact",
+      "method": "GET",
+      "path": "/v1/clients/{clientId}/contacts/{contactId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getClientNote",
+      "method": "GET",
+      "path": "/v1/clients/{clientId}/notes/{noteId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getDeposit",
+      "method": "GET",
+      "path": "/v1/deposits/{depositId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getExpense",
+      "method": "GET",
+      "path": "/v1/expenses/{expenseId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getFaceInvoiceStatus",
+      "method": "GET",
+      "path": "/v1/invoices/{invoiceId}/face/status",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "403",
+        "404",
+        "422",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getGuest",
+      "method": "GET",
+      "path": "/v1/guests/{guestId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404"
+      ]
+    },
+    {
+      "operationId": "getInvoice",
+      "method": "GET",
+      "path": "/v1/invoices/{invoiceId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getInvoicePdf",
+      "method": "GET",
+      "path": "/v1/invoices/{invoiceId}/pdf",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getInvoiceXml",
+      "method": "GET",
+      "path": "/v1/invoices/{invoiceId}/xml",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getKitchenTickets",
+      "method": "GET",
+      "path": "/v1/kitchen/tickets/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "getMonthlySummary",
+      "method": "GET",
+      "path": "/v1/monthly",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getPosCashSessions",
+      "method": "GET",
+      "path": "/v1/pos/cash_sessions/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "getPosProducts",
+      "method": "GET",
+      "path": "/v1/pos/products/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "getPosSales",
+      "method": "GET",
+      "path": "/v1/pos/sales/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "getPosTerminals",
+      "method": "GET",
+      "path": "/v1/pos/terminals/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "getProduct",
+      "method": "GET",
+      "path": "/v1/products/{productId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getProperty",
+      "method": "GET",
+      "path": "/v1/properties/{propertyId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404"
+      ]
+    },
+    {
+      "operationId": "getQuarterlySummary",
+      "method": "GET",
+      "path": "/v1/quarterly",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getQuote",
+      "method": "GET",
+      "path": "/v1/quotes/{quoteId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getQuotePdf",
+      "method": "GET",
+      "path": "/v1/quotes/{quoteId}/pdf",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getReservation",
+      "method": "GET",
+      "path": "/v1/reservations/{reservationId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404"
+      ]
+    },
+    {
+      "operationId": "getStayReservations",
+      "method": "GET",
+      "path": "/v1/stay/reservations/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "getSummary",
+      "method": "GET",
+      "path": "/v1/summary",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getTicketBaiInvoiceStatus",
+      "method": "GET",
+      "path": "/v1/invoices/{invoiceId}/ticketbai/status",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "403",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getVendor",
+      "method": "GET",
+      "path": "/v1/vendors/{vendorId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getWebhook",
+      "method": "GET",
+      "path": "/v1/webhooks/{webhookId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "globalSearch",
+      "method": "GET",
+      "path": "/v1/search/global",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "inviteTeamMember",
+      "method": "POST",
+      "path": "/v1/team/members/invite",
+      "security": "required",
+      "responseCodes": [
+        "201",
+        "400",
+        "401",
+        "409",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listBankAccounts",
+      "method": "GET",
+      "path": "/v1/banking/accounts",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listBankTransactions",
+      "method": "GET",
+      "path": "/v1/banking/transactions",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listChannels",
+      "method": "GET",
+      "path": "/v1/channels",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listClientActivities",
+      "method": "GET",
+      "path": "/v1/clients/{clientId}/activities",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listClientContacts",
+      "method": "GET",
+      "path": "/v1/clients/{clientId}/contacts",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listClientNotes",
+      "method": "GET",
+      "path": "/v1/clients/{clientId}/notes",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listClients",
+      "method": "GET",
+      "path": "/v1/clients",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listDeposits",
+      "method": "GET",
+      "path": "/v1/deposits",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listExpenses",
+      "method": "GET",
+      "path": "/v1/expenses",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listGuests",
+      "method": "GET",
+      "path": "/v1/guests",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listInvoices",
+      "method": "GET",
+      "path": "/v1/invoices",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listKitchenMenuItems",
+      "method": "GET",
+      "path": "/v1/kitchen/menuItems",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listKitchenMenuItemsAlias",
+      "method": "GET",
+      "path": "/v1/kitchen/menu-items",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listKitchenStations",
+      "method": "GET",
+      "path": "/v1/kitchen/stations",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listKitchenTickets",
+      "method": "GET",
+      "path": "/v1/kitchen/tickets",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listPosCashSessions",
+      "method": "GET",
+      "path": "/v1/pos/cash_sessions",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listPosProducts",
+      "method": "GET",
+      "path": "/v1/pos/products",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listPosSales",
+      "method": "GET",
+      "path": "/v1/pos/sales",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listPosTerminals",
+      "method": "GET",
+      "path": "/v1/pos/terminals",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listProducts",
+      "method": "GET",
+      "path": "/v1/products",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listProperties",
+      "method": "GET",
+      "path": "/v1/properties",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listQuotes",
+      "method": "GET",
+      "path": "/v1/quotes",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listReservations",
+      "method": "GET",
+      "path": "/v1/reservations",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listStayProperties",
+      "method": "GET",
+      "path": "/v1/stay/properties",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listStayReservations",
+      "method": "GET",
+      "path": "/v1/stay/reservations",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429"
+      ]
+    },
+    {
+      "operationId": "listTeamMembers",
+      "method": "GET",
+      "path": "/v1/team/members",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listVendors",
+      "method": "GET",
+      "path": "/v1/vendors",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "listWebhooks",
+      "method": "GET",
+      "path": "/v1/webhooks",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "markExpenseBillable",
+      "method": "POST",
+      "path": "/v1/expenses/{expenseId}/billable",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "markInvoicePaid",
+      "method": "POST",
+      "path": "/v1/invoices/{invoiceId}/paid",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "matchBankTransaction",
+      "method": "POST",
+      "path": "/v1/banking/transactions/{transactionId}/match",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "429"
+      ]
+    },
+    {
+      "operationId": "patchClient",
+      "method": "PATCH",
+      "path": "/v1/clients/{clientId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "patchDeposit",
+      "method": "PATCH",
+      "path": "/v1/deposits/{depositId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "patchExpense",
+      "method": "PATCH",
+      "path": "/v1/expenses/{expenseId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "patchInvoice",
+      "method": "PATCH",
+      "path": "/v1/invoices/{invoiceId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "patchProduct",
+      "method": "PATCH",
+      "path": "/v1/products/{productId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "patchQuote",
+      "method": "PATCH",
+      "path": "/v1/quotes/{quoteId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "patchVendor",
+      "method": "PATCH",
+      "path": "/v1/vendors/{vendorId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "patchWebhook",
+      "method": "PATCH",
+      "path": "/v1/webhooks/{webhookId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "refundDeposit",
+      "method": "POST",
+      "path": "/v1/deposits/{depositId}/refund",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "removeTeamMember",
+      "method": "DELETE",
+      "path": "/v1/team/members/{memberId}",
+      "security": "required",
+      "responseCodes": [
+        "204",
+        "400",
+        "401",
+        "403",
+        "404",
+        "409",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "resendInbound",
+      "method": "POST",
+      "path": "/webhooks/resend-inbound",
+      "security": "open",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "500"
+      ]
+    },
+    {
+      "operationId": "sendInvoice",
+      "method": "POST",
+      "path": "/v1/invoices/{invoiceId}/send",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "422",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "sendQuote",
+      "method": "POST",
+      "path": "/v1/quotes/{quoteId}/send",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "422",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "submitFaceInvoice",
+      "method": "POST",
+      "path": "/v1/invoices/{invoiceId}/face/submit",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "422",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "submitTicketBaiInvoice",
+      "method": "POST",
+      "path": "/v1/invoices/{invoiceId}/ticketbai/submit",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "422",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "syncChannel",
+      "method": "POST",
+      "path": "/v1/channels/{channelId}/sync",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404"
+      ]
+    },
+    {
+      "operationId": "syncStayChannel",
+      "method": "POST",
+      "path": "/v1/stay/channels/{id}/sync",
+      "security": "required",
+      "responseCodes": [
+        "401",
+        "429",
+        "501"
+      ]
+    },
+    {
+      "operationId": "unmarkExpenseBillable",
+      "method": "DELETE",
+      "path": "/v1/expenses/{expenseId}/billable",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateClient",
+      "method": "PUT",
+      "path": "/v1/clients/{clientId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateClientContact",
+      "method": "PATCH",
+      "path": "/v1/clients/{clientId}/contacts/{contactId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateClientNote",
+      "method": "PATCH",
+      "path": "/v1/clients/{clientId}/notes/{noteId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateDeposit",
+      "method": "PUT",
+      "path": "/v1/deposits/{depositId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateExpense",
+      "method": "PUT",
+      "path": "/v1/expenses/{expenseId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateInvoice",
+      "method": "PUT",
+      "path": "/v1/invoices/{invoiceId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateKitchenTickets",
+      "method": "PATCH",
+      "path": "/v1/kitchen/tickets/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "updatePosCashSessions",
+      "method": "PATCH",
+      "path": "/v1/pos/cash_sessions/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "updatePosProducts",
+      "method": "PATCH",
+      "path": "/v1/pos/products/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "updatePosSales",
+      "method": "PATCH",
+      "path": "/v1/pos/sales/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "updatePosTerminals",
+      "method": "PATCH",
+      "path": "/v1/pos/terminals/{id}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429"
+      ]
+    },
+    {
+      "operationId": "updateProduct",
+      "method": "PUT",
+      "path": "/v1/products/{productId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateQuote",
+      "method": "PUT",
+      "path": "/v1/quotes/{quoteId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateTeamMemberRole",
+      "method": "PATCH",
+      "path": "/v1/team/members/{memberId}/role",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateVendor",
+      "method": "PUT",
+      "path": "/v1/vendors/{vendorId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "updateWebhook",
+      "method": "PUT",
+      "path": "/v1/webhooks/{webhookId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    }
+  ]
+}
