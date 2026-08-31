@@ -2,7 +2,7 @@
   "consumer": "frihet-mcp",
   "pinnedProjection": {
     "source": "workers/remote-mcp/public/openapi.json",
-    "fingerprint": "3299bbeb56d96e1b34a21a75a5e10f53e5cd35e28a909ceebf4c958fab4e6f01",
+    "fingerprint": "6ef00ca1d2f14a427f8097297d0939be13539672f24c9082f6bd4fc1732a14e6",
     "openapiVersion": "3.1.0",
     "infoVersion": "2026-03-18",
     "rootSecurity": [
@@ -294,17 +294,6 @@
       ]
     },
     {
-      "operationId": "createProperty",
-      "method": "POST",
-      "path": "/v1/properties",
-      "security": "required",
-      "responseCodes": [
-        "201",
-        "400",
-        "401"
-      ]
-    },
-    {
       "operationId": "createQuote",
       "method": "POST",
       "path": "/v1/quotes",
@@ -315,18 +304,6 @@
         "401",
         "429",
         "500"
-      ]
-    },
-    {
-      "operationId": "createReservation",
-      "method": "POST",
-      "path": "/v1/reservations",
-      "security": "required",
-      "responseCodes": [
-        "201",
-        "400",
-        "401",
-        "429"
       ]
     },
     {
@@ -1307,6 +1284,7 @@
       "security": "required",
       "responseCodes": [
         "200",
+        "400",
         "401",
         "429",
         "500"
@@ -1798,18 +1776,6 @@
       ]
     },
     {
-      "operationId": "updateProperty",
-      "method": "PATCH",
-      "path": "/v1/properties/{propertyId}",
-      "security": "required",
-      "responseCodes": [
-        "200",
-        "400",
-        "401",
-        "404"
-      ]
-    },
-    {
       "operationId": "updateQuote",
       "method": "PUT",
       "path": "/v1/quotes/{quoteId}",
@@ -1821,18 +1787,6 @@
         "404",
         "429",
         "500"
-      ]
-    },
-    {
-      "operationId": "updateReservation",
-      "method": "PATCH",
-      "path": "/v1/reservations/{reservationId}",
-      "security": "required",
-      "responseCodes": [
-        "200",
-        "400",
-        "401",
-        "404"
       ]
     },
     {
