@@ -25,7 +25,7 @@ import { FISCAL_MODELO_ALIASES } from "../fiscal-aliases.js";
 
 export const HARNESS_CONTRACT_VERSION = 1;
 export const INSPECTOR_PINNED_VERSION = "2.3.0";
-export const CANONICAL_OPERATIONS_COUNT = 157;
+export const CANONICAL_OPERATIONS_COUNT = 158;
 export const FISCAL_ALIASES_COUNT = Object.keys(FISCAL_MODELO_ALIASES).length;
 
 export type CheckStatus = "PASS" | "FAIL" | "UNSUPPORTED" | "NOT_EXERCISED";

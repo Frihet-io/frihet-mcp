@@ -58,7 +58,7 @@
       "version": "1.16.0",
       "date": "2026-07-18",
       "mcpToolCount": 157,
-      "notes": "outputSchema coverage complete (160/160 schemas across 157 tools); honest OAuth consent-scope disclosure (#82)."
+      "notes": "outputSchema coverage complete (160/160 schemas across 158 tools); honest OAuth consent-scope disclosure (#82)."
     },
     {
       "version": "1.15.2",

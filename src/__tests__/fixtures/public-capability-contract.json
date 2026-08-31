@@ -1,7 +1,7 @@
 {
   "contractVersion": 2,
   "catalogue": {
-    "canonicalOperations": 157,
+    "canonicalOperations": 158,
     "aliasNames": 5,
     "discoveryNames": 3
   },
@@ -1557,6 +1557,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_webhook",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "global_search",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "global_search",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
@@ -4437,6 +4454,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_webhook",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "global_search",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "global_search",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []

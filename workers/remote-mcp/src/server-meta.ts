@@ -27,7 +27,7 @@ export const MCP_SERVER_VERSION: string = (pkg as { version: string }).version;
  * audit:mcp-refs pins this to registerTool sites; the generated public-capability
  * contract pins the actual profile compositions.
  */
-export const FULL_TOOL_COUNT = 157;
+export const FULL_TOOL_COUNT = 158;
 
 /**
  * Canonical legal URLs advertised by every discovery artifact in the fleet.

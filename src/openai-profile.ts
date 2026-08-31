@@ -12,7 +12,7 @@
  * 4. Redacts sensitive fields from all tool outputs
  * 5. Updates descriptions to reflect modified behavior + openWorldHint justifications
  *
- * The full MCP server (157 business tools + MCP extras) remains available for Claude, Cursor,
+ * The full MCP server (158 business tools + MCP extras) remains available for Claude, Cursor,
  * Windsurf, Cline, Codex, and all other MCP clients.
  *
  * OpenAI-safe mode: 33 reviewed business tools, 0 prompts, 0 resources, and no

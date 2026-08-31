@@ -1377,6 +1377,54 @@ export class FrihetClient {
     return this.request("DELETE", `/webhooks/${encodeURIComponent(id)}`);
   }
 
+  // ---------------------------------------------------------------- Cross-resource search
+  // ----------------------------------------------------------------
+  //
+  // GET /v1/search/global?q=<term>&types=a,b,c&limit=&offset=  (publicApi.ts:4476)
+  //
+  // Read-only fan-out across invoices / expenses / vendors / clients / products.
+  // All five collections are workspace-scoped via users/{userId}/..., so the
+  // tenant boundary is preserved by Firestore subcollection paths — same as
+  // every other list/search endpoint on the server. No mutation counterpart;
+  // no auth boundary different from any other read tool.
+
+  async globalSearch(params: {
+    q: string;
+    types?: ReadonlyArray<"invoices" | "expenses" | "vendors" | "clients" | "products">;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    data: Record<string, unknown>[];
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+    query: string;
+    types: ReadonlyArray<"invoices" | "expenses" | "vendors" | "clients" | "products">;
+    truncated?: boolean;
+  }> {
+    const typesCsv = params.types && params.types.length > 0 ? params.types.join(",") : undefined;
+    const result = await this.request<{
+      data: Record<string, unknown>[];
+      total: number;
+      limit: number;
+      offset: number;
+      hasMore: boolean;
+      query: string;
+      types: string[];
+      truncated?: boolean;
+    }>("GET", "/search/global", undefined, {
+      q: params.q,
+      types: typesCsv,
+      limit: params.limit,
+      offset: params.offset,
+    });
+    return {
+      ...result,
+      types: result.types as ReadonlyArray<"invoices" | "expenses" | "vendors" | "clients" | "products">,
+    };
+  }
+
   // ---------------------------------------------------------------- CRM: Contacts
   // ----------------------------------------------------------------
 
