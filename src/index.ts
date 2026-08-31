@@ -124,7 +124,7 @@ function main(): void {
     version: PKG_VERSION,
     description:
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
-      "Provides a catalogue of 157 canonical operations; fiscal aliases and optional grouped discovery names are reported separately. " +
+      "Provides a catalogue of 158 canonical operations; fiscal aliases and optional grouped discovery names are reported separately. " +
       "The local package serves 11 resources (7 static + 4 API-backed) and 10 workflow prompts " +
       "with full Spanish tax compliance (IVA, IGIC, IPSI).",
   }, {

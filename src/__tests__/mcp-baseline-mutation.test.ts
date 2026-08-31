@@ -30,8 +30,8 @@ describe("MCP Compatibility Lab — Mutation Proofs", () => {
   test("fixture setup: capture valid baseline", async () => {
     goldenBaseline = await runMcpBaseline();
     assert.equal(goldenBaseline.summary.overallStatus, "PASS_WITH_GAPS");
-    assert.equal(goldenBaseline.summary.totalTools, 162);
-    assert.equal(goldenBaseline.summary.canonicalOperations, 157);
+    assert.equal(goldenBaseline.summary.totalTools, 163);
+    assert.equal(goldenBaseline.summary.canonicalOperations, 158);
     assert.equal(goldenBaseline.summary.resources, 11);
     assert.equal(goldenBaseline.summary.prompts, 10);
     assert.equal(goldenBaseline.summary.checks.pass, 21);

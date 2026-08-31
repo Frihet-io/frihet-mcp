@@ -347,6 +347,35 @@ export class DemoFrihetClient implements IFrihetClient {
     return;
   }
 
+  // ---------------------------------------------------------------- Cross-resource search
+  // ----------------------------------------------------------------
+  async globalSearch(params: {
+    q: string;
+    types?: ReadonlyArray<"invoices" | "expenses" | "vendors" | "clients" | "products">;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    data: Record<string, unknown>[];
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+    query: string;
+    types: ReadonlyArray<"invoices" | "expenses" | "vendors" | "clients" | "products">;
+    truncated?: boolean;
+  }> {
+    return {
+      data: [],
+      total: 0,
+      limit: params.limit ?? 25,
+      offset: params.offset ?? 0,
+      hasMore: false,
+      query: params.q,
+      types: params.types ?? ["invoices", "expenses", "vendors", "clients", "products"],
+      truncated: false,
+    };
+  }
+
   // ---------------------------------------------------------------- CRM: Contacts
   async listClientContacts(_clientId: string, params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
     return demoEmptyPage(params);
