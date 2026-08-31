@@ -307,7 +307,7 @@ describe("P0-6 — frihet_bank_rule_create uses new engine shape", () => {
     await server.tools.get("frihet_bank_rule_create")!.handler({
       name: "Mercadona",
       bankConditions: [{ field: "description", operator: "contains", value: "MERCADONA" }],
-      action: "setCategory",
+      action: "categorize_expense",
       actionConfig: { category: "groceries" },
     });
 
@@ -318,8 +318,57 @@ describe("P0-6 — frihet_bank_rule_create uses new engine shape", () => {
     assert.deepEqual(body.bankConditions, [
       { field: "description", operator: "contains", value: "MERCADONA" },
     ]);
-    assert.equal(body.action, "setCategory");
+    // ERP authority: functions/src/banking/bankRuleCreate.ts:BANK_RULE_ACTIONS
+    assert.equal(body.action, "categorize_expense");
     assert.deepEqual(body.actionConfig, { category: "groceries" });
+  });
+
+  test("NEW: inputSchema enums match ERP authority (no fabricated slugs)", async () => {
+    const { registerBankRulesTools } = await import("../tools/bank_rules.js");
+    const server = new StubMcpServer();
+    registerBankRulesTools(asMcp(server), makeRecordingClient().client);
+
+    const schema = server.tools.get("frihet_bank_rule_create")!.config.inputSchema ?? {};
+    const dump = JSON.stringify(schema);
+
+    // Fields — ERP allows: description, reference, amount, counterparty
+    for (const allowed of ["description", "reference", "amount", "counterparty"]) {
+      assert.match(dump, new RegExp(`"${allowed}"`), `must include field ${allowed}`);
+    }
+    assert.doesNotMatch(dump, /"iban"/, "ERP does not accept iban as a bankConditions field");
+
+    // Operators — ERP uses snake_case verbs
+    for (const allowed of [
+      "contains",
+      "exact",
+      "starts_with",
+      "ends_with",
+      "regex",
+      "amount_above",
+      "amount_below",
+      "amount_between",
+    ]) {
+      assert.match(dump, new RegExp(`"${allowed}"`), `must include operator ${allowed}`);
+    }
+    assert.doesNotMatch(dump, /"equals"/, "ERP uses 'exact', not 'equals'");
+    assert.doesNotMatch(dump, /"greaterThan"/, "ERP uses 'amount_above', not camelCase");
+    assert.doesNotMatch(dump, /"lessThan"/, "ERP uses 'amount_below', not camelCase");
+
+    // Actions — ERP authority
+    for (const allowed of [
+      "categorize_expense",
+      "match_invoice",
+      "match_client",
+      "ignore",
+      "create_expense",
+      "flag_review",
+    ]) {
+      assert.match(dump, new RegExp(`"${allowed}"`), `must include action ${allowed}`);
+    }
+    // Regression: the old MCP enums were legacy placeholders ERP would 400.
+    assert.doesNotMatch(dump, /"setCategory"/, "ERP has no 'setCategory' action");
+    assert.doesNotMatch(dump, /"addTag"/, "ERP has no 'addTag' action");
+    assert.doesNotMatch(dump, /"assignClient"/, "ERP uses 'match_client', not 'assignClient'");
   });
 });
 
@@ -347,17 +396,29 @@ describe("P0-7 — anomaly_list severity enum + type slug list match ERP", () =>
     assert.doesNotMatch(description, /"high"/);
   });
 
-  test("NEW: anomaly_list type enum is the documented slug list", async () => {
+  test("NEW: anomaly_list type enum is the documented ERP slug list (Art.34/35 ET overtime engine)", async () => {
     const { registerHrTools } = await import("../tools/hr.js");
     const server = new StubMcpServer();
     registerHrTools(asMcp(server), makeRecordingClient().client);
 
     const schema = server.tools.get("anomaly_list")!.config.inputSchema ?? {};
     const description = JSON.stringify(schema["type"] ?? {});
-    assert.match(description, /duplicate_clock_in/);
-    assert.match(description, /overtime_spike/);
-    assert.match(description, /missing_clock_out/);
-    assert.match(description, /expense_outlier/);
+    // ERP functions/src/publicApi/families/anomalies.ts:ANOMALY_TYPES
+    for (const allowed of [
+      "daily_exceeded",
+      "weekly_exceeded",
+      "annual_approaching",
+      "annual_exceeded",
+      "missing_break",
+    ]) {
+      assert.match(description, new RegExp(allowed), `must include ${allowed}`);
+    }
+    // Regression: the old MCP enums were HR-conceptual placeholders that ERP
+    // never accepted (each would 400 INVALID_TYPE).
+    assert.doesNotMatch(description, /duplicate_clock_in/);
+    assert.doesNotMatch(description, /overtime_spike/);
+    assert.doesNotMatch(description, /missing_clock_out/);
+    assert.doesNotMatch(description, /expense_outlier/);
   });
 });
 

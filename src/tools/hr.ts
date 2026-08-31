@@ -310,18 +310,21 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       title: "List Anomalies",
       description:
         "List HR / operational / financial anomalies detected by the system. " +
-        "Filter by type (duplicate_clock_in, overtime_spike, missing_clock_out, expense_outlier), " +
-        "severity (warning/critical), or period. " +
+        "Filter by type (daily_exceeded, weekly_exceeded, annual_approaching, " +
+        "annual_exceeded, missing_break), severity (warning/critical), or period. " +
+        "Anomalies are COMPUTE-ON-READ over the live attendance records (Art.34/35 ET " +
+        "overtime engine) — there is no stored anomalies collection. " +
         "Useful for daily HR review and compliance audits. " +
         "/ Lista anomalias detectadas (RRHH/operativas/financieras) con filtros opcionales.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         type: z
           .enum([
-            "duplicate_clock_in",
-            "overtime_spike",
-            "missing_clock_out",
-            "expense_outlier",
+            "daily_exceeded",
+            "weekly_exceeded",
+            "annual_approaching",
+            "annual_exceeded",
+            "missing_break",
           ])
           .optional()
           .describe("Filter by anomaly type slug / Tipo"),
@@ -329,8 +332,8 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
           .enum(["warning", "critical"])
           .optional()
           .describe("Filter by severity / Severidad"),
-        from: z.string().optional().describe("Period start ISO 8601 / Inicio"),
-        to: z.string().optional().describe("Period end ISO 8601 / Fin"),
+        from: z.string().optional().describe("Period start ISO 8601 (YYYY-MM-DD) / Inicio"),
+        to: z.string().optional().describe("Period end ISO 8601 (YYYY-MM-DD) / Fin"),
         limit: z.number().int().min(1).max(100).optional().describe("Max results / Maximos"),
         offset: z.number().int().min(0).optional().describe("Offset / Desplazamiento"),
       },

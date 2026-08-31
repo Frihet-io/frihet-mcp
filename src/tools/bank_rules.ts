@@ -57,9 +57,39 @@ const bankRuleItemOutput = z.object({
   createdAt: z.string().optional(),
 }).passthrough();
 
-const CONDITION_FIELD = z.enum(["description", "amount", "counterparty", "iban", "reference"]);
-const CONDITION_OPERATOR = z.enum(["contains", "startsWith", "endsWith", "equals", "greaterThan", "lessThan"]);
-const RULE_ACTION = z.enum(["setCategory", "addTag", "assignClient"]);
+// ERP authority: functions/src/banking/bankRuleCreate.ts
+//   BANK_RULE_FIELDS    = ['description', 'reference', 'amount', 'counterparty']
+//   BANK_RULE_OPERATORS = ['contains', 'exact', 'starts_with', 'ends_with', 'regex',
+//                          'amount_above', 'amount_below', 'amount_between']
+//   BANK_RULE_ACTIONS   = ['categorize_expense', 'match_invoice', 'match_client',
+//                          'ignore', 'create_expense', 'flag_review']
+//
+// Per-action required actionConfig shape (ERP):
+//   categorize_expense → { category: string }
+//   match_client       → { clientId: string }
+//   create_expense     → { expenseDefaults: { vendor?, category?, taxRate?, description? } }
+//   flag_review        → { flag: string }
+//   match_invoice      → (no required config)
+//   ignore             → (no required config)
+const CONDITION_FIELD = z.enum(["description", "reference", "amount", "counterparty"]);
+const CONDITION_OPERATOR = z.enum([
+  "contains",
+  "exact",
+  "starts_with",
+  "ends_with",
+  "regex",
+  "amount_above",
+  "amount_below",
+  "amount_between",
+]);
+const RULE_ACTION = z.enum([
+  "categorize_expense",
+  "match_invoice",
+  "match_client",
+  "ignore",
+  "create_expense",
+  "flag_review",
+]);
 
 export function registerBankRulesTools(server: McpServer, client: IFrihetClient): void {
   // -- frihet_bank_rules_list -----------------------------------------------
@@ -102,10 +132,15 @@ export function registerBankRulesTools(server: McpServer, client: IFrihetClient)
       description:
         "Create a new bank auto-categorization rule. " +
         "Rules apply automatically to matching incoming transactions. " +
-        "The new ERP engine expects `bankConditions` (AND logic) plus a single `action` " +
-        "(setCategory / addTag / assignClient) and its `actionConfig` payload. " +
-        "Example: name='Mercadona groceries', bankConditions=[{field:'description', operator:'contains', value:'MERCADONA'}], " +
-        "action='setCategory', actionConfig={category:'groceries'}. " +
+        "The ERP new-engine vocabulary: `bankConditions` (AND logic) + a single `action` " +
+        "(`categorize_expense` | `match_invoice` | `match_client` | `ignore` | " +
+        "`create_expense` | `flag_review`) and its `actionConfig` payload. " +
+        "Required actionConfig per action: categorize_expense→{category}, " +
+        "match_client→{clientId}, create_expense→{expenseDefaults:{vendor,category,…}}, " +
+        "flag_review→{flag}; match_invoice and ignore require no config. " +
+        "Example: name='Mercadona groceries', bankConditions=[{field:'description', " +
+        "operator:'contains', value:'MERCADONA'}], action='categorize_expense', " +
+        "actionConfig={category:'groceries'}. " +
         "/ Crea una nueva regla de categorizacion automatica de transacciones bancarias. " +
         "El nuevo motor ERP espera `bankConditions` (logica AND) y un unico `action` con su `actionConfig`.",
       annotations: CREATE_ANNOTATIONS,
@@ -125,8 +160,11 @@ export function registerBankRulesTools(server: McpServer, client: IFrihetClient)
         actionConfig: z
           .record(z.string(), z.unknown())
           .describe(
-            "Action-specific payload. For setCategory: {category:string}. For addTag: {tag:string}. " +
-            "For assignClient: {clientId:string}. / Payload segun la accion.",
+            "Action-specific payload. categorize_expense requires {category:string}. " +
+            "match_client requires {clientId:string}. create_expense requires " +
+            "{expenseDefaults:{vendor:string, category:string, taxRate?:number, description?:string}}. " +
+            "flag_review requires {flag:string}. match_invoice and ignore require no config. " +
+            "/ Payload segun la accion.",
           ),
         isActive: z.boolean().optional().describe("Whether the rule is active (default true) / Si la regla esta activa (por defecto true)"),
       },
