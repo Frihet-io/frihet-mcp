@@ -323,7 +323,7 @@ export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
   "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "799b5e628ee0baacd1f50d61f2e584fce3931c9f0e87cbb7b6ab77be63b47088",
-  "src/__tests__/fixtures/public-capability-contract.json": "31c5d6a416c506f7068190f35b62a63abc6b6bd3f0921df19061d885065d03a7",
+  "src/__tests__/fixtures/public-capability-contract.json": "66621eaf7bf8487db21b5eaf61d1d33264d532ef1949189a7785a1b61f017789",
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
 
