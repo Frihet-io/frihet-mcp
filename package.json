@@ -36,7 +36,10 @@
     "gate:no-legacy-region": "bash scripts/no-legacy-region.sh",
     "sync:openapi": "node scripts/sync-openapi.mjs",
     "gate:openapi-fresh": "node scripts/sync-openapi.mjs --check",
-    "gate:openapi-fresh:live": "node scripts/sync-openapi.mjs --check --live"
+    "gate:openapi-fresh:live": "node scripts/sync-openapi.mjs --check --live",
+    "contract:fetch": "node scripts/contract-fetch.mjs",
+    "contract:fetch:check": "node scripts/contract-fetch.mjs --check",
+    "contract:fetch:update": "node scripts/contract-fetch.mjs --update"
   },
   "keywords": [
     "accounting",

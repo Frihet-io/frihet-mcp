@@ -1,0 +1,58 @@
+name: contract-fetch
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Cross-surface drift defense: fetch the producer (api.frihet.io) openapi
+# and assert the MCP consumer contract still matches the frozen expected list.
+#
+# This check is advisory. It runs on every PR and on manual dispatch, but
+# network errors are NOT treated as failures — live ERP may be down or behind
+# Cloudflare, and that's not the contract's fault. Only contract DRIFT
+# (removed operationIds, removed tags, removed security schemes) fails the
+# job. Exit code 2 from contract-fetch.mjs is treated as a graceful skip.
+#
+# The committed expected file (scripts/contract-fetch.expected.json) is the
+# single source of truth for "what MCP consumers depend on." A producer PR
+# that needs the expected file updated should land the contract-fetch.mjs
+# update in the same PR that updates the expected file.
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Check contract against live ERP openapi
+        id: contract
+        # network errors → graceful skip (exit 2)
+        # drift → fail (exit 1)
+        # ok → pass (exit 0)
+        run: |
+          set +e
+          node scripts/contract-fetch.mjs --check
+          rc=$?
+          set -e
+          if [ $rc -eq 2 ]; then
+            echo "::warning::Contract endpoint unreachable — skipping drift check (this is not a contract fault)"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit $rc
+
+      - name: Run contract-fetch unit tests
+        run: node --test scripts/__tests__/contract-fetch.test.mjs
