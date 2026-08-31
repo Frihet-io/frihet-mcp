@@ -183,8 +183,8 @@ test("real SDK surfaces match the generated public capability contract", async (
       ]),
     ),
     {
-      localFull: { tools: 162, resources: 11, prompts: 10 },
-      remoteGrouped: { tools: 165, resources: 7, prompts: 10 },
+      localFull: { tools: 163, resources: 11, prompts: 10 },
+      remoteGrouped: { tools: 166, resources: 7, prompts: 10 },
       openaiFull: { tools: 33, resources: 0, prompts: 0 },
     },
   );
@@ -280,7 +280,7 @@ test("canonical callability classes remain conservative and exhaustive", async (
     counts[callability] = (counts[callability] ?? 0) + 1;
   }
   assert.deepEqual(counts, {
-    api_dependent: 99,
+    api_dependent: 100,
     runtime_checked: 49,
     deferred: 8,
     unavailable: 1,
