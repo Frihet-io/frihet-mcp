@@ -37,6 +37,13 @@ import { withBackendGuard } from "./backend-availability.js";
 const bankRuleItemOutput = z.object({
   id: z.string(),
   name: z.string(),
+  bankConditions: z.array(z.object({
+    field: z.string(),
+    operator: z.string(),
+    value: z.string(),
+  })).optional(),
+  action: z.string().optional(),
+  actionConfig: z.record(z.string(), z.unknown()).optional(),
   conditions: z.array(z.object({
     field: z.string(),
     operator: z.string(),
@@ -50,8 +57,39 @@ const bankRuleItemOutput = z.object({
   createdAt: z.string().optional(),
 }).passthrough();
 
-const CONDITION_FIELD = z.enum(["description", "amount", "counterparty", "iban", "reference"]);
-const CONDITION_OPERATOR = z.enum(["contains", "startsWith", "endsWith", "equals", "greaterThan", "lessThan"]);
+// ERP authority: functions/src/banking/bankRuleCreate.ts
+//   BANK_RULE_FIELDS    = ['description', 'reference', 'amount', 'counterparty']
+//   BANK_RULE_OPERATORS = ['contains', 'exact', 'starts_with', 'ends_with', 'regex',
+//                          'amount_above', 'amount_below', 'amount_between']
+//   BANK_RULE_ACTIONS   = ['categorize_expense', 'match_invoice', 'match_client',
+//                          'ignore', 'create_expense', 'flag_review']
+//
+// Per-action required actionConfig shape (ERP):
+//   categorize_expense → { category: string }
+//   match_client       → { clientId: string }
+//   create_expense     → { expenseDefaults: { vendor?, category?, taxRate?, description? } }
+//   flag_review        → { flag: string }
+//   match_invoice      → (no required config)
+//   ignore             → (no required config)
+const CONDITION_FIELD = z.enum(["description", "reference", "amount", "counterparty"]);
+const CONDITION_OPERATOR = z.enum([
+  "contains",
+  "exact",
+  "starts_with",
+  "ends_with",
+  "regex",
+  "amount_above",
+  "amount_below",
+  "amount_between",
+]);
+const RULE_ACTION = z.enum([
+  "categorize_expense",
+  "match_invoice",
+  "match_client",
+  "ignore",
+  "create_expense",
+  "flag_review",
+]);
 
 export function registerBankRulesTools(server: McpServer, client: IFrihetClient): void {
   // -- frihet_bank_rules_list -----------------------------------------------
@@ -94,36 +132,49 @@ export function registerBankRulesTools(server: McpServer, client: IFrihetClient)
       description:
         "Create a new bank auto-categorization rule. " +
         "Rules apply automatically to matching incoming transactions. " +
-        "A rule has conditions (AND logic) and actions (assign category, tag, or client). " +
-        "Example: name='Mercadona groceries', condition description contains 'MERCADONA', " +
-        "action category='groceries'. " +
+        "The ERP new-engine vocabulary: `bankConditions` (AND logic) + a single `action` " +
+        "(`categorize_expense` | `match_invoice` | `match_client` | `ignore` | " +
+        "`create_expense` | `flag_review`) and its `actionConfig` payload. " +
+        "Required actionConfig per action: categorize_expense→{category}, " +
+        "match_client→{clientId}, create_expense→{expenseDefaults:{vendor,category,…}}, " +
+        "flag_review→{flag}; match_invoice and ignore require no config. " +
+        "Example: name='Mercadona groceries', bankConditions=[{field:'description', " +
+        "operator:'contains', value:'MERCADONA'}], action='categorize_expense', " +
+        "actionConfig={category:'groceries'}. " +
         "/ Crea una nueva regla de categorizacion automatica de transacciones bancarias. " +
-        "Las reglas aplican condiciones (logica AND) y acciones (categoria, etiqueta, cliente).",
+        "El nuevo motor ERP espera `bankConditions` (logica AND) y un unico `action` con su `actionConfig`.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
         name: z.string().describe("Rule name for identification / Nombre de la regla"),
-        conditions: z.array(
-          z.object({
-            field: CONDITION_FIELD.describe("Transaction field to match / Campo de transaccion a comparar"),
-            operator: CONDITION_OPERATOR.describe("Comparison operator / Operador de comparacion"),
-            value: z.string().describe("Value to match against / Valor a comparar"),
-          }),
-        ).min(1).describe("Rule conditions (AND logic — all must match) / Condiciones (logica AND — todas deben cumplirse)"),
-        actions: z.array(
-          z.object({
-            type: z.enum(["setCategory", "addTag", "assignClient"]).describe("Action type / Tipo de accion"),
-            value: z.string().describe("Action value (category name, tag name, or client ID) / Valor de la accion"),
-          }),
-        ).min(1).describe("Actions to apply when rule matches / Acciones a aplicar cuando la regla se cumple"),
+        bankConditions: z
+          .array(
+            z.object({
+              field: CONDITION_FIELD.describe("Transaction field to match / Campo de transaccion a comparar"),
+              operator: CONDITION_OPERATOR.describe("Comparison operator / Operador de comparacion"),
+              value: z.string().describe("Value to match against / Valor a comparar"),
+            }),
+          )
+          .min(1)
+          .describe("Rule conditions (AND logic — all must match) / Condiciones (logica AND — todas deben cumplirse)"),
+        action: RULE_ACTION.describe("Action to apply when the rule matches / Accion a aplicar cuando la regla se cumple"),
+        actionConfig: z
+          .record(z.string(), z.unknown())
+          .describe(
+            "Action-specific payload. categorize_expense requires {category:string}. " +
+            "match_client requires {clientId:string}. create_expense requires " +
+            "{expenseDefaults:{vendor:string, category:string, taxRate?:number, description?:string}}. " +
+            "flag_review requires {flag:string}. match_invoice and ignore require no config. " +
+            "/ Payload segun la accion.",
+          ),
         isActive: z.boolean().optional().describe("Whether the rule is active (default true) / Si la regla esta activa (por defecto true)"),
       },
       outputSchema: openObjectOutput(
-        "Created bank rule record with ID, conditions and actions / Regla bancaria creada con ID, condiciones y acciones",
+        "Created bank rule record with ID, conditions and action / Regla bancaria creada con ID, condiciones y accion",
       ),
     },
-    async ({ name, conditions, actions, isActive }) => withToolLogging("frihet_bank_rule_create", () =>
+    async ({ name, bankConditions, action, actionConfig, isActive }) => withToolLogging("frihet_bank_rule_create", () =>
       withBackendGuard("frihet_bank_rule_create", "/v1/banking/rules", async () => {
-        const result = await client.createBankRule({ name, conditions, actions, isActive });
+        const result = await client.createBankRule({ name, bankConditions, action, actionConfig, isActive });
         return {
           content: [
             mutateContent(

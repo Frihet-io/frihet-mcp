@@ -73,24 +73,24 @@ export function registerAuditGLTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Reject GL Entry",
       description:
-        "Reject a General Ledger journal entry pending review with a required reason. " +
-        "Sets entry status to 'rejected' and records the rejector + reason in the audit trail. " +
+        "Reject a General Ledger journal entry pending review with a required note. " +
+        "Sets entry status to 'rejected' and records the rejector + note in the audit trail. " +
         "Requires gestor/admin role. This is a TRUST AREA action. " +
-        "Example: entryId='gl_2026_q1_042', reason='Importe incorrecto, revisar factura F-2026-042'. " +
-        "/ Rechaza un asiento contable pendiente con una razon obligatoria. " +
+        "Example: entryId='gl_2026_q1_042', note='Importe incorrecto, revisar factura F-2026-042'. " +
+        "/ Rechaza un asiento contable pendiente con una nota obligatoria. " +
         "Requiere rol gestor/admin.",
       annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         entryId: z.string().describe("GL entry ID to reject / ID del asiento contable a rechazar"),
-        reason: z.string().describe("Mandatory rejection reason (visible to submitter) / Razon del rechazo (obligatoria, visible al emisor)"),
+        note: z.string().min(1).describe("Mandatory rejection note (visible to submitter) / Nota del rechazo (obligatoria, visible al emisor)"),
       },
       outputSchema: openObjectOutput(
-        "Rejected GL entry record with reason and audit trail entry / Asiento contable rechazado con motivo y entrada de auditoría",
+        "Rejected GL entry record with note and audit trail entry / Asiento contable rechazado con nota y entrada de auditoría",
       ),
     },
-    async ({ entryId, reason }) => withToolLogging("frihet_gl_entry_reject", () =>
+    async ({ entryId, note }) => withToolLogging("frihet_gl_entry_reject", () =>
       withBackendGuard("frihet_gl_entry_reject", "/v1/gl/entries/reject", async () => {
-        const result = await client.rejectGLEntry(entryId, reason);
+        const result = await client.rejectGLEntry(entryId, note);
         return {
           content: [
             mutateContent(

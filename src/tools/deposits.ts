@@ -199,15 +199,21 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
       description:
         "Apply a deposit to an invoice or mark it as used. " +
         "Transitions the deposit status to 'applied'. " +
-        "Example: id='dep_abc123', invoiceId='inv_xyz' " +
-        "/ Aplica un deposito a una factura o lo marca como utilizado.",
+        "ERP requires invoiceId + invoiceNumber + amount on the body; id is the deposit ID. " +
+        "Example: id='dep_abc123', invoiceId='inv_xyz', invoiceNumber='F-2026-007', amount=150 " +
+        "/ Aplica un deposito a una factura o lo marca como utilizado. Requiere invoiceId, invoiceNumber y amount.",
       annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         id: z.string().describe("Deposit ID / ID del deposito"),
         invoiceId: z
           .string()
-          .optional()
           .describe("Invoice ID to apply the deposit to / ID de la factura a la que aplicar el deposito"),
+        invoiceNumber: z
+          .string()
+          .describe("Invoice number (document number) the deposit applies to / Numero de la factura"),
+        amount: z
+          .number()
+          .describe("Amount of the deposit to apply in EUR / Importe del deposito a aplicar en EUR"),
         notes: z.string().optional().describe("Application notes / Notas de aplicacion"),
       },
       outputSchema: actionResultOutput,

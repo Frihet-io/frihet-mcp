@@ -250,7 +250,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "dc16d4a3f0d4d6329266debc5991305387d758d6fcad57c5f7a4a236dbc4fc5d",
+  "src/client.ts": "908643c24984f7132d18251602b3051de4168fb9da867d6b68aa54bbdec4383c",
   "src/observability.ts": "d0bd50c57843f59d0ab61b18b59c1e2ccfcc9dcb83ab76a00a34882d6d1d7cd6",
   "src/openai-review-oauth.ts": "388035b1b9952b5c1f0ecc82dcac962a93320b1076dc23d3e4a155dbf9bf263f",
   "workers/api-proxy/worker.js": "1838e99f60d15c13ffa1fbd6dc3a87ae827c86c61154b508f84377a601c75a54",

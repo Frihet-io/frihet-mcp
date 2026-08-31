@@ -649,10 +649,15 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Apply Late Fee",
       description:
-        "Apply late payment interest to an overdue invoice. Calculates interest based on EU Late Payment Directive (8% default) " +
-        "or auto-calculates from days overdue. Creates a debit note linked to the original invoice. " +
-        "/ Aplica intereses de demora a una factura vencida. Calcula intereses segun la Directiva Europea de Morosidad (8% por defecto) " +
-        "o los calcula automaticamente a partir de los dias de retraso. Crea una nota de debito vinculada a la factura original.",
+        "Apply late payment interest flags to an overdue invoice. " +
+        "Calculates interest based on EU Late Payment Directive (8% default) or auto-calculates " +
+        "from days overdue, and flips the `hasLateFee` / `lateFeeAmount` / `lateFeeDaysOverdue` " +
+        "fields on the invoice. The endpoint does NOT create a debit note — if a separate " +
+        "rectifying invoice is required, issue it explicitly with create_invoice or create_credit_note. " +
+        "/ Aplica los indicadores de intereses de demora a una factura vencida. Calcula intereses " +
+        "segun la Directiva Europea de Morosidad (8% por defecto) o a partir de los dias de retraso, " +
+        "y actualiza los flags `hasLateFee` / `lateFeeAmount` / `lateFeeDaysOverdue`. NO crea una " +
+        "nota de debito — si hace falta una factura rectificativa aparte, emitela con create_invoice o create_credit_note.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
         invoiceId: z.string().describe("ID of the overdue invoice / ID de la factura vencida"),
