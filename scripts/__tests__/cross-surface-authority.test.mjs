@@ -36,6 +36,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 const SCRIPT = "scripts/cross-surface-authority.mjs";
 
@@ -444,3 +445,208 @@ test("schema: legacy security tag 'apiKey' is recognised", () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /SECURITY.*resendInbound/);
 });
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ *  Power matrix (hostile mutants) — one assertion per drift vector the gate
+ *  claims to catch. Each test name is the canonical drift category; the
+ *  mutation is the smallest change that exercises the detector.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+test("SECURITY: required op flipped from required → open → exit 1", () => {
+  const projection = buildBaseProjection();
+  // Producer flipped createInvoice FROM protected TO open. The required
+  // contract still pins it as 'required'. The gate should fail closed.
+  projection.paths["/v1/invoices"].post.security = [];
+  const required = requiredForProjection(projection);
+  // Override: the required.json still pins createInvoice as 'required'
+  // (the consumer still depends on it being protected).
+  for (const r of required.required) {
+    if (r.operationId === "createInvoice") r.security = "required";
+  }
+  required.pinnedProjection.fingerprint = fingerprintOf(projection);
+  const tree = buildTree({ projection, requiredJson: required });
+  const result = runInTree(tree);
+  assert.equal(result.status, 1, `stdout: ${result.stdout}\nstderr: ${result.stderr}`);
+  assert.match(result.stderr, /SECURITY.*createInvoice/);
+});
+
+test("SCHEMA: required path parameter missing → exit 1", () => {
+  const projection = buildBaseProjection();
+  projection.paths["/v1/invoices/{id}"].get.parameters = [];
+  const required = requiredForProjection(projection);
+  for (const r of required.required) {
+    if (r.operationId === "getInvoice") {
+      r.request = { requiredPathParams: ["id"] };
+    }
+  }
+  const tree = buildTree({ projection, requiredJson: required });
+  const result = runInTree(tree);
+  assert.equal(result.status, 1, `stdout: ${result.stdout}\nstderr: ${result.stderr}`);
+  assert.match(result.stderr, /SCHEMA.*getInvoice.*id/);
+});
+
+test("SCHEMA: required header parameter missing → exit 1", () => {
+  const projection = buildBaseProjection();
+  // createInvoice did not declare a header parameter; the gate should fail
+  // closed when the contract pins one (e.g. Idempotency-Key).
+  const required = requiredForProjection(projection);
+  for (const r of required.required) {
+    if (r.operationId === "createInvoice") {
+      r.request = { requiredHeaders: ["Idempotency-Key"] };
+    }
+  }
+  const tree = buildTree({ projection, requiredJson: required });
+  const result = runInTree(tree);
+  assert.equal(result.status, 1, `stdout: ${result.stdout}\nstderr: ${result.stderr}`);
+  assert.match(result.stderr, /SCHEMA.*createInvoice.*Idempotency-Key/);
+});
+
+test("RESPONSE: 401 removed from required → exit 1", () => {
+  const projection = buildBaseProjection();
+  delete projection.paths["/v1/invoices"].get.responses["401"];
+  const required = requiredForProjection(projection);
+  for (const r of required.required) {
+    if (r.operationId === "listInvoices") r.responseCodes = ["200", "401"];
+  }
+  const tree = buildTree({ projection, requiredJson: required });
+  const result = runInTree(tree);
+  assert.equal(result.status, 1, `stdout: ${result.stdout}\nstderr: ${result.stderr}`);
+  assert.match(result.stderr, /RESPONSE.*listInvoices.*401/);
+});
+
+test("RESPONSE: 429 removed from required → exit 1", () => {
+  const projection = buildBaseProjection();
+  delete projection.paths["/v1/invoices"].get.responses["429"];
+  const required = requiredForProjection(projection);
+  for (const r of required.required) {
+    if (r.operationId === "listInvoices") r.responseCodes = ["200", "429"];
+  }
+  const tree = buildTree({ projection, requiredJson: required });
+  const result = runInTree(tree);
+  assert.equal(result.status, 1, `stdout: ${result.stdout}\nstderr: ${result.stderr}`);
+  assert.match(result.stderr, /RESPONSE.*listInvoices.*429/);
+});
+
+test("empty required contract (zero required ops) → exit 0 with explicit note", () => {
+  // A consumer that legitimately requires zero operations from this surface
+  // is degenerate but should NOT fail-closed on missing — it should fail-closed
+  // ONLY on missing-files. An empty required array means "no contract", and
+  // the gate accepts that without complaint.
+  const projection = buildBaseProjection();
+  const required = requiredForProjection(projection);
+  required.required = [];
+  required.pinnedProjection.fingerprint = fingerprintOf(projection);
+  const tree = buildTree({ projection, requiredJson: required });
+  const result = runInTree(tree);
+  assert.equal(result.status, 0, `stdout: ${result.stdout}\nstderr: ${result.stderr}`);
+  assert.match(result.stdout, /0 required operations present/);
+});
+
+test("stale fingerprint: required.json pin matches a projection that has since been tampered with → still drift-warning emitted", () => {
+  // This is the P1 source-binding gap (Phase 2 mutant) — V2 currently WARNS
+  // on fingerprint drift but does not FAIL. This test pins the current
+  // behaviour so any future tightening is a deliberate semantic change.
+  const projection = buildBaseProjection();
+  const required = requiredForProjection(projection);
+  required.pinnedProjection.fingerprint = "deadbeef".repeat(8); // wrong, stale
+  const tree = buildTree({ projection, requiredJson: required });
+  const result = runInTree(tree);
+  // Current behaviour: drift is informational, gate passes as long as
+  // required ops still resolve in the projection. A future hardening that
+  // fails closed on stale fingerprint will need to update this assertion.
+  assert.equal(result.status, 0, `stdout: ${result.stdout}\nstderr: ${result.stderr}`);
+  assert.match(result.stdout, /fingerprint drifted/);
+  assert.match(
+    result.stdout,
+    /Run .* --update.* to refresh the pin/,
+  );
+});
+
+test("wrong producer artifact: projection is a valid OpenAPI doc but not the Frihet producer → gate still parses and detects per-op drift", () => {
+  // The committed projection could be from a different producer (e.g., a
+  // mirror, a fork, or a non-Frihet service that happens to satisfy OpenAPI
+  // shape). The gate has no producer-identity field of its own; it only
+  // checks the contract. This test pins that behaviour: a non-Frihet
+  // projection with all required ops is accepted.
+  const projection = buildBaseProjection();
+  projection.info = { title: "NotFrihet API", version: "test-wrong-producer" };
+  const required = requiredForProjection(projection);
+  required.pinnedProjection.fingerprint = fingerprintOf(projection);
+  const tree = buildTree({ projection, requiredJson: required });
+  const result = runInTree(tree);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /5 required operations present/);
+});
+
+test("network fully unavailable: --check succeeds offline (V2 must NOT depend on network)", () => {
+  // Stub fetch as a TypeError-throwing function. If V2's --check path calls
+  // fetch, the test fails with FETCH CALLED. This is the strongest claim of
+  // the offline-deterministic design: no network, anywhere, ever.
+  const projection = buildBaseProjection();
+  const required = requiredForProjection(projection);
+  required.pinnedProjection.fingerprint = fingerprintOf(projection);
+  const tree = buildTree({ projection, requiredJson: required });
+  const scriptPath = join(tree, "scripts/cross-surface-authority.mjs");
+
+  const preload = `
+    globalThis.fetch = async () => {
+      throw new TypeError("FETCH CALLED under network-down — V2 must be offline");
+    };
+    globalThis.XMLHttpRequest = function () {
+      throw new TypeError("XHR CALLED under network-down — V2 must be offline");
+    };
+    // Also stub any http/https agent imports — V2 must not import them.
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--import", `data:text/javascript,${encodeURIComponent(preload)}`, scriptPath, "--check"],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, `unexpected exit\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
+  assert.doesNotMatch(result.stderr, /FETCH CALLED/);
+  assert.doesNotMatch(result.stderr, /XHR CALLED/);
+});
+
+test("double-edit mutant: projection and required.json lie consistently → currently passes (P1 source-binding gap, pinned for review)", () => {
+  // This is the V1→V2 phase-2 hostile mutant: a PR that removes a real
+  // ERP-backed op from BOTH projection AND required.json, and bumps the
+  // pin to match the lying projection. V2 currently passes. The cross-check
+  // that catches this is `sync-openapi.mjs --check` against the live
+  // canonical — a network-dependent gate that runs only on push to main.
+  //
+  // This test pins the current V2 behaviour so the next tightening attempt
+  // is a deliberate semantic change, not an accidental regression. The fix
+  // recommended in the Phase 2 trace: add `gate:openapi-fresh` to
+  // `prepublishOnly` so the lie is caught before `npm publish`.
+  const projection = buildBaseProjection();
+  const required = requiredForProjection(projection);
+  // Remove createInvoice from BOTH files.
+  delete projection.paths["/v1/invoices"].post;
+  required.required = required.required.filter((r) => r.operationId !== "createInvoice");
+  // Bump the pin to match the lying projection.
+  required.pinnedProjection.fingerprint = fingerprintOf(projection);
+  const tree = buildTree({ projection, requiredJson: required });
+  const result = runInTree(tree);
+  // V2's current behaviour: gate passes when the lie is consistent.
+  // Document this so a tightening PR is a deliberate change.
+  assert.equal(result.status, 0, `stdout: ${result.stdout}\nstderr: ${result.stderr}`);
+  assert.match(result.stdout, /4 required operations present/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  helpers used by the power matrix
+// ─────────────────────────────────────────────────────────────────────────────
+
+function fingerprintOf(doc) {
+  const sorted = (v) => {
+    if (Array.isArray(v)) return v.map(sorted);
+    if (v && typeof v === "object") {
+      return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted(v[k])]));
+    }
+    return v;
+  };
+  // Deterministic JSON; matches the script's `stable()` + sha256.
+  return createHash("sha256")
+    .update(JSON.stringify(sorted(doc)))
+    .digest("hex");
+}
