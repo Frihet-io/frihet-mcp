@@ -194,7 +194,7 @@ export interface IFrihetClient {
 
   // Audit GL endpoints (/v1/gl/*) — Day 1 Megasprint PR #395.
   approveGLEntry(entryId: string, notes?: string): Promise<Record<string, unknown>>;
-  rejectGLEntry(entryId: string, reason: string): Promise<Record<string, unknown>>;
+  rejectGLEntry(entryId: string, note: string): Promise<Record<string, unknown>>;
   getGLEntryAuditLog(entryId: string): Promise<Record<string, unknown>>;
 
   // White-label portal domain endpoints (/v1/portal/domain/*) — Day 1 Megasprint PR #397.
@@ -215,7 +215,7 @@ export interface IFrihetClient {
 
   // Bank rules endpoints (/v1/banking/rules) — Day 1 Megasprint PR #394 (Q3-flagged).
   listBankRules(params?: { isActive?: boolean; limit?: number; offset?: number }): Promise<import("./types.js").PaginatedResponse<Record<string, unknown>>>;
-  createBankRule(data: { name: string; conditions: Array<{ field: string; operator: string; value: string }>; actions: Array<{ type: string; value: string }>; isActive?: boolean }): Promise<Record<string, unknown>>;
+  createBankRule(data: { name: string; bankConditions: Array<{ field: string; operator: string; value: string }>; action: string; actionConfig: Record<string, unknown>; isActive?: boolean }): Promise<Record<string, unknown>>;
 
   // Gestoria endpoints (/v1/gestoria/*) — Wave Fase 1 surface for accountants.
   // Backend lands with Frihet-ERP PRs #383 (bulk send), #384 (aging), #385
@@ -246,7 +246,7 @@ export interface IFrihetClient {
     clientWorkspaceIds: string[];
     periodOverrides?: { quarter?: string | number; year?: string | number; month?: string | number };
   }): Promise<Record<string, unknown>>;
-  getGestoriaAgingConsolidated(params?: { ownerUid?: string }): Promise<Record<string, unknown>>;
+  getGestoriaAgingConsolidated(params?: { workspaceIds?: string[]; asOf?: string; bustCache?: boolean }): Promise<Record<string, unknown>>;
 
   // Live HR endpoints (/v1/leaves, /v1/time-entries, /v1/anomalies).
   listLeaves(params?: { employeeId?: string; status?: string; from?: string; to?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
@@ -254,8 +254,8 @@ export interface IFrihetClient {
   approveLeave(leaveId: string, data?: { reason?: string }): Promise<Record<string, unknown>>;
   rejectLeave(leaveId: string, data: { reason: string }): Promise<Record<string, unknown>>;
   cancelLeave(leaveId: string): Promise<Record<string, unknown>>;
-  attendanceClockIn(data: { employeeId: string; mood?: string; location?: string }): Promise<Record<string, unknown>>;
-  attendanceClockOut(entryId: string): Promise<Record<string, unknown>>;
+  attendanceClockIn(data: { employeeId: string; mood?: string; location?: string }, idempotencyKey?: string): Promise<Record<string, unknown>>;
+  attendanceClockOut(entryId: string, idempotencyKey?: string): Promise<Record<string, unknown>>;
   getOvertimeReport(params: { period: string; employeeId?: string }): Promise<Record<string, unknown>>;
   listAnomalies(params?: { type?: string; severity?: string; from?: string; to?: string; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
 

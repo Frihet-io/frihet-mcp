@@ -1994,9 +1994,11 @@ export class FrihetClient {
     return this.requestUnwrapped("POST", "/gestoria/templates/bulk-send", data);
   }
 
-  async getGestoriaAgingConsolidated(params?: { ownerUid?: string }): Promise<Record<string, unknown>> {
-    return this.request("GET", "/gestoria/aging/consolidated", undefined, {
-      ownerUid: params?.ownerUid,
+  async getGestoriaAgingConsolidated(params?: { workspaceIds?: string[]; asOf?: string; bustCache?: boolean }): Promise<Record<string, unknown>> {
+    return this.requestUnwrapped("POST", "/gestoria/aging", {
+      workspaceIds: params?.workspaceIds,
+      asOf: params?.asOf,
+      bustCache: params?.bustCache,
     });
   }
 
@@ -2007,8 +2009,8 @@ export class FrihetClient {
     return this.requestUnwrapped("POST", `/gl/entries/${encodeURIComponent(entryId)}/approve`, { notes });
   }
 
-  async rejectGLEntry(entryId: string, reason: string): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", `/gl/entries/${encodeURIComponent(entryId)}/reject`, { reason });
+  async rejectGLEntry(entryId: string, note: string): Promise<Record<string, unknown>> {
+    return this.requestUnwrapped("POST", `/gl/entries/${encodeURIComponent(entryId)}/reject`, { note });
   }
 
   async getGLEntryAuditLog(entryId: string): Promise<Record<string, unknown>> {
@@ -2081,8 +2083,9 @@ export class FrihetClient {
 
   async createBankRule(data: {
     name: string;
-    conditions: Array<{ field: string; operator: string; value: string }>;
-    actions: Array<{ type: string; value: string }>;
+    bankConditions: Array<{ field: string; operator: string; value: string }>;
+    action: string;
+    actionConfig: Record<string, unknown>;
     isActive?: boolean;
   }): Promise<Record<string, unknown>> {
     return this.requestUnwrapped("POST", "/banking/rules", data);
@@ -2126,12 +2129,13 @@ export class FrihetClient {
 
   async attendanceClockIn(
     data: { employeeId: string; mood?: string; location?: string },
+    idempotencyKey?: string,
   ): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", "/time-entries/clock-in", data);
+    return this.requestUnwrapped("POST", "/time-entries/clock-in", data, undefined, idempotencyKey);
   }
 
-  async attendanceClockOut(entryId: string): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("PATCH", `/time-entries/${encodeURIComponent(entryId)}/clock-out`, {});
+  async attendanceClockOut(entryId: string, idempotencyKey?: string): Promise<Record<string, unknown>> {
+    return this.requestUnwrapped("PATCH", `/time-entries/${encodeURIComponent(entryId)}/clock-out`, {}, undefined, idempotencyKey);
   }
 
   async getOvertimeReport(

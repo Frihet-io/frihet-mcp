@@ -649,8 +649,8 @@ export class DemoFrihetClient implements IFrihetClient {
   async approveGLEntry(entryId: string, notes?: string): Promise<Rec> {
     return simulateAction(entryId, { status: "approved", ...(notes ? { notes } : {}) });
   }
-  async rejectGLEntry(entryId: string, reason: string): Promise<Rec> {
-    return simulateAction(entryId, { status: "rejected", reason });
+  async rejectGLEntry(entryId: string, note: string): Promise<Rec> {
+    return simulateAction(entryId, { status: "rejected", note });
   }
   async getGLEntryAuditLog(entryId: string): Promise<Rec> {
     return { entryId, log: [], ...READ_STAMP };
@@ -692,8 +692,8 @@ export class DemoFrihetClient implements IFrihetClient {
   async listBankRules(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
     return demoEmptyPage(params);
   }
-  async createBankRule(data: { name: string; conditions: Array<{ field: string; operator: string; value: string }>; actions: Array<{ type: string; value: string }>; isActive?: boolean }): Promise<Rec> {
-    return simulateWrite("demo_rule", { name: data.name, conditions: data.conditions, actions: data.actions }, { isActive: data.isActive ?? true });
+  async createBankRule(data: { name: string; bankConditions: Array<{ field: string; operator: string; value: string }>; action: string; actionConfig: Record<string, unknown>; isActive?: boolean }): Promise<Rec> {
+    return simulateWrite("demo_rule", { name: data.name, bankConditions: data.bankConditions, action: data.action, actionConfig: data.actionConfig }, { isActive: data.isActive ?? true });
   }
 
   // ---------------------------------------------------------------- Gestoria
@@ -709,7 +709,7 @@ export class DemoFrihetClient implements IFrihetClient {
   async bulkSendGestoriaTemplate(data: { templateId: string; clientWorkspaceIds: string[]; periodOverrides?: { quarter?: string | number; year?: string | number; month?: string | number } }): Promise<Rec> {
     return { success: data.clientWorkspaceIds.length, failed: [], ...FISCAL_STAMP };
   }
-  async getGestoriaAgingConsolidated(_params?: { ownerUid?: string }): Promise<Rec> {
+  async getGestoriaAgingConsolidated(_params?: { workspaceIds?: string[]; asOf?: string; bustCache?: boolean }): Promise<Rec> {
     return { totals: { current: 0, "30_60": 0, "60_90": 0, "90_plus": 0 }, byWorkspace: [], topOverdue: [], generatedAt: DEMO_NOW, ...READ_STAMP };
   }
 
@@ -729,10 +729,10 @@ export class DemoFrihetClient implements IFrihetClient {
   async cancelLeave(leaveId: string): Promise<Rec> {
     return simulateAction(leaveId, { status: "cancelled" });
   }
-  async attendanceClockIn(data: { employeeId: string; mood?: string; location?: string }): Promise<Rec> {
+  async attendanceClockIn(data: { employeeId: string; mood?: string; location?: string }, _idempotencyKey?: string): Promise<Rec> {
     return simulateWrite("demo_att", { employeeId: data.employeeId, ...(data.mood ? { mood: data.mood } : {}), ...(data.location ? { location: data.location } : {}) }, { status: "open", clockInAt: DEMO_NOW });
   }
-  async attendanceClockOut(entryId: string): Promise<Rec> {
+  async attendanceClockOut(entryId: string, _idempotencyKey?: string): Promise<Rec> {
     return simulateAction(entryId, { status: "closed", clockOutAt: DEMO_NOW });
   }
   async getOvertimeReport(params: { period: string; employeeId?: string }): Promise<Rec> {

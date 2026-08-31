@@ -48,13 +48,15 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       title: "Create Leave Request",
       description:
         "Create a new leave/PTO request for an employee. " +
-        "Types: 'vacation', 'sick', 'personal', 'parental', 'unpaid', 'training'. " +
+        "Types: 'vacation', 'sick', 'personal', 'parental', 'bereavement', 'other'. " +
         "Dates must be ISO 8601 (YYYY-MM-DD). Status starts as 'pending' awaiting manager approval. " +
         "/ Crea una nueva solicitud de vacaciones/permiso. Estado inicial 'pending' pendiente aprobacion.",
       annotations: CREATE_ANNOTATIONS,
       inputSchema: {
         employeeId: z.string().describe("Employee ID / ID del empleado"),
-        type: z.string().describe("Leave type slug (vacation, sick, personal, parental, unpaid, training) / Tipo de permiso"),
+        type: z
+          .enum(["vacation", "sick", "personal", "parental", "bereavement", "other"])
+          .describe("Leave type slug (vacation, sick, personal, parental, bereavement, other) / Tipo de permiso"),
         startDate: z.string().describe("Start date ISO 8601 (YYYY-MM-DD) / Fecha inicio"),
         endDate: z.string().describe("End date ISO 8601 (YYYY-MM-DD) / Fecha fin"),
         reason: z.string().optional().describe("Optional reason / Motivo opcional"),
@@ -209,12 +211,23 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
         employeeId: z.string().describe("Employee ID / ID del empleado"),
         mood: z.string().optional().describe("Optional mood slug (e.g. 'great','ok','tired') / Estado de animo"),
         location: z.string().optional().describe("Optional location ('remote','office','site') / Ubicacion"),
+        idempotencyKey: z
+          .string()
+          .max(64)
+          .optional()
+          .describe(
+            "Optional idempotency key, max 64 chars. One is generated per call when omitted or blank; " +
+            "pass your own to make a retry replay the stored open entry instead of creating a second clock-in. " +
+            "Reusing a key with a different body returns 409 IDEMPOTENCY_KEY_REUSED — reconcile, do not " +
+            "retry with a new key. / Clave de idempotencia opcional (max 64). Se genera una por llamada si se omite.",
+          ),
       },
       outputSchema: attendanceEntryItemOutput,
     },
     async (input) => withToolLogging("attendance_clock_in", () =>
       withBackendGuard("attendance_clock_in", "/v1/time-entries/clock-in", async () => {
-        const result = await client.attendanceClockIn(input);
+        const { idempotencyKey, ...data } = input as typeof input & { idempotencyKey?: string };
+        const result = await client.attendanceClockIn(data, idempotencyKey);
         return {
           content: [mutateContent(formatRecord("Clocked in", result))],
           structuredContent: result as unknown as Record<string, unknown>,
@@ -236,12 +249,22 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       annotations: UPDATE_ANNOTATIONS,
       inputSchema: {
         entryId: z.string().describe("Open attendance entry ID / ID de la entrada abierta"),
+        idempotencyKey: z
+          .string()
+          .max(64)
+          .optional()
+          .describe(
+            "Optional idempotency key, max 64 chars. One is generated per call when omitted or blank; " +
+            "pass your own to make a retry replay the stored close instead of erroring on a closed entry. " +
+            "/ Clave de idempotencia opcional (max 64). Se genera una por llamada si se omite.",
+          ),
       },
       outputSchema: attendanceEntryItemOutput,
     },
-    async ({ entryId }) => withToolLogging("attendance_clock_out", () =>
+    async (input) => withToolLogging("attendance_clock_out", () =>
       withBackendGuard("attendance_clock_out", "/v1/time-entries/clock-out", async () => {
-        const result = await client.attendanceClockOut(entryId);
+        const { entryId, idempotencyKey } = input as { entryId: string; idempotencyKey?: string };
+        const result = await client.attendanceClockOut(entryId, idempotencyKey);
         return {
           content: [mutateContent(formatRecord("Clocked out", result))],
           structuredContent: result as unknown as Record<string, unknown>,
@@ -287,15 +310,23 @@ export function registerHrTools(server: McpServer, client: IFrihetClient): void 
       title: "List Anomalies",
       description:
         "List HR / operational / financial anomalies detected by the system. " +
-        "Filter by type (duplicate_clock_in, overtime_spike, missing_clock_out, expense_outlier, etc.), " +
-        "severity (low/medium/high/critical), or period. " +
+        "Filter by type (duplicate_clock_in, overtime_spike, missing_clock_out, expense_outlier), " +
+        "severity (warning/critical), or period. " +
         "Useful for daily HR review and compliance audits. " +
         "/ Lista anomalias detectadas (RRHH/operativas/financieras) con filtros opcionales.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
-        type: z.string().optional().describe("Filter by anomaly type slug / Tipo"),
+        type: z
+          .enum([
+            "duplicate_clock_in",
+            "overtime_spike",
+            "missing_clock_out",
+            "expense_outlier",
+          ])
+          .optional()
+          .describe("Filter by anomaly type slug / Tipo"),
         severity: z
-          .enum(["low", "medium", "high", "critical"])
+          .enum(["warning", "critical"])
           .optional()
           .describe("Filter by severity / Severidad"),
         from: z.string().optional().describe("Period start ISO 8601 / Inicio"),

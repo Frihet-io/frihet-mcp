@@ -392,9 +392,9 @@ describe("HR Tools — happy path", () => {
   });
 
   test("anomaly_list returns paginated anomalies", async () => {
-    const r = await server.tools.get("anomaly_list")!.handler({ severity: "medium" });
-    assert.ok(!r.isError);
-    assert.equal((r.structuredContent!["data"] as unknown[]).length, 1);
+    const r = await server.tools.get("anomaly_list")!.handler({ severity: "warning" });
+    assert.equal(r.isError, undefined);
+    assert.equal((r.structuredContent as Record<string, unknown>)["total"], 1);
   });
 });
 
