@@ -296,27 +296,35 @@ export function registerGestoriaTools(server: McpServer, client: IFrihetClient):
       description:
         "Get a cross-client AR aging report for a gestor — totals bucketed by current / 30-60 / " +
         "60-90 / 90+ days overdue, a per-workspace breakdown, and the top overdue invoices. " +
-        "Defaults to the authenticated gestor; pass `ownerUid` to query a specific gestor " +
-        "(requires elevated scope). " +
+        "The ERP requires POST /v1/gestoria/aging with a body listing the workspaces to include " +
+        "(defaults to the authenticated gestor when `workspaceIds` is omitted). " +
         "Useful for dunning prioritisation and end-of-month chase lists. " +
-        "/ Obtiene un informe de antiguedad de saldos cruzando todos los clientes del gestor — " +
+        "/ Obtiene un informe de antiguedad de saldos cruzando los clientes del gestor — " +
         "totales por tramo (al dia / 30-60 / 60-90 / 90+ dias), desglose por espacio y top vencidas. " +
         "Util para priorizar reclamaciones y listas de cobro de fin de mes.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
-        ownerUid: z
-          .string()
+        workspaceIds: z
+          .array(z.string().min(1))
           .optional()
           .describe(
-            "Gestor UID to query (defaults to authenticated caller; elevated scope required for other UIDs) / UID del gestor (por defecto el llamante)",
+            "Workspace IDs to include (defaults to the authenticated gestor when omitted) / IDs de espacios a incluir (por defecto los del gestor)",
           ),
+        asOf: z
+          .string()
+          .optional()
+          .describe("Reference date in ISO 8601 (YYYY-MM-DD). Defaults to today / Fecha de referencia"),
+        bustCache: z
+          .boolean()
+          .optional()
+          .describe("Force-refresh server cache (default false) / Forzar refresco de cache del servidor"),
       },
       outputSchema: gestoriaAgingConsolidatedOutput,
     },
-    async ({ ownerUid }) =>
+    async ({ workspaceIds, asOf, bustCache }) =>
       withToolLogging("gestoria_aging_consolidated", () =>
-        withBackendGuard("gestoria_aging_consolidated", "/v1/gestoria/aging/consolidated", async () => {
-          const result = await client.getGestoriaAgingConsolidated({ ownerUid });
+        withBackendGuard("gestoria_aging_consolidated", "/v1/gestoria/aging", async () => {
+          const result = await client.getGestoriaAgingConsolidated({ workspaceIds, asOf, bustCache });
           return {
             content: [getContent(formatRecord("Aging consolidated", result))],
             structuredContent: result as unknown as Record<string, unknown>,
