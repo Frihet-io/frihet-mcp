@@ -32,7 +32,23 @@ export const OAUTH_PROVISIONING_CONTRACT = {
     openai: "https://openai-mcp.frihet.io",
     full: "https://mcp.frihet.io",
   },
+  /**
+   * Baseline permissions written to legacy (1.16.x-compatible) keys and to
+   * candidate keys when the caller does not match a registered profile.
+   * Mirror of ERP @berthelius/Frihet-ERP OAUTH_PROVISIONING_CONTRACT — keep
+   * byte-for-byte identical.
+   */
   permissions: ["read", "write"],
+  /**
+   * Profile-keyed permission matrix for candidate keys. The MCP side does
+   * NOT consume this at runtime (the ERP is the authority on persisted
+   * scope), but the literal is mirrored so the cross-repo test pins
+   * byte-for-byte parity.
+   */
+  permissionsByProfile: {
+    openai: ["read", "write"],
+    full: ["read", "write", "einvoice:*"],
+  },
 } as const;
 
 export type OAuthProvisioningBinding = {
