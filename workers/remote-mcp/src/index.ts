@@ -68,6 +68,7 @@ import {
   LEGAL_PRIVACY_URL,
   LEGAL_TERMS_URL,
 } from "./server-meta.js";
+import { readReleaseMeta } from "./release-meta.js";
 import { buildServerCard } from "./server-card.js";
 import { isOpenApiLookalikePath, serveOpenApiAsset } from "./openapi-safety.js";
 import {
@@ -1256,12 +1257,23 @@ export default {
         ? "ok"
         : "degraded";
 
+      // Release provenance — published only when the deploy pipeline injected
+      // RELEASE_SOURCE_SHA / RELEASE_VERSION via `wrangler deploy --var ...`.
+      // Outside that pipeline, source = "fallback-unknown" so day-to-day deploys
+      // do not lie about provenance they cannot prove. The release workflow
+      // asserts releaseSha === origin/main HEAD after deploy; mismatch fails
+      // verify-worker and blocks the GitHub Release.
+      const release = readReleaseMeta(env);
+
       return new Response(
         JSON.stringify({
           status: overallStatus,
           checks,
           version: MCP_SERVER_VERSION,
           timestamp: new Date().toISOString(),
+          releaseSha: release.releaseSha,
+          releaseVersion: release.releaseVersion,
+          releaseSource: release.source,
         }),
         {
           status: overallStatus === "ok" ? 200 : 503,

@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "a046eb8b16a48bae0325398297ac2183779423b8beb9824fa345bc104136f54e",
+  "package.json": "3e7a6547d58807628419a599fd1fe8ccdcf9ae6c17e95ecba5e4d5d63b8c0593", // #171: test command now also runs scripts/__tests__/release-workflow-contract.test.mjs
   "workers/remote-mcp/package.json": "c7025291c46b023fac162d1a0e0a010d1173bf7bc5d218c6faaab515aba97c6b",
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -257,7 +257,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/api-url.ts": "6603350d3dde02e0a8139f216320a055df79f1bbba45ff2e1bf2fe7f40f32f23",
   "workers/remote-mcp/src/auth-handler.ts": "7de5521aae87c2785fabf4703a37a3ecc803bad5bdb6913aa1504d53f4c6b6d1",
   "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
-  "workers/remote-mcp/src/index.ts": "a63033e9b79621f6758b7732fda0c88f13e8d229acb3a77f406295ef5faccd52",
+  "workers/remote-mcp/src/index.ts": "da01005ac9ff156bbfa9c0421874e2065108ef2e9f24e8a346f16c4e0749b2e5", // #171: import readReleaseMeta + /health emits releaseSha/releaseVersion/releaseSource (no new outbound sinks)
   "workers/remote-mcp/src/login-page.ts": "1c4d6dcacbbcdc47db152242a4ca4adfb83b4f0229903e0550c63b973ab00ff5",
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "8c6b6599a2f687f539c116a2dd88591f9a71ea1c2a06aaa17f0ca30a25b60c4c",

@@ -21,4 +21,13 @@ interface Env {
    * Declared in wrangler.toml [assets] section.
    */
   ASSETS?: Fetcher;
+  /**
+   * Release-pipeline provenance — injected by
+   * `.github/workflows/release-mcp-npm.yml` via `wrangler deploy --var ...`.
+   * Absent / malformed → `readReleaseMeta` reports "unknown" and
+   * `/health` does not lie about provenance it cannot prove.
+   * @see ./src/release-meta.ts
+   */
+  RELEASE_SOURCE_SHA?: string;
+  RELEASE_VERSION?: string;
 }

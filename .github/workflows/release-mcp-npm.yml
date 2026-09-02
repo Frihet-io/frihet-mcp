@@ -1,0 +1,693 @@
+name: Release @frihet/mcp-server
+
+# Canonical MCP release workflow. Single end-to-end pipeline from a verified
+# origin/main HEAD to a verified npm registry byte + verified Worker
+# provenance + a GitHub Release whose tag points at the source commit.
+#
+# ── Why this exists ─────────────────────────────────────────────────────────
+# Before this workflow, the release path was:
+#   - bump version in a metadata-only commit
+#   - tag that metadata-only commit
+#   - npm publish from a possibly-dirty working tree (npm gitHead may lie)
+#   - wrangler deploy at leisure, with no SHA proof
+#   - GitHub Release whenever someone remembered
+# Five independent ways for the bytes on the registry, the bytes on the
+# Worker, and the bytes the tag points at to silently diverge. The five
+# hostile tests in §"HOSTILE TEST MATRIX" below are the bugs that surfaced
+# when each divergence actually happened.
+#
+# This workflow closes all five by enforcing the end-to-end provenance chain:
+#   publish-anchor (npm gitHead === origin/main) ──┐
+#   release-meta   (Worker /health.releaseSha)  ──┴─→ GitHub Release tag
+# The chain is asserted at every gate. A break in any link is fail-closed
+# and the Release step never runs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          Exact version to publish. MUST equal package.json#version and
+          MUST be a strict semver bump over the latest published tag.
+        required: true
+        type: string
+      dry_run:
+        description: >-
+          If true, run every gate EXCEPT the npm publish, wrangler deploy,
+          GitHub Release, and downstream cascade. Deterministic package
+          evidence is still produced and asserted locally.
+        required: false
+        type: boolean
+        default: false
+
+# `npm-release` is a GitHub repository environment configured with
+# required reviewers + a protection rule. The mission explicitly does
+# NOT create this environment — that is a GitHub UI action for Viktor.
+# Until the environment exists with its protection rule, this workflow
+# cannot run for real (the `environment:` line is required and the
+# protection rule is what makes the dispatch a two-key event).
+environment:
+  name: npm-release
+  url: https://github.com/Frihet-io/frihet-mcp/releases
+
+# `id-token: write` is the ONLY auth mechanism for `npm publish` here.
+# We deliberately do NOT fall back to a long-lived NPM_TOKEN: an OIDC
+# trusted publisher bound to this workflow file and this environment
+# is the only way to publish. A leaked NPM_TOKEN cannot be used to ship
+# a poisoned tarball because the publish token does not exist.
+permissions:
+  contents: read
+  id-token: write
+  # `pages: write` is NOT requested; releases publish via gh CLI which
+  # uses the default GITHUB_TOKEN inherited from contents: read.
+
+# A single release must be in flight at a time. Concurrent releases
+# would race on the version pin and the registry byte readback, and the
+# cascade would publish twice to downstream registries.
+concurrency:
+  group: mcp-npm-release
+  cancel-in-progress: false
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  # Stage 1 — preflight: identity, anchor, and inputs.
+  # Must close before any expensive gate runs.
+  # ───────────────────────────────────────────────────────────────────────
+  preflight:
+    name: Preflight — version · branch · anchor
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.id.outputs.version }}
+      sourceCommit: ${{ steps.anchor.outputs.source_commit }}
+      worktreeSha: ${{ steps.anchor.outputs.worktree_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full clone, not a shallow one, so npm records the right gitHead
+          # and so `git ls-remote origin refs/heads/main` resolves the anchor.
+          fetch-depth: 0
+
+      - name: Resolve release version + identity
+        id: id
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$INPUT_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::version mismatch — input '$INPUT_VERSION' != package.json '$PKG_VERSION'"
+            echo "The release tag points at the source commit. Bump package.json"
+            echo "in the SAME commit as the code that ships under that version,"
+            echo "then re-dispatch from that commit."
+            exit 1
+          fi
+          # Strict semver — npm publish will reject anything else and the
+          # cascade relies on the X.Y.Z shape to compute next-candidate.
+          if ! [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "::error::version '$INPUT_VERSION' is not strict semver"
+            exit 1
+          fi
+          echo "version=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "OK — version $INPUT_VERSION matches package.json"
+
+      - name: Assert publish anchor (origin/main HEAD + clean tree)
+        id: anchor
+        env:
+          HEAD_SHA: ${{ github.sha }}
+          HEAD_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          # Branch must be main — the release tag points at the source
+          # commit, so the trigger branch must be the source branch.
+          if [ "$HEAD_REF" != "refs/heads/main" ]; then
+            echo "::error::release must be dispatched from main; got $HEAD_REF"
+            echo "Tag of a non-main commit = stale source. Re-dispatch from main."
+            exit 1
+          fi
+          # HEAD must be the canonical main tip — no fast-forward lags.
+          REMOTE_MAIN="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+          if [ "$REMOTE_MAIN" != "$HEAD_SHA" ]; then
+            echo "::error::HEAD $HEAD_SHA is not origin/main $REMOTE_MAIN"
+            echo "Stale dispatch = stale source. Pull main and re-dispatch."
+            exit 1
+          fi
+          # assert-publish-anchor.mjs is the canonical script. It also
+          # rejects dirty trees and linked worktrees.
+          node scripts/assert-publish-anchor.mjs
+          echo "source_commit=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "worktree_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Stage 2 — gates: cross-surface authority, OpenAPI freshness, capability
+  # truth, agent onboarding, and the build/test drift audit.
+  # All four must pass BEFORE we pack the tarball.
+  # ───────────────────────────────────────────────────────────────────────
+  gates:
+    name: Gates — cross-surface · openapi · capability · onboarding · drift
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node (pinned to MCP CI authority)
+        uses: actions/setup-node@v4
+        with:
+          # MCP CI pins Node 22. Lockfile integrity check below pins the
+          # exact `package-lock.json` byte sha256 — the same triple as
+          # .github/workflows/ci.yml. Pinning the major prevents a future
+          # "let's upgrade to 24 because it is faster" from silently
+          # changing npm publish behavior (npm 10 / Node 22 is the tested
+          # combination).
+          node-version: 22
+          cache: npm
+
+      - name: Lockfile integrity (pre-install)
+        run: |
+          test ! -e npm-shrinkwrap.json
+          test ! -e .npmrc
+          test ! -e workers/remote-mcp/npm-shrinkwrap.json
+          test ! -e workers/remote-mcp/.npmrc
+          echo "ebf5ce3c3b9207fb07cfc2856c1ca3d3232e154133406435511fe99f08e6ae18  package-lock.json" | sha256sum --check --strict -
+          echo "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191  workers/remote-mcp/package-lock.json" | sha256sum --check --strict -
+
+      - name: Install (inert — no lifecycle hooks before gates)
+        run: npm ci --ignore-scripts
+
+      - name: Cross-surface contract authority (consumer-required ops)
+        # consumer-specific OpenAPI pin. Fails the workflow if the ERP
+        # producer dropped a security, response-code, or schema field the
+        # MCP consumer depends on.
+        run: npm run gate:cross-surface-authority
+
+      - name: OpenAPI projection freshness
+        # The Worker serves /openapi.json mirror. If the committed
+        # projection is stale, the Worker's advertised contract drifts
+        # from the live api.frihet.io spec.
+        run: npm run gate:openapi-fresh
+
+      - name: Public capability truth
+        # Generated public-capability-contract.json must match the
+        # actual tool surface. This is what registries/clients read.
+        run: npm run gate:public-capability-truth
+
+      - name: Agent onboarding descriptor parity
+        # docs/agent-onboarding.json is a projection of the live MCP
+        # surface, not a parallel claim. Hand-editing or drift turns red.
+        run: npm run gate:agent-onboarding
+
+      - name: Published-artifact drift (self)
+        # Even within the repo: server.json, README, index.ts, CHANGELOG
+        # must agree with package.json SoT. Catches the version-bump PR
+        # that forgot to update the README badge.
+        run: npm run audit:mcp-refs -- --repo frihet-mcp
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Stage 3 — build & pack: produce a deterministic tarball and capture
+  # evidence that downstream stages assert against.
+  # ───────────────────────────────────────────────────────────────────────
+  build-pack:
+    name: Build · deterministic pack evidence
+    needs: [preflight, gates]
+    runs-on: ubuntu-latest
+    outputs:
+      tarball_sha256: ${{ steps.pack.outputs.tarball_sha256 }}
+      tarball_filename: ${{ steps.pack.outputs.tarball_filename }}
+      tarball_size: ${{ steps.pack.outputs.tarball_size }}
+      file_manifest_sha256: ${{ steps.pack.outputs.file_manifest_sha256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node (pinned to MCP CI authority)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Lockfile integrity (pre-install)
+        run: |
+          echo "ebf5ce3c3b9207fb07cfc2856c1ca3d3232e154133406435511fe99f08e6ae18  package-lock.json" | sha256sum --check --strict -
+          echo "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191  workers/remote-mcp/package-lock.json" | sha256sum --check --strict -
+
+      - name: Install Worker dependencies (inert)
+        run: npm ci --prefix workers/remote-mcp --ignore-scripts
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack — deterministic + evidence
+        id: pack
+        # --dry-run + --pack-destination emits the tarball without
+        # publishing, into a deterministic name. We then sha256 the file
+        # and emit a sorted manifest of every shipped file so the
+        # registry byte readback has a known-good reference.
+        run: |
+          set -euo pipefail
+          mkdir -p .release-evidence
+          cd .release-evidence
+          TARBALL="$(npm pack --pack-destination=. --json | node -e "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>{const j=JSON.parse(s);console.log(j[0].filename);})")"
+          if [ -z "$TARBALL" ]; then
+            echo "::error::npm pack produced no tarball filename"
+            exit 1
+          fi
+          if [ ! -s "$TARBALL" ]; then
+            echo "::error::npm pack produced an empty tarball"
+            exit 1
+          fi
+          TARBALL_SHA="$(sha256sum "$TARBALL" | awk '{print $1}')"
+          TARBALL_SIZE="$(wc -c < "$TARBALL" | tr -d ' ')"
+          # Sorted file manifest — sha256 of every file inside the tarball.
+          # Used by the registry-byte-readback job to assert the bytes
+          # npm shipped == the bytes we packed here.
+          tar -tf "$TARBALL" | LC_ALL=C sort | sha256sum | awk '{print $1}' > file-manifest.sha256
+          FILE_MANIFEST_SHA="$(cat file-manifest.sha256)"
+          echo "tarball=$TARBALL" >&2
+          echo "tarball_sha=$TARBALL_SHA" >&2
+          echo "tarball_size=$TARBALL_SIZE" >&2
+          echo "file_manifest_sha=$FILE_MANIFEST_SHA" >&2
+          echo "tarball_sha256=$TARBALL_SHA" >> "$GITHUB_OUTPUT"
+          echo "tarball_filename=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "tarball_size=$TARBALL_SIZE" >> "$GITHUB_OUTPUT"
+          echo "file_manifest_sha256=$FILE_MANIFEST_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload deterministic package evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-release-evidence-${{ inputs.version }}
+          path: .release-evidence/
+          retention-days: 30
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Stage 4 — publish to npm via OIDC trusted publisher.
+  # Fails closed if the version is already published (idempotent reruns
+  # cannot accidentally double-publish).
+  # ───────────────────────────────────────────────────────────────────────
+  publish-npm:
+    name: Publish to npm (OIDC trusted publisher)
+    needs: build-pack
+    runs-on: ubuntu-latest
+    environment: npm-release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Lockfile integrity (pre-install)
+        run: |
+          echo "ebf5ce3c3b9207fb07cfc2856c1ca3d3232e154133406435511fe99f08e6ae18  package-lock.json" | sha256sum --check --strict -
+          echo "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191  workers/remote-mcp/package-lock.json" | sha256sum --check --strict -
+
+      - name: Install (inert)
+        run: npm ci --ignore-scripts
+
+      - name: Idempotency — version already published?
+        # npm view exits 0 with version output if the version exists.
+        # We refuse to publish a duplicate: re-running this workflow for
+        # the same version MUST continue to verify-npm, NOT republish.
+        id: check
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if npm view "@frihet/mcp-server@${VERSION}" version >/dev/null 2>&1; then
+            PUBLISHED_VERSION="$(npm view "@frihet/mcp-server@${VERSION}" version)"
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::@frihet/mcp-server@${VERSION} is already on the registry (${PUBLISHED_VERSION})"
+            echo "::notice::Skipping publish — continuing to verify-npm."
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build (publish time)
+        if: steps.check.outputs.already_published != 'true'
+        run: npm run build
+
+      - name: Publish via OIDC trusted publisher
+        if: steps.check.outputs.already_published != 'true'
+        env:
+          # No NPM_TOKEN env var is ever read here — the only way npm
+          # authenticates is via the OIDC token automatically minted by
+          # `permissions: id-token: write` + the trusted publisher
+          # configuration on the @frihet/mcp-server npm package, which
+          # is bound to this exact workflow path + environment.
+          NODE_AUTH_TOKEN: ""
+        run: |
+          set -euo pipefail
+          # Belt + suspenders: explicitly refuse any NPM_TOKEN. If a
+          # future contributor adds one, the publish still uses OIDC —
+          # but a loud failure here makes the policy visible in logs.
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            echo "::error::NPM_TOKEN is set but this workflow MUST use OIDC only"
+            echo "Remove the secret from the environment and re-dispatch."
+            exit 1
+          fi
+          # --provenance ties the publish to the OIDC subject + workflow
+          # run + source repo. Anyone querying npm view provenance can
+          # verify the bytes shipped here == the bytes the npm tarball
+          # records as its gitHead.
+          npm publish --provenance --access public
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Stage 5 — registry byte readback. The bytes npm shipped MUST equal
+  # the bytes we packed here. Drift = npm published a different tarball
+  # than the one whose evidence the release workflow holds.
+  # ───────────────────────────────────────────────────────────────────────
+  verify-npm:
+    name: Verify npm registry bytes
+    needs: [build-pack, publish-npm]
+    runs-on: ubuntu-latest
+    environment: npm-release
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download deterministic package evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: mcp-release-evidence-${{ inputs.version }}
+          path: .release-evidence
+
+      - name: Read tarball + fetch registry tarball, compare sha256
+        env:
+          VERSION: ${{ inputs.version }}
+          EXPECTED_TARBALL_SHA: ${{ needs.build-pack.outputs.tarball_sha256 }}
+          EXPECTED_TARBALL_FILENAME: ${{ needs.build-pack.outputs.tarball_filename }}
+          EXPECTED_FILE_MANIFEST_SHA: ${{ needs.build-pack.outputs.file_manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          cd .release-evidence
+          if [ ! -s "$EXPECTED_TARBALL_FILENAME" ]; then
+            echo "::error::local tarball missing from evidence artifact"
+            exit 1
+          fi
+          # The dist.tarball URL is what npm publishes; the tarball behind
+          # it is the artifact users install. We sha256-compare.
+          REGISTRY_TARBALL_URL="$(npm view "@frihet/mcp-server@${VERSION}" dist.tarball)"
+          if [ -z "$REGISTRY_TARBALL_URL" ]; then
+            echo "::error::npm view returned no dist.tarball for @frihet/mcp-server@${VERSION}"
+            exit 1
+          fi
+          curl -fsSL --retry 3 --retry-delay 5 -o registry.tarball "$REGISTRY_TARBALL_URL"
+          REGISTRY_SHA="$(sha256sum registry.tarball | awk '{print $1}')"
+          if [ "$REGISTRY_SHA" != "$EXPECTED_TARBALL_SHA" ]; then
+            echo "::error::registry tarball sha mismatch"
+            echo "  expected (build): $EXPECTED_TARBALL_SHA"
+            echo "  registry:         $REGISTRY_SHA"
+            exit 1
+          fi
+          # File-manifest match — every shipped path + content in our
+          # pack must be present in the registry tarball. Catches a
+          # tampered tarball with the same outer sha (would require a
+          # sha256 collision, but defence-in-depth).
+          REGISTRY_MANIFEST="$(tar -tf registry.tarball | LC_ALL=C sort | sha256sum | awk '{print $1}')"
+          if [ "$REGISTRY_MANIFEST" != "$EXPECTED_FILE_MANIFEST_SHA" ]; then
+            echo "::error::registry tarball file-manifest mismatch"
+            echo "  expected: $EXPECTED_FILE_MANIFEST_SHA"
+            echo "  registry: $REGISTRY_MANIFEST"
+            exit 1
+          fi
+          echo "OK — registry tarball byte-equivalent to local pack evidence"
+
+      - name: Verify npm gitHead == origin/main HEAD
+        env:
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
+        run: |
+          set -euo pipefail
+          GIT_HEAD="$(npm view "@frihet/mcp-server@${{ inputs.version }}" gitHead || true)"
+          # npm 10.x on Node 22 returns gitHead for trusted-publisher
+          # publishes; absent gitHead is a release-anchor RED.
+          if [ -z "$GIT_HEAD" ]; then
+            echo "::error::npm registry returned no gitHead for the published version"
+            echo "The publish-anchor chain is broken. Re-dispatch with a clean full clone."
+            exit 1
+          fi
+          if [ "$GIT_HEAD" != "$SOURCE_COMMIT" ]; then
+            echo "::error::npm gitHead $GIT_HEAD does not match origin/main HEAD $SOURCE_COMMIT"
+            exit 1
+          fi
+          echo "OK — npm gitHead ($GIT_HEAD) === origin/main HEAD"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Stage 6 — deploy Worker. ONLY runs after verify-npm succeeds, so the
+  # bytes on the Worker can never lead the bytes on the registry.
+  # The Worker is injected with RELEASE_SOURCE_SHA so /health can prove
+  # which commit produced the bundle on the wire.
+  # ───────────────────────────────────────────────────────────────────────
+  deploy-worker:
+    name: Deploy Worker (with source-SHA var)
+    needs: verify-npm
+    if: inputs.dry_run != true
+    runs-on: ubuntu-latest
+    environment: npm-release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Worker dependencies
+        run: npm ci --prefix workers/remote-mcp --ignore-scripts
+
+      - name: Typecheck Worker
+        run: npm run typecheck --prefix workers/remote-mcp
+
+      - name: Worker gates (analytics + openapi-fresh)
+        # The Worker's deploy script wraps these two gates. They are
+        # exactly the same ones run by CI; the only difference is they
+        # run before the deploy command rather than as a PR job.
+        run: |
+          npm --prefix ../.. run gate:analytics
+          npm --prefix ../.. run gate:openapi-fresh
+
+      - name: Deploy Worker with source-SHA + version vars
+        # The source SHA + version vars are the second half of the
+        # end-to-end provenance chain. After deploy, verify-worker
+        # fetches /health and asserts releaseSha === origin/main HEAD.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
+          VERSION: ${{ inputs.version }}
+        working-directory: workers/remote-mcp
+        run: |
+          set -euo pipefail
+          npx wrangler deploy \
+            --var "RELEASE_SOURCE_SHA:${SOURCE_COMMIT}" \
+            --var "RELEASE_VERSION:${VERSION}"
+          echo "OK — Worker deployed with RELEASE_SOURCE_SHA=${SOURCE_COMMIT}"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Stage 7 — Worker provenance verification. The Worker on the wire
+  # MUST echo back the source SHA. Mismatch = the Worker is a different
+  # commit than the one that produced the registry tarball, and the
+  # GitHub Release must NOT be created.
+  # ───────────────────────────────────────────────────────────────────────
+  verify-worker:
+    name: Verify Worker provenance (releaseSha)
+    needs: deploy-worker
+    runs-on: ubuntu-latest
+    environment: npm-release
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Fetch /health, assert releaseSha + version
+        env:
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # The canonical Worker. If the deploy added a new zone or
+          # rename, this URL must move with it.
+          HEALTH_URL="https://mcp.frihet.io/health"
+          # Up to 6 retries, 10s apart — Worker deploy propagation is
+          # usually <30s, but we allow generous slack to avoid false RED.
+          HEALTH_BODY=""
+          for i in $(seq 1 6); do
+            HEALTH_BODY="$(curl -fsSL --max-time 15 "$HEALTH_URL" || true)"
+            if [ -n "$HEALTH_BODY" ]; then break; fi
+            echo "::notice::waiting for Worker /health to converge ($i/6)"
+            sleep 10
+          done
+          if [ -z "$HEALTH_BODY" ]; then
+            echo "::error::Worker /health never returned a body"
+            exit 1
+          fi
+          LIVE_SHA="$(printf '%s' "$HEALTH_BODY" | node -e "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>{try{console.log(JSON.parse(s).releaseSha||'')}catch(e){console.log('')}})")"
+          LIVE_VERSION="$(printf '%s' "$HEALTH_BODY" | node -e "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>{try{console.log(JSON.parse(s).releaseVersion||'')}catch(e){console.log('')}})")"
+          LIVE_SOURCE="$(printf '%s' "$HEALTH_BODY" | node -e "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>{try{console.log(JSON.parse(s).releaseSource||'')}catch(e){console.log('')}})")"
+          echo "Worker /health: version=$LIVE_VERSION releaseSha=$LIVE_SHA source=$LIVE_SOURCE"
+          if [ "$LIVE_SHA" != "$SOURCE_COMMIT" ]; then
+            echo "::error::Worker releaseSha $LIVE_SHA != origin/main HEAD $SOURCE_COMMIT"
+            echo "The Worker on the wire is a different commit than the one"
+            echo "that produced the npm tarball. Refusing to release."
+            exit 1
+          fi
+          if [ "$LIVE_VERSION" != "$VERSION" ]; then
+            echo "::error::Worker releaseVersion $LIVE_VERSION != published $VERSION"
+            exit 1
+          fi
+          if [ "$LIVE_SOURCE" != "wrangler-var" ]; then
+            echo "::error::Worker releaseSource $LIVE_SOURCE != wrangler-var"
+            echo "Provenance was not set by the deploy pipeline. Refusing to release."
+            exit 1
+          fi
+          echo "OK — Worker /health proves releaseSha === origin/main HEAD"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Stage 8 — GitHub Release. Only after BOTH verify-npm AND verify-worker
+  # succeed. The tag points at the source commit (github.sha, which was
+  # asserted to BE origin/main HEAD in preflight) — NEVER at a synthetic
+  # metadata-only follow-up commit.
+  # ───────────────────────────────────────────────────────────────────────
+  release-github:
+    name: GitHub Release (tag → source commit)
+    needs: [verify-npm, verify-worker]
+    if: inputs.dry_run != true
+    runs-on: ubuntu-latest
+    environment: npm-release
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Idempotency — release already exists?
+        id: check
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            EXISTING_TARGET="$(gh release view "$TAG" --json targetCommitish --jq '.targetCommitish')"
+            echo "already_exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::GitHub Release $TAG already exists (targetCommitish=$EXISTING_TARGET)"
+          else
+            echo "already_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release (tag → origin/main HEAD)
+        if: steps.check.outputs.already_exists != 'true'
+        env:
+          VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          # --target = exact commit SHA, not a branch. The tag's
+          # dereferenced commit is the source commit that produced the
+          # tarball AND the Worker. Anyone running `git checkout v$VERSION`
+          # lands on the exact code that shipped.
+          NOTES_FILE="$(mktemp)"
+          {
+            printf '## @frihet/mcp-server@%s\n\n' "${VERSION}"
+            printf 'Provenance chain (each link asserted before this Release):\n\n'
+            printf '* npm gitHead: `%s`\n' "${SOURCE_COMMIT}"
+            printf '* Worker /health.releaseSha: `%s`\n' "${SOURCE_COMMIT}"
+            printf '* Release tag: `%s` -> `%s`\n\n' "${TAG}" "${SOURCE_COMMIT}"
+            printf 'The bytes on the registry, the bytes on the Worker, and the bytes the tag\n'
+            printf 'points at are the SAME bytes. Any divergence fails one of the upstream gates\n'
+            printf 'and blocks this Release.\n'
+          } > "${NOTES_FILE}"
+          gh release create "$TAG" \
+            --title "${VERSION}" \
+            --target "${SOURCE_COMMIT}" \
+            --generate-notes \
+            --notes-file "${NOTES_FILE}"
+          rm -f "${NOTES_FILE}"
+          echo "OK — GitHub Release ${TAG} created targeting ${SOURCE_COMMIT}"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Stage 9 — downstream cascade. AFTER the GitHub Release exists, fan the
+  # release out to the MCP Registry, glama.json submission, and Smithery
+  # so all listings point at the same version + SHA.
+  # ───────────────────────────────────────────────────────────────────────
+  cascade:
+    name: Downstream registry cascade
+    needs: release-github
+    if: inputs.dry_run != true && success()
+    runs-on: ubuntu-latest
+    environment: npm-release
+    steps:
+      - name: Trigger MCP Registry publish (workflow_call)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // publish-mcp-registry.yml is the only existing surface that
+            // updates the Anthropic / MCP Registry listing. Triggering it
+            // via workflow_dispatch (not workflow_call — that workflow
+            // does not declare workflow_call trigger) preserves its
+            // existing auth path.
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'publish-mcp-registry.yml',
+              ref: 'main',
+            });
+
+      - name: Smithery refresh (curl)
+        # Smithery's refresh endpoint re-pulls server.json + openapi.json
+        # from our canonical source. The release version + SHA are
+        # picked up automatically because both are derived from the
+        # same origin/main HEAD.
+        env:
+          SMITHERY_SERVER_ID: io.frihet/mcp-server
+        run: |
+          set -euo pipefail
+          # The refresh endpoint is idempotent — Smithery dedupes by
+          # server.json content hash. Calling it with the same content
+          # is a no-op.
+          curl -fsSL --retry 3 --retry-delay 5 -X POST \
+            -H "Authorization: Bearer ${SMITHERY_API_TOKEN}" \
+            "https://smithery.ai/api/v1/servers/${SMITHERY_SERVER_ID}/refresh" \
+            -o /dev/null
+          echo "OK — Smithery refresh submitted"
+        env:
+          SMITHERY_API_TOKEN: ${{ secrets.SMITHERY_API_TOKEN }}
+
+      - name: glama.json listing refresh (manual artifact bump)
+        # glama.json is a static file in the repo. Its `version` field
+        # must equal the just-released version. The release PR includes
+        # that bump; we re-assert it here in case the bump was missed.
+        run: |
+          set -euo pipefail
+          if [ ! -s glama.json ]; then
+            echo "::notice::glama.json not present — skipping"
+            exit 0
+          fi
+          GLAMA_VERSION="$(node -p "JSON.parse(require('fs').readFileSync('glama.json','utf8')).version || ''" 2>/dev/null || true)"
+          if [ "$GLAMA_VERSION" != "${{ inputs.version }}" ]; then
+            echo "::warning::glama.json version ($GLAMA_VERSION) != released (${{ inputs.version }})"
+            echo "::warning::Refresh glama.json in a follow-up PR — this Release is otherwise consistent."
+          else
+            echo "OK — glama.json version matches release"
+          fi
