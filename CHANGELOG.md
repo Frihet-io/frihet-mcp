@@ -4,6 +4,62 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-09-02
+
+### Added
+
+- **`global_search` — cross-resource read-only fan-out across the canonical surface (#168).** The single new MCP tool wraps `GET /v1/search/global` (server-side at `publicApi.ts:4555`) with strict Zod input: `q` 1-200 chars (defensive JSON-Schema `trim()` round-trip), `types` ∈ `{invoices, expenses, vendors, clients, products}` (the 5 canonical kinds), `limit` ≤ 50 mirroring the ERP cap, `offset` ≤ 1000. Workspace isolation is preserved by the server's existing `users/{userId}/...` Firestore subcollection paths — no new auth boundary, no fiscal surface, no mutation surface. OpenAI subset is intentionally NOT touched (canonical-search tools stay full-only). File-group `intelligence` + name-prefix rule `global_search → intelligence`. 10 new tests in `src/__tests__/search-tools.test.ts` pin registration, happy-path, param forwarding, defensive trim, schema shape, and 4xx propagation.
+- **End-to-end provenance release workflow (#171).** `.github/workflows/release-mcp-npm.yml` is a 9-stage pipeline (`preflight` → `gates` → `build-pack` → `publish-npm` → `verify-npm` → `deploy-worker` → `verify-worker` → `release-github` → `cascade`) with explicit `needs:` edges between every stage. Every stage is fail-closed; the npm byte read and the Worker `/health.releaseSha` prove the bytes on the registry, the Worker, and the GitHub Release tag all name the same commit. New `workers/remote-mcp/src/release-meta.ts` reads `RELEASE_SOURCE_SHA` from `wrangler deploy --var ...` and surfaces it on `/health` (whitelist 40-hex-lowercase, fallback `unknown` for day-to-day deploys that don't pass the var). 11 executable contract tests in `scripts/__tests__/release-workflow-contract.test.test.mjs` pin the 9 hostile failure classes (stale source SHA, npm partial publication, Worker failure after npm, Worker wrong release SHA, wrong tag target, GitHub Release before Worker convergence, missing protected environment, token fallback, rerun after partial success) against the actual workflow control code, not prose. Wired into `npm test`.
+
+### Fixed
+
+- **Cross-surface contract authority V2 (#166).** `scripts/cross-surface-authority.mjs` is now offline, deterministic, and fail-closed. The previous live-HTTP check (`contract-fetch.mjs`) was a graceful network skip — a producer PR that breaks a consumer contract could pass the gate when the network was unreachable. V2 reads the committed `workers/remote-mcp/public/openapi.json` projection against `scripts/cross-surface-authority.required.json` (consumer-specific operation-by-operation expectation) and exits 1 on any missing security / response code / schema field. `gate:cross-surface-authority` runs in CI on every PR and the workflow run order is locked.
+- **Cross-surface P0 client truth (non-OAuth, non-fiscal) (#167).** Several non-Trust-Area client signatures drifted away from the live ERP. Brought back into lockstep without expanding the OAuth or fiscal surface: `validateApiKey` response-key pin (`VALID|INVALID|UNAVAILABLE` only), `banking` and `crm` use the canonical ERP contract keys, `pagination-cursor-param` pins the canonical shape, `mutation-unwrap-and-schema-regression` and `mutation-unwrap-and-schema` are paired on every mutation tool, `einvoice` export/submit contracts are aligned.
+- **OAuth A' permissions pinned (#164 → #170 mirror).** `OAUTH_PROVISIONING_CONTRACT.permissionsByProfile` is the canonical mirror between ERP (`functions/src/oauthApiKey.ts`) and MCP (`workers/remote-mcp/src/oauth-provisioning.ts`). OpenAI candidates carry `['read', 'write']` (NO einvoice authority); full candidates carry `['read', 'write', 'einvoice:*']` (matches the full MCP surface). The cross-repo golden test (`workers/remote-mcp/src/__tests__/oauth-url.test.ts`) pins byte-for-byte deepEqual against the contract matrix.
+- **`search-tools.test.ts` 10 tests cover the new `global_search` tool.**
+- **`search` capability pin in the generated public-capability-contract.** `scripts/generate-public-capability-contract.mjs` now reflects the new tool; `gate:public-capability-truth` enforces.
+- **`scripts/check-no-analytics-emitters.mjs` re-snapshots `workers/remote-mcp/src/index.ts`.** The new `release-meta.ts` import + 3-field /health emission are non-network, non-analytics; the source-file hash is re-pinned with an inline comment naming the change scope.
+
+### Changed
+
+- **`package.json#version`: 1.17.1 → 1.18.0.** Capability count in description: `157 → 158` canonical operations (the `global_search` P1 surface).
+- **`server.json` version: 1.17.1 → 1.18.0** (both root `.version` and `.packages[0].version`). `gate:agent-onboarding` and `audit:mcp-refs --repo frihet-mcp` re-checked.
+- **`package-lock.json` version: 1.17.1 → 1.18.0** (no other lockfile change — the package.json deps are unchanged; the lockfile version header follows the package version by convention).
+- **No capability contract change beyond `global_search` addition.** `src/__tests__/fixtures/public-capability-contract.json` regenerates to `canonicalOperations: 158`, `aliasNames: 5`, `discoveryNames: 3`.
+
+### Capability counts (this release)
+
+| Surface | Count | Source of truth |
+|---|---:|---|
+| Canonical business operations | **158** | `src/__tests__/fixtures/public-capability-contract.json#catalogue.canonicalOperations` |
+| Alias names (fiscal modelo) | 5 | `src/fiscal-aliases.ts` |
+| Discovery names (grouped mode meta) | 3 | `src/tool-exposure.ts#GROUPED_META_TOOL_COUNT` |
+| `localFull` profile tools | 163 | generated contract |
+| `openai` profile tools | 33 | curated in `src/openai-profile.ts` (unchanged this release) |
+| Resources (static + API-backed) | 9 | `src/resources/register-all.ts` (`MCP_STATIC_RESOURCE_COUNT`) |
+| Prompts | 10 | `src/prompts/register-all.ts` (`MCP_PROMPT_COUNT`) |
+
+### Release notes
+
+#### For `@frihet/mcp-server` consumers
+
+`global_search` is the only public surface change: agents that previously had to chain `list_invoices` / `list_clients` / `list_vendors` / `list_products` / `list_expenses` + filter on the client side can now call one read-only tool with `q` and a `types` filter. Output shape is the canonical envelope `{data, total, limit, offset, hasMore, query, types, truncated?}` — the same envelope every other list tool already returns. Workspace-scoped, single-tenant, no fiscal / mutation / OpenAI-surface exposure.
+
+The release pipeline itself is new: prior releases were a hand-rolled `npm publish` with no byte readback. 1.18.0 is the first release that can be re-derived from a single source-commit on main via the new workflow at `.github/workflows/release-mcp-npm.yml` (dispatch input `version`, protected `npm-release` environment, OIDC trusted publisher, byte-readback on npm, `/health.releaseSha` assertion on the Worker). Release-prep is mechanical; publication remains a manual `gh workflow run` from a Viktor-reviewed source commit.
+
+OAuth A' ships the long-promised profile-scoped permission matrix; nothing changes for already-provisioned 1.17.x candidate keys (legacy 1.16.x compatibility still gated by exact byte shape `{ uid }` no service header — retirement requires telemetry = 0 uses for 30 days across both public Worker hosts).
+
+#### For MCP Registry + Smithery submitters
+
+`server.json` is in sync. `npm install @frihet/mcp-server@1.18.0` after the release workflow fires the GitHub Release at `v1.18.0`.
+
+#### NOT in this release
+
+- **No package.json dep change** (dependency surface is the same).
+- **No Worker runtime change** beyond the `/health` field additions and the `release-meta.ts` read of the wrangler var.
+- **No new outbound network sinks** (analytics tripwire passes; `check-no-analytics-emitters.mjs` reports 26 approved sinks — unchanged).
+- **No npm publish, no Worker deploy, no environment mutation.** This PR is release-PREP only. The release workflow (now landed on main via #171) is what actually publishes 1.18.0.
+
 ## [1.17.1] — 2026-08-30
 
 ### Fixed
