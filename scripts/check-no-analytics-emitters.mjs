@@ -265,7 +265,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/oauth-token-family.ts": "fc0cb5c82b0d698139a0caf3dfae34d267e7366b6d073b4d1b901c8267af0eb6",
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "ebf5ce3c3b9207fb07cfc2856c1ca3d3232e154133406435511fe99f08e6ae18",
+  "package-lock.json": "e47d353cd4be5a0813b23746f777aa8830d63fb6c6239ca92a369a8fdddc8482", // #172: 1.18.0 version bump rewrites top-level version field
   "workers/remote-mcp/package-lock.json": "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
@@ -281,7 +281,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  ".github/workflows/ci.yml": "afb5a58808a20cb512a071210c38f02f551251a9b35297b6540a5a966440978d",
+  ".github/workflows/ci.yml": "f1b92d2cb0d30d7159692ef068a0679a5025a076f24e955ce8cd0a247f8e4210", // #172: 1.18.0 version bump refreshed package-lock.json hash pin
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "6799c971a773f04cd39d8e134c042474d23bfb1e949348df2e382b6fceb10023",
