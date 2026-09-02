@@ -45,6 +45,10 @@ test("OAuth provisioning golden matches the ERP two-phase contract", () => {
       full: "https://mcp.frihet.io",
     },
     permissions: ["read", "write"],
+    permissionsByProfile: {
+      openai: ["read", "write"],
+      full: ["read", "write", "einvoice:*"],
+    },
   });
 });
 

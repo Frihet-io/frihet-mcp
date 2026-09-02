@@ -260,7 +260,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/index.ts": "a63033e9b79621f6758b7732fda0c88f13e8d229acb3a77f406295ef5faccd52",
   "workers/remote-mcp/src/login-page.ts": "1c4d6dcacbbcdc47db152242a4ca4adfb83b4f0229903e0550c63b973ab00ff5",
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
-  "workers/remote-mcp/src/oauth-provisioning.ts": "d396b7442539786ee50ed6704a585fc24e44ef21d3e8420b50f08c1376326f90",
+  "workers/remote-mcp/src/oauth-provisioning.ts": "8c6b6599a2f687f539c116a2dd88591f9a71ea1c2a06aaa17f0ca30a25b60c4c",
   "workers/remote-mcp/src/oauth-state-store.ts": "9785c628b2a01d80c06267a0c39beb93f9d9b7a11b26369d48aa2cc705bf7906",
   "workers/remote-mcp/src/oauth-token-family.ts": "fc0cb5c82b0d698139a0caf3dfae34d267e7366b6d073b4d1b901c8267af0eb6",
 });
