@@ -22,9 +22,9 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ### Changed
 
-- **`package.json#version`: 1.17.1 → 1.18.0.** Capability count in description: `157 → 158` canonical operations (the `global_search` P1 surface).
-- **`server.json` version: 1.17.1 → 1.18.0** (both root `.version` and `.packages[0].version`). `gate:agent-onboarding` and `audit:mcp-refs --repo frihet-mcp` re-checked.
-- **`package-lock.json` version: 1.17.1 → 1.18.0** (no other lockfile change — the package.json deps are unchanged; the lockfile version header follows the package version by convention).
+- **`package.json#version`: bumped to 1.18.0.** Capability count in description: `157 → 158` canonical operations (the `global_search` P1 surface).
+- **`server.json` version: bumped to 1.18.0** (both root `.version` and `.packages[0].version`). `gate:agent-onboarding` and `audit:mcp-refs --repo frihet-mcp` re-checked.
+- **`package-lock.json` version: bumped to 1.18.0** (no other lockfile change — the package.json deps are unchanged; the lockfile version header follows the package version by convention).
 - **No capability contract change beyond `global_search` addition.** `src/__tests__/fixtures/public-capability-contract.json` regenerates to `canonicalOperations: 158`, `aliasNames: 5`, `discoveryNames: 3`.
 
 ### Capability counts (this release)
