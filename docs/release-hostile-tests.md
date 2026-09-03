@@ -10,6 +10,12 @@ All cases below assume `version=1.18.0` (the just-released version) and
 locally by patching the workflow OR by manipulating the inputs / branch /
 commit state before dispatch.
 
+Scope is deliberately limited: this workflow deploys and verifies the
+full-profile Worker at `mcp.frihet.io`. It does **not** run `wrangler deploy
+--env openai` and does not verify `openai-mcp.frihet.io`. The dedicated OpenAI
+review surface is a separate release surface and requires its own reviewed
+deployment and readback workflow.
+
 ---
 
 ## 1. Wrong order
@@ -225,29 +231,42 @@ force-pushes there; if they don't, the tag's SHA is still safe.
 
 ### 6a. `npm-release` environment does not exist
 
-**Setup:** Workflow dispatched without the environment ever being created.
+**Setup:** A real (`dry_run=false`) workflow is dispatched without the
+environment ever being created. Dry runs intentionally skip this platform
+prerequisite so their non-mutating gates and pack evidence remain usable.
 
-**Expected behaviour:** GitHub Actions rejects the dispatch with a 404
-on `environment: npm-release`. The workflow cannot start.
+**Expected behaviour:** GitHub may auto-create a referenced environment with
+no protection. The environment-free `preflight` job therefore queries the
+exact `npm-release` environment first; a 404 or unreadable response exits 1
+before any environment-scoped job is reached. As defence in depth,
+`authorize-release` requires the environment-scoped
+`NPM_RELEASE_ENV_GUARD`; an auto-created empty environment cannot supply it.
+Before the first irreversible mutation, the same job also requires the
+Cloudflare account/token pair, Smithery token, and MCP Registry private key
+used by later stages. A known missing downstream credential therefore cannot
+strand a release after npm has already accepted the package.
 
-**Stage that catches:** GitHub's own `environment:` validation. The
-mission explicitly does NOT create this environment — that is a GitHub
-UI action for Viktor with required reviewers + a deployment branch
-rule.
+**Stage that catches:** `preflight` "Assert protected npm-release environment
+exists", followed by the non-mutating `authorize-release` sentinel check.
+Every mutating job depends directly on `authorize-release`. Repository owners
+must create and inspect the environment, eligible reviewer, branch policy, and
+complete credential set out of band before dispatch; the environment name
+alone is not proof.
 
 ### 6b. Environment exists but no required reviewers
 
 **Setup:** Environment created without `required reviewers` configured.
 
-**Expected behaviour:** Anyone with `workflow_dispatch` permission can
-trigger the workflow. The environment protection rule is what makes
-release a two-key event. Without it, the workflow still runs — but
-Viktor's standing order is that production releases are reviewed before
-dispatch.
+**Expected behaviour:** `preflight` parses the live environment's
+`protection_rules` and exits 1 unless a `required_reviewers` rule has at least
+one reviewer and `prevent_self_review` is true. `authorize-release` is not a
+substitute for this independent approval; it is an additional fail-closed
+sentinel against an empty or auto-created environment.
 
-**Stage that catches:** This is the policy gap, not a CI gate. The
-mission's no-publish posture means we do not exercise this case; the
-hostile case is the operator's standing order, not a code path.
+**Stage that catches:** `preflight` "Assert protected npm-release environment
+exists". The executable release contract freezes the API check, sentinel, and
+the direct `needs: authorize-release` edges. Reviewer eligibility remains
+GitHub repository configuration that must be verified out of band.
 
 ### 6c. Environment protection bypassed via direct push
 
@@ -286,7 +305,7 @@ configuration.
 | 6b no reviewers   | unset rule       | dispatch          | n/a              |
 | 6c direct push    | push main        | n/a               | n/a              |
 
-All cases are reproducible by hand; none run in CI by design. The
-workflow's fail-closed semantics make them impossible to "accidentally"
-trigger via normal use — the hostile case is the failure mode that
-arises from a misconfigured environment or a malicious PR.
+The executable contract exercises the non-mutating structure and fail-closed
+branches in CI. No hostile test performs a publish, deploy, release, or real
+environment mutation. Cases requiring platform state remain an out-of-band
+owner check before dispatch.

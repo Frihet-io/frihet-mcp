@@ -16,6 +16,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate GitHub Actions workflows
+        # Use the real Actions-aware parser. Text/regex contract tests cannot
+        # detect unsupported workflow-level keys or every duplicate mapping.
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
