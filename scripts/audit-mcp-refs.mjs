@@ -232,6 +232,12 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
     ]),
   );
   const remote = surfaces.remoteGrouped;
+  const countWords = [
+    'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+    'Seventeen', 'Eighteen', 'Nineteen', 'Twenty',
+  ];
+  const countWord = (value) => countWords[value] ?? String(value);
 
   const stale = (jsonPath, found, expected) => {
     if (found !== expected) {
@@ -260,16 +266,6 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
         jsonPath,
         found,
         expected: [expected],
-      });
-    }
-  };
-  const expectNonemptyUniformScalars = (jsonPath, found, expected) => {
-    if (found.length === 0 || found.some((value) => value !== expected)) {
-      drifts.push({
-        kind: 'release-projection',
-        jsonPath,
-        found,
-        expected: `one or more claims, all equal to ${expected}`,
       });
     }
   };
@@ -330,6 +326,18 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
       text: document.slice(start, next?.index ?? document.length),
     };
   };
+  const markdownSection = (document, heading) => {
+    if (typeof document !== 'string') return { count: 0, text: '' };
+    const headings = [...document.matchAll(/^## ([^\r\n]+)$/gmu)];
+    const current = headings.filter((match) => match[1] === heading);
+    if (current.length !== 1) return { count: current.length, text: '' };
+    const start = current[0].index + current[0][0].length;
+    const next = headings.find((match) => match.index > start);
+    return {
+      count: 1,
+      text: document.slice(start, next?.index ?? document.length),
+    };
+  };
 
   stale('package.json.version', input.packageJson?.version, expectedVersion);
   stale('glama.json.version', input.glamaJson?.version, expectedVersion);
@@ -361,20 +369,61 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
     input.glamaJson?.description,
     `AI-native MCP server for business management. The catalogue contains ${canonical} canonical operations; the grouped remote profile serves ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts with conservative callability and side-effect metadata.`,
   );
-  const surfaceTruthLines = typeof input.readme === 'string'
-    ? input.readme.split(/\r?\n/u).filter((line) => line.startsWith('> **Surface truth:**'))
-    : [];
-  const readmeCanonicalClaims = typeof input.readme === 'string'
-    ? [...input.readme.matchAll(/\b(\d+)\s+canonical(?:\s+catalogue)?\s+operations\b/giu)]
-      .map((match) => Number(match[1]))
-    : [];
-  expectNonemptyUniformScalars('README.md.canonical-claims', readmeCanonicalClaims, canonical);
+  const readmeLines = typeof input.readme === 'string' ? input.readme.split(/\r?\n/u) : [];
+  const distributionSection = markdownSection(input.readme, 'Distribution');
+  stale('README.md.distribution-section-count', distributionSection.count, 1);
+  const surfaceTruthLines = distributionSection.text
+    .split(/\r?\n/u)
+    .filter((line) => line.startsWith('> **Surface truth:**'));
   stale('README.md.surface-truth-line-count', surfaceTruthLines.length, 1);
   const surfaceTruth = surfaceTruthLines.length === 1 ? surfaceTruthLines[0] : '';
   contains(
     'README.md.surface-truth.canonical',
     surfaceTruth,
     `> **Surface truth:** the catalogue contains ${canonical} canonical operations.`,
+  );
+  const catalogueBadgeLines = readmeLines.filter((line) =>
+    line.includes('img.shields.io/badge/catalogue-')
+  );
+  stale('README.md.catalogue-badge-line-count', catalogueBadgeLines.length, 1);
+  stale(
+    'README.md.catalogue-badge',
+    catalogueBadgeLines.length === 1 ? catalogueBadgeLines[0].trim() : '',
+    `<img src="https://img.shields.io/badge/catalogue-${canonical}_operations-18181b?style=flat&labelColor=09090b" alt="${canonical} canonical catalogue operations">`,
+  );
+  const whatIsThisSection = markdownSection(input.readme, 'What is this');
+  stale('README.md.what-is-this-section-count', whatIsThisSection.count, 1);
+  const visibleWhatIsThis = whatIsThisSection.text.replace(/<!--[\s\S]*?-->/gu, '');
+  const summaryLines = visibleWhatIsThis.split(/\r?\n/u).filter((line) =>
+    /^\d+ canonical operations\. [A-Z][a-z]+ fiscal aliases\. [A-Z][a-z]+ prompts\. The local package serves \d+ resources;/u.test(line)
+  );
+  stale('README.md.current-summary-line-count', summaryLines.length, 1);
+  stale(
+    'README.md.current-summary',
+    summaryLines.length === 1 ? summaryLines[0] : '',
+    `${canonical} canonical operations. ${countWord(surfaces.localFull?.tools - canonical)} fiscal aliases. ${countWord(surfaces.localFull?.prompts)} prompts. The local package serves ${surfaces.localFull?.resources} resources; the hosted Worker deliberately serves the ${remote?.resources} static resources, while API-backed workspace resources remain local-profile only.`,
+  );
+  const expectationSection = markdownSection(input.readme, 'What to expect');
+  stale('README.md.what-to-expect-section-count', expectationSection.count, 1);
+  const expectationLines = expectationSection.text.split(/\r?\n/u).filter((line) =>
+    line.startsWith('This MCP is a **structured data interface** -- ')
+  );
+  stale('README.md.what-to-expect-line-count', expectationLines.length, 1);
+  const expectationCanonical = expectationLines.length === 1
+    ? [...expectationLines[0].matchAll(/\bMost of the (\d+) canonical operations\b/gu)]
+      .map((match) => Number(match[1]))
+    : [];
+  expectUniqueScalar('README.md.what-to-expect.canonical', expectationCanonical, canonical);
+  const ecosystemSection = markdownSection(input.readme, 'Ecosystem');
+  stale('README.md.ecosystem-section-count', ecosystemSection.count, 1);
+  const packageRows = ecosystemSection.text.split(/\r?\n/u).filter((line) =>
+    line.startsWith('| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) |')
+  );
+  stale('README.md.package-row-count', packageRows.length, 1);
+  stale(
+    'README.md.package-row',
+    packageRows.length === 1 ? packageRows[0] : '',
+    `| [\`@frihet/mcp-server\`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (${canonical} canonical operations + ${surfaces.localFull?.tools - canonical} alias names; ${surfaces.localFull?.resources} local resources; ${surfaces.localFull?.prompts} prompts) |`,
   );
   const readmeProfileLabels = {
     localFull: 'local full profile',
@@ -385,12 +434,6 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
     expectUniqueProfileTuple(
       `README.md.surface-truth.${name}`,
       surfaceTruth,
-      readmeProfileLabels[name],
-      counts,
-    );
-    expectUniqueProfileTuple(
-      `README.md.claims.${name}`,
-      input.readme,
       readmeProfileLabels[name],
       counts,
     );

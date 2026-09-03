@@ -234,13 +234,16 @@ describe("current release projection gate", () => {
     const paths = drifts.map((drift) => drift.jsonPath);
     for (const profile of ["localFull", "remoteGrouped"]) {
       assert.ok(paths.includes(`README.md.surface-truth.${profile}`));
-      assert.ok(paths.includes(`README.md.claims.${profile}`));
     }
   });
 
   test("contradictory duplicate public claims cannot hide behind a correct claim", () => {
     const mutations: Array<[string, (input: ReleaseProjectionInput) => void]> = [
-      ["README", (input) => { input.readme += "\nThe local full profile serves 999 tool names, 11 resources, and 10 prompts.\n"; }],
+      ["README", (input) => {
+        const current = "158 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources; the hosted Worker deliberately serves the 7 static resources, while API-backed workspace resources remain local-profile only.";
+        const stale = current.replace("158 canonical operations", "157 canonical operations");
+        input.readme = input.readme.replace(current, `${current}\n${stale}`);
+      }],
       ["Glama", (input) => { input.glamaJson.description += " The grouped remote profile serves 165 tool names, 7 resources, and 10 prompts."; }],
       ["package", (input) => { input.packageJson.description += " Legacy claim: 157 canonical operations."; }],
       ["Anthropic", (input) => { input.anthropicManifest.description += " The grouped remote profile exposes 165 tool names, 7 resources, and 10 prompts."; }],
@@ -265,7 +268,19 @@ describe("current release projection gate", () => {
     input.readme = input.readme.replace(current, stale);
 
     const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
-    assert.ok(paths.includes("README.md.canonical-claims"));
+    assert.ok(paths.includes("README.md.current-summary"));
+  });
+
+  test("an explicitly historical README claim is outside current structural anchors", () => {
+    const input = releaseProjectionInput();
+    const historicalComment = "<!-- v1.12.0-beta.1 — D4-B megasprint:";
+    assert.ok(input.readme.includes(historicalComment), "fixture must contain the historical HTML comment");
+    input.readme = input.readme.replace(
+      historicalComment,
+      "<!-- Historical release note: 157 canonical operations. v1.12.0-beta.1 — D4-B megasprint:",
+    );
+
+    assert.deepEqual(checkCurrentReleaseProjections(input, SOT_VERSION), []);
   });
 
   test("current CHANGELOG truth cannot be satisfied by a historical-only match", () => {
