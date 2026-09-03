@@ -283,6 +283,20 @@ describe("current release projection gate", () => {
     assert.deepEqual(checkCurrentReleaseProjections(input, SOT_VERSION), []);
   });
 
+  test("a stale canonical summary relocated into a new public section fails", () => {
+    const input = releaseProjectionInput();
+    input.readme += [
+      "",
+      "## Additional public summary",
+      "",
+      "157 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources.",
+      "",
+    ].join("\n");
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("README.md.public-canonical-claims"));
+  });
+
   test("current CHANGELOG truth cannot be satisfied by a historical-only match", () => {
     const input = releaseProjectionInput();
     const projectionLine = input.changelog

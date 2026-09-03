@@ -269,6 +269,16 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
       });
     }
   };
+  const expectNonemptyUniformScalars = (jsonPath, found, expected) => {
+    if (found.length === 0 || found.some((value) => value !== expected)) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found,
+        expected: `one or more public claims, all equal to ${expected}`,
+      });
+    }
+  };
   const profileTuples = (text, label) => {
     if (typeof text !== 'string') return [];
     const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
@@ -369,8 +379,19 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
     input.glamaJson?.description,
     `AI-native MCP server for business management. The catalogue contains ${canonical} canonical operations; the grouped remote profile serves ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts with conservative callability and side-effect metadata.`,
   );
-  const readmeLines = typeof input.readme === 'string' ? input.readme.split(/\r?\n/u) : [];
-  const distributionSection = markdownSection(input.readme, 'Distribution');
+  const publicReadme = typeof input.readme === 'string'
+    ? input.readme.replace(/<!--[\s\S]*?-->/gu, '')
+    : '';
+  const readmeLines = publicReadme.split(/\r?\n/u);
+  const publicCanonicalClaims = [
+    ...publicReadme.matchAll(/\b(\d+)\s+canonical(?:\s+catalogue)?\s+operations\b/giu),
+  ].map((match) => Number(match[1]));
+  expectNonemptyUniformScalars(
+    'README.md.public-canonical-claims',
+    publicCanonicalClaims,
+    canonical,
+  );
+  const distributionSection = markdownSection(publicReadme, 'Distribution');
   stale('README.md.distribution-section-count', distributionSection.count, 1);
   const surfaceTruthLines = distributionSection.text
     .split(/\r?\n/u)
@@ -391,10 +412,9 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
     catalogueBadgeLines.length === 1 ? catalogueBadgeLines[0].trim() : '',
     `<img src="https://img.shields.io/badge/catalogue-${canonical}_operations-18181b?style=flat&labelColor=09090b" alt="${canonical} canonical catalogue operations">`,
   );
-  const whatIsThisSection = markdownSection(input.readme, 'What is this');
+  const whatIsThisSection = markdownSection(publicReadme, 'What is this');
   stale('README.md.what-is-this-section-count', whatIsThisSection.count, 1);
-  const visibleWhatIsThis = whatIsThisSection.text.replace(/<!--[\s\S]*?-->/gu, '');
-  const summaryLines = visibleWhatIsThis.split(/\r?\n/u).filter((line) =>
+  const summaryLines = whatIsThisSection.text.split(/\r?\n/u).filter((line) =>
     /^\d+ canonical operations\. [A-Z][a-z]+ fiscal aliases\. [A-Z][a-z]+ prompts\. The local package serves \d+ resources;/u.test(line)
   );
   stale('README.md.current-summary-line-count', summaryLines.length, 1);
@@ -403,7 +423,7 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
     summaryLines.length === 1 ? summaryLines[0] : '',
     `${canonical} canonical operations. ${countWord(surfaces.localFull?.tools - canonical)} fiscal aliases. ${countWord(surfaces.localFull?.prompts)} prompts. The local package serves ${surfaces.localFull?.resources} resources; the hosted Worker deliberately serves the ${remote?.resources} static resources, while API-backed workspace resources remain local-profile only.`,
   );
-  const expectationSection = markdownSection(input.readme, 'What to expect');
+  const expectationSection = markdownSection(publicReadme, 'What to expect');
   stale('README.md.what-to-expect-section-count', expectationSection.count, 1);
   const expectationLines = expectationSection.text.split(/\r?\n/u).filter((line) =>
     line.startsWith('This MCP is a **structured data interface** -- ')
@@ -414,7 +434,7 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
       .map((match) => Number(match[1]))
     : [];
   expectUniqueScalar('README.md.what-to-expect.canonical', expectationCanonical, canonical);
-  const ecosystemSection = markdownSection(input.readme, 'Ecosystem');
+  const ecosystemSection = markdownSection(publicReadme, 'Ecosystem');
   stale('README.md.ecosystem-section-count', ecosystemSection.count, 1);
   const packageRows = ecosystemSection.text.split(/\r?\n/u).filter((line) =>
     line.startsWith('| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) |')
