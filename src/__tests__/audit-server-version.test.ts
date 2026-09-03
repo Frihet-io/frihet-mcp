@@ -34,8 +34,60 @@ const checkServerJsonVersion = auditMod.checkServerJsonVersion as (
   serverJson: unknown,
   expectedVersion: string,
 ) => Array<{ kind: string; jsonPath: string; found: unknown; expected: string }>;
+type ReleaseProjectionInput = {
+  packageJson: { version: string; description: string };
+  glamaJson: { version: string; description: string };
+  releasesJson: {
+    version: string;
+    mcpToolCount: number;
+    products: { mcp_server: { version: string } };
+    releases: Array<Record<string, unknown> & { version: string }>;
+    surfaceCounts: Record<string, { tools: number; resources: number; prompts: number }>;
+  };
+  anthropicManifest: {
+    version: string;
+    description: string;
+    packages: Array<{ version: string }>;
+  };
+  readme: string;
+  changelog: string;
+  capabilityContract: {
+    catalogue: { canonicalOperations: number };
+    surfaces: Record<string, { tools: unknown[]; resources: unknown[]; prompts: unknown[] }>;
+  };
+  skillDocuments: string[];
+};
+const checkCurrentReleaseProjections = auditMod.checkCurrentReleaseProjections as (
+  input: ReleaseProjectionInput,
+  expectedVersion: string,
+) => Array<{ kind: string; jsonPath: string; found: unknown; expected: unknown }>;
 
 const SOT_VERSION = JSON.parse(readFileSync(PKG_PATH, "utf8")).version as string;
+
+function releaseProjectionInput(): ReleaseProjectionInput {
+  return {
+    packageJson: JSON.parse(readFileSync(PKG_PATH, "utf8")),
+    glamaJson: JSON.parse(readFileSync(join(REPO_ROOT, "glama.json"), "utf8")),
+    releasesJson: JSON.parse(readFileSync(
+      join(REPO_ROOT, "workers", "remote-mcp", "public", "releases.json"),
+      "utf8",
+    )),
+    anthropicManifest: JSON.parse(readFileSync(
+      join(REPO_ROOT, "marketplace", "anthropic", "connector", "manifest.json"),
+      "utf8",
+    )),
+    readme: readFileSync(join(REPO_ROOT, "README.md"), "utf8"),
+    changelog: readFileSync(join(REPO_ROOT, "CHANGELOG.md"), "utf8"),
+    capabilityContract: JSON.parse(readFileSync(
+      join(REPO_ROOT, "src", "__tests__", "fixtures", "public-capability-contract.json"),
+      "utf8",
+    )),
+    skillDocuments: [
+      readFileSync(join(REPO_ROOT, "skill", "SKILL.md"), "utf8"),
+      readFileSync(join(REPO_ROOT, "skills", "frihet-mcp", "SKILL.md"), "utf8"),
+    ],
+  };
+}
 
 describe("server.json version gate", () => {
   test("exports a checkServerJsonVersion helper", () => {
@@ -122,5 +174,182 @@ describe("server.json version gate", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("current release projection gate", () => {
+  test("real package-facing projections match generated profile truth", () => {
+    assert.deepEqual(checkCurrentReleaseProjections(releaseProjectionInput(), SOT_VERSION), []);
+  });
+
+  test("bare JSON version drift cannot pass the line-oriented audit", () => {
+    const mutations: Array<[string, (input: ReleaseProjectionInput) => void]> = [
+      ["glama", (input) => { input.glamaJson.version = "0.0.0"; }],
+      ["default Worker release root", (input) => { input.releasesJson.version = "0.0.0"; }],
+      ["default Worker product", (input) => { input.releasesJson.products.mcp_server.version = "0.0.0"; }],
+      ["Anthropic root", (input) => { input.anthropicManifest.version = "0.0.0"; }],
+      ["Anthropic npm package", (input) => { input.anthropicManifest.packages[0].version = "0.0.0"; }],
+      ["skill frontmatter", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 1.18.0", "  version: 0.0.0"); }],
+    ];
+    for (const [label, mutate] of mutations) {
+      const input = releaseProjectionInput();
+      mutate(input);
+      assert.ok(
+        checkCurrentReleaseProjections(input, SOT_VERSION).length > 0,
+        `${label} version drift must fail`,
+      );
+    }
+  });
+
+  test("canonical and per-profile count drift fails in prose and structured metadata", () => {
+    const mutations: Array<[string, (input: ReleaseProjectionInput) => void]> = [
+      ["package canonical prose", (input) => { input.packageJson.description = "157 canonical operations"; }],
+      ["README generated surface", (input) => { input.readme = input.readme.replace("166 tool names, 7 resources, and 10 prompts", "165 tool names, 9 resources, and 10 prompts"); }],
+      ["Glama remote surface", (input) => { input.glamaJson.description = "158 canonical operations"; }],
+      ["release local resources", (input) => { input.releasesJson.surfaceCounts.localFull.resources = 9; }],
+      ["release OpenAI prompts", (input) => { input.releasesJson.surfaceCounts.openaiFull.prompts = 10; }],
+      ["skill catalogue", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replaceAll("158 canonical operations", "157 canonical operations"); }],
+      ["Anthropic remote profile", (input) => { input.anthropicManifest.description = input.anthropicManifest.description.replace("166 tool names, 7 resources, and 10 prompts", "163 tool names, 11 resources, and 10 prompts"); }],
+    ];
+    for (const [label, mutate] of mutations) {
+      const input = releaseProjectionInput();
+      mutate(input);
+      assert.ok(
+        checkCurrentReleaseProjections(input, SOT_VERSION).length > 0,
+        `${label} drift must fail`,
+      );
+    }
+  });
+
+  test("README counts are bound to their exact profile labels", () => {
+    const input = releaseProjectionInput();
+    const localCounts = "163 tool names, 11 resources, and 10 prompts";
+    const remoteCounts = "166 tool names, 7 resources, and 10 prompts";
+    input.readme = input.readme
+      .replace(localCounts, "__LOCAL_COUNTS__")
+      .replace(remoteCounts, localCounts)
+      .replace("__LOCAL_COUNTS__", remoteCounts);
+
+    const drifts = checkCurrentReleaseProjections(input, SOT_VERSION);
+    const paths = drifts.map((drift) => drift.jsonPath);
+    for (const profile of ["localFull", "remoteGrouped"]) {
+      assert.ok(paths.includes(`README.md.surface-truth.${profile}`));
+    }
+  });
+
+  test("contradictory duplicate public claims cannot hide behind a correct claim", () => {
+    const mutations: Array<[string, (input: ReleaseProjectionInput) => void]> = [
+      ["README", (input) => {
+        const current = "158 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources; the hosted Worker deliberately serves the 7 static resources, while API-backed workspace resources remain local-profile only.";
+        const stale = current.replace("158 canonical operations", "157 canonical operations");
+        input.readme = input.readme.replace(current, `${current}\n${stale}`);
+      }],
+      ["Glama", (input) => { input.glamaJson.description += " The grouped remote profile serves 165 tool names, 7 resources, and 10 prompts."; }],
+      ["package", (input) => { input.packageJson.description += " Legacy claim: 157 canonical operations."; }],
+      ["Anthropic", (input) => { input.anthropicManifest.description += " The grouped remote profile exposes 165 tool names, 7 resources, and 10 prompts."; }],
+      ["skill metadata", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 1.18.0", "  version: 1.18.0\n  version: 0.0.0"); }],
+      ["current changelog", (input) => { input.changelog = input.changelog.replace("The catalogue has 158 canonical operations.", "The catalogue has 158 canonical operations. The catalogue has 157 canonical operations. `localFull` exposes 999 tool names, 11 resources, and 10 prompts."); }],
+    ];
+    for (const [label, mutate] of mutations) {
+      const input = releaseProjectionInput();
+      mutate(input);
+      assert.ok(
+        checkCurrentReleaseProjections(input, SOT_VERSION).length > 0,
+        `${label} contradictory duplicate must fail`,
+      );
+    }
+  });
+
+  test("stale canonical prose beside resource counts cannot bypass the README gate", () => {
+    const input = releaseProjectionInput();
+    const current = "158 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources";
+    const stale = "157 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources";
+    assert.match(input.readme, new RegExp(current.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")));
+    input.readme = input.readme.replace(current, stale);
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("README.md.current-summary"));
+  });
+
+  test("explicitly historical README canonical and profile claims are outside the public scan", () => {
+    const input = releaseProjectionInput();
+    const historicalComment = "<!-- v1.12.0-beta.1 — D4-B megasprint:";
+    assert.ok(input.readme.includes(historicalComment), "fixture must contain the historical HTML comment");
+    input.readme = input.readme.replace(
+      historicalComment,
+      "<!-- Historical release note: 157 canonical operations. The hosted grouped profile serves 165 tool names, 9 resources, and 8 prompts. v1.12.0-beta.1 — D4-B megasprint:",
+    );
+
+    assert.deepEqual(checkCurrentReleaseProjections(input, SOT_VERSION), []);
+  });
+
+  test("a stale canonical summary relocated into a new public section fails", () => {
+    const input = releaseProjectionInput();
+    input.readme += [
+      "",
+      "## Additional public summary",
+      "",
+      "157 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources.",
+      "",
+    ].join("\n");
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("README.md.public-canonical-claims"));
+  });
+
+  test("a stale profile tuple relocated into a new public section fails", () => {
+    const input = releaseProjectionInput();
+    input.readme += [
+      "",
+      "## Additional public profile",
+      "",
+      "The hosted grouped profile serves 165 tool names, 9 resources, and 8 prompts.",
+      "",
+    ].join("\n");
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("README.md.public-profile.remoteGrouped"));
+  });
+
+  test("a stale profile tuple split across visible lines still fails", () => {
+    const input = releaseProjectionInput();
+    input.readme += [
+      "",
+      "## Multiline public profile",
+      "",
+      "The hosted grouped profile serves",
+      "165 tool names, 9 resources, and 8 prompts.",
+      "",
+    ].join("\n");
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("README.md.public-profile.remoteGrouped"));
+  });
+
+  test("profile matching cannot cross Markdown headings or HTML comments", () => {
+    const input = releaseProjectionInput();
+    input.readme += [
+      "",
+      "The hosted grouped profile serves",
+      "## Boundary",
+      "165 tool names, 9 resources, and 8 prompts.",
+      "The OpenAI profile serves<!-- explicit historical boundary -->165 tool names, 9 resources, and 8 prompts.",
+      "",
+    ].join("\n");
+
+    assert.deepEqual(checkCurrentReleaseProjections(input, SOT_VERSION), []);
+  });
+
+  test("current CHANGELOG truth cannot be satisfied by a historical-only match", () => {
+    const input = releaseProjectionInput();
+    const projectionLine = input.changelog
+      .split(/\r?\n/u)
+      .find((line) => line.startsWith("- **Release projections now agree on "));
+    assert.ok(projectionLine, "fixture must contain the current projection line");
+    input.changelog = input.changelog.replace(`${projectionLine}\n`, "") + `\n${projectionLine}\n`;
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("CHANGELOG.md.current-release.projection-line-count"));
+    assert.ok(paths.includes("CHANGELOG.md.current-release.localFull"));
   });
 });

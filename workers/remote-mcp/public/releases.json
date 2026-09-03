@@ -3,7 +3,24 @@
   "languageCount": 17,
   "lastEmit": "2026-07-12T01:39:18.540Z",
   "manifestChecksum": "cb7bccb0cc7fcbb4c0189809cf6368eec4adc6955b4701aae97f64f505bd1782",
-  "mcpToolCount": 157,
+  "mcpToolCount": 158,
+  "surfaceCounts": {
+    "localFull": {
+      "tools": 163,
+      "resources": 11,
+      "prompts": 10
+    },
+    "remoteGrouped": {
+      "tools": 166,
+      "resources": 7,
+      "prompts": 10
+    },
+    "openaiFull": {
+      "tools": 33,
+      "resources": 0,
+      "prompts": 0
+    }
+  },
   "products": {
     "app": {
       "status": "live",
@@ -19,7 +36,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.16.4"
+      "version": "1.18.0"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -28,8 +45,17 @@
       "version": "0.1.0"
     }
   },
-  "releasedAt": "2026-07-21",
+  "releasedAt": "2026-09-03",
   "releases": [
+    {
+      "version": "1.18.0",
+      "date": "2026-09-03",
+      "mcpToolCount": 158,
+      "toolNamesCount": 166,
+      "resourcesCount": 7,
+      "promptsCount": 10,
+      "notes": "Adds the read-only, workspace-scoped global_search canonical operation for invoices, expenses, vendors, clients, and products. The default hosted grouped profile now exposes 158 canonical operations plus 5 fiscal aliases and 3 discovery names; the separately reviewed OpenAI profile is unchanged and is not deployed by the default release workflow. This source release also carries corrected e-invoice/client contracts, the offline cross-surface authority gate, the profile-scoped OAuth permission mirror, and the fail-closed npm/full-profile Worker provenance pipeline."
+    },
     {
       "version": "1.16.4",
       "date": "2026-07-21",
@@ -128,5 +154,5 @@
       "version": "1.7.0-beta.1"
     }
   ],
-  "version": "1.16.4"
+  "version": "1.18.0"
 }

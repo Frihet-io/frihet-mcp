@@ -77,6 +77,8 @@ const REPOS = {
       'README.md',
       'CHANGELOG.md',
       'skill/SKILL.md',
+      'skills/frihet-mcp/SKILL.md',
+      'marketplace/anthropic/connector/manifest.json',
       'src/index.ts',
       'scripts/postinstall.js',
       'workers/api-proxy/worker.js',
@@ -208,6 +210,307 @@ export function checkServerJsonVersion(serverJson, expectedVersion) {
   return drifts;
 }
 
+/**
+ * Validate current release projections that the generic line scanner cannot
+ * understand safely: bare JSON versions, "canonical operations" prose, and
+ * the three generated runtime profile inventories. Historical changelog rows
+ * and the separately reviewed OpenAI submission bundle are deliberately out
+ * of scope.
+ */
+export function checkCurrentReleaseProjections(input, expectedVersion) {
+  const drifts = [];
+  const contract = input.capabilityContract;
+  const canonical = contract?.catalogue?.canonicalOperations;
+  const surfaces = Object.fromEntries(
+    Object.entries(contract?.surfaces ?? {}).map(([name, surface]) => [
+      name,
+      {
+        tools: surface?.tools?.length,
+        resources: surface?.resources?.length,
+        prompts: surface?.prompts?.length,
+      },
+    ]),
+  );
+  const remote = surfaces.remoteGrouped;
+  const countWords = [
+    'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+    'Seventeen', 'Eighteen', 'Nineteen', 'Twenty',
+  ];
+  const countWord = (value) => countWords[value] ?? String(value);
+
+  const stale = (jsonPath, found, expected) => {
+    if (found !== expected) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found,
+        expected,
+      });
+    }
+  };
+  const contains = (jsonPath, text, expected) => {
+    if (typeof text !== 'string' || !text.includes(expected)) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found: text,
+        expected,
+      });
+    }
+  };
+  const expectUniqueScalar = (jsonPath, found, expected) => {
+    if (found.length !== 1 || found[0] !== expected) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found,
+        expected: [expected],
+      });
+    }
+  };
+  const expectNonemptyUniformScalars = (jsonPath, found, expected) => {
+    if (found.length === 0 || found.some((value) => value !== expected)) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found,
+        expected: `one or more public claims, all equal to ${expected}`,
+      });
+    }
+  };
+  const profileTuples = (text, label) => {
+    if (typeof text !== 'string') return [];
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    const pattern = new RegExp(
+      `${escapedLabel}(?:(?!^#{1,6}(?:[ \\t]|$))[\\s\\S]){0,160}?(\\d+) tool names, (\\d+) resources, and (\\d+) prompts`,
+      'gimu',
+    );
+    return [...text.matchAll(pattern)].map((match) =>
+      match.slice(1, 4).map((value) => Number(value))
+    );
+  };
+  const expectUniqueProfileTuple = (jsonPath, text, label, counts) => {
+    const found = profileTuples(text, label);
+    const expected = [counts?.tools, counts?.resources, counts?.prompts];
+    if (
+      found.length !== 1
+      || found[0].length !== expected.length
+      || found[0].some((value, index) => value !== expected[index])
+    ) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found,
+        expected: [expected],
+      });
+    }
+  };
+  const skillMetadataVersions = (document) => {
+    if (typeof document !== 'string') return [];
+    const frontmatter = document.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+    if (!frontmatter) return [];
+    let inMetadata = false;
+    const versions = [];
+    for (const line of frontmatter.split(/\r?\n/u)) {
+      if (line === 'metadata:') {
+        inMetadata = true;
+        continue;
+      }
+      if (!inMetadata) continue;
+      if (/^\S/u.test(line)) break;
+      const version = line.match(/^  version:\s*(\S+)\s*$/u)?.[1];
+      if (version) versions.push(version);
+    }
+    return versions;
+  };
+  const changelogReleaseBlock = (document, version) => {
+    if (typeof document !== 'string') return { count: 0, text: '' };
+    const headings = [...document.matchAll(/^## \[([^\]\r\n]+)\][^\r\n]*$/gmu)];
+    const current = headings.filter((heading) => heading[1] === version);
+    if (current.length !== 1) return { count: current.length, text: '' };
+    const start = current[0].index;
+    const next = headings.find((heading) => heading.index > start);
+    return {
+      count: 1,
+      text: document.slice(start, next?.index ?? document.length),
+    };
+  };
+  const markdownSection = (document, heading) => {
+    if (typeof document !== 'string') return { count: 0, text: '' };
+    const headings = [...document.matchAll(/^## ([^\r\n]+)$/gmu)];
+    const current = headings.filter((match) => match[1] === heading);
+    if (current.length !== 1) return { count: current.length, text: '' };
+    const start = current[0].index + current[0][0].length;
+    const next = headings.find((match) => match.index > start);
+    return {
+      count: 1,
+      text: document.slice(start, next?.index ?? document.length),
+    };
+  };
+
+  stale('package.json.version', input.packageJson?.version, expectedVersion);
+  stale('glama.json.version', input.glamaJson?.version, expectedVersion);
+  stale('workers/remote-mcp/public/releases.json.version', input.releasesJson?.version, expectedVersion);
+  stale(
+    'workers/remote-mcp/public/releases.json.products.mcp_server.version',
+    input.releasesJson?.products?.mcp_server?.version,
+    expectedVersion,
+  );
+  stale(
+    'workers/remote-mcp/public/releases.json.releases[0].version',
+    input.releasesJson?.releases?.[0]?.version,
+    expectedVersion,
+  );
+  stale('marketplace/anthropic/connector/manifest.json.version', input.anthropicManifest?.version, expectedVersion);
+  stale(
+    'marketplace/anthropic/connector/manifest.json.packages[0].version',
+    input.anthropicManifest?.packages?.[0]?.version,
+    expectedVersion,
+  );
+
+  stale(
+    'package.json.description',
+    input.packageJson?.description,
+    `AI-native MCP server for Frihet ERP — ${canonical} canonical operations for invoicing, expenses, CRM, banking, POS and ES/EU fiscal workflows, with conservative capability and side-effect metadata.`,
+  );
+  stale(
+    'glama.json.description',
+    input.glamaJson?.description,
+    `AI-native MCP server for business management. The catalogue contains ${canonical} canonical operations; the grouped remote profile serves ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts with conservative callability and side-effect metadata.`,
+  );
+  const publicReadme = typeof input.readme === 'string'
+    ? input.readme.replace(/<!--[\s\S]*?-->/gu, '\n# HTML_COMMENT_BOUNDARY\n')
+    : '';
+  const readmeLines = publicReadme.split(/\r?\n/u);
+  const publicCanonicalClaims = [
+    ...publicReadme.matchAll(/\b(\d+)\s+canonical(?:\s+catalogue)?\s+operations\b/giu),
+  ].map((match) => Number(match[1]));
+  expectNonemptyUniformScalars(
+    'README.md.public-canonical-claims',
+    publicCanonicalClaims,
+    canonical,
+  );
+  const distributionSection = markdownSection(publicReadme, 'Distribution');
+  stale('README.md.distribution-section-count', distributionSection.count, 1);
+  const surfaceTruthLines = distributionSection.text
+    .split(/\r?\n/u)
+    .filter((line) => line.startsWith('> **Surface truth:**'));
+  stale('README.md.surface-truth-line-count', surfaceTruthLines.length, 1);
+  const surfaceTruth = surfaceTruthLines.length === 1 ? surfaceTruthLines[0] : '';
+  contains(
+    'README.md.surface-truth.canonical',
+    surfaceTruth,
+    `> **Surface truth:** the catalogue contains ${canonical} canonical operations.`,
+  );
+  const catalogueBadgeLines = readmeLines.filter((line) =>
+    line.includes('img.shields.io/badge/catalogue-')
+  );
+  stale('README.md.catalogue-badge-line-count', catalogueBadgeLines.length, 1);
+  stale(
+    'README.md.catalogue-badge',
+    catalogueBadgeLines.length === 1 ? catalogueBadgeLines[0].trim() : '',
+    `<img src="https://img.shields.io/badge/catalogue-${canonical}_operations-18181b?style=flat&labelColor=09090b" alt="${canonical} canonical catalogue operations">`,
+  );
+  const whatIsThisSection = markdownSection(publicReadme, 'What is this');
+  stale('README.md.what-is-this-section-count', whatIsThisSection.count, 1);
+  const summaryLines = whatIsThisSection.text.split(/\r?\n/u).filter((line) =>
+    /^\d+ canonical operations\. [A-Z][a-z]+ fiscal aliases\. [A-Z][a-z]+ prompts\. The local package serves \d+ resources;/u.test(line)
+  );
+  stale('README.md.current-summary-line-count', summaryLines.length, 1);
+  stale(
+    'README.md.current-summary',
+    summaryLines.length === 1 ? summaryLines[0] : '',
+    `${canonical} canonical operations. ${countWord(surfaces.localFull?.tools - canonical)} fiscal aliases. ${countWord(surfaces.localFull?.prompts)} prompts. The local package serves ${surfaces.localFull?.resources} resources; the hosted Worker deliberately serves the ${remote?.resources} static resources, while API-backed workspace resources remain local-profile only.`,
+  );
+  const expectationSection = markdownSection(publicReadme, 'What to expect');
+  stale('README.md.what-to-expect-section-count', expectationSection.count, 1);
+  const expectationLines = expectationSection.text.split(/\r?\n/u).filter((line) =>
+    line.startsWith('This MCP is a **structured data interface** -- ')
+  );
+  stale('README.md.what-to-expect-line-count', expectationLines.length, 1);
+  const expectationCanonical = expectationLines.length === 1
+    ? [...expectationLines[0].matchAll(/\bMost of the (\d+) canonical operations\b/gu)]
+      .map((match) => Number(match[1]))
+    : [];
+  expectUniqueScalar('README.md.what-to-expect.canonical', expectationCanonical, canonical);
+  const ecosystemSection = markdownSection(publicReadme, 'Ecosystem');
+  stale('README.md.ecosystem-section-count', ecosystemSection.count, 1);
+  const packageRows = ecosystemSection.text.split(/\r?\n/u).filter((line) =>
+    line.startsWith('| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) |')
+  );
+  stale('README.md.package-row-count', packageRows.length, 1);
+  stale(
+    'README.md.package-row',
+    packageRows.length === 1 ? packageRows[0] : '',
+    `| [\`@frihet/mcp-server\`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (${canonical} canonical operations + ${surfaces.localFull?.tools - canonical} alias names; ${surfaces.localFull?.resources} local resources; ${surfaces.localFull?.prompts} prompts) |`,
+  );
+  const readmeProfileLabels = {
+    localFull: 'local full profile',
+    remoteGrouped: 'hosted grouped profile',
+    openaiFull: 'OpenAI profile',
+  };
+  for (const [name, counts] of Object.entries(surfaces)) {
+    expectUniqueProfileTuple(
+      `README.md.surface-truth.${name}`,
+      surfaceTruth,
+      readmeProfileLabels[name],
+      counts,
+    );
+    expectUniqueProfileTuple(
+      `README.md.public-profile.${name}`,
+      publicReadme,
+      readmeProfileLabels[name],
+      counts,
+    );
+    for (const dimension of ['tools', 'resources', 'prompts']) {
+      stale(
+        `workers/remote-mcp/public/releases.json.surfaceCounts.${name}.${dimension}`,
+        input.releasesJson?.surfaceCounts?.[name]?.[dimension],
+        counts[dimension],
+      );
+    }
+  }
+  stale('workers/remote-mcp/public/releases.json.mcpToolCount', input.releasesJson?.mcpToolCount, canonical);
+  stale('workers/remote-mcp/public/releases.json.releases[0].mcpToolCount', input.releasesJson?.releases?.[0]?.mcpToolCount, canonical);
+  stale('workers/remote-mcp/public/releases.json.releases[0].toolNamesCount', input.releasesJson?.releases?.[0]?.toolNamesCount, remote?.tools);
+  stale('workers/remote-mcp/public/releases.json.releases[0].resourcesCount', input.releasesJson?.releases?.[0]?.resourcesCount, remote?.resources);
+  stale('workers/remote-mcp/public/releases.json.releases[0].promptsCount', input.releasesJson?.releases?.[0]?.promptsCount, remote?.prompts);
+  stale(
+    'marketplace/anthropic/connector/manifest.json.description',
+    input.anthropicManifest?.description,
+    `AI-native ERP MCP server with a ${canonical}-operation catalogue; the grouped remote profile exposes ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts with callability and side effects reported separately.`,
+  );
+  const changelogBlock = changelogReleaseBlock(input.changelog, expectedVersion);
+  stale('CHANGELOG.md.current-release-block-count', changelogBlock.count, 1);
+  const projectionLines = changelogBlock.text
+    .split(/\r?\n/u)
+    .filter((line) => line.startsWith('- **Release projections now agree on '));
+  stale('CHANGELOG.md.current-release.projection-line-count', projectionLines.length, 1);
+  const projectionLine = projectionLines.length === 1 ? projectionLines[0] : '';
+  contains(
+    'CHANGELOG.md.current-release.projection-version',
+    projectionLine,
+    `Release projections now agree on ${expectedVersion}`,
+  );
+  const changelogCanonical = [...changelogBlock.text.matchAll(/The catalogue has (\d+) canonical operations\b/gu)]
+    .map((match) => Number(match[1]));
+  expectUniqueScalar('CHANGELOG.md.current-release.canonical', changelogCanonical, canonical);
+  expectUniqueProfileTuple('CHANGELOG.md.current-release.localFull', changelogBlock.text, '`localFull`', surfaces.localFull);
+  expectUniqueProfileTuple('CHANGELOG.md.current-release.remoteGrouped', changelogBlock.text, '`remoteGrouped`', remote);
+  expectUniqueProfileTuple('CHANGELOG.md.current-release.openaiFull', changelogBlock.text, '`openaiFull`', surfaces.openaiFull);
+
+  for (const [index, skill] of (input.skillDocuments ?? []).entries()) {
+    expectUniqueScalar(`skill[${index}].metadata.version`, skillMetadataVersions(skill), expectedVersion);
+    const headings = typeof skill === 'string'
+      ? skill.split(/\r?\n/u).filter((line) => line === `## MCP catalogue (${canonical} canonical operations)`)
+      : [];
+    stale(`skill[${index}].catalogue-heading-count`, headings.length, 1);
+  }
+
+  return drifts;
+}
+
 // Run the full audit only when invoked as a CLI. When imported (e.g. by tests)
 // the module exposes its pure helpers without executing the audit or exiting.
 const isMain = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
@@ -247,6 +550,32 @@ if (FIX && !ALLOW_DIRTY) {
 }
 
 const findings = [];
+
+if (!REPO_FILTER || REPO_FILTER === 'frihet-mcp') {
+  const projectionDrifts = checkCurrentReleaseProjections({
+    packageJson: pkg,
+    glamaJson: JSON.parse(readFileSync(join(SELF, 'glama.json'), 'utf8')),
+    releasesJson: JSON.parse(readFileSync(join(SELF, 'workers/remote-mcp/public/releases.json'), 'utf8')),
+    anthropicManifest: JSON.parse(readFileSync(join(SELF, 'marketplace/anthropic/connector/manifest.json'), 'utf8')),
+    readme: readFileSync(join(SELF, 'README.md'), 'utf8'),
+    changelog: readFileSync(join(SELF, 'CHANGELOG.md'), 'utf8'),
+    capabilityContract: publicCapabilityContract,
+    skillDocuments: [
+      readFileSync(join(SELF, 'skill/SKILL.md'), 'utf8'),
+      readFileSync(join(SELF, 'skills/frihet-mcp/SKILL.md'), 'utf8'),
+    ],
+  }, VERSION);
+  for (const drift of projectionDrifts) {
+    findings.push({
+      repo: 'frihet-mcp',
+      file: drift.jsonPath.split('.')[0],
+      line: drift.jsonPath,
+      severity: 'fail',
+      ...drift,
+      snippet: `${drift.jsonPath} = ${JSON.stringify(drift.found)}`.slice(0, 240),
+    });
+  }
+}
 
 for (const [repoName, cfg] of Object.entries(REPOS)) {
   if (REPO_FILTER && repoName !== REPO_FILTER) continue;
@@ -500,6 +829,9 @@ if (JSON_OUT) {
 }
 
 const exitFail = findings.some((f) => f.severity === 'fail');
-process.exit(exitFail && !FIX ? 1 : 0);
+const unfixableProjectionFail = findings.some(
+  (f) => f.severity === 'fail' && f.kind === 'release-projection',
+);
+process.exit((exitFail && !FIX) || unfixableProjectionFail ? 1 : 0);
 
 } // end if (isMain)

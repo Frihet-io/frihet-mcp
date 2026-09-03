@@ -21,7 +21,7 @@
   <a href="https://smithery.ai/servers/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
-  <img src="https://img.shields.io/badge/catalogue-157_operations-18181b?style=flat&labelColor=09090b" alt="157 canonical catalogue operations">
+  <img src="https://img.shields.io/badge/catalogue-158_operations-18181b?style=flat&labelColor=09090b" alt="158 canonical catalogue operations">
   <img src="https://img.shields.io/badge/node-%3E%3D20-18181b?style=flat&labelColor=09090b" alt="node >=20">
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
@@ -47,7 +47,7 @@
 | **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
 | **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
 
-> **Surface truth:** the catalogue contains 157 canonical operations. The local full profile serves those plus 5 fiscal alias names (162 names). The hosted grouped profile also adds 3 local discovery names (165 names). Catalogue membership is not a promise that a backing API is enabled for every workspace.
+> **Surface truth:** the catalogue contains 158 canonical operations. The local full profile serves 163 tool names, 11 resources, and 10 prompts (158 canonical operations plus 5 fiscal aliases). The hosted grouped profile serves 166 tool names, 7 resources, and 10 prompts (the same names plus 3 discovery tools, with API-backed resources kept local-only). The separately reviewed OpenAI profile serves 33 tool names, 0 resources, and 0 prompts. Catalogue membership is not a promise that a backing API is enabled for every workspace.
 
 ---
 
@@ -60,7 +60,7 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-157 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources; the hosted Worker deliberately serves the 7 static resources, while API-backed workspace resources remain local-profile only.
+158 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources; the hosted Worker deliberately serves the 7 static resources, while API-backed workspace resources remain local-profile only.
 
 <!-- v1.12.0-beta.1 — D4-B megasprint: HR (9), payroll (2), onboarding (2), permissions (2), period close (3), webhook test (1) = +19 = 158 tools total -->
 
@@ -269,7 +269,7 @@ Talk to your ERP. These are real prompts, not marketing copy.
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. Most of the 157 canonical operations are CRUD operations over the REST API; the rest are read-only summaries and fiscal/e-invoice actions. Alias and discovery names are counted separately.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. Most of the 158 canonical operations are CRUD operations over the REST API; the rest are read-only summaries and fiscal/e-invoice actions. Alias and discovery names are counted separately.
 
 **Works great:**
 
@@ -296,7 +296,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 ---
 
-## Catalogue operations (157)
+## Catalogue operations (158)
 
 ### Invoices (12)
 
@@ -857,7 +857,7 @@ npm run build   # must pass before submitting
 
 | Package | What it is |
 |---------|-----------|
-| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (157 canonical operations + 5 alias names; 11 local resources; 10 prompts) |
+| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (158 canonical operations + 5 alias names; 11 local resources; 10 prompts) |
 | [`@frihet/sdk`](https://github.com/Frihet-io/frihet-sdk) | TypeScript SDK (`frihet.invoices.create()`) |
 | [`frihet`](https://www.npmjs.com/package/frihet) | CLI (`frihet invoices list --status overdue`) |
 | [`n8n-nodes-frihet`](https://www.npmjs.com/package/n8n-nodes-frihet) | n8n community node for workflow automation |

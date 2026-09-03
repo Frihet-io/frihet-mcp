@@ -334,6 +334,10 @@ test("Release workflow — hostile case 7: missing protected environment (declar
     authorize.dependsOn.includes("build-pack"),
     "authorization must happen only after every gate and deterministic pack succeeds",
   );
+  assert.ok(
+    authorize.dependsOn.includes("preflight"),
+    "authorization must consume the exact-source Worker lockfile digest",
+  );
   assert.match(authorize.body, /^    if: inputs\.dry_run != true$/m);
   assert.match(authorize.body, /^    environment:\s*npm-release\s*$/m);
   const releaseCredentials = [
@@ -359,6 +363,43 @@ test("Release workflow — hostile case 7: missing protected environment (declar
     authorize.body,
     /if \[ "\$\{#MISSING\[@\]\}" -ne 0 \]/,
     "any absent release credential must stop authorization",
+  );
+  assert.match(
+    authorize.body,
+    /npm ci --prefix workers\/remote-mcp --ignore-scripts/,
+    "authorization must install the Wrangler version frozen by the Worker lockfile",
+  );
+  assert.match(
+    authorize.body,
+    /EXPECTED_WORKER_LOCK_SHA:\s*\$\{\{ needs\.preflight\.outputs\.workerLockSha256 \}\}/,
+    "authorization must verify the exact-source Worker lock before installing Wrangler",
+  );
+  assert.match(
+    authorize.body,
+    /\.\/node_modules\/\.bin\/wrangler secret list --env "" --format json/,
+    "authorization must query only the default/full-profile Worker secret-name inventory",
+  );
+  assert.doesNotMatch(
+    authorize.body,
+    /wrangler secret list --env openai/,
+    "the full-profile release must not substitute the separate OpenAI Worker inventory",
+  );
+  for (const secretName of [
+    "COOKIE_ENCRYPTION_KEY",
+    "FIREBASE_PROJECT_ID",
+    "FRIHET_API_BASE",
+    "FRIHET_OAUTH_API_KEY",
+  ]) {
+    assert.match(
+      authorize.body,
+      new RegExp(`\\b${secretName}\\b`),
+      `authorization must require the ${secretName} Worker secret name`,
+    );
+  }
+  assert.match(
+    authorize.body,
+    /required full-profile Worker secret name is absent/,
+    "a missing runtime secret name must fail before npm publish",
   );
   for (const id of ["publish-npm", "deploy-worker", "release-github", "cascade"]) {
     const stage = findStage(stages, id);

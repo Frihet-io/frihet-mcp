@@ -367,7 +367,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────
   authorize-release:
     name: Authorize release environment
-    needs: build-pack
+    needs: [preflight, build-pack]
     if: inputs.dry_run != true
     runs-on: ubuntu-latest
     environment: npm-release
@@ -393,6 +393,60 @@ jobs:
             exit 1
           fi
           echo "OK — release guard and all downstream credentials are present"
+
+      - name: Checkout exact release source
+        uses: actions/checkout@v4
+
+      - name: Setup Node for pinned Wrangler
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workers/remote-mcp/package-lock.json
+
+      - name: Verify Worker lockfile before install
+        env:
+          EXPECTED_WORKER_LOCK_SHA: ${{ needs.preflight.outputs.workerLockSha256 }}
+        run: |
+          set -euo pipefail
+          printf '%s  workers/remote-mcp/package-lock.json\n' "$EXPECTED_WORKER_LOCK_SHA" \
+            | sha256sum --check --strict -
+
+      - name: Install pinned Worker release tooling
+        run: npm ci --prefix workers/remote-mcp --ignore-scripts
+
+      - name: Assert full-profile Worker runtime secret names
+        # Wrangler returns names only; Cloudflare never exposes secret values.
+        # The Langfuse trio is optional in Env and is therefore not an
+        # availability prerequisite. OAuth and session secrets are mandatory.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: workers/remote-mcp
+        run: |
+          set -euo pipefail
+          SECRET_INVENTORY="$(./node_modules/.bin/wrangler secret list --env "" --format json)"
+          if ! jq -e 'type == "array" and all(.[]; (.name | type) == "string")' \
+            <<< "$SECRET_INVENTORY" >/dev/null; then
+            echo "::error::Cloudflare returned an invalid full-profile Worker secret inventory"
+            exit 1
+          fi
+          MISSING=()
+          for SECRET_NAME in \
+            COOKIE_ENCRYPTION_KEY \
+            FIREBASE_PROJECT_ID \
+            FRIHET_API_BASE \
+            FRIHET_OAUTH_API_KEY; do
+            if ! jq -e --arg required "$SECRET_NAME" \
+              'any(.[]; .name == $required)' <<< "$SECRET_INVENTORY" >/dev/null; then
+              MISSING+=("$SECRET_NAME")
+            fi
+          done
+          if [ "${#MISSING[@]}" -ne 0 ]; then
+            printf '::error::required full-profile Worker secret name is absent: %s\n' "${MISSING[@]}"
+            exit 1
+          fi
+          echo "OK — required full-profile Worker secret names are present"
 
   # ───────────────────────────────────────────────────────────────────────
   # Stage 4 — publish to npm via OIDC trusted publisher.

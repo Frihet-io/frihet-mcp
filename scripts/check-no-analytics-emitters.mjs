@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "3e7a6547d58807628419a599fd1fe8ccdcf9ae6c17e95ecba5e4d5d63b8c0593", // #171: test command now also runs scripts/__tests__/release-workflow-contract.test.mjs
+  "package.json": "7d8a452e5824b2710ec5c18dec9d743e25e36484d8e6222e886c5b9628d304dd", // 1.18.0: npm test now executes the existing global_search contract suite
   "workers/remote-mcp/package.json": "c7025291c46b023fac162d1a0e0a010d1173bf7bc5d218c6faaab515aba97c6b",
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -265,7 +265,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/oauth-token-family.ts": "fc0cb5c82b0d698139a0caf3dfae34d267e7366b6d073b4d1b901c8267af0eb6",
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "ebf5ce3c3b9207fb07cfc2856c1ca3d3232e154133406435511fe99f08e6ae18",
+  "package-lock.json": "b8eac56e1f88e2537c4239d1ee583dc3c11ef2643486a00ed1e80887ef661bec",
   "workers/remote-mcp/package-lock.json": "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
@@ -277,11 +277,11 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
   "docs/agent-onboarding.json": "2dd391f0c3a507b001490355e7460712fe2d19d7a210c8b37804a1fa0234aea7",
-  "README.md": "2df03c8d3548fd0076b948215691c6b73d4602895b17fe1a002d2151048b2c02",
+  "README.md": "c5ee02e290bc143d9050d50db2cb761ce2643e1884f51ed1218460dd599291dd",
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  ".github/workflows/ci.yml": "8b12d16ee11f4742b261cee329890a867191269903ee78dbdac6333bc9c7beea",
+  ".github/workflows/ci.yml": "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "6799c971a773f04cd39d8e134c042474d23bfb1e949348df2e382b6fceb10023",
@@ -289,7 +289,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
-  "scripts/audit-mcp-refs.mjs": "afd2486b3cf3c268636f7eb4ddbd3c1140d140f4486d178f688a694361f35600",
+  "scripts/audit-mcp-refs.mjs": "1b57f6bbda528e6d62ba649449c25750001c96c5709203ce51079e5b79aea0e7",
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
   "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",
   "scripts/conformance/applicability.json": "a561dcb009c695cd3d5287aaa1aef6f0c43518b38a377c6ed5770b1f4d68eb25",
