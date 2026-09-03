@@ -311,6 +311,35 @@ describe("current release projection gate", () => {
     assert.ok(paths.includes("README.md.public-profile.remoteGrouped"));
   });
 
+  test("a stale profile tuple split across visible lines still fails", () => {
+    const input = releaseProjectionInput();
+    input.readme += [
+      "",
+      "## Multiline public profile",
+      "",
+      "The hosted grouped profile serves",
+      "165 tool names, 9 resources, and 8 prompts.",
+      "",
+    ].join("\n");
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("README.md.public-profile.remoteGrouped"));
+  });
+
+  test("profile matching cannot cross Markdown headings or HTML comments", () => {
+    const input = releaseProjectionInput();
+    input.readme += [
+      "",
+      "The hosted grouped profile serves",
+      "## Boundary",
+      "165 tool names, 9 resources, and 8 prompts.",
+      "The OpenAI profile serves<!-- explicit historical boundary -->165 tool names, 9 resources, and 8 prompts.",
+      "",
+    ].join("\n");
+
+    assert.deepEqual(checkCurrentReleaseProjections(input, SOT_VERSION), []);
+  });
+
   test("current CHANGELOG truth cannot be satisfied by a historical-only match", () => {
     const input = releaseProjectionInput();
     const projectionLine = input.changelog

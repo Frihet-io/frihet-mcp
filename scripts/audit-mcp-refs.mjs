@@ -283,8 +283,8 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
     if (typeof text !== 'string') return [];
     const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
     const pattern = new RegExp(
-      `${escapedLabel}[^\\r\\n]{0,100}?(\\d+) tool names, (\\d+) resources, and (\\d+) prompts`,
-      'giu',
+      `${escapedLabel}(?:(?!^#{1,6}(?:[ \\t]|$))[\\s\\S]){0,160}?(\\d+) tool names, (\\d+) resources, and (\\d+) prompts`,
+      'gimu',
     );
     return [...text.matchAll(pattern)].map((match) =>
       match.slice(1, 4).map((value) => Number(value))
@@ -380,7 +380,7 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
     `AI-native MCP server for business management. The catalogue contains ${canonical} canonical operations; the grouped remote profile serves ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts with conservative callability and side-effect metadata.`,
   );
   const publicReadme = typeof input.readme === 'string'
-    ? input.readme.replace(/<!--[\s\S]*?-->/gu, '')
+    ? input.readme.replace(/<!--[\s\S]*?-->/gu, '\n# HTML_COMMENT_BOUNDARY\n')
     : '';
   const readmeLines = publicReadme.split(/\r?\n/u);
   const publicCanonicalClaims = [
