@@ -257,6 +257,17 @@ describe("current release projection gate", () => {
     }
   });
 
+  test("stale canonical prose beside resource counts cannot bypass the README gate", () => {
+    const input = releaseProjectionInput();
+    const current = "158 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources";
+    const stale = "157 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources";
+    assert.match(input.readme, new RegExp(current.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")));
+    input.readme = input.readme.replace(current, stale);
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("README.md.canonical-claims"));
+  });
+
   test("current CHANGELOG truth cannot be satisfied by a historical-only match", () => {
     const input = releaseProjectionInput();
     const projectionLine = input.changelog

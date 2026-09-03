@@ -263,6 +263,16 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
       });
     }
   };
+  const expectNonemptyUniformScalars = (jsonPath, found, expected) => {
+    if (found.length === 0 || found.some((value) => value !== expected)) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found,
+        expected: `one or more claims, all equal to ${expected}`,
+      });
+    }
+  };
   const profileTuples = (text, label) => {
     if (typeof text !== 'string') return [];
     const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
@@ -354,6 +364,11 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
   const surfaceTruthLines = typeof input.readme === 'string'
     ? input.readme.split(/\r?\n/u).filter((line) => line.startsWith('> **Surface truth:**'))
     : [];
+  const readmeCanonicalClaims = typeof input.readme === 'string'
+    ? [...input.readme.matchAll(/\b(\d+)\s+canonical(?:\s+catalogue)?\s+operations\b/giu)]
+      .map((match) => Number(match[1]))
+    : [];
+  expectNonemptyUniformScalars('README.md.canonical-claims', readmeCanonicalClaims, canonical);
   stale('README.md.surface-truth-line-count', surfaceTruthLines.length, 1);
   const surfaceTruth = surfaceTruthLines.length === 1 ? surfaceTruthLines[0] : '';
   contains(
