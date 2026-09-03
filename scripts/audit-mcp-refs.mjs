@@ -253,11 +253,49 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
       });
     }
   };
-  const skillMetadataVersion = (document) => {
-    if (typeof document !== 'string') return undefined;
+  const expectUniqueScalar = (jsonPath, found, expected) => {
+    if (found.length !== 1 || found[0] !== expected) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found,
+        expected: [expected],
+      });
+    }
+  };
+  const profileTuples = (text, label) => {
+    if (typeof text !== 'string') return [];
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    const pattern = new RegExp(
+      `${escapedLabel}[^\\r\\n]{0,100}?(\\d+) tool names, (\\d+) resources, and (\\d+) prompts`,
+      'giu',
+    );
+    return [...text.matchAll(pattern)].map((match) =>
+      match.slice(1, 4).map((value) => Number(value))
+    );
+  };
+  const expectUniqueProfileTuple = (jsonPath, text, label, counts) => {
+    const found = profileTuples(text, label);
+    const expected = [counts?.tools, counts?.resources, counts?.prompts];
+    if (
+      found.length !== 1
+      || found[0].length !== expected.length
+      || found[0].some((value, index) => value !== expected[index])
+    ) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found,
+        expected: [expected],
+      });
+    }
+  };
+  const skillMetadataVersions = (document) => {
+    if (typeof document !== 'string') return [];
     const frontmatter = document.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
-    if (!frontmatter) return undefined;
+    if (!frontmatter) return [];
     let inMetadata = false;
+    const versions = [];
     for (const line of frontmatter.split(/\r?\n/u)) {
       if (line === 'metadata:') {
         inMetadata = true;
@@ -266,9 +304,21 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
       if (!inMetadata) continue;
       if (/^\S/u.test(line)) break;
       const version = line.match(/^  version:\s*(\S+)\s*$/u)?.[1];
-      if (version) return version;
+      if (version) versions.push(version);
     }
-    return undefined;
+    return versions;
+  };
+  const changelogReleaseBlock = (document, version) => {
+    if (typeof document !== 'string') return { count: 0, text: '' };
+    const headings = [...document.matchAll(/^## \[([^\]\r\n]+)\][^\r\n]*$/gmu)];
+    const current = headings.filter((heading) => heading[1] === version);
+    if (current.length !== 1) return { count: current.length, text: '' };
+    const start = current[0].index;
+    const next = headings.find((heading) => heading.index > start);
+    return {
+      count: 1,
+      text: document.slice(start, next?.index ?? document.length),
+    };
   };
 
   stale('package.json.version', input.packageJson?.version, expectedVersion);
@@ -291,22 +341,43 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
     expectedVersion,
   );
 
-  contains('package.json.description', input.packageJson?.description, `${canonical} canonical operations`);
-  contains('glama.json.description.canonical', input.glamaJson?.description, `${canonical} canonical operations`);
-  contains('glama.json.description.remote-tools', input.glamaJson?.description, `${remote?.tools} tool names`);
-  contains('glama.json.description.remote-resources', input.glamaJson?.description, `${remote?.resources} resources`);
-  contains('glama.json.description.remote-prompts', input.glamaJson?.description, `${remote?.prompts} prompts`);
-  contains('README.md.canonical', input.readme, `${canonical} canonical operations`);
+  stale(
+    'package.json.description',
+    input.packageJson?.description,
+    `AI-native MCP server for Frihet ERP — ${canonical} canonical operations for invoicing, expenses, CRM, banking, POS and ES/EU fiscal workflows, with conservative capability and side-effect metadata.`,
+  );
+  stale(
+    'glama.json.description',
+    input.glamaJson?.description,
+    `AI-native MCP server for business management. The catalogue contains ${canonical} canonical operations; the grouped remote profile serves ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts with conservative callability and side-effect metadata.`,
+  );
+  const surfaceTruthLines = typeof input.readme === 'string'
+    ? input.readme.split(/\r?\n/u).filter((line) => line.startsWith('> **Surface truth:**'))
+    : [];
+  stale('README.md.surface-truth-line-count', surfaceTruthLines.length, 1);
+  const surfaceTruth = surfaceTruthLines.length === 1 ? surfaceTruthLines[0] : '';
+  contains(
+    'README.md.surface-truth.canonical',
+    surfaceTruth,
+    `> **Surface truth:** the catalogue contains ${canonical} canonical operations.`,
+  );
   const readmeProfileLabels = {
-    localFull: 'The local full profile serves',
-    remoteGrouped: 'The hosted grouped profile serves',
-    openaiFull: 'The separately reviewed OpenAI profile serves',
+    localFull: 'local full profile',
+    remoteGrouped: 'hosted grouped profile',
+    openaiFull: 'OpenAI profile',
   };
   for (const [name, counts] of Object.entries(surfaces)) {
-    contains(
-      `README.md.${name}`,
+    expectUniqueProfileTuple(
+      `README.md.surface-truth.${name}`,
+      surfaceTruth,
+      readmeProfileLabels[name],
+      counts,
+    );
+    expectUniqueProfileTuple(
+      `README.md.claims.${name}`,
       input.readme,
-      `${readmeProfileLabels[name]} ${counts.tools} tool names, ${counts.resources} resources, and ${counts.prompts} prompts`,
+      readmeProfileLabels[name],
+      counts,
     );
     for (const dimension of ['tools', 'resources', 'prompts']) {
       stale(
@@ -321,19 +392,36 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
   stale('workers/remote-mcp/public/releases.json.releases[0].toolNamesCount', input.releasesJson?.releases?.[0]?.toolNamesCount, remote?.tools);
   stale('workers/remote-mcp/public/releases.json.releases[0].resourcesCount', input.releasesJson?.releases?.[0]?.resourcesCount, remote?.resources);
   stale('workers/remote-mcp/public/releases.json.releases[0].promptsCount', input.releasesJson?.releases?.[0]?.promptsCount, remote?.prompts);
-  contains(
+  stale(
     'marketplace/anthropic/connector/manifest.json.description',
     input.anthropicManifest?.description,
-    `a ${canonical}-operation catalogue; the grouped remote profile exposes ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts`,
+    `AI-native ERP MCP server with a ${canonical}-operation catalogue; the grouped remote profile exposes ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts with callability and side effects reported separately.`,
   );
-  contains('CHANGELOG.md.current-release', input.changelog, `## [${expectedVersion}]`);
-  contains('CHANGELOG.md.localFull', input.changelog, `\`localFull\` exposes ${surfaces.localFull?.tools} tool names, ${surfaces.localFull?.resources} resources, and ${surfaces.localFull?.prompts} prompts`);
-  contains('CHANGELOG.md.remoteGrouped', input.changelog, `\`remoteGrouped\` exposes ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts`);
-  contains('CHANGELOG.md.openaiFull', input.changelog, `\`openaiFull\` remains ${surfaces.openaiFull?.tools} tool names, ${surfaces.openaiFull?.resources} resources, and ${surfaces.openaiFull?.prompts} prompts`);
+  const changelogBlock = changelogReleaseBlock(input.changelog, expectedVersion);
+  stale('CHANGELOG.md.current-release-block-count', changelogBlock.count, 1);
+  const projectionLines = changelogBlock.text
+    .split(/\r?\n/u)
+    .filter((line) => line.startsWith('- **Release projections now agree on '));
+  stale('CHANGELOG.md.current-release.projection-line-count', projectionLines.length, 1);
+  const projectionLine = projectionLines.length === 1 ? projectionLines[0] : '';
+  contains(
+    'CHANGELOG.md.current-release.projection-version',
+    projectionLine,
+    `Release projections now agree on ${expectedVersion}`,
+  );
+  const changelogCanonical = [...changelogBlock.text.matchAll(/The catalogue has (\d+) canonical operations\b/gu)]
+    .map((match) => Number(match[1]));
+  expectUniqueScalar('CHANGELOG.md.current-release.canonical', changelogCanonical, canonical);
+  expectUniqueProfileTuple('CHANGELOG.md.current-release.localFull', changelogBlock.text, '`localFull`', surfaces.localFull);
+  expectUniqueProfileTuple('CHANGELOG.md.current-release.remoteGrouped', changelogBlock.text, '`remoteGrouped`', remote);
+  expectUniqueProfileTuple('CHANGELOG.md.current-release.openaiFull', changelogBlock.text, '`openaiFull`', surfaces.openaiFull);
 
   for (const [index, skill] of (input.skillDocuments ?? []).entries()) {
-    stale(`skill[${index}].metadata.version`, skillMetadataVersion(skill), expectedVersion);
-    contains(`skill[${index}].catalogue-heading`, skill, `## MCP catalogue (${canonical} canonical operations)`);
+    expectUniqueScalar(`skill[${index}].metadata.version`, skillMetadataVersions(skill), expectedVersion);
+    const headings = typeof skill === 'string'
+      ? skill.split(/\r?\n/u).filter((line) => line === `## MCP catalogue (${canonical} canonical operations)`)
+      : [];
+    stale(`skill[${index}].catalogue-heading-count`, headings.length, 1);
   }
 
   return drifts;

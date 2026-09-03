@@ -231,10 +231,42 @@ describe("current release projection gate", () => {
       .replace("__LOCAL_COUNTS__", remoteCounts);
 
     const drifts = checkCurrentReleaseProjections(input, SOT_VERSION);
-    assert.deepEqual(
-      drifts.map((drift) => drift.jsonPath).filter((path) => path.startsWith("README.md.")),
-      ["README.md.localFull", "README.md.remoteGrouped"],
-      "swapping otherwise-valid tuples between profile labels must fail",
-    );
+    const paths = drifts.map((drift) => drift.jsonPath);
+    for (const profile of ["localFull", "remoteGrouped"]) {
+      assert.ok(paths.includes(`README.md.surface-truth.${profile}`));
+      assert.ok(paths.includes(`README.md.claims.${profile}`));
+    }
+  });
+
+  test("contradictory duplicate public claims cannot hide behind a correct claim", () => {
+    const mutations: Array<[string, (input: ReleaseProjectionInput) => void]> = [
+      ["README", (input) => { input.readme += "\nThe local full profile serves 999 tool names, 11 resources, and 10 prompts.\n"; }],
+      ["Glama", (input) => { input.glamaJson.description += " The grouped remote profile serves 165 tool names, 7 resources, and 10 prompts."; }],
+      ["package", (input) => { input.packageJson.description += " Legacy claim: 157 canonical operations."; }],
+      ["Anthropic", (input) => { input.anthropicManifest.description += " The grouped remote profile exposes 165 tool names, 7 resources, and 10 prompts."; }],
+      ["skill metadata", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 1.18.0", "  version: 1.18.0\n  version: 0.0.0"); }],
+      ["current changelog", (input) => { input.changelog = input.changelog.replace("The catalogue has 158 canonical operations.", "The catalogue has 158 canonical operations. The catalogue has 157 canonical operations. `localFull` exposes 999 tool names, 11 resources, and 10 prompts."); }],
+    ];
+    for (const [label, mutate] of mutations) {
+      const input = releaseProjectionInput();
+      mutate(input);
+      assert.ok(
+        checkCurrentReleaseProjections(input, SOT_VERSION).length > 0,
+        `${label} contradictory duplicate must fail`,
+      );
+    }
+  });
+
+  test("current CHANGELOG truth cannot be satisfied by a historical-only match", () => {
+    const input = releaseProjectionInput();
+    const projectionLine = input.changelog
+      .split(/\r?\n/u)
+      .find((line) => line.startsWith("- **Release projections now agree on "));
+    assert.ok(projectionLine, "fixture must contain the current projection line");
+    input.changelog = input.changelog.replace(`${projectionLine}\n`, "") + `\n${projectionLine}\n`;
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("CHANGELOG.md.current-release.projection-line-count"));
+    assert.ok(paths.includes("CHANGELOG.md.current-release.localFull"));
   });
 });
