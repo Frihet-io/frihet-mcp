@@ -4,6 +4,27 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-09-03
+
+### Added
+
+- **`global_search` adds one read-only, workspace-scoped canonical operation (#168).** It wraps `GET /v1/search/global` across invoices, expenses, vendors, clients, and products with `q` (1–200 characters), an optional five-value `types` filter, `limit` 1–50, and `offset` 0–1000. Its result uses the endpoint's own `{ data, total, limit, offset, hasMore, query, types, truncated? }` envelope; this is intentionally not described as the standard single-resource pagination envelope. The OpenAI allow-list is unchanged. All 10 focused tests in `src/__tests__/search-tools.test.ts` are now executed by `npm test`.
+- **A fail-closed release pipeline for npm and the full-profile Worker (#171, #173).** The ten-job workflow verifies the exact `origin/main` source, runs release gates, packs deterministic npm evidence, authorizes the protected environment, publishes through npm OIDC, compares the registry tarball byte-for-byte with the local pack, verifies npm `gitHead`, explicitly deploys only the default Wrangler environment at `mcp.frihet.io`, reads back its source SHA/version, creates the exact-SHA GitHub Release, and then starts downstream refreshes. CI runs the real `actionlint` parser, while 16 executable tests in `scripts/__tests__/release-workflow-contract.test.mjs` freeze the dependency graph, dry-run non-mutation, permissions, lockfile authority, toolchain, and provenance checks. Before the first irreversible mutation, authorization also verifies the required configured credentials and the required full-profile Worker secret names; it never reads or prints Worker secret values.
+
+### Fixed
+
+- **E-invoice export and submission now match the ERP contract (#163).** Supported export aliases map to exact ERP enum values and consume the inline XML response; unsupported Factur-X profiles fail instead of collapsing to EN 16931. FACe and TicketBAI submissions carry conservative capability metadata and local confirmation interlocks.
+- **Nine non-OAuth, non-fiscal client contract drifts no longer cause silent 400 responses (#167).** Attendance mutations forward idempotency keys; GL rejection sends `note`; gestoria aging uses the canonical POST body; deposit application requires the ERP fields; bank-rule creation uses the current engine shape; anomaly and leave enums match the backend; and the late-fee description now states that the operation updates flags rather than creating a debit note.
+- **The Worker resolves the production `nanoid` advisory without widening its dependency graph (#160).** `agents` remains at 0.7.5 and the single resolved `nanoid` copy is pinned to 5.1.16.
+
+### Changed
+
+- **Cross-surface authority V2 is offline and fail-closed (#166).** `scripts/cross-surface-authority.mjs` checks the committed OpenAPI projection against the consumer-required operation, security, response, and schema fields. It does not claim to prove that the projection equals live ERP by itself; `gate:openapi-fresh` remains the separate canonical-source check.
+- **The OAuth provisioning contract mirrors profile-scoped permissions (#164, #170).** The reviewed mirror records `read`/`write` for the OpenAI profile and adds `einvoice:*` only for the full profile. ERP remains the runtime authority that writes stored permissions; the MCP-side addition is a drift-detection contract, not a scope grant.
+- **Release projections now agree on 1.18.0 and the generated runtime inventory.** The catalogue has 158 canonical operations. `localFull` exposes 163 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 166 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth. The separately reviewed OpenAI submission artifacts remain frozen and are not hand-edited by this release prep.
+
+No npm publication, Worker deployment, GitHub Release, marketplace submission, environment configuration, or secret mutation is part of this source-preparation change.
+
 ## [1.17.1] — 2026-08-30
 
 ### Fixed

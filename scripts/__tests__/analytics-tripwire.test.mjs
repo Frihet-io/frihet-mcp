@@ -25,6 +25,7 @@ import {
   APPROVED_PACKAGE_RUNTIME_METADATA,
   APPROVED_PACKAGE_SCRIPT_HASHES,
   APPROVED_PLATFORM_TELEMETRY,
+  APPROVED_PUBLISHED_FILE_HASHES,
   APPROVED_REVIEW_FILE_HASHES,
   APPROVED_SOURCE_FILE_HASHES,
   APPROVED_STATIC_BINDINGS,
@@ -160,12 +161,20 @@ describe("anti-defang contract", () => {
       );
     }
     assert.deepEqual(APPROVED_LOCKFILE_HASHES, {
-      "package-lock.json": "ebf5ce3c3b9207fb07cfc2856c1ca3d3232e154133406435511fe99f08e6ae18",
+      "package-lock.json": "b8eac56e1f88e2537c4239d1ee583dc3c11ef2643486a00ed1e80887ef661bec",
       "workers/remote-mcp/package-lock.json": "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191",
     });
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES[".github/workflows/ci.yml"],
-      "8b12d16ee11f4742b261cee329890a867191269903ee78dbdac6333bc9c7beea",
+      "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27",
+    );
+    assert.equal(
+      APPROVED_OPERATIONAL_FILE_HASHES["scripts/audit-mcp-refs.mjs"],
+      "a34cfc8cb1a0f2f24a284623b5a4fd3133ac7a1e3839e4b5d61fa26722071446",
+    );
+    assert.equal(
+      APPROVED_PUBLISHED_FILE_HASHES["README.md"],
+      "c5ee02e290bc143d9050d50db2cb761ce2643e1884f51ed1218460dd599291dd",
     );
     assert.deepEqual(APPROVED_PLATFORM_TELEMETRY, {
       "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",

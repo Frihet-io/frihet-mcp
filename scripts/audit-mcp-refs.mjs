@@ -77,6 +77,8 @@ const REPOS = {
       'README.md',
       'CHANGELOG.md',
       'skill/SKILL.md',
+      'skills/frihet-mcp/SKILL.md',
+      'marketplace/anthropic/connector/manifest.json',
       'src/index.ts',
       'scripts/postinstall.js',
       'workers/api-proxy/worker.js',
@@ -208,6 +210,135 @@ export function checkServerJsonVersion(serverJson, expectedVersion) {
   return drifts;
 }
 
+/**
+ * Validate current release projections that the generic line scanner cannot
+ * understand safely: bare JSON versions, "canonical operations" prose, and
+ * the three generated runtime profile inventories. Historical changelog rows
+ * and the separately reviewed OpenAI submission bundle are deliberately out
+ * of scope.
+ */
+export function checkCurrentReleaseProjections(input, expectedVersion) {
+  const drifts = [];
+  const contract = input.capabilityContract;
+  const canonical = contract?.catalogue?.canonicalOperations;
+  const surfaces = Object.fromEntries(
+    Object.entries(contract?.surfaces ?? {}).map(([name, surface]) => [
+      name,
+      {
+        tools: surface?.tools?.length,
+        resources: surface?.resources?.length,
+        prompts: surface?.prompts?.length,
+      },
+    ]),
+  );
+  const remote = surfaces.remoteGrouped;
+
+  const stale = (jsonPath, found, expected) => {
+    if (found !== expected) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found,
+        expected,
+      });
+    }
+  };
+  const contains = (jsonPath, text, expected) => {
+    if (typeof text !== 'string' || !text.includes(expected)) {
+      drifts.push({
+        kind: 'release-projection',
+        jsonPath,
+        found: text,
+        expected,
+      });
+    }
+  };
+  const skillMetadataVersion = (document) => {
+    if (typeof document !== 'string') return undefined;
+    const frontmatter = document.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+    if (!frontmatter) return undefined;
+    let inMetadata = false;
+    for (const line of frontmatter.split(/\r?\n/u)) {
+      if (line === 'metadata:') {
+        inMetadata = true;
+        continue;
+      }
+      if (!inMetadata) continue;
+      if (/^\S/u.test(line)) break;
+      const version = line.match(/^  version:\s*(\S+)\s*$/u)?.[1];
+      if (version) return version;
+    }
+    return undefined;
+  };
+
+  stale('package.json.version', input.packageJson?.version, expectedVersion);
+  stale('glama.json.version', input.glamaJson?.version, expectedVersion);
+  stale('workers/remote-mcp/public/releases.json.version', input.releasesJson?.version, expectedVersion);
+  stale(
+    'workers/remote-mcp/public/releases.json.products.mcp_server.version',
+    input.releasesJson?.products?.mcp_server?.version,
+    expectedVersion,
+  );
+  stale(
+    'workers/remote-mcp/public/releases.json.releases[0].version',
+    input.releasesJson?.releases?.[0]?.version,
+    expectedVersion,
+  );
+  stale('marketplace/anthropic/connector/manifest.json.version', input.anthropicManifest?.version, expectedVersion);
+  stale(
+    'marketplace/anthropic/connector/manifest.json.packages[0].version',
+    input.anthropicManifest?.packages?.[0]?.version,
+    expectedVersion,
+  );
+
+  contains('package.json.description', input.packageJson?.description, `${canonical} canonical operations`);
+  contains('glama.json.description.canonical', input.glamaJson?.description, `${canonical} canonical operations`);
+  contains('glama.json.description.remote-tools', input.glamaJson?.description, `${remote?.tools} tool names`);
+  contains('glama.json.description.remote-resources', input.glamaJson?.description, `${remote?.resources} resources`);
+  contains('glama.json.description.remote-prompts', input.glamaJson?.description, `${remote?.prompts} prompts`);
+  contains('README.md.canonical', input.readme, `${canonical} canonical operations`);
+  const readmeProfileLabels = {
+    localFull: 'The local full profile serves',
+    remoteGrouped: 'The hosted grouped profile serves',
+    openaiFull: 'The separately reviewed OpenAI profile serves',
+  };
+  for (const [name, counts] of Object.entries(surfaces)) {
+    contains(
+      `README.md.${name}`,
+      input.readme,
+      `${readmeProfileLabels[name]} ${counts.tools} tool names, ${counts.resources} resources, and ${counts.prompts} prompts`,
+    );
+    for (const dimension of ['tools', 'resources', 'prompts']) {
+      stale(
+        `workers/remote-mcp/public/releases.json.surfaceCounts.${name}.${dimension}`,
+        input.releasesJson?.surfaceCounts?.[name]?.[dimension],
+        counts[dimension],
+      );
+    }
+  }
+  stale('workers/remote-mcp/public/releases.json.mcpToolCount', input.releasesJson?.mcpToolCount, canonical);
+  stale('workers/remote-mcp/public/releases.json.releases[0].mcpToolCount', input.releasesJson?.releases?.[0]?.mcpToolCount, canonical);
+  stale('workers/remote-mcp/public/releases.json.releases[0].toolNamesCount', input.releasesJson?.releases?.[0]?.toolNamesCount, remote?.tools);
+  stale('workers/remote-mcp/public/releases.json.releases[0].resourcesCount', input.releasesJson?.releases?.[0]?.resourcesCount, remote?.resources);
+  stale('workers/remote-mcp/public/releases.json.releases[0].promptsCount', input.releasesJson?.releases?.[0]?.promptsCount, remote?.prompts);
+  contains(
+    'marketplace/anthropic/connector/manifest.json.description',
+    input.anthropicManifest?.description,
+    `a ${canonical}-operation catalogue; the grouped remote profile exposes ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts`,
+  );
+  contains('CHANGELOG.md.current-release', input.changelog, `## [${expectedVersion}]`);
+  contains('CHANGELOG.md.localFull', input.changelog, `\`localFull\` exposes ${surfaces.localFull?.tools} tool names, ${surfaces.localFull?.resources} resources, and ${surfaces.localFull?.prompts} prompts`);
+  contains('CHANGELOG.md.remoteGrouped', input.changelog, `\`remoteGrouped\` exposes ${remote?.tools} tool names, ${remote?.resources} resources, and ${remote?.prompts} prompts`);
+  contains('CHANGELOG.md.openaiFull', input.changelog, `\`openaiFull\` remains ${surfaces.openaiFull?.tools} tool names, ${surfaces.openaiFull?.resources} resources, and ${surfaces.openaiFull?.prompts} prompts`);
+
+  for (const [index, skill] of (input.skillDocuments ?? []).entries()) {
+    stale(`skill[${index}].metadata.version`, skillMetadataVersion(skill), expectedVersion);
+    contains(`skill[${index}].catalogue-heading`, skill, `## MCP catalogue (${canonical} canonical operations)`);
+  }
+
+  return drifts;
+}
+
 // Run the full audit only when invoked as a CLI. When imported (e.g. by tests)
 // the module exposes its pure helpers without executing the audit or exiting.
 const isMain = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
@@ -247,6 +378,32 @@ if (FIX && !ALLOW_DIRTY) {
 }
 
 const findings = [];
+
+if (!REPO_FILTER || REPO_FILTER === 'frihet-mcp') {
+  const projectionDrifts = checkCurrentReleaseProjections({
+    packageJson: pkg,
+    glamaJson: JSON.parse(readFileSync(join(SELF, 'glama.json'), 'utf8')),
+    releasesJson: JSON.parse(readFileSync(join(SELF, 'workers/remote-mcp/public/releases.json'), 'utf8')),
+    anthropicManifest: JSON.parse(readFileSync(join(SELF, 'marketplace/anthropic/connector/manifest.json'), 'utf8')),
+    readme: readFileSync(join(SELF, 'README.md'), 'utf8'),
+    changelog: readFileSync(join(SELF, 'CHANGELOG.md'), 'utf8'),
+    capabilityContract: publicCapabilityContract,
+    skillDocuments: [
+      readFileSync(join(SELF, 'skill/SKILL.md'), 'utf8'),
+      readFileSync(join(SELF, 'skills/frihet-mcp/SKILL.md'), 'utf8'),
+    ],
+  }, VERSION);
+  for (const drift of projectionDrifts) {
+    findings.push({
+      repo: 'frihet-mcp',
+      file: drift.jsonPath.split('.')[0],
+      line: drift.jsonPath,
+      severity: 'fail',
+      ...drift,
+      snippet: `${drift.jsonPath} = ${JSON.stringify(drift.found)}`.slice(0, 240),
+    });
+  }
+}
 
 for (const [repoName, cfg] of Object.entries(REPOS)) {
   if (REPO_FILTER && repoName !== REPO_FILTER) continue;
@@ -500,6 +657,9 @@ if (JSON_OUT) {
 }
 
 const exitFail = findings.some((f) => f.severity === 'fail');
-process.exit(exitFail && !FIX ? 1 : 0);
+const unfixableProjectionFail = findings.some(
+  (f) => f.severity === 'fail' && f.kind === 'release-projection',
+);
+process.exit((exitFail && !FIX) || unfixableProjectionFail ? 1 : 0);
 
 } // end if (isMain)

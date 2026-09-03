@@ -34,8 +34,60 @@ const checkServerJsonVersion = auditMod.checkServerJsonVersion as (
   serverJson: unknown,
   expectedVersion: string,
 ) => Array<{ kind: string; jsonPath: string; found: unknown; expected: string }>;
+type ReleaseProjectionInput = {
+  packageJson: { version: string; description: string };
+  glamaJson: { version: string; description: string };
+  releasesJson: {
+    version: string;
+    mcpToolCount: number;
+    products: { mcp_server: { version: string } };
+    releases: Array<Record<string, unknown> & { version: string }>;
+    surfaceCounts: Record<string, { tools: number; resources: number; prompts: number }>;
+  };
+  anthropicManifest: {
+    version: string;
+    description: string;
+    packages: Array<{ version: string }>;
+  };
+  readme: string;
+  changelog: string;
+  capabilityContract: {
+    catalogue: { canonicalOperations: number };
+    surfaces: Record<string, { tools: unknown[]; resources: unknown[]; prompts: unknown[] }>;
+  };
+  skillDocuments: string[];
+};
+const checkCurrentReleaseProjections = auditMod.checkCurrentReleaseProjections as (
+  input: ReleaseProjectionInput,
+  expectedVersion: string,
+) => Array<{ kind: string; jsonPath: string; found: unknown; expected: unknown }>;
 
 const SOT_VERSION = JSON.parse(readFileSync(PKG_PATH, "utf8")).version as string;
+
+function releaseProjectionInput(): ReleaseProjectionInput {
+  return {
+    packageJson: JSON.parse(readFileSync(PKG_PATH, "utf8")),
+    glamaJson: JSON.parse(readFileSync(join(REPO_ROOT, "glama.json"), "utf8")),
+    releasesJson: JSON.parse(readFileSync(
+      join(REPO_ROOT, "workers", "remote-mcp", "public", "releases.json"),
+      "utf8",
+    )),
+    anthropicManifest: JSON.parse(readFileSync(
+      join(REPO_ROOT, "marketplace", "anthropic", "connector", "manifest.json"),
+      "utf8",
+    )),
+    readme: readFileSync(join(REPO_ROOT, "README.md"), "utf8"),
+    changelog: readFileSync(join(REPO_ROOT, "CHANGELOG.md"), "utf8"),
+    capabilityContract: JSON.parse(readFileSync(
+      join(REPO_ROOT, "src", "__tests__", "fixtures", "public-capability-contract.json"),
+      "utf8",
+    )),
+    skillDocuments: [
+      readFileSync(join(REPO_ROOT, "skill", "SKILL.md"), "utf8"),
+      readFileSync(join(REPO_ROOT, "skills", "frihet-mcp", "SKILL.md"), "utf8"),
+    ],
+  };
+}
 
 describe("server.json version gate", () => {
   test("exports a checkServerJsonVersion helper", () => {
@@ -122,5 +174,67 @@ describe("server.json version gate", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("current release projection gate", () => {
+  test("real package-facing projections match generated profile truth", () => {
+    assert.deepEqual(checkCurrentReleaseProjections(releaseProjectionInput(), SOT_VERSION), []);
+  });
+
+  test("bare JSON version drift cannot pass the line-oriented audit", () => {
+    const mutations: Array<[string, (input: ReleaseProjectionInput) => void]> = [
+      ["glama", (input) => { input.glamaJson.version = "0.0.0"; }],
+      ["default Worker release root", (input) => { input.releasesJson.version = "0.0.0"; }],
+      ["default Worker product", (input) => { input.releasesJson.products.mcp_server.version = "0.0.0"; }],
+      ["Anthropic root", (input) => { input.anthropicManifest.version = "0.0.0"; }],
+      ["Anthropic npm package", (input) => { input.anthropicManifest.packages[0].version = "0.0.0"; }],
+      ["skill frontmatter", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 1.18.0", "  version: 0.0.0"); }],
+    ];
+    for (const [label, mutate] of mutations) {
+      const input = releaseProjectionInput();
+      mutate(input);
+      assert.ok(
+        checkCurrentReleaseProjections(input, SOT_VERSION).length > 0,
+        `${label} version drift must fail`,
+      );
+    }
+  });
+
+  test("canonical and per-profile count drift fails in prose and structured metadata", () => {
+    const mutations: Array<[string, (input: ReleaseProjectionInput) => void]> = [
+      ["package canonical prose", (input) => { input.packageJson.description = "157 canonical operations"; }],
+      ["README generated surface", (input) => { input.readme = input.readme.replace("166 tool names, 7 resources, and 10 prompts", "165 tool names, 9 resources, and 10 prompts"); }],
+      ["Glama remote surface", (input) => { input.glamaJson.description = "158 canonical operations"; }],
+      ["release local resources", (input) => { input.releasesJson.surfaceCounts.localFull.resources = 9; }],
+      ["release OpenAI prompts", (input) => { input.releasesJson.surfaceCounts.openaiFull.prompts = 10; }],
+      ["skill catalogue", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replaceAll("158 canonical operations", "157 canonical operations"); }],
+      ["Anthropic remote profile", (input) => { input.anthropicManifest.description = input.anthropicManifest.description.replace("166 tool names, 7 resources, and 10 prompts", "163 tool names, 11 resources, and 10 prompts"); }],
+    ];
+    for (const [label, mutate] of mutations) {
+      const input = releaseProjectionInput();
+      mutate(input);
+      assert.ok(
+        checkCurrentReleaseProjections(input, SOT_VERSION).length > 0,
+        `${label} drift must fail`,
+      );
+    }
+  });
+
+  test("README counts are bound to their exact profile labels", () => {
+    const input = releaseProjectionInput();
+    const localCounts = "163 tool names, 11 resources, and 10 prompts";
+    const remoteCounts = "166 tool names, 7 resources, and 10 prompts";
+    input.readme = input.readme
+      .replace(localCounts, "__LOCAL_COUNTS__")
+      .replace(remoteCounts, localCounts)
+      .replace("__LOCAL_COUNTS__", remoteCounts);
+
+    const drifts = checkCurrentReleaseProjections(input, SOT_VERSION);
+    assert.deepEqual(
+      drifts.map((drift) => drift.jsonPath).filter((path) => path.startsWith("README.md.")),
+      ["README.md.localFull", "README.md.remoteGrouped"],
+      "swapping otherwise-valid tuples between profile labels must fail",
+    );
   });
 });
