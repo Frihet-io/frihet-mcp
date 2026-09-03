@@ -289,7 +289,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
-  "scripts/audit-mcp-refs.mjs": "b0591c8c40cbc6e392a5d3a8b753b9b63fcd35754691624b49191ba476c7c85e",
+  "scripts/audit-mcp-refs.mjs": "28dea6fecbb23005ed9c0b70f0a33605a551264238428d30514fb40567d65460",
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
   "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",
   "scripts/conformance/applicability.json": "a561dcb009c695cd3d5287aaa1aef6f0c43518b38a377c6ed5770b1f4d68eb25",

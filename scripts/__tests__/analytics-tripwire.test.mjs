@@ -170,7 +170,7 @@ describe("anti-defang contract", () => {
     );
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES["scripts/audit-mcp-refs.mjs"],
-      "b0591c8c40cbc6e392a5d3a8b753b9b63fcd35754691624b49191ba476c7c85e",
+      "28dea6fecbb23005ed9c0b70f0a33605a551264238428d30514fb40567d65460",
     );
     assert.equal(
       APPROVED_PUBLISHED_FILE_HASHES["README.md"],

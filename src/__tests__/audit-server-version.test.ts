@@ -271,13 +271,13 @@ describe("current release projection gate", () => {
     assert.ok(paths.includes("README.md.current-summary"));
   });
 
-  test("an explicitly historical README claim is outside current structural anchors", () => {
+  test("explicitly historical README canonical and profile claims are outside the public scan", () => {
     const input = releaseProjectionInput();
     const historicalComment = "<!-- v1.12.0-beta.1 — D4-B megasprint:";
     assert.ok(input.readme.includes(historicalComment), "fixture must contain the historical HTML comment");
     input.readme = input.readme.replace(
       historicalComment,
-      "<!-- Historical release note: 157 canonical operations. v1.12.0-beta.1 — D4-B megasprint:",
+      "<!-- Historical release note: 157 canonical operations. The hosted grouped profile serves 165 tool names, 9 resources, and 8 prompts. v1.12.0-beta.1 — D4-B megasprint:",
     );
 
     assert.deepEqual(checkCurrentReleaseProjections(input, SOT_VERSION), []);
@@ -295,6 +295,20 @@ describe("current release projection gate", () => {
 
     const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
     assert.ok(paths.includes("README.md.public-canonical-claims"));
+  });
+
+  test("a stale profile tuple relocated into a new public section fails", () => {
+    const input = releaseProjectionInput();
+    input.readme += [
+      "",
+      "## Additional public profile",
+      "",
+      "The hosted grouped profile serves 165 tool names, 9 resources, and 8 prompts.",
+      "",
+    ].join("\n");
+
+    const paths = checkCurrentReleaseProjections(input, SOT_VERSION).map((drift) => drift.jsonPath);
+    assert.ok(paths.includes("README.md.public-profile.remoteGrouped"));
   });
 
   test("current CHANGELOG truth cannot be satisfied by a historical-only match", () => {

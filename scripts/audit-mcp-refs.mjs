@@ -457,6 +457,12 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
       readmeProfileLabels[name],
       counts,
     );
+    expectUniqueProfileTuple(
+      `README.md.public-profile.${name}`,
+      publicReadme,
+      readmeProfileLabels[name],
+      counts,
+    );
     for (const dimension of ['tools', 'resources', 'prompts']) {
       stale(
         `workers/remote-mcp/public/releases.json.surfaceCounts.${name}.${dimension}`,
