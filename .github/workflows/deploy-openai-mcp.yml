@@ -1,0 +1,1539 @@
+name: Deploy OpenAI-reviewed MCP profile
+
+# This is deliberately separate from release-mcp-npm.yml. The canonical release
+# must first prove npm + the full-profile Worker + GitHub tag from one exact
+# origin/main commit. Only then may an independently approved run deploy the
+# narrower, reviewed OpenAI profile from that same commit.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact package/runtime source release. Must match package.json and vVERSION.
+        required: true
+        type: string
+      source_sha:
+        description: Exact 40-character origin/main SHA already released by the full-profile workflow.
+        required: true
+        type: string
+      dry_run:
+        description: Run all gates and the asserted Wrangler OpenAI dry-run, but never deploy.
+        required: false
+        type: boolean
+        default: true
+      change_freeze_id:
+        description: One-time 64-hex change-freeze nonce; required for real runs and matched inside protected environments.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openai-mcp-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Preflight — exact released source · protected environment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+      sourceCommit: ${{ steps.identity.outputs.source_commit }}
+      reviewedProfileVersion: ${{ steps.identity.outputs.reviewed_profile_version }}
+      rootLockSha256: ${{ steps.locks.outputs.root_lock_sha256 }}
+      workerLockSha256: ${{ steps.locks.outputs.worker_lock_sha256 }}
+    steps:
+      - name: Checkout exact requested source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Setup exact Node toolchain
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.2
+
+      - name: Assert exact origin/main + package + release tag source
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_SHA: ${{ github.sha }}
+          DISPATCH_REF: ${{ github.ref }}
+          INPUT_SOURCE_SHA: ${{ inputs.source_sha }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$INPUT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be one exact lowercase 40-character commit SHA"
+            exit 1
+          fi
+          if ! [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "::error::version '$INPUT_VERSION' is not strict semver"
+            exit 1
+          fi
+          if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+            echo "::error::OpenAI deployment must be dispatched from main; got $DISPATCH_REF"
+            exit 1
+          fi
+
+          HEAD_SHA="$(git rev-parse HEAD)"
+          REMOTE_MAIN="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+          if [ "$HEAD_SHA" != "$INPUT_SOURCE_SHA" ] \
+            || [ "$DISPATCH_SHA" != "$INPUT_SOURCE_SHA" ] \
+            || [ "$REMOTE_MAIN" != "$INPUT_SOURCE_SHA" ]; then
+            echo "::error::source authority mismatch"
+            echo "Requested source must equal checkout HEAD, dispatch SHA, and current origin/main."
+            exit 1
+          fi
+
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$PACKAGE_VERSION" != "$INPUT_VERSION" ]; then
+            echo "::error::package.json version '$PACKAGE_VERSION' != requested '$INPUT_VERSION'"
+            exit 1
+          fi
+
+          # The reviewed ChatGPT profile has its own frozen candidate version.
+          # Do not mislabel it as the package/runtime release version: the
+          # public-openai asset is its single source of truth.
+          PROFILE_FILE="workers/remote-mcp/public-openai/releases.json"
+          PROFILE_VERSION="$(jq -r '.version // ""' "$PROFILE_FILE")"
+          if [ -z "$PROFILE_VERSION" ]; then
+            echo "::error::reviewed OpenAI profile version is missing"
+            exit 1
+          fi
+          jq -e \
+            --arg profileVersion "$PROFILE_VERSION" \
+            '.surface == "openai-chatgpt"
+              and .mcpToolCount == 33
+              and .reviewedBusinessToolCount == 33
+              and .discoveryMetaToolCount == 0
+              and .resourcesCount == 0
+              and .promptsCount == 0
+              and .products.mcp_server.status == "candidate"
+              and .products.mcp_server.version == $profileVersion
+              and .releases[0].version == $profileVersion' \
+            "$PROFILE_FILE" >/dev/null
+          if ! grep -Fq "Release \`$PROFILE_VERSION\`" marketplace/openai/SUBMISSION.md; then
+            echo "::error::OpenAI submission guide disagrees with the reviewed profile version"
+            exit 1
+          fi
+
+          TAG="v${INPUT_VERSION}"
+          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          TAG_COMMIT="$(git rev-parse "${TAG}^{commit}")"
+          if [ "$TAG_COMMIT" != "$INPUT_SOURCE_SHA" ]; then
+            echo "::error::$TAG resolves to $TAG_COMMIT, not $INPUT_SOURCE_SHA"
+            exit 1
+          fi
+
+          RELEASE_JSON="$(gh release view "$TAG" --json tagName,isDraft,isPrerelease)"
+          if [ "$(jq -r '.tagName' <<< "$RELEASE_JSON")" != "$TAG" ] \
+            || [ "$(jq -r '.isDraft' <<< "$RELEASE_JSON")" != "false" ] \
+            || [ "$(jq -r '.isPrerelease' <<< "$RELEASE_JSON")" != "false" ]; then
+            echo "::error::GitHub Release $TAG is absent, draft, prerelease, or does not match the source tag"
+            exit 1
+          fi
+
+          git diff --exit-code -- .
+          test -z "$(git status --porcelain)"
+          {
+            echo "version=$INPUT_VERSION"
+            echo "source_commit=$INPUT_SOURCE_SHA"
+            echo "reviewed_profile_version=$PROFILE_VERSION"
+          } >> "$GITHUB_OUTPUT"
+          echo "OK — exact released source is $INPUT_SOURCE_SHA ($TAG)"
+
+      - name: Require successful full-profile release readback
+        env:
+          SOURCE_COMMIT: ${{ steps.identity.outputs.source_commit }}
+          VERSION: ${{ steps.identity.outputs.version }}
+        run: |
+          set -euo pipefail
+          HEALTH_FILE="$(mktemp)"
+          trap 'rm -f "$HEALTH_FILE"' EXIT
+          curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 10 --max-time 45 \
+            -H 'Cache-Control: no-cache' \
+            "https://mcp.frihet.io/health?release=${SOURCE_COMMIT}" > "$HEALTH_FILE"
+          jq -e \
+            --arg sha "$SOURCE_COMMIT" \
+            --arg version "$VERSION" \
+            '.status == "ok"
+              and .version == $version
+              and .releaseSha == $sha
+              and .releaseVersion == $version
+              and .releaseSource == "wrangler-var"' \
+            "$HEALTH_FILE" >/dev/null
+          echo "OK — full-profile Worker already proves this exact release"
+
+      - name: Assert protected release and non-blocking recovery environments
+        if: inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          read_environment() {
+            local name="$1"
+            if ! gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/environments/${name}"; then
+              echo "::error::$name environment is missing or unreadable" >&2
+              return 1
+            fi
+          }
+          assert_protected() {
+            local name="$1"
+            local environment_json
+            environment_json="$(read_environment "$name")"
+            local reviewer_count
+            local prevent_self_review
+            reviewer_count="$(jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length' <<< "$environment_json")"
+            prevent_self_review="$(jq -r '[.protection_rules[]? | select(.type == "required_reviewers") | .prevent_self_review] | any' <<< "$environment_json")"
+            if [ "$(jq -r '.name // ""' <<< "$environment_json")" != "$name" ] \
+              || [ "$reviewer_count" -lt 1 ] \
+              || [ "$prevent_self_review" != "true" ]; then
+              echo "::error::$name must have a required reviewer and prevent self-review"
+              return 1
+            fi
+          }
+          assert_main_only() {
+            local name="$1"
+            local policies_json
+            if ! policies_json="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/environments/${name}/deployment-branch-policies?per_page=100")"; then
+              echo "::error::$name deployment branch policy is missing or unreadable"
+              return 1
+            fi
+            if ! jq -e '.branch_policies | length == 1 and .[0].name == "main" and .[0].type == "branch"' \
+              <<< "$policies_json" >/dev/null; then
+              echo "::error::$name must allow exactly the main branch"
+              return 1
+            fi
+          }
+
+          assert_protected openai-plugin-release
+          assert_main_only openai-plugin-release
+          ROLLBACK_JSON="$(read_environment openai-plugin-rollback)"
+          if [ "$(jq -r '.name // ""' <<< "$ROLLBACK_JSON")" != "openai-plugin-rollback" ] \
+            || [ "$(jq '[.protection_rules[]?] | length' <<< "$ROLLBACK_JSON")" -ne 0 ]; then
+            echo "::error::openai-plugin-rollback must have no reviewer, wait timer, or custom gate"
+            exit 1
+          fi
+          assert_main_only openai-plugin-rollback
+          echo "OK — protected release and non-blocking main-only recovery environments exist"
+
+      - name: Freeze exact-source lockfile digests
+        id: locks
+        run: |
+          set -euo pipefail
+          git ls-files --error-unmatch package-lock.json workers/remote-mcp/package-lock.json >/dev/null
+          ROOT_LOCK_SHA="$(sha256sum package-lock.json | awk '{print $1}')"
+          WORKER_LOCK_SHA="$(sha256sum workers/remote-mcp/package-lock.json | awk '{print $1}')"
+          {
+            echo "root_lock_sha256=$ROOT_LOCK_SHA"
+            echo "worker_lock_sha256=$WORKER_LOCK_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+  gates:
+    name: Gates — root · Worker · reviewed OpenAI contracts
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.preflight.outputs.sourceCommit }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Assert exact-source lockfiles before install
+        env:
+          EXPECTED_ROOT_LOCK_SHA: ${{ needs.preflight.outputs.rootLockSha256 }}
+          EXPECTED_WORKER_LOCK_SHA: ${{ needs.preflight.outputs.workerLockSha256 }}
+        run: |
+          set -euo pipefail
+          test ! -e npm-shrinkwrap.json
+          test ! -e .npmrc
+          test ! -e workers/remote-mcp/npm-shrinkwrap.json
+          test ! -e workers/remote-mcp/.npmrc
+          {
+            printf '%s  package-lock.json\n' "$EXPECTED_ROOT_LOCK_SHA"
+            printf '%s  workers/remote-mcp/package-lock.json\n' "$EXPECTED_WORKER_LOCK_SHA"
+          } | sha256sum --check --strict -
+
+      - name: Install exact locked dependencies without lifecycle hooks
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix workers/remote-mcp --ignore-scripts
+
+      - name: Full root build and test suite
+        run: npm test
+
+      - name: Full Worker typecheck and test suite
+        run: |
+          npm run typecheck --prefix workers/remote-mcp
+          npm test --prefix workers/remote-mcp
+
+      - name: Frozen OpenAI descriptor and submission
+        run: |
+          npm run gate:openai-review-descriptor
+          npm run gate:openai-submission
+
+      - name: Capability and onboarding truth
+        run: |
+          npm run gate:public-capability-truth
+          npm run gate:agent-onboarding
+
+      - name: Analytics and OpenAPI gates
+        run: |
+          npm run gate:analytics
+          npm run gate:openapi-fresh
+
+      - name: Target OpenAI topology contract
+        run: node scripts/check-openai-worker-topology.mjs
+
+  wrangler-dry-run:
+    name: Wrangler — asserted OpenAI dry-run
+    needs: [preflight, gates]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.preflight.outputs.sourceCommit }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Assert exact-source lockfiles before install
+        env:
+          EXPECTED_ROOT_LOCK_SHA: ${{ needs.preflight.outputs.rootLockSha256 }}
+          EXPECTED_WORKER_LOCK_SHA: ${{ needs.preflight.outputs.workerLockSha256 }}
+        run: |
+          set -euo pipefail
+          {
+            printf '%s  package-lock.json\n' "$EXPECTED_ROOT_LOCK_SHA"
+            printf '%s  workers/remote-mcp/package-lock.json\n' "$EXPECTED_WORKER_LOCK_SHA"
+          } | sha256sum --check --strict -
+
+      - name: Install exact locked dependencies without lifecycle hooks
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix workers/remote-mcp --ignore-scripts
+
+      - name: Build and assert OpenAI bindings without deploying
+        env:
+          NO_COLOR: "1"
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          REVIEWED_PROFILE_VERSION: ${{ needs.preflight.outputs.reviewedProfileVersion }}
+        working-directory: workers/remote-mcp
+        run: |
+          set -euo pipefail
+          RAW_LOG="$(mktemp)"
+          OUTDIR="$(mktemp -d)"
+          if ! ./node_modules/.bin/wrangler deploy --dry-run --env openai \
+            --outdir "$OUTDIR" \
+            --var "RELEASE_SOURCE_SHA:${SOURCE_COMMIT}" \
+            --var "RELEASE_VERSION:${VERSION}" > "$RAW_LOG" 2>&1; then
+            echo "::error::Wrangler OpenAI dry-run failed; raw output withheld from artifacts"
+            exit 1
+          fi
+
+          require_binding() {
+            local pattern="$1"
+            local label="$2"
+            if ! grep -Eq "$pattern" "$RAW_LOG"; then
+              echo "::error::OpenAI dry-run omitted or changed required binding: $label"
+              exit 1
+            fi
+          }
+          require_binding 'FRIHET_OPENAI_MODE.*\("true"\)' 'FRIHET_OPENAI_MODE=true'
+          require_binding 'FRIHET_TOOL_MODE.*\("full"\)' 'FRIHET_TOOL_MODE=full'
+          require_binding 'OAUTH_KV.*7df4e387eee243268669425594aae45e' 'dedicated OAUTH_KV'
+          require_binding 'MCP_OBJECT.*FrihetMCP.*Durable Object' 'MCP_OBJECT Durable Object'
+          require_binding 'OAUTH_STATE.*OAuthStateStore.*Durable Object' 'OAUTH_STATE Durable Object'
+          require_binding 'ASSETS.*(Assets|Fetcher)' 'OpenAI ASSETS binding'
+          if grep -Eq 'FRIHET_OPENAI_MODE.*\("false"\)|FRIHET_TOOL_MODE.*\("grouped"\)|9207b98598f849109139ad11f3b0ac51' "$RAW_LOG"; then
+            echo "::error::OpenAI dry-run resolved a default/full-profile binding"
+            exit 1
+          fi
+
+          EVIDENCE_DIR="$PWD/../../.openai-release-evidence"
+          mkdir -p "$EVIDENCE_DIR"
+          test -n "$(find "$OUTDIR" -type f -print -quit)"
+          (
+            cd "$OUTDIR"
+            find . -type f -print0 \
+              | LC_ALL=C sort -z \
+              | xargs -0 sha256sum
+          ) > "$EVIDENCE_DIR/openai-bundle-files.sha256"
+          jq -n \
+            --arg sourceSha "$SOURCE_COMMIT" \
+            --arg version "$VERSION" \
+            --arg reviewedProfileVersion "$REVIEWED_PROFILE_VERSION" \
+            '{
+              sourceSha: $sourceSha,
+              sourceReleaseVersion: $version,
+              reviewedProfileVersion: $reviewedProfileVersion,
+              wranglerDryRun: true,
+              environment: "openai",
+              profile: { openaiMode: true, toolMode: "full" },
+              bindings: {
+                oauthKv: "7df4e387eee243268669425594aae45e",
+                durableObjects: ["MCP_OBJECT:FrihetMCP", "OAUTH_STATE:OAuthStateStore"],
+                assets: true
+              }
+            }' > "$EVIDENCE_DIR/wrangler-openai-dry-run.json"
+          echo "OK — dry-run proves the dedicated reviewed OpenAI binding set"
+
+      - name: Upload sanitized dry-run evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openai-wrangler-dry-run-${{ inputs.version }}
+          path: .openai-release-evidence/
+          retention-days: 90
+
+  capture-rollback-state:
+    name: Prove compatible active OpenAI baseline before mutation
+    needs: [preflight, gates, wrangler-dry-run]
+    if: inputs.dry_run != true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: openai-plugin-rollback
+    outputs:
+      previousDeploymentId: ${{ steps.capture.outputs.previous_deployment_id }}
+      previousVersionId: ${{ steps.capture.outputs.previous_version_id }}
+      previousHealthSha256: ${{ steps.capture.outputs.previous_health_sha256 }}
+      baselineTopologySha256: ${{ steps.capture.outputs.baseline_topology_sha256 }}
+      baselineReceiptSha256: ${{ steps.capture.outputs.baseline_receipt_sha256 }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.preflight.outputs.sourceCommit }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Assert exact-source lockfiles before install
+        env:
+          EXPECTED_ROOT_LOCK_SHA: ${{ needs.preflight.outputs.rootLockSha256 }}
+          EXPECTED_WORKER_LOCK_SHA: ${{ needs.preflight.outputs.workerLockSha256 }}
+        run: |
+          set -euo pipefail
+          {
+            printf '%s  package-lock.json\n' "$EXPECTED_ROOT_LOCK_SHA"
+            printf '%s  workers/remote-mcp/package-lock.json\n' "$EXPECTED_WORKER_LOCK_SHA"
+          } | sha256sum --check --strict -
+
+      - name: Install exact Worker deployment CLI
+        run: npm ci --prefix workers/remote-mcp --ignore-scripts
+
+      - name: Assert automatic recovery credentials before mutation
+        env:
+          OPENAI_ROLLBACK_ENV_GUARD: ${{ secrets.OPENAI_ROLLBACK_ENV_GUARD }}
+          OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID: ${{ secrets.OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID }}
+          INPUT_CHANGE_FREEZE_ID: ${{ inputs.change_freeze_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          MISSING=()
+          [ -n "$OPENAI_ROLLBACK_ENV_GUARD" ] || MISSING+=("OPENAI_ROLLBACK_ENV_GUARD")
+          [ -n "$OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID" ] || MISSING+=("OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID")
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || MISSING+=("CLOUDFLARE_API_TOKEN")
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || MISSING+=("CLOUDFLARE_ACCOUNT_ID")
+          if [ "${#MISSING[@]}" -ne 0 ]; then
+            printf '::error::automatic recovery credential is absent: %s\n' "${MISSING[@]}"
+            exit 1
+          fi
+          if ! [[ "$INPUT_CHANGE_FREEZE_ID" =~ ^[0-9a-f]{64}$ ]] \
+            || [ "$INPUT_CHANGE_FREEZE_ID" != "$OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID" ]; then
+            echo "::error::automatic recovery does not hold this run's exclusive-change freeze"
+            exit 1
+          fi
+
+      - name: Capture active deployment and prove final-topology baseline
+        id: capture
+        env:
+          NO_COLOR: "1"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OPENAI_BASE: https://openai-mcp.frihet.io
+        working-directory: workers/remote-mcp
+        run: |
+          set -euo pipefail
+          STATE_DIR="$(mktemp -d)"
+          trap 'rm -rf "$STATE_DIR"' EXIT
+          CONTRACT=../../marketplace/openai/cloudflare-topology-baseline.json
+          WORKER_NAME="$(jq -r '.workerName // ""' "$CONTRACT")"
+          ENVIRONMENT="$(jq -r '.environment // ""' "$CONTRACT")"
+          ZONE_NAME="$(jq -r '.targetTopology.routes[0].zoneName // ""' "$CONTRACT")"
+          test "$WORKER_NAME" = "frihet-openai-mcp"
+          test "$ENVIRONMENT" = "openai"
+          test "$ZONE_NAME" = "frihet.io"
+
+          api_get() {
+            curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 \
+              --connect-timeout 10 --max-time 45 \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              "https://api.cloudflare.com/client/v4/$1"
+          }
+
+          IDENTITY_FILE="$STATE_DIR/identity.json"
+          STATUS_FILE="$STATE_DIR/deployment.json"
+          VERSION_FILE="$STATE_DIR/version.json"
+          ZONE_ENVELOPE="$STATE_DIR/zone-envelope.json"
+          ZONE_FILE="$STATE_DIR/zone.json"
+          ROUTES_ENVELOPE="$STATE_DIR/routes-envelope.json"
+          ROUTES_FILE="$STATE_DIR/routes.json"
+          SUBDOMAIN_ENVELOPE="$STATE_DIR/subdomain-envelope.json"
+          SUBDOMAIN_FILE="$STATE_DIR/subdomain.json"
+          HEALTH_FILE="$STATE_DIR/health.json"
+          HEALTH_CANONICAL="$STATE_DIR/health-canonical.json"
+
+          ./node_modules/.bin/wrangler whoami --json > "$IDENTITY_FILE"
+          ./node_modules/.bin/wrangler deployments status \
+            --env openai --name "$WORKER_NAME" --json > "$STATUS_FILE"
+          jq -e '
+            type == "object"
+            and (.id | type == "string" and length > 0)
+            and (.versions | type == "array" and length == 1)
+            and (.versions[0].version_id | type == "string" and length > 0)
+            and .versions[0].percentage == 100
+          ' "$STATUS_FILE" >/dev/null
+          PREVIOUS_DEPLOYMENT_ID="$(jq -r '.id' "$STATUS_FILE")"
+          PREVIOUS_VERSION_ID="$(jq -r '.versions[0].version_id' "$STATUS_FILE")"
+
+          # This gate compares the actual active Cloudflare resources with the
+          # separately reviewed final-topology receipt. A pending receipt, DO
+          # migration drift, namespace drift, or binding drift stops here.
+          ./node_modules/.bin/wrangler versions view "$PREVIOUS_VERSION_ID" \
+            --env openai --name "$WORKER_NAME" --json > "$VERSION_FILE"
+          api_get "zones?name=${ZONE_NAME}&account.id=${CLOUDFLARE_ACCOUNT_ID}&status=active&per_page=50" \
+            > "$ZONE_ENVELOPE"
+          jq -e --arg accountId "$CLOUDFLARE_ACCOUNT_ID" --arg zoneName "$ZONE_NAME" \
+            '.success == true and (.result | length) == 1
+              and .result[0].name == $zoneName
+              and .result[0].account.id == $accountId
+              and .result[0].status == "active"' "$ZONE_ENVELOPE" >/dev/null
+          jq '.result[0]' "$ZONE_ENVELOPE" > "$ZONE_FILE"
+          ZONE_ID="$(jq -r '.id' "$ZONE_FILE")"
+          api_get "zones/${ZONE_ID}/workers/routes" > "$ROUTES_ENVELOPE"
+          jq -e '.success == true and (.result | type == "array")' "$ROUTES_ENVELOPE" >/dev/null
+          jq '.result' "$ROUTES_ENVELOPE" > "$ROUTES_FILE"
+          api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/subdomain" \
+            > "$SUBDOMAIN_ENVELOPE"
+          jq -e '.success == true and (.result | type == "object")' "$SUBDOMAIN_ENVELOPE" >/dev/null
+          jq '.result' "$SUBDOMAIN_ENVELOPE" > "$SUBDOMAIN_FILE"
+          curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 10 --max-time 45 \
+            -H 'Cache-Control: no-cache' "$OPENAI_BASE/health?rollback-capture=1" > "$HEALTH_FILE"
+          node ../../scripts/check-openai-worker-topology.mjs \
+            --require-established \
+            --active-deployment "$STATUS_FILE" \
+            --live-version "$VERSION_FILE" \
+            --health "$HEALTH_FILE" \
+            --identity "$IDENTITY_FILE" \
+            --zone "$ZONE_FILE" \
+            --routes "$ROUTES_FILE" \
+            --subdomain "$SUBDOMAIN_FILE" \
+            --account-id "$CLOUDFLARE_ACCOUNT_ID" \
+            --worker-name "$WORKER_NAME" \
+            --environment openai
+          BASELINE_TOPOLOGY_SHA="$(jq -r '.baseline.topologySha256' \
+            "$CONTRACT")"
+          BASELINE_RECEIPT_SHA="$(sha256sum "$CONTRACT" | awk '{print $1}')"
+          jq -cS '{status, version, releaseSha, releaseVersion, releaseSource}' \
+            "$HEALTH_FILE" > "$HEALTH_CANONICAL"
+          PREVIOUS_HEALTH_SHA="$(sha256sum "$HEALTH_CANONICAL" | awk '{print $1}')"
+          {
+            echo "previous_deployment_id=$PREVIOUS_DEPLOYMENT_ID"
+            echo "previous_version_id=$PREVIOUS_VERSION_ID"
+            echo "previous_health_sha256=$PREVIOUS_HEALTH_SHA"
+            echo "baseline_topology_sha256=$BASELINE_TOPOLOGY_SHA"
+            echo "baseline_receipt_sha256=$BASELINE_RECEIPT_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+          mkdir -p ../../.openai-release-evidence
+          jq -n \
+            --arg deploymentId "$PREVIOUS_DEPLOYMENT_ID" \
+            --arg versionId "$PREVIOUS_VERSION_ID" \
+            --arg healthSha256 "$PREVIOUS_HEALTH_SHA" \
+            '{
+              preMutationStateCaptured: true,
+              activeDeploymentId: $deploymentId,
+              activeVersionId: $versionId,
+              activePercentageIs100: true,
+              compatibleFinalTopologyProven: true,
+              topologyReceiptAuthenticatedByCloudflareReadback: true,
+              exactAccountScriptEnvironmentBoundByReceipt: true,
+              exactZoneRouteAndSubdomainBoundByReceipt: true,
+              exactDeploymentVersionSourceAndEtagProven: true,
+              publicSourceProvenanceBoundByReceipt: true,
+              immutableAnchorValidated: true,
+              recoveryAuthorityStillRequiresJitPrestate: true,
+              healthFingerprintSha256: $healthSha256
+            }' > ../../.openai-release-evidence/pre-mutation-state.json
+
+      - name: Upload sanitized pre-mutation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openai-pre-mutation-${{ inputs.version }}
+          path: .openai-release-evidence/
+          retention-days: 90
+
+  deploy-openai:
+    name: Deploy reviewed OpenAI Worker
+    needs: [preflight, gates, wrangler-dry-run, capture-rollback-state]
+    if: inputs.dry_run != true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: openai-plugin-release
+    outputs:
+      mutationStarted: ${{ steps.deploy.outputs.started }}
+      deploymentId: ${{ steps.deploy.outputs.deployment_id }}
+      versionId: ${{ steps.deploy.outputs.version_id }}
+      jitPreviousDeploymentId: ${{ steps.deploy.outputs.jit_previous_deployment_id }}
+      jitPreviousVersionId: ${{ steps.deploy.outputs.jit_previous_version_id }}
+      jitPreviousSourceSha: ${{ steps.deploy.outputs.jit_previous_source_sha }}
+      jitPreviousSourceVersion: ${{ steps.deploy.outputs.jit_previous_source_version }}
+      jitPreviousScriptEtagSha256: ${{ steps.deploy.outputs.jit_previous_script_etag_sha256 }}
+      jitPreviousTopologySha256: ${{ steps.deploy.outputs.jit_previous_topology_sha256 }}
+      jitPreviousHealthSha256: ${{ steps.deploy.outputs.jit_previous_health_sha256 }}
+      jitPrestateSha256: ${{ steps.deploy.outputs.jit_prestate_sha256 }}
+      jitObservedAt: ${{ steps.deploy.outputs.jit_observed_at }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.preflight.outputs.sourceCommit }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Assert exact-source lockfiles before install
+        env:
+          EXPECTED_ROOT_LOCK_SHA: ${{ needs.preflight.outputs.rootLockSha256 }}
+          EXPECTED_WORKER_LOCK_SHA: ${{ needs.preflight.outputs.workerLockSha256 }}
+        run: |
+          set -euo pipefail
+          {
+            printf '%s  package-lock.json\n' "$EXPECTED_ROOT_LOCK_SHA"
+            printf '%s  workers/remote-mcp/package-lock.json\n' "$EXPECTED_WORKER_LOCK_SHA"
+          } | sha256sum --check --strict -
+
+      - name: Install exact locked deployment dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix workers/remote-mcp --ignore-scripts
+
+      - name: Assert release guard, compatible token readiness and runtime secret names
+        env:
+          NO_COLOR: "1"
+          OPENAI_RELEASE_ENV_GUARD: ${{ secrets.OPENAI_RELEASE_ENV_GUARD }}
+          OPENAI_TOKEN_BASELINE_VERSION_ID: ${{ secrets.OPENAI_TOKEN_BASELINE_VERSION_ID }}
+          OPENAI_TOKEN_TOPOLOGY_SHA256: ${{ secrets.OPENAI_TOKEN_TOPOLOGY_SHA256 }}
+          FRIHET_OAUTH_ACCESS_TOKEN: ${{ secrets.FRIHET_OAUTH_ACCESS_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID: ${{ secrets.OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID }}
+          INPUT_CHANGE_FREEZE_ID: ${{ inputs.change_freeze_id }}
+          PREVIOUS_VERSION_ID: ${{ needs.capture-rollback-state.outputs.previousVersionId }}
+          BASELINE_TOPOLOGY_SHA256: ${{ needs.capture-rollback-state.outputs.baselineTopologySha256 }}
+        working-directory: workers/remote-mcp
+        run: |
+          set -euo pipefail
+          MISSING=()
+          [ -n "$OPENAI_RELEASE_ENV_GUARD" ] || MISSING+=("OPENAI_RELEASE_ENV_GUARD")
+          [ -n "$OPENAI_TOKEN_BASELINE_VERSION_ID" ] || MISSING+=("OPENAI_TOKEN_BASELINE_VERSION_ID")
+          [ -n "$OPENAI_TOKEN_TOPOLOGY_SHA256" ] || MISSING+=("OPENAI_TOKEN_TOPOLOGY_SHA256")
+          [ -n "$FRIHET_OAUTH_ACCESS_TOKEN" ] || MISSING+=("FRIHET_OAUTH_ACCESS_TOKEN")
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || MISSING+=("CLOUDFLARE_API_TOKEN")
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || MISSING+=("CLOUDFLARE_ACCOUNT_ID")
+          [ -n "$OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID" ] || MISSING+=("OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID")
+          if [ "${#MISSING[@]}" -ne 0 ]; then
+            printf '::error::required OpenAI release credential is absent: %s\n' "${MISSING[@]}"
+            exit 1
+          fi
+          if [ "$OPENAI_TOKEN_BASELINE_VERSION_ID" != "$PREVIOUS_VERSION_ID" ] \
+            || [ "$OPENAI_TOKEN_TOPOLOGY_SHA256" != "$BASELINE_TOPOLOGY_SHA256" ]; then
+            echo "::error::OAuth token readiness attestation does not match the active compatible baseline"
+            exit 1
+          fi
+          if ! [[ "$INPUT_CHANGE_FREEZE_ID" =~ ^[0-9a-f]{64}$ ]] \
+            || [ "$INPUT_CHANGE_FREEZE_ID" != "$OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID" ]; then
+            echo "::error::one-time Cloudflare exclusive-change freeze attestation is absent or mismatched"
+            exit 1
+          fi
+          ./node_modules/.bin/wrangler whoami >/dev/null 2>&1
+          SECRET_LIST="$(mktemp)"
+          trap 'rm -f "$SECRET_LIST"' EXIT
+          ./node_modules/.bin/wrangler secret list \
+            --env openai --name frihet-openai-mcp --format json > "$SECRET_LIST"
+          if ! jq -e 'type == "array" and all(.[]; (.name | type) == "string")' \
+            "$SECRET_LIST" >/dev/null; then
+            echo "::error::Cloudflare returned an invalid OpenAI Worker secret inventory"
+            exit 1
+          fi
+          CONTRACT=../../marketplace/openai/cloudflare-topology-baseline.json
+          if ! jq -e --slurpfile contract "$CONTRACT" \
+            '([.[].name] | sort) == ($contract[0].targetTopology.secretNames | sort)' \
+            "$SECRET_LIST" >/dev/null; then
+            echo "::error::OpenAI Worker secret-name set differs from the exact reviewed topology"
+            echo "No deployment was attempted. Reconcile it in the separate bootstrap release."
+            exit 1
+          fi
+
+      - name: Prove authenticated token works on compatible baseline
+        env:
+          FRIHET_MCP_ENDPOINT: https://openai-mcp.frihet.io/mcp
+          FRIHET_OAUTH_ACCESS_TOKEN: ${{ secrets.FRIHET_OAUTH_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .openai-release-evidence
+          node scripts/test-openai-full-compose.mjs \
+            --readiness-only \
+            --endpoint "$FRIHET_MCP_ENDPOINT" \
+            --evidence .openai-release-evidence/pre-mutation-auth-readiness.json
+
+      - name: JIT revalidate exact live receipt and deploy only the reviewed OpenAI environment
+        id: deploy
+        env:
+          NO_COLOR: "1"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          REVIEWED_PROFILE_VERSION: ${{ needs.preflight.outputs.reviewedProfileVersion }}
+          PREVIOUS_DEPLOYMENT_ID: ${{ needs.capture-rollback-state.outputs.previousDeploymentId }}
+          PREVIOUS_VERSION_ID: ${{ needs.capture-rollback-state.outputs.previousVersionId }}
+          PREVIOUS_HEALTH_SHA256: ${{ needs.capture-rollback-state.outputs.previousHealthSha256 }}
+          BASELINE_RECEIPT_SHA256: ${{ needs.capture-rollback-state.outputs.baselineReceiptSha256 }}
+          OPENAI_BASE: https://openai-mcp.frihet.io
+        working-directory: workers/remote-mcp
+        run: |
+          set -euo pipefail
+          STATE_DIR="$(mktemp -d)"
+          RAW_LOG="$STATE_DIR/wrangler-deploy.log"
+          trap 'rm -rf "$STATE_DIR"' EXIT
+          CONTRACT=../../marketplace/openai/cloudflare-topology-baseline.json
+          WORKER_NAME="$(jq -r '.workerName // ""' "$CONTRACT")"
+          ENVIRONMENT="$(jq -r '.environment // ""' "$CONTRACT")"
+          ZONE_NAME="$(jq -r '.targetTopology.routes[0].zoneName // ""' "$CONTRACT")"
+          test "$WORKER_NAME" = "frihet-openai-mcp"
+          test "$ENVIRONMENT" = "openai"
+          test "$ZONE_NAME" = "frihet.io"
+          test "$(sha256sum "$CONTRACT" | awk '{print $1}')" = "$BASELINE_RECEIPT_SHA256"
+
+          # There is no Cloudflare compare-and-swap primitive for deployments.
+          # The protected one-time freeze nonce is therefore an explicit hard
+          # prerequisite, and this repository-wide concurrency group excludes
+          # other runs of this workflow. No external Cloudflare mutation is
+          # permitted until this run reaches a terminal state.
+          HEAD_SHA="$(git rev-parse HEAD)"
+          REMOTE_MAIN="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+          git fetch --force origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
+          TAG_COMMIT="$(git rev-parse "v${VERSION}^{commit}")"
+          if [ "$HEAD_SHA" != "$SOURCE_COMMIT" ] \
+            || [ "$REMOTE_MAIN" != "$SOURCE_COMMIT" ] \
+            || [ "$TAG_COMMIT" != "$SOURCE_COMMIT" ]; then
+            echo "::error::source authority moved after review; refusing deployment"
+            exit 1
+          fi
+          test -z "$(git status --porcelain)"
+
+          api_get() {
+            curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 \
+              --connect-timeout 10 --max-time 45 \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              "https://api.cloudflare.com/client/v4/$1"
+          }
+          capture_snapshot() {
+            local label="$1"
+            local identity="$STATE_DIR/${label}-identity.json"
+            local deployment="$STATE_DIR/${label}-deployment.json"
+            local version="$STATE_DIR/${label}-version.json"
+            local zone_envelope="$STATE_DIR/${label}-zone-envelope.json"
+            local zone="$STATE_DIR/${label}-zone.json"
+            local routes_envelope="$STATE_DIR/${label}-routes-envelope.json"
+            local routes="$STATE_DIR/${label}-routes.json"
+            local subdomain_envelope="$STATE_DIR/${label}-subdomain-envelope.json"
+            local subdomain="$STATE_DIR/${label}-subdomain.json"
+            local health="$STATE_DIR/${label}-health.json"
+            local jit="$STATE_DIR/${label}-jit.json"
+            local snapshot_started_at="$STATE_DIR/${label}-snapshot-started-at.txt"
+
+            node ../../scripts/check-openai-worker-topology.mjs \
+              --write-snapshot-start "$snapshot_started_at"
+            ./node_modules/.bin/wrangler whoami --json > "$identity"
+            ./node_modules/.bin/wrangler deployments status \
+              --env openai --name "$WORKER_NAME" --json > "$deployment"
+            jq -e 'type == "object" and (.id | type == "string")
+              and (.created_on | type == "string") and (.source | type == "string")
+              and .strategy == "percentage" and (.versions | length) == 1
+              and (.versions[0].version_id | type == "string")
+              and .versions[0].percentage == 100' "$deployment" >/dev/null
+            local version_id
+            version_id="$(jq -r '.versions[0].version_id' "$deployment")"
+            ./node_modules/.bin/wrangler versions view "$version_id" \
+              --env openai --name "$WORKER_NAME" --json > "$version"
+            api_get "zones?name=${ZONE_NAME}&account.id=${CLOUDFLARE_ACCOUNT_ID}&status=active&per_page=50" \
+              > "$zone_envelope"
+            jq -e --arg accountId "$CLOUDFLARE_ACCOUNT_ID" --arg zoneName "$ZONE_NAME" \
+              '.success == true and (.result | length) == 1
+                and .result[0].name == $zoneName
+                and .result[0].account.id == $accountId
+                and .result[0].status == "active"' "$zone_envelope" >/dev/null
+            jq '.result[0]' "$zone_envelope" > "$zone"
+            local zone_id
+            zone_id="$(jq -r '.id' "$zone")"
+            api_get "zones/${zone_id}/workers/routes" > "$routes_envelope"
+            jq -e '.success == true and (.result | type == "array")' "$routes_envelope" >/dev/null
+            jq '.result' "$routes_envelope" > "$routes"
+            api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/subdomain" \
+              > "$subdomain_envelope"
+            jq -e '.success == true and (.result | type == "object")' "$subdomain_envelope" >/dev/null
+            jq '.result' "$subdomain_envelope" > "$subdomain"
+            curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 \
+              --connect-timeout 10 --max-time 45 -H 'Cache-Control: no-cache' \
+              "$OPENAI_BASE/health?jit=${SOURCE_COMMIT}&snapshot=${label}" > "$health"
+            node ../../scripts/check-openai-worker-topology.mjs \
+              --write-jit-prestate "$jit" \
+              --snapshot-started-at-file "$snapshot_started_at" \
+              --active-deployment "$deployment" \
+              --live-version "$version" \
+              --health "$health" \
+              --identity "$identity" \
+              --zone "$zone" \
+              --routes "$routes" \
+              --subdomain "$subdomain" \
+              --account-id "$CLOUDFLARE_ACCOUNT_ID" \
+              --worker-name "$WORKER_NAME" \
+              --environment openai
+          }
+
+          # Two complete snapshots are taken inside the already approved job.
+          # Their canonical security projections must be identical after
+          # excluding only their independently recorded observation times.
+          capture_snapshot before
+          capture_snapshot after
+          node ../../scripts/check-openai-worker-topology.mjs \
+            --require-jit-unchanged \
+            --jit-before "$STATE_DIR/before-jit.json" \
+            --jit-after "$STATE_DIR/after-jit.json"
+
+          JIT_PRESTATE="$STATE_DIR/after-jit.json"
+          JIT_DEPLOYMENT_ID="$(jq -r '.deployment.id' "$JIT_PRESTATE")"
+          JIT_VERSION_ID="$(jq -r '.version.id' "$JIT_PRESTATE")"
+          JIT_SOURCE_SHA="$(jq -r '.source.sha' "$JIT_PRESTATE")"
+          JIT_SOURCE_VERSION="$(jq -r '.source.version' "$JIT_PRESTATE")"
+          JIT_ETAG_SHA="$(printf '%s' "$(jq -r '.version.scriptEtag' "$JIT_PRESTATE")" | sha256sum | awk '{print $1}')"
+          JIT_TOPOLOGY_SHA="$(jq -r '.topologySha256' "$JIT_PRESTATE")"
+          JIT_HEALTH_SHA="$(jq -cS '.publicProvenance' "$JIT_PRESTATE" | sha256sum | awk '{print $1}')"
+          JIT_PRESTATE_SHA="$(sha256sum "$JIT_PRESTATE" | awk '{print $1}')"
+          JIT_OBSERVED_AT="$(jq -r '.observedAt' "$JIT_PRESTATE")"
+          test "$JIT_DEPLOYMENT_ID" = "$PREVIOUS_DEPLOYMENT_ID"
+          test "$JIT_VERSION_ID" = "$PREVIOUS_VERSION_ID"
+          test "$JIT_HEALTH_SHA" = "$PREVIOUS_HEALTH_SHA256"
+          {
+            echo "jit_previous_deployment_id=$JIT_DEPLOYMENT_ID"
+            echo "jit_previous_version_id=$JIT_VERSION_ID"
+            echo "jit_previous_source_sha=$JIT_SOURCE_SHA"
+            echo "jit_previous_source_version=$JIT_SOURCE_VERSION"
+            echo "jit_previous_script_etag_sha256=$JIT_ETAG_SHA"
+            echo "jit_previous_topology_sha256=$JIT_TOPOLOGY_SHA"
+            echo "jit_previous_health_sha256=$JIT_HEALTH_SHA"
+            echo "jit_prestate_sha256=$JIT_PRESTATE_SHA"
+            echo "jit_observed_at=$JIT_OBSERVED_AT"
+          } >> "$GITHUB_OUTPUT"
+
+          # Re-check both complete snapshots and the full first-read-to-mutation
+          # budget after output serialization. A paused runner cannot deploy
+          # merely because the second snapshot is still within its own window.
+          node ../../scripts/check-openai-worker-topology.mjs \
+            --require-jit-unchanged \
+            --jit-before "$STATE_DIR/before-jit.json" \
+            --jit-after "$STATE_DIR/after-jit.json"
+          echo "started=true" >> "$GITHUB_OUTPUT"
+          if ! ./node_modules/.bin/wrangler deploy --env openai \
+            --name "$WORKER_NAME" \
+            --var "RELEASE_SOURCE_SHA:${SOURCE_COMMIT}" \
+            --var "RELEASE_VERSION:${VERSION}" \
+            --message "OpenAI reviewed runtime ${VERSION} from ${SOURCE_COMMIT}" \
+            > "$RAW_LOG" 2>&1; then
+            # A provider response can be ambiguous. Preserve the observed exact
+            # active IDs for the non-blocking recovery job, but only if the
+            # version carries this run's release identity.
+            if ./node_modules/.bin/wrangler deployments status \
+              --env openai --name "$WORKER_NAME" --json > "$STATE_DIR/deployed-state.json" 2>/dev/null \
+              && jq -e '(.versions | length) == 1 and .versions[0].percentage == 100' \
+                "$STATE_DIR/deployed-state.json" >/dev/null; then
+              DEPLOYMENT_ID="$(jq -r '.id' "$STATE_DIR/deployed-state.json")"
+              VERSION_ID="$(jq -r '.versions[0].version_id' "$STATE_DIR/deployed-state.json")"
+              if [ "$VERSION_ID" = "$JIT_VERSION_ID" ]; then
+                echo "deployment_id=$JIT_DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+                echo "version_id=$JIT_VERSION_ID" >> "$GITHUB_OUTPUT"
+              elif ./node_modules/.bin/wrangler versions view "$VERSION_ID" \
+                --env openai --name "$WORKER_NAME" --json > "$STATE_DIR/deployed-version.json" 2>/dev/null \
+                && node ../../scripts/check-openai-worker-topology.mjs \
+                  --require-compatible \
+                  --active-deployment "$STATE_DIR/deployed-state.json" \
+                  --live-version "$STATE_DIR/deployed-version.json" \
+                  --expected-source-sha "$SOURCE_COMMIT" \
+                  --expected-source-version "$VERSION" \
+                  --account-id "$CLOUDFLARE_ACCOUNT_ID" \
+                  --worker-name "$WORKER_NAME" \
+                  --environment openai >/dev/null; then
+                echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+                echo "version_id=$VERSION_ID" >> "$GITHUB_OUTPUT"
+              fi
+            fi
+            echo "::error::OpenAI Worker deployment failed; inspect Cloudflare deployment state"
+            exit 1
+          fi
+          ./node_modules/.bin/wrangler deployments status \
+            --env openai --name "$WORKER_NAME" --json > "$STATE_DIR/deployed-state.json"
+          jq -e '
+            type == "object"
+            and (.id | type == "string" and length > 0)
+            and (.versions | type == "array" and length == 1)
+            and (.versions[0].version_id | type == "string" and length > 0)
+            and .versions[0].percentage == 100
+          ' "$STATE_DIR/deployed-state.json" >/dev/null
+          DEPLOYMENT_ID="$(jq -r '.id' "$STATE_DIR/deployed-state.json")"
+          VERSION_ID="$(jq -r '.versions[0].version_id' "$STATE_DIR/deployed-state.json")"
+          if [ "$VERSION_ID" = "$JIT_VERSION_ID" ]; then
+            echo "::error::Wrangler deploy did not create and activate a new Worker version"
+            exit 1
+          fi
+          ./node_modules/.bin/wrangler versions view "$VERSION_ID" \
+            --env openai --name "$WORKER_NAME" --json > "$STATE_DIR/deployed-version.json"
+          node ../../scripts/check-openai-worker-topology.mjs \
+            --require-compatible \
+            --active-deployment "$STATE_DIR/deployed-state.json" \
+            --live-version "$STATE_DIR/deployed-version.json" \
+            --expected-source-sha "$SOURCE_COMMIT" \
+            --expected-source-version "$VERSION" \
+            --account-id "$CLOUDFLARE_ACCOUNT_ID" \
+            --worker-name "$WORKER_NAME" \
+            --environment openai
+          {
+            echo "deployment_id=$DEPLOYMENT_ID"
+            echo "version_id=$VERSION_ID"
+          } >> "$GITHUB_OUTPUT"
+          mkdir -p ../../.openai-release-evidence
+          jq -n \
+            --arg sourceSha "$SOURCE_COMMIT" \
+            --arg version "$VERSION" \
+            --arg reviewedProfileVersion "$REVIEWED_PROFILE_VERSION" \
+            --arg deploymentId "$DEPLOYMENT_ID" \
+            --arg versionId "$VERSION_ID" \
+            --arg jitPrestateSha256 "$JIT_PRESTATE_SHA" \
+            '{
+              sourceSha: $sourceSha,
+              sourceReleaseVersion: $version,
+              reviewedProfileVersion: $reviewedProfileVersion,
+              environment: "openai",
+              jitPrestateSha256: $jitPrestateSha256,
+              deploymentId: $deploymentId,
+              versionId: $versionId,
+              deployed: true
+            }' > ../../.openai-release-evidence/openai-deploy.json
+          echo "OK — OpenAI Worker deployment command completed; readback is still required"
+
+      - name: Verify authenticated exact descriptor immediately after mutation
+        env:
+          FRIHET_MCP_ENDPOINT: https://openai-mcp.frihet.io/mcp
+          FRIHET_OAUTH_ACCESS_TOKEN: ${{ secrets.FRIHET_OAUTH_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERIFIED=false
+          for attempt in $(seq 1 18); do
+            if node scripts/test-openai-full-compose.mjs \
+              --endpoint "$FRIHET_MCP_ENDPOINT" \
+              --evidence .openai-release-evidence/authenticated-compose.json; then
+              VERIFIED=true
+              break
+            fi
+            [ "$attempt" -eq 18 ] || sleep 10
+          done
+          if [ "$VERIFIED" != true ]; then
+            echo "::error::authenticated compose did not converge within 180 seconds"
+            exit 1
+          fi
+
+      - name: Upload sanitized deployment evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openai-deploy-${{ inputs.version }}
+          path: .openai-release-evidence/
+          if-no-files-found: warn
+          retention-days: 90
+
+  verify-public:
+    name: Verify public OpenAI production 33 · 0 · 0 + OAuth metadata
+    needs: [preflight, deploy-openai]
+    if: inputs.dry_run != true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.preflight.outputs.sourceCommit }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.2
+
+      - name: Bounded public production readback
+        env:
+          OPENAI_BASE: https://openai-mcp.frihet.io
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          REVIEWED_PROFILE_VERSION: ${{ needs.preflight.outputs.reviewedProfileVersion }}
+        run: |
+          set -euo pipefail
+          mkdir -p .openai-release-evidence
+          node --input-type=module <<'NODE'
+          const assert = (condition, message) => {
+            if (!condition) throw new Error(message);
+          };
+          const { readFile, writeFile } = await import("node:fs/promises");
+          const base = process.env.OPENAI_BASE;
+          const sourceSha = process.env.SOURCE_COMMIT;
+          const version = process.env.VERSION;
+          const reviewedProfileVersion = process.env.REVIEWED_PROFILE_VERSION;
+          const snapshot = JSON.parse(
+            await readFile("src/__tests__/fixtures/openai-review-descriptor.snapshot.json", "utf8"),
+          );
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          const request = (path, init = {}) => fetch(
+            `${base}${path}${path.includes("?") ? "&" : "?"}release=${sourceSha}`,
+            {
+              redirect: "manual",
+              signal: AbortSignal.timeout(10_000),
+              ...init,
+              headers: { "Cache-Control": "no-cache", ...(init.headers || {}) },
+            },
+          );
+          const json = async (path) => {
+            const response = await request(path);
+            assert(response.status === 200, `${path} returned ${response.status}`);
+            return { response, body: await response.json() };
+          };
+          const canonical = (value) => {
+            if (Array.isArray(value)) return value.map(canonical);
+            if (value && typeof value === "object") {
+              return Object.fromEntries(
+                Object.entries(value)
+                  .sort(([left], [right]) => left.localeCompare(right))
+                  .map(([key, child]) => [key, canonical(child)]),
+              );
+            }
+            return value;
+          };
+          const equal = (left, right) =>
+            JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
+
+          let health;
+          for (let attempt = 1; attempt <= 18; attempt += 1) {
+            try {
+              const current = await json("/health");
+              if (
+                current.body.status === "ok"
+                && typeof current.body.releaseSha === "string"
+                && current.body.releaseSha.length === 40
+                && current.body.releaseSha === sourceSha
+                && typeof current.body.releaseVersion === "string"
+                && current.body.releaseVersion.length > 0
+                && current.body.version === version
+                && current.body.releaseVersion === version
+                && typeof current.body.releaseSource === "string"
+                && current.body.releaseSource.length > 0
+                && current.body.releaseSource === "wrangler-var"
+              ) {
+                health = current.body;
+                break;
+              }
+            } catch (error) {
+              if (attempt === 18) throw error;
+            }
+            if (attempt < 18) await sleep(10_000);
+          }
+          assert(health, "OpenAI /health did not converge to the exact release within 180 seconds");
+
+          const { body: reviewedProfile } = await json("/releases.json");
+          assert(
+            reviewedProfile.version === reviewedProfileVersion,
+            "live reviewed-profile version disagrees with the frozen OpenAI asset",
+          );
+          assert(reviewedProfile.surface === "openai-chatgpt", "reviewed-profile surface drift");
+          assert(reviewedProfile.mcpToolCount === 33, "reviewed-profile tools != 33");
+          assert(reviewedProfile.reviewedBusinessToolCount === 33, "reviewed-profile reviewed tools != 33");
+          assert(reviewedProfile.discoveryMetaToolCount === 0, "reviewed-profile discovery tools != 0");
+          assert(reviewedProfile.resourcesCount === 0, "reviewed-profile resources != 0");
+          assert(reviewedProfile.promptsCount === 0, "reviewed-profile prompts != 0");
+          assert(reviewedProfile.products?.mcp_server?.status === "candidate", "reviewed profile is not candidate");
+          assert(
+            reviewedProfile.products?.mcp_server?.version === reviewedProfileVersion,
+            "reviewed profile product version drift",
+          );
+
+          const discoveryPaths = ["/", "/.well-known/mcp", "/mcp.json"];
+          const discovery = {};
+          for (const path of discoveryPaths) {
+            const { body } = await json(path);
+            assert(body.endpoint === `${base}/mcp`, `${path} endpoint drift`);
+            assert(body.tools_count === 33, `${path} tools_count != 33`);
+            assert(body.reviewed_business_tools_count === 33, `${path} reviewed count != 33`);
+            assert(body.discovery_meta_tools_count === 0, `${path} discovery count != 0`);
+            assert(body.resources_count === 0, `${path} resources_count != 0`);
+            assert(body.prompts_count === 0, `${path} prompts_count != 0`);
+            assert(equal(body.auth.scopes, ["frihet:workspace.manage"]), `${path} OAuth scope drift`);
+            discovery[path] = {
+              endpoint: body.endpoint,
+              tools: body.tools_count,
+              discoveryMetaTools: body.discovery_meta_tools_count,
+              resources: body.resources_count,
+              prompts: body.prompts_count,
+            };
+          }
+
+          const { body: card } = await json("/.well-known/mcp.json");
+          assert(card.transport?.endpoint === `${base}/mcp`, "server-card endpoint drift");
+          assert(card.tools_count === 33, "server-card tools_count != 33");
+          assert(card.resources_count === 0, "server-card resources_count != 0");
+          assert(card.prompts_count === 0, "server-card prompts_count != 0");
+          assert(equal(card.capabilities, { tools: { listChanged: true } }), "server-card capability drift");
+
+          const { body: authorizationServer } = await json("/.well-known/oauth-authorization-server");
+          const { body: protectedResource } = await json("/.well-known/oauth-protected-resource");
+          assert(equal(authorizationServer, snapshot.oauth.authorizationServer), "authorization-server drift");
+          assert(equal(protectedResource, snapshot.oauth.protectedResource), "protected-resource drift");
+
+          const legal = {};
+          for (const path of ["/support", "/privacy"]) {
+            const response = await request(path);
+            const body = await response.text();
+            assert(response.status === 200, `${path} returned ${response.status}`);
+            assert(body.includes("VICTOR BERTHELIUS PATO"), `${path} legal owner drift`);
+            assert(body.includes("ayuda@frihet.io"), `${path} support contact drift`);
+            legal[path] = response.status;
+          }
+
+          const openapi = {};
+          for (const path of ["/openapi.json", "/openapi.yaml"]) {
+            for (const method of ["GET", "HEAD"]) {
+              const response = await request(path, { method });
+              const cacheControl = response.headers.get("cache-control") || "";
+              assert(response.status === 404, `${method} ${path} returned ${response.status}`);
+              assert(/(?:^|,)\s*no-store(?:,|$)/i.test(cacheControl), `${method} ${path} is cacheable`);
+              openapi[`${method} ${path}`] = { status: response.status, cacheControl };
+            }
+          }
+
+          const challenge = await request("/mcp", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json, text/event-stream",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: "release-readback",
+              method: "tools/list",
+              params: {},
+            }),
+          });
+          assert(challenge.status === 401, `unauthenticated MCP returned ${challenge.status}`);
+          assert(
+            challenge.headers.get("www-authenticate") === snapshot.oauth.wwwAuthenticate.missingTokenHeader,
+            "WWW-Authenticate drift",
+          );
+
+          await writeFile(
+            ".openai-release-evidence/public-readback.json",
+            `${JSON.stringify({
+              sourceSha,
+              sourceReleaseVersion: version,
+              reviewedProfileVersion,
+              health: {
+                status: health.status,
+                version: health.version,
+                releaseSha: health.releaseSha,
+                releaseVersion: health.releaseVersion,
+                releaseSource: health.releaseSource,
+              },
+              discovery,
+              serverCard: { tools: 33, resources: 0, prompts: 0 },
+              oauth: {
+                issuer: authorizationServer.issuer,
+                resource: protectedResource.resource,
+                scopes: protectedResource.scopes_supported,
+              },
+              legal,
+              openapi,
+              unauthenticatedMcp: { status: challenge.status, challengeMatchesSnapshot: true },
+            }, null, 2)}\n`,
+          );
+          console.log("PASS — public OpenAI release readback proves exact SHA and 33/0/0");
+          NODE
+
+      - name: Upload sanitized public production evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openai-public-readback-${{ inputs.version }}
+          path: .openai-release-evidence/
+          if-no-files-found: warn
+          retention-days: 90
+
+  rollback-openai:
+    name: Restore compatible prior OpenAI version after failed verification
+    needs: [preflight, capture-rollback-state, deploy-openai, verify-public]
+    if: >-
+      ${{
+        always()
+        && inputs.dry_run != true
+        && needs.capture-rollback-state.result == 'success'
+        && needs.deploy-openai.outputs.mutationStarted == 'true'
+        && (
+          needs.deploy-openai.result != 'success'
+          || needs.verify-public.result != 'success'
+        )
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: openai-plugin-rollback
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.preflight.outputs.sourceCommit }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Assert exact-source lockfiles before install
+        env:
+          EXPECTED_ROOT_LOCK_SHA: ${{ needs.preflight.outputs.rootLockSha256 }}
+          EXPECTED_WORKER_LOCK_SHA: ${{ needs.preflight.outputs.workerLockSha256 }}
+        run: |
+          set -euo pipefail
+          {
+            printf '%s  package-lock.json\n' "$EXPECTED_ROOT_LOCK_SHA"
+            printf '%s  workers/remote-mcp/package-lock.json\n' "$EXPECTED_WORKER_LOCK_SHA"
+          } | sha256sum --check --strict -
+
+      - name: Install exact Worker deployment CLI
+        run: npm ci --prefix workers/remote-mcp --ignore-scripts
+
+      - name: Roll forward to the compatible prior version and prove recovery
+        env:
+          NO_COLOR: "1"
+          OPENAI_ROLLBACK_ENV_GUARD: ${{ secrets.OPENAI_ROLLBACK_ENV_GUARD }}
+          OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID: ${{ secrets.OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID }}
+          INPUT_CHANGE_FREEZE_ID: ${{ inputs.change_freeze_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          JIT_PREVIOUS_DEPLOYMENT_ID: ${{ needs.deploy-openai.outputs.jitPreviousDeploymentId }}
+          JIT_PREVIOUS_VERSION_ID: ${{ needs.deploy-openai.outputs.jitPreviousVersionId }}
+          JIT_PREVIOUS_SOURCE_SHA: ${{ needs.deploy-openai.outputs.jitPreviousSourceSha }}
+          JIT_PREVIOUS_SOURCE_VERSION: ${{ needs.deploy-openai.outputs.jitPreviousSourceVersion }}
+          JIT_PREVIOUS_SCRIPT_ETAG_SHA256: ${{ needs.deploy-openai.outputs.jitPreviousScriptEtagSha256 }}
+          JIT_PREVIOUS_TOPOLOGY_SHA256: ${{ needs.deploy-openai.outputs.jitPreviousTopologySha256 }}
+          JIT_PREVIOUS_HEALTH_SHA256: ${{ needs.deploy-openai.outputs.jitPreviousHealthSha256 }}
+          JIT_PRESTATE_SHA256: ${{ needs.deploy-openai.outputs.jitPrestateSha256 }}
+          JIT_OBSERVED_AT: ${{ needs.deploy-openai.outputs.jitObservedAt }}
+          BASELINE_RECEIPT_SHA256: ${{ needs.capture-rollback-state.outputs.baselineReceiptSha256 }}
+          DEPLOYED_DEPLOYMENT_ID: ${{ needs.deploy-openai.outputs.deploymentId }}
+          DEPLOYED_VERSION_ID: ${{ needs.deploy-openai.outputs.versionId }}
+          OPENAI_BASE: https://openai-mcp.frihet.io
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        working-directory: workers/remote-mcp
+        run: |
+          set -euo pipefail
+          MISSING=()
+          [ -n "$OPENAI_ROLLBACK_ENV_GUARD" ] || MISSING+=("OPENAI_ROLLBACK_ENV_GUARD")
+          [ -n "$OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID" ] || MISSING+=("OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID")
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || MISSING+=("CLOUDFLARE_API_TOKEN")
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || MISSING+=("CLOUDFLARE_ACCOUNT_ID")
+          [ -n "$JIT_PREVIOUS_DEPLOYMENT_ID" ] || MISSING+=("JIT_PREVIOUS_DEPLOYMENT_ID")
+          [ -n "$JIT_PREVIOUS_VERSION_ID" ] || MISSING+=("JIT_PREVIOUS_VERSION_ID")
+          [ -n "$JIT_PREVIOUS_SOURCE_SHA" ] || MISSING+=("JIT_PREVIOUS_SOURCE_SHA")
+          [ -n "$JIT_PREVIOUS_SOURCE_VERSION" ] || MISSING+=("JIT_PREVIOUS_SOURCE_VERSION")
+          [ -n "$JIT_PREVIOUS_SCRIPT_ETAG_SHA256" ] || MISSING+=("JIT_PREVIOUS_SCRIPT_ETAG_SHA256")
+          [ -n "$JIT_PREVIOUS_TOPOLOGY_SHA256" ] || MISSING+=("JIT_PREVIOUS_TOPOLOGY_SHA256")
+          [ -n "$JIT_PREVIOUS_HEALTH_SHA256" ] || MISSING+=("JIT_PREVIOUS_HEALTH_SHA256")
+          [ -n "$JIT_PRESTATE_SHA256" ] || MISSING+=("JIT_PRESTATE_SHA256")
+          [ -n "$JIT_OBSERVED_AT" ] || MISSING+=("JIT_OBSERVED_AT")
+          [ -n "$BASELINE_RECEIPT_SHA256" ] || MISSING+=("BASELINE_RECEIPT_SHA256")
+          if [ "${#MISSING[@]}" -ne 0 ]; then
+            printf '::error::cannot execute automatic recovery; prerequisite is absent: %s\n' "${MISSING[@]}"
+            exit 1
+          fi
+          if ! [[ "$INPUT_CHANGE_FREEZE_ID" =~ ^[0-9a-f]{64}$ ]] \
+            || [ "$INPUT_CHANGE_FREEZE_ID" != "$OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID" ]; then
+            echo "::error::recovery lost the one-time Cloudflare exclusive-change freeze"
+            exit 1
+          fi
+
+          STATE_DIR="$(mktemp -d)"
+          trap 'rm -rf "$STATE_DIR"' EXIT
+          CONTRACT=../../marketplace/openai/cloudflare-topology-baseline.json
+          WORKER_NAME="$(jq -r '.workerName // ""' "$CONTRACT")"
+          ZONE_NAME="$(jq -r '.targetTopology.routes[0].zoneName // ""' "$CONTRACT")"
+          test "$WORKER_NAME" = "frihet-openai-mcp"
+          test "$ZONE_NAME" = "frihet.io"
+          test "$(sha256sum "$CONTRACT" | awk '{print $1}')" = "$BASELINE_RECEIPT_SHA256"
+
+          api_get() {
+            curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 \
+              --connect-timeout 10 --max-time 45 \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H 'Content-Type: application/json' \
+              "https://api.cloudflare.com/client/v4/$1"
+          }
+          IDENTITY_FILE="$STATE_DIR/identity.json"
+          ZONE_ENVELOPE="$STATE_DIR/zone-envelope.json"
+          ZONE_FILE="$STATE_DIR/zone.json"
+          ROUTES_ENVELOPE="$STATE_DIR/routes-envelope.json"
+          ROUTES_FILE="$STATE_DIR/routes.json"
+          SUBDOMAIN_ENVELOPE="$STATE_DIR/subdomain-envelope.json"
+          SUBDOMAIN_FILE="$STATE_DIR/subdomain.json"
+          STATUS_FILE="$STATE_DIR/status.json"
+          VERSION_FILE="$STATE_DIR/jit-recovery-version.json"
+          CURRENT_VERSION_FILE="$STATE_DIR/current-version.json"
+          HEALTH_FILE="$STATE_DIR/health.json"
+          HEALTH_CANONICAL="$STATE_DIR/health-canonical.json"
+
+          capture_network_surface() {
+            ./node_modules/.bin/wrangler whoami --json > "$IDENTITY_FILE"
+            api_get "zones?name=${ZONE_NAME}&account.id=${CLOUDFLARE_ACCOUNT_ID}&status=active&per_page=50" \
+              > "$ZONE_ENVELOPE"
+            jq -e --arg accountId "$CLOUDFLARE_ACCOUNT_ID" --arg zoneName "$ZONE_NAME" \
+              '.success == true and (.result | length) == 1
+                and .result[0].name == $zoneName
+                and .result[0].account.id == $accountId
+                and .result[0].status == "active"' "$ZONE_ENVELOPE" >/dev/null
+            jq '.result[0]' "$ZONE_ENVELOPE" > "$ZONE_FILE"
+            local zone_id
+            zone_id="$(jq -r '.id' "$ZONE_FILE")"
+            api_get "zones/${zone_id}/workers/routes" > "$ROUTES_ENVELOPE"
+            jq -e '.success == true and (.result | type == "array")' "$ROUTES_ENVELOPE" >/dev/null
+            jq '.result' "$ROUTES_ENVELOPE" > "$ROUTES_FILE"
+            api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/subdomain" \
+              > "$SUBDOMAIN_ENVELOPE"
+            jq -e '.success == true and (.result | type == "object")' "$SUBDOMAIN_ENVELOPE" >/dev/null
+            jq '.result' "$SUBDOMAIN_ENVELOPE" > "$SUBDOMAIN_FILE"
+          }
+          capture_network_surface
+
+          # Authenticate the recovery target from the fresh JIT prestate, not
+          # from the historical topology anchor or a positional version list.
+          ./node_modules/.bin/wrangler versions view "$JIT_PREVIOUS_VERSION_ID" \
+            --env openai --name "$WORKER_NAME" --json > "$VERSION_FILE"
+          node ../../scripts/check-openai-worker-topology.mjs \
+            --require-recovery-target \
+            --live-version "$VERSION_FILE" \
+            --identity "$IDENTITY_FILE" \
+            --zone "$ZONE_FILE" \
+            --routes "$ROUTES_FILE" \
+            --subdomain "$SUBDOMAIN_FILE" \
+            --account-id "$CLOUDFLARE_ACCOUNT_ID" \
+            --worker-name "$WORKER_NAME" \
+            --environment openai \
+            --expected-version-id "$JIT_PREVIOUS_VERSION_ID" \
+            --expected-source-sha "$JIT_PREVIOUS_SOURCE_SHA" \
+            --expected-source-version "$JIT_PREVIOUS_SOURCE_VERSION" \
+            --expected-script-etag-sha256 "$JIT_PREVIOUS_SCRIPT_ETAG_SHA256" \
+            --expected-topology-sha256 "$JIT_PREVIOUS_TOPOLOGY_SHA256"
+          ./node_modules/.bin/wrangler deployments status \
+            --env openai --name "$WORKER_NAME" --json > "$STATUS_FILE"
+          CURRENT_VERSION_ID="$(jq -r '.versions[0].version_id // ""' "$STATUS_FILE")"
+          ALREADY_AT_PREVIOUS=false
+          RECOVERY_COMMAND_COMPLETED=false
+          if [ "$CURRENT_VERSION_ID" = "$JIT_PREVIOUS_VERSION_ID" ]; then
+            jq -e \
+              --arg deploymentId "$JIT_PREVIOUS_DEPLOYMENT_ID" \
+              --arg versionId "$JIT_PREVIOUS_VERSION_ID" \
+              '.id == $deploymentId and (.versions | length == 1)
+                and .versions[0].version_id == $versionId
+                and .versions[0].percentage == 100' \
+              "$STATUS_FILE" >/dev/null
+            ALREADY_AT_PREVIOUS=true
+          else
+            jq -e 'type == "object" and (.id | type == "string" and length > 0)
+              and (.created_on | type == "string" and length > 0)
+              and (.source | type == "string" and length > 0)
+              and .strategy == "percentage"
+              and (.versions | length == 1)
+              and (.versions[0].version_id | type == "string" and length > 0)
+              and .versions[0].percentage == 100' "$STATUS_FILE" >/dev/null
+            CURRENT_DEPLOYMENT_ID="$(jq -r '.id' "$STATUS_FILE")"
+            if [ -n "$DEPLOYED_DEPLOYMENT_ID" ] && [ "$CURRENT_DEPLOYMENT_ID" != "$DEPLOYED_DEPLOYMENT_ID" ]; then
+              echo "::error::active deployment differs from this run's mutation receipt"
+              exit 1
+            fi
+            if [ -n "$DEPLOYED_VERSION_ID" ] && [ "$CURRENT_VERSION_ID" != "$DEPLOYED_VERSION_ID" ]; then
+              echo "::error::active version differs from this run's mutation receipt"
+              exit 1
+            fi
+            ./node_modules/.bin/wrangler versions view "$CURRENT_VERSION_ID" \
+              --env openai --name "$WORKER_NAME" --json > "$CURRENT_VERSION_FILE"
+            # If the provider response was ambiguous, exact release vars and
+            # topology attribute the active version while the freeze is held.
+            node ../../scripts/check-openai-worker-topology.mjs \
+              --require-compatible \
+              --active-deployment "$STATUS_FILE" \
+              --live-version "$CURRENT_VERSION_FILE" \
+              --expected-source-sha "$SOURCE_COMMIT" \
+              --expected-source-version "$VERSION" \
+              --account-id "$CLOUDFLARE_ACCOUNT_ID" \
+              --worker-name "$WORKER_NAME" \
+              --environment openai
+            ./node_modules/.bin/wrangler versions deploy "$JIT_PREVIOUS_VERSION_ID@100%" \
+              --env openai --name "$WORKER_NAME" --yes \
+              --message "Automatic compatible recovery after failed OpenAI verification for ${SOURCE_COMMIT}" \
+              >/dev/null 2>&1
+            RECOVERY_COMMAND_COMPLETED=true
+            ./node_modules/.bin/wrangler deployments status \
+              --env openai --name "$WORKER_NAME" --json > "$STATUS_FILE"
+          fi
+          jq -e \
+            --arg versionId "$JIT_PREVIOUS_VERSION_ID" \
+            --arg previousDeploymentId "$JIT_PREVIOUS_DEPLOYMENT_ID" \
+            --argjson alreadyAtPrevious "$ALREADY_AT_PREVIOUS" \
+            'type == "object"
+              and (.id | type == "string" and length > 0)
+              and (.created_on | type == "string" and length > 0)
+              and (.source | type == "string" and length > 0)
+              and .strategy == "percentage"
+              and ((.id != $previousDeploymentId) or $alreadyAtPrevious)
+              and (.versions | length == 1)
+              and .versions[0].version_id == $versionId
+              and .versions[0].percentage == 100' \
+            "$STATUS_FILE" >/dev/null
+          ROLLBACK_DEPLOYMENT_ID="$(jq -r '.id' "$STATUS_FILE")"
+          # Terminal proof must be a new authenticated network-surface read,
+          # never the pre-recovery files reused under a new label.
+          capture_network_surface
+          ./node_modules/.bin/wrangler versions view "$JIT_PREVIOUS_VERSION_ID" \
+            --env openai --name "$WORKER_NAME" --json > "$VERSION_FILE"
+          node ../../scripts/check-openai-worker-topology.mjs \
+            --require-recovery-target \
+            --live-version "$VERSION_FILE" \
+            --identity "$IDENTITY_FILE" \
+            --zone "$ZONE_FILE" \
+            --routes "$ROUTES_FILE" \
+            --subdomain "$SUBDOMAIN_FILE" \
+            --account-id "$CLOUDFLARE_ACCOUNT_ID" \
+            --worker-name "$WORKER_NAME" \
+            --environment openai \
+            --expected-version-id "$JIT_PREVIOUS_VERSION_ID" \
+            --expected-source-sha "$JIT_PREVIOUS_SOURCE_SHA" \
+            --expected-source-version "$JIT_PREVIOUS_SOURCE_VERSION" \
+            --expected-script-etag-sha256 "$JIT_PREVIOUS_SCRIPT_ETAG_SHA256" \
+            --expected-topology-sha256 "$JIT_PREVIOUS_TOPOLOGY_SHA256"
+
+          ROLLBACK_HEALTH_MATCHED=false
+          for attempt in $(seq 1 18); do
+            if curl -fsSL --connect-timeout 10 --max-time 20 \
+              -H 'Cache-Control: no-cache' \
+              "$OPENAI_BASE/health?rollback=${JIT_PREVIOUS_VERSION_ID}&attempt=${attempt}" > "$HEALTH_FILE"; then
+              jq -cS '{status, version, releaseSha, releaseVersion, releaseSource}' \
+                "$HEALTH_FILE" > "$HEALTH_CANONICAL"
+              CURRENT_HEALTH_SHA="$(sha256sum "$HEALTH_CANONICAL" | awk '{print $1}')"
+              if [ "$CURRENT_HEALTH_SHA" = "$JIT_PREVIOUS_HEALTH_SHA256" ]; then
+                ROLLBACK_HEALTH_MATCHED=true
+                break
+              fi
+            fi
+            [ "$attempt" -eq 18 ] || sleep 10
+          done
+          if [ "$ROLLBACK_HEALTH_MATCHED" != true ]; then
+            echo "::error::recovery version is active but public health does not match pre-mutation state"
+            exit 1
+          fi
+
+          CHALLENGE_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' \
+            --connect-timeout 10 --max-time 20 \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            --data '{"jsonrpc":"2.0","id":"rollback-proof","method":"tools/list","params":{}}' \
+            "$OPENAI_BASE/mcp")"
+          if [ "$CHALLENGE_STATUS" != 401 ]; then
+            echo "::error::rolled-back MCP endpoint is not enforcing authentication"
+            exit 1
+          fi
+
+          mkdir -p ../../.openai-release-evidence
+          jq -n \
+            --arg previousVersionId "$JIT_PREVIOUS_VERSION_ID" \
+            --arg rollbackDeploymentId "$ROLLBACK_DEPLOYMENT_ID" \
+            --arg jitPrestateSha256 "$JIT_PRESTATE_SHA256" \
+            --argjson recoveryCommandCompleted "$RECOVERY_COMMAND_COMPLETED" \
+            --argjson alreadyAtPrevious "$ALREADY_AT_PREVIOUS" \
+            '{
+              compatibleVersionRollForwardCompleted: $recoveryCommandCompleted,
+              alreadyAtPreviousVersion: $alreadyAtPrevious,
+              previousVersionRestoredAt100Percent: true,
+              topologyReceiptRevalidated: true,
+              publicHealthMatchesPreMutationFingerprint: true,
+              recoveryAuthority: "jit-prestate",
+              jitPrestateSha256: $jitPrestateSha256,
+              unauthenticatedMcpIs401: true,
+              previousVersionId: $previousVersionId,
+              rollbackDeploymentId: $rollbackDeploymentId
+            }' > ../../.openai-release-evidence/rollback-proof.json
+          echo "OK — compatible prior Worker version, topology and public health were restored"
+
+      - name: Upload sanitized rollback evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openai-rollback-proof-${{ inputs.version }}
+          path: .openai-release-evidence/
+          if-no-files-found: warn
+          retention-days: 90
