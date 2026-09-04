@@ -255,12 +255,12 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/openai-review-oauth.ts": "388035b1b9952b5c1f0ecc82dcac962a93320b1076dc23d3e4a155dbf9bf263f",
   "workers/api-proxy/worker.js": "640d3aa873f1a20b705f9e73cdafe368bcb0bbe43f187afe5c9583336373accb",
   "workers/remote-mcp/src/api-url.ts": "6603350d3dde02e0a8139f216320a055df79f1bbba45ff2e1bf2fe7f40f32f23",
-  "workers/remote-mcp/src/auth-handler.ts": "7de5521aae87c2785fabf4703a37a3ecc803bad5bdb6913aa1504d53f4c6b6d1",
+  "workers/remote-mcp/src/auth-handler.ts": "d978ef655961895b0c6c8785f5d066e54e4c0b4ec5988a5ea0ed9e764cf2e205",
   "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
   "workers/remote-mcp/src/index.ts": "da01005ac9ff156bbfa9c0421874e2065108ef2e9f24e8a346f16c4e0749b2e5", // #171: import readReleaseMeta + /health emits releaseSha/releaseVersion/releaseSource (no new outbound sinks)
   "workers/remote-mcp/src/login-page.ts": "1c4d6dcacbbcdc47db152242a4ca4adfb83b4f0229903e0550c63b973ab00ff5",
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
-  "workers/remote-mcp/src/oauth-provisioning.ts": "8c6b6599a2f687f539c116a2dd88591f9a71ea1c2a06aaa17f0ca30a25b60c4c",
+  "workers/remote-mcp/src/oauth-provisioning.ts": "dd76bc88dd20f0d7afc8459dff1872b8af3c2eea04d66ca6a1b60b1ac53f779d",
   "workers/remote-mcp/src/oauth-state-store.ts": "9785c628b2a01d80c06267a0c39beb93f9d9b7a11b26369d48aa2cc705bf7906",
   "workers/remote-mcp/src/oauth-token-family.ts": "fc0cb5c82b0d698139a0caf3dfae34d267e7366b6d073b4d1b901c8267af0eb6",
 });

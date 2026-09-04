@@ -16,7 +16,9 @@ import type { AddressInfo } from "node:net";
 import { resolveApiBaseUrl, resolveOAuthApiKeyUrl } from "../api-url.ts";
 import {
   OAUTH_PROVISIONING_CONTRACT,
+  OAUTH_RECOVERY_STATES,
   isTrustedOAuthApiKeyUrl,
+  parseOAuthRecoveryPayload,
   parseProvisionedOAuthApiKey,
   provisionOAuthApiKey,
   revokeOAuthApiKey,
@@ -334,4 +336,61 @@ test("OAuth lifecycle leaf rejects attacker-controlled URLs before fetch sees ei
     );
   }
   assert.equal(fetchCalls, 0);
+});
+
+test("parseOAuthRecoveryPayload accepts valid 409 replay-committed payload", () => {
+  const payload = {
+    recoveryState: "IDEMPOTENT_REPLAY_REQUIRES_REVOKE_AND_REISSUE",
+    keyId: "AbCdEfGhIjKlMnOpQrSt",
+    expiresAt: "2026-09-30T12:00:00.000Z",
+    revokeHint: "DELETE /api/oauth/api-key",
+  };
+  const parsed = parseOAuthRecoveryPayload(payload);
+  assert.deepEqual(parsed, payload);
+});
+
+test("parseOAuthRecoveryPayload accepts valid 410 revoked payload", () => {
+  const payload = {
+    recoveryState: "IDEMPOTENT_TUPLE_REVOKED_USE_NEW_CORRELATION",
+  };
+  const parsed = parseOAuthRecoveryPayload(payload);
+  assert.deepEqual(parsed, payload);
+});
+
+test("parseOAuthRecoveryPayload accepts valid 410 expired payload", () => {
+  const payload = {
+    recoveryState: "IDEMPOTENT_TUPLE_EXPIRED_USE_NEW_CORRELATION",
+  };
+  const parsed = parseOAuthRecoveryPayload(payload);
+  assert.deepEqual(parsed, payload);
+});
+
+test("parseOAuthRecoveryPayload rejects payload with raw apiKey or unknown properties (no raw-key logging)", () => {
+  // Never accept or log a raw credential
+  const withRawKey = {
+    recoveryState: "IDEMPOTENT_REPLAY_REQUIRES_REVOKE_AND_REISSUE",
+    keyId: "AbCdEfGhIjKlMnOpQrSt",
+    expiresAt: "2026-09-30T12:00:00.000Z",
+    apiKey: "fri_leak_secret_key_that_must_not_be_present_12345",
+  };
+  assert.equal(parseOAuthRecoveryPayload(withRawKey), undefined);
+
+  // Rejects invalid keyId format
+  const badKeyId = {
+    recoveryState: "IDEMPOTENT_REPLAY_REQUIRES_REVOKE_AND_REISSUE",
+    keyId: "invalid-key-id-format!",
+    expiresAt: "2026-09-30T12:00:00.000Z",
+  };
+  assert.equal(parseOAuthRecoveryPayload(badKeyId), undefined);
+
+  // Rejects unknown recovery state
+  const unknownState = {
+    recoveryState: "UNKNOWN_RECOVERY_STATE",
+  };
+  assert.equal(parseOAuthRecoveryPayload(unknownState), undefined);
+
+  // Rejects non-records
+  assert.equal(parseOAuthRecoveryPayload(null), undefined);
+  assert.equal(parseOAuthRecoveryPayload("string"), undefined);
+  assert.equal(parseOAuthRecoveryPayload(123), undefined);
 });
