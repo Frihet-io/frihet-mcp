@@ -343,11 +343,10 @@ app.post("/callback", async (c) => {
     oauthResource: accessProfile === "openai" ? OPENAI_REVIEW_ORIGIN : FULL_MCP_ORIGIN,
   } as const;
 
-  // Provision an API key for this user via the Frihet Cloud Function.
-  // The provisioning endpoint lives at the API ORIGIN ROOT, never under /v1 —
-  // resolveOAuthApiKeyUrl strips a trailing /v1 so a FRIHET_API_BASE configured
-  // in either form (origin or /v1) resolves correctly. Passing the raw env var
-  // with a /v1 suffix produced /v1/oauth/api-key → 401 → 500 for every OAuth grant.
+  // Provision an API key through the exact dedicated OpenAI lifecycle function.
+  // resolveOAuthApiKeyUrl validates FRIHET_API_BASE but never derives the
+  // credential-bearing destination from it, so neither the publicApi function
+  // nor the api.frihet.io proxy can become a fallback authority.
   let apiKeyResponse: Response;
   try {
     apiKeyResponse = await provisionOAuthApiKey(

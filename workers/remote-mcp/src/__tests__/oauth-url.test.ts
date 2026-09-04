@@ -1,13 +1,9 @@
 /**
- * Regression test for the OAuth API-key provisioning URL derivation.
+ * Regression tests for the dedicated OAuth API-key lifecycle authority.
  *
- * Bug (26-jun-2026): auth-handler used `${FRIHET_API_BASE}/oauth/api-key` raw.
- * With FRIHET_API_BASE = "https://api.frihet.io/v1" (the form the main client
- * also accepts), this produced "https://api.frihet.io/v1/oauth/api-key", which
- * does NOT match the provisioning route → the Firebase Bearer token is rejected
- * as an invalid API key (401) → worker returns 500 "Failed to provision API key"
- * for EVERY remote-OAuth connection. resolveOAuthApiKeyUrl strips the trailing
- * /v1 so the call always lands on the API origin root.
+ * FRIHET_API_BASE remains the tool API authority only. Firebase/service
+ * credentials must never fall back to publicApi or api.frihet.io; the OpenAI
+ * bridge uses one exact Gen1 function and a server-derived profile/resource.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,7 +18,8 @@ import {
   revokeOAuthApiKey,
 } from "../oauth-provisioning.ts";
 
-const EXPECTED = "https://api.frihet.io/oauth/api-key";
+const EXPECTED =
+  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning";
 const SERVICE_SECRET = "s".repeat(32);
 const CORRELATION_ID = "123e4567-e89b-42d3-a456-426614174000";
 const OPENAI_BINDING = {
@@ -30,11 +27,33 @@ const OPENAI_BINDING = {
   accessProfile: "openai",
   oauthResource: "https://openai-mcp.frihet.io",
 } as const;
+const FULL_BINDING = {
+  uid: "uid-test",
+  accessProfile: "full",
+  oauthResource: "https://mcp.frihet.io",
+} as const;
+const WRONG_RESOURCE_BINDING = {
+  uid: "uid-test",
+  accessProfile: "openai",
+  oauthResource: "https://mcp.frihet.io",
+} as const;
+const WRONG_PROFILE_BINDING = {
+  uid: "uid-test",
+  accessProfile: "full",
+  oauthResource: "https://openai-mcp.frihet.io",
+} as const;
 
 test("OAuth provisioning golden matches the ERP two-phase contract", () => {
   assert.deepEqual(OAUTH_PROVISIONING_CONTRACT, {
-    contractVersion: "2026-08-30",
-    candidateRequestKeys: ["accessProfile", "correlationId", "oauthResource", "uid"],
+    contractVersion: "2026-09-04",
+    candidateRequestKeys: ["correlationId", "uid"],
+    recoveryRequestKeys: [
+      "correlationId",
+      "identityEmail",
+      "operation",
+      "runId",
+      "uid",
+    ],
     legacyRequestKeys: ["uid"],
     responseKeys: ["apiKey", "expiresAt", "keyId"],
     candidateLifetimeDays: 30,
@@ -42,18 +61,38 @@ test("OAuth provisioning golden matches the ERP two-phase contract", () => {
     keyIdPattern: "^[A-Za-z0-9]{20}$",
     bindings: {
       openai: "https://openai-mcp.frihet.io",
-      full: "https://mcp.frihet.io",
     },
     permissions: ["read", "write"],
     permissionsByProfile: {
       openai: ["read", "write"],
-      full: ["read", "write", "einvoice:*"],
+    },
+    cleanupVerification: {
+      deleteResponseIsIndependentProof: false,
+      liveCanaryProbe: {
+        requiredWhenRawKeyAvailable: true,
+        method: "GET",
+        path: "/api/v1/permissions/me",
+        expectedActiveStatus: 200,
+        expectedRevokedStatus: 401,
+      },
+      crashRecovery: {
+        rawKeyMayBeUnavailable: true,
+        evidence: "correlation-tombstone-plus-zero-active-keys",
+        rollbackBlockedOnResidue: true,
+      },
     },
   });
 });
 
-test("resolveOAuthApiKeyUrl strips /v1 suffix (the production bug)", () => {
+test("resolveOAuthApiKeyUrl ignores a valid tool base and selects the dedicated authority", () => {
   assert.equal(resolveOAuthApiKeyUrl("https://api.frihet.io/v1"), EXPECTED);
+  assert.equal(resolveOAuthApiKeyUrl("https://api.frihet.io"), EXPECTED);
+  assert.equal(
+    resolveOAuthApiKeyUrl(
+      "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1",
+    ),
+    EXPECTED,
+  );
 });
 
 test("OAuth provisioning accepts only Frihet's exact one-time bound key tuple", () => {
@@ -95,45 +134,34 @@ test("OAuth provisioning accepts only Frihet's exact one-time bound key tuple", 
   }
 });
 
-test("resolveOAuthApiKeyUrl accepts origin form", () => {
-  assert.equal(resolveOAuthApiKeyUrl("https://api.frihet.io"), EXPECTED);
-});
-
-test("OAuth lifecycle leaf accepts only the two exact resolved authorities", () => {
+test("OAuth lifecycle leaf accepts only the exact dedicated authority", () => {
   assert.equal(isTrustedOAuthApiKeyUrl(EXPECTED), true);
-  assert.equal(
-    isTrustedOAuthApiKeyUrl(
-      "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/oauth/api-key",
-    ),
-    true,
-  );
   for (const candidate of [
+    "https://api.frihet.io/oauth/api-key",
+    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/oauth/api-key",
     "http://api.frihet.io/oauth/api-key",
     "https://api.frihet.io:444/oauth/api-key",
     "https://user:password@api.frihet.io/oauth/api-key",
     "https://api.frihet.io/oauth/api-key/",
     "https://api.frihet.io/oauth/api-key?redirect=evil",
     "https://api.frihet.io.evil.example/oauth/api-key",
-    "https://attacker-project.cloudfunctions.net/publicApi/api/oauth/api-key",
+    "https://attacker-project.cloudfunctions.net/oauthApiKeyProvisioning",
+    `${EXPECTED}/`,
+    `${EXPECTED}?redirect=evil`,
   ]) {
     assert.equal(isTrustedOAuthApiKeyUrl(candidate), false, candidate);
   }
 });
 
-test("resolveOAuthApiKeyUrl tolerates trailing slashes", () => {
+test("resolveOAuthApiKeyUrl validates supported tool-base forms", () => {
   assert.equal(resolveOAuthApiKeyUrl("https://api.frihet.io/v1/"), EXPECTED);
   assert.equal(resolveOAuthApiKeyUrl("https://api.frihet.io/"), EXPECTED);
 });
 
-test("resolveOAuthApiKeyUrl falls back to the CF origin (NOT api.frihet.io) when unset", () => {
-  // The fallback must be the direct Cloud Function origin: a worker→api.frihet.io
-  // subrequest (same Cloudflare zone) returns 522, breaking provisioning.
-  const cfFallback =
-    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/oauth/api-key";
-  assert.equal(resolveOAuthApiKeyUrl(undefined), cfFallback);
-  assert.equal(resolveOAuthApiKeyUrl(""), cfFallback);
-  // api.frihet.io must never be the resolved origin (the 522 trap)
-  assert.ok(!resolveOAuthApiKeyUrl(undefined).includes("api.frihet.io"));
+test("resolveOAuthApiKeyUrl uses the dedicated authority when the tool base is unset", () => {
+  assert.equal(resolveOAuthApiKeyUrl(undefined), EXPECTED);
+  assert.equal(resolveOAuthApiKeyUrl(""), EXPECTED);
+  assert.ok(!resolveOAuthApiKeyUrl(undefined).includes("/publicApi/"));
 });
 
 test("tool requests also fall back to the direct CF origin when the env var is unset", () => {
@@ -144,11 +172,11 @@ test("tool requests also fall back to the direct CF origin when the env var is u
   assert.ok(!resolveApiBaseUrl(undefined).includes("api.frihet.io"));
 });
 
-test("resolveOAuthApiKeyUrl only strips a /v1 SEGMENT, not substrings", () => {
+test("resolveOAuthApiKeyUrl rejects lookalike tool-base hosts", () => {
   assert.throws(() => resolveOAuthApiKeyUrl("https://api-v1.frihet.io"));
 });
 
-test("tool and OAuth bases canonicalize trusted Frihet and exact Cloud Function origins", () => {
+test("tool base canonicalizes trusted Frihet and exact Cloud Function origins", () => {
   assert.equal(resolveApiBaseUrl("https://API.FRIHET.IO:443/"), "https://api.frihet.io/v1");
   assert.equal(
     resolveApiBaseUrl("https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/"),
@@ -234,7 +262,7 @@ test("OAuth provisioning behavior blocks redirects before the bearer token reach
   assert.deepEqual(sinkRequests, []);
 });
 
-test("OAuth provision and revoke requests send exact bound bodies without the raw key on DELETE", async () => {
+test("OAuth provision and revoke requests send the narrow server-derived bodies", async () => {
   const calls: Array<{ input: string; init?: RequestInit }> = [];
   const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
     calls.push({ input: String(input), init });
@@ -259,7 +287,7 @@ test("OAuth provision and revoke requests send exact bound bodies without the ra
   assert.equal(calls[0]?.init?.method, "POST");
   assert.equal(calls[0]?.init?.redirect, "error");
   assert.equal(calls[0]?.init?.body, JSON.stringify({
-    ...OPENAI_BINDING,
+    uid: OPENAI_BINDING.uid,
     correlationId: CORRELATION_ID,
   }));
   assert.equal(
@@ -269,9 +297,11 @@ test("OAuth provision and revoke requests send exact bound bodies without the ra
   assert.equal(calls[1]?.init?.method, "DELETE");
   assert.equal(calls[1]?.init?.redirect, "error");
   assert.equal(calls[1]?.init?.body, JSON.stringify({
-    ...OPENAI_BINDING,
+    uid: OPENAI_BINDING.uid,
     keyId: "AbCdEfGhIjKlMnOpQrSt",
   }));
+  assert.doesNotMatch(String(calls[0]?.init?.body), /accessProfile|oauthResource|full/u);
+  assert.doesNotMatch(String(calls[1]?.init?.body), /accessProfile|oauthResource|full/u);
   assert.doesNotMatch(String(calls[1]?.init?.body), /fri_/u);
   assert.equal(
     (calls[1]?.init?.headers as Record<string, string>)["x-frihet-oauth-key"],
@@ -299,6 +329,37 @@ test("OAuth provision and revoke requests send exact bound bodies without the ra
     "not-a-correlation-id",
     fetchImpl,
   ));
+  assert.throws(() => revokeOAuthApiKey(
+    EXPECTED,
+    SERVICE_SECRET,
+    { ...OPENAI_BINDING, keyId: "invalid" },
+    fetchImpl,
+  ), /identifier is invalid/u);
+  assert.throws(() => provisionOAuthApiKey(
+    EXPECTED,
+    "firebase-token",
+    SERVICE_SECRET,
+    FULL_BINDING,
+    CORRELATION_ID,
+    fetchImpl,
+  ), /restricted to the OpenAI profile/u);
+  assert.throws(() => revokeOAuthApiKey(
+    EXPECTED,
+    SERVICE_SECRET,
+    { ...FULL_BINDING, keyId: "AbCdEfGhIjKlMnOpQrSt" },
+    fetchImpl,
+  ), /restricted to the OpenAI profile/u);
+  for (const binding of [WRONG_RESOURCE_BINDING, WRONG_PROFILE_BINDING]) {
+    assert.throws(() => provisionOAuthApiKey(
+      EXPECTED,
+      "firebase-token",
+      SERVICE_SECRET,
+      binding,
+      CORRELATION_ID,
+      fetchImpl,
+    ), /restricted to the OpenAI profile/u);
+  }
+  assert.equal(calls.length, 2);
 });
 
 test("OAuth lifecycle leaf rejects attacker-controlled URLs before fetch sees either secret", () => {
@@ -311,6 +372,8 @@ test("OAuth lifecycle leaf rejects attacker-controlled URLs before fetch sees ei
 
   for (const candidate of [
     "https://evil.example/oauth/api-key",
+    "https://api.frihet.io/oauth/api-key",
+    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/oauth/api-key",
     "https://api.frihet.io/oauth/api-key/",
     "https://api.frihet.io/oauth/api-key?redirect=evil",
     "https://api.frihet.io.evil.example/oauth/api-key",

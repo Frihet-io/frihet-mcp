@@ -65,11 +65,14 @@ npm run gate:agent-onboarding
 bash scripts/analytics-tripwire.sh
 ```
 
-The portal publisher selection must be the approved Business identity
-`VICTOR BERTHELIUS PATO`. It must match the live connector privacy/support
-ownership statement, JSON-LD publisher evidence, and generated submission
-description before a draft is submitted. Do not substitute the Individual
-identity or rely on the Frihet display name alone as ownership evidence.
+The verified portal selections observed on 2026-09-04 are Identity
+`Business — Frihet` and Plugin Author `Frihet`. They must match the live
+connector privacy/support ownership statement, JSON-LD publisher evidence, and
+generated submission description before a draft is submitted. The public
+evidence must keep the legal chain explicit: Frihet is the trade name owned and
+operated in Spain by `VICTOR BERTHELIUS PATO`. Do not substitute the Individual
+identity, rely on the display name alone as ownership evidence, or search for a
+nonexistent `Business — VICTOR BERTHELIUS PATO` portal option.
 
 ## Historical rejection regression matrix
 
@@ -78,7 +81,7 @@ not merely portal copy to complete at submission time:
 
 | Prior review issue | Required evidence before resubmission |
 | --- | --- |
-| Developer or business identity did not match | Select the approved **Business** identity `VICTOR BERTHELIUS PATO`; keep that exact legal name in the generated description and on the live connector support, privacy, JSON-LD, agent, and MCP publisher surfaces. |
+| Developer or business identity did not match | Select Identity `Business — Frihet` and Plugin Author `Frihet`; keep the exact legal owner/controller `VICTOR BERTHELIUS PATO` in the generated description and on the live website, connector support, privacy, terms, JSON-LD, agent, and MCP publisher surfaces. |
 | App or trademark ownership could not be confirmed | Keep the public chain explicit: the legal person owns and operates the Frihet trade name, and the live Frihet privacy policy and terms identify the same controller and service provider. Do not rely on logo or display-name similarity. |
 | `openWorldHint` values were missing or inconsistent | All 33 tools must carry explicit boolean `readOnlyHint`, `openWorldHint`, and `destructiveHint` values, with tool-specific external-effect explanations enforced by the descriptor and submission gates. |
 | Test cases were incorrect or inconsistent | Generate exactly five positive and three negative cases from the frozen descriptor, seed deterministic review data, and execute every case successfully in both ChatGPT web and mobile against the release candidate. Record the expected and observed outcomes. |
@@ -222,15 +225,17 @@ after the evidence has been reviewed.
 
 ## Submission-time hard stops
 
-- Sign in to the **same OpenAI organization and project** where Business
-  verification is approved as `VICTOR BERTHELIUS PATO`. Before creating or
-  editing the draft, confirm that this selected identity is visible and that the
-  operator has Apps Management / `api.apps.write`. Messages delivered to an old
-  account such as `marketing@rewinder.eco`, or the legal name appearing in app
-  copy, do not prove that the active portal identity is correct. **STOP before
-  creating the draft** if organization, project, Business identity, or permission
-  differs. Record a screenshot of the selected identity and project as review
-  evidence, with tokens, credentials, and personal session details redacted.
+- Sign in to the **same OpenAI organization and project** where the verified
+  portal selections are Identity `Business — Frihet` and Plugin Author
+  `Frihet`. Before creating or editing the draft, confirm both selections are
+  visible and that the operator has Apps Management / `api.apps.write`.
+  Historical review messages delivered to an old account such as
+  `marketing@rewinder.eco`, or the legal name appearing in app copy, do not
+  prove that the active portal identity is correct. **STOP before
+  creating the draft** if organization, project, Identity, Plugin Author, or
+  permission differs. Record a screenshot of the selected identity and project
+  as review evidence; the frame must also show the Plugin Author selection.
+  Redact tokens, credentials, and personal session details.
 - In that exact project, confirm visually that data residency is **Global**.
   OpenAI does not permit MCP plugin submission from a project with EU data
   residency. **STOP before creating or editing the draft** if the selected
@@ -275,7 +280,7 @@ confirmation.
 
 **Release notes**
 
-> Fourth resubmission: Frihet now exposes only 33 reviewed business tools with complete schemas and explicit action hints; removes discovery tools, prompts, resources, OpenAPI, regulated workflows, raw documents, and dedicated sensitive-identifier fields; aligns the verified Business identity, OAuth scope, privacy disclosures, and five positive plus three negative review cases.
+> Fourth resubmission: Frihet now exposes only 33 reviewed business tools with complete schemas and explicit action hints; removes discovery tools, prompts, resources, OpenAPI, regulated workflows, raw documents, and dedicated sensitive-identifier fields; aligns the verified Identity `Business — Frihet` and Plugin Author `Frihet`, OAuth scope, privacy disclosures, and five positive plus three negative review cases.
 
 **Availability**
 

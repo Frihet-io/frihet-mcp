@@ -1,10 +1,12 @@
 # OpenAI-reviewed public contract
 
-Release `1.16.6` is submitted as a separately reviewed MCP surface:
+Release `1.16.6` is the frozen candidate for this separately reviewed MCP
+surface:
 
-- portal Business identity `VICTOR BERTHELIUS PATO`, matching the controller
-  and Frihet trade-name ownership statement published on the connector privacy,
-  support, submission-description, and JSON-LD surfaces;
+- portal Identity `Business — Frihet` and Plugin Author `Frihet`, matching
+  the Frihet trade name; the live website, connector privacy/support,
+  submission-description, terms, and JSON-LD surfaces must preserve the legal
+  ownership chain to controller and operator `VICTOR BERTHELIUS PATO`;
 - endpoint `https://openai-mcp.frihet.io/mcp`;
 - OAuth issuer/resource `https://openai-mcp.frihet.io` and sole scope
   `frihet:workspace.manage`;
@@ -54,13 +56,16 @@ submission steps, reviewer credentials, CAPTCHA handling, provider
 configuration, and test accounts are intentionally not stored here.
 
 Before the portal action, live-smoke the dedicated privacy and support pages and
-their ownership statement, then select the exact Business identity above. A
-different identity, an Individual identity, or a draft whose public owner
+their ownership statement, then select the exact Identity and Plugin Author
+above. Do not select or search for a `Business — VICTOR BERTHELIUS PATO` label:
+that portal option does not exist in the verified 2026-09-04 draft. A different
+Identity/author, an Individual identity, or a draft whose public owner
 evidence is not yet live is not eligible for submission.
 
 Enter the manual portal fields exactly as follows after those URLs are live:
 
-- publisher identity: Business — `VICTOR BERTHELIUS PATO`;
+- Identity: `Business — Frihet`;
+- Plugin Author: `Frihet`;
 - website: `https://www.frihet.io`;
 - connector support: `https://openai-mcp.frihet.io/support`;
 - privacy policy: `https://openai-mcp.frihet.io/privacy`;

@@ -237,8 +237,8 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
   "workers/remote-mcp/src/index.ts|UPSTREAM_HEALTH": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/health",
   "workers/remote-mcp/src/api-url.ts|DEFAULT_API_BASE": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api",
   "workers/remote-mcp/src/api-url.ts|TRUSTED_CLOUD_FUNCTION_HOST": "europe-west1-gen-lang-client-0335716041.cloudfunctions.net",
-  "workers/remote-mcp/src/oauth-provisioning.ts|FRIHET_OAUTH_API_KEY_URL": "https://api.frihet.io/oauth/api-key",
-  "workers/remote-mcp/src/oauth-provisioning.ts|CLOUD_FUNCTION_OAUTH_API_KEY_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/oauth/api-key",
+  "workers/remote-mcp/src/api-url.ts|OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
+  "workers/remote-mcp/src/oauth-provisioning.ts|OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
   "workers/remote-mcp/src/oauth-state-store.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
   "workers/remote-mcp/src/oauth-token-family.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
 });
@@ -254,13 +254,13 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/observability.ts": "d0bd50c57843f59d0ab61b18b59c1e2ccfcc9dcb83ab76a00a34882d6d1d7cd6",
   "src/openai-review-oauth.ts": "388035b1b9952b5c1f0ecc82dcac962a93320b1076dc23d3e4a155dbf9bf263f",
   "workers/api-proxy/worker.js": "640d3aa873f1a20b705f9e73cdafe368bcb0bbe43f187afe5c9583336373accb",
-  "workers/remote-mcp/src/api-url.ts": "6603350d3dde02e0a8139f216320a055df79f1bbba45ff2e1bf2fe7f40f32f23",
-  "workers/remote-mcp/src/auth-handler.ts": "7de5521aae87c2785fabf4703a37a3ecc803bad5bdb6913aa1504d53f4c6b6d1",
+  "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
+  "workers/remote-mcp/src/auth-handler.ts": "34af6880ba450bcb0ae217557a9dcc4a0988a611bde65ce67f9a8002623cd43c",
   "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
   "workers/remote-mcp/src/index.ts": "da01005ac9ff156bbfa9c0421874e2065108ef2e9f24e8a346f16c4e0749b2e5", // #171: import readReleaseMeta + /health emits releaseSha/releaseVersion/releaseSource (no new outbound sinks)
   "workers/remote-mcp/src/login-page.ts": "1c4d6dcacbbcdc47db152242a4ca4adfb83b4f0229903e0550c63b973ab00ff5",
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
-  "workers/remote-mcp/src/oauth-provisioning.ts": "8c6b6599a2f687f539c116a2dd88591f9a71ea1c2a06aaa17f0ca30a25b60c4c",
+  "workers/remote-mcp/src/oauth-provisioning.ts": "2e129bb4b62a57eb6082f39f2004fae1a3bc26609bb43343928fb47bf73327d3",
   "workers/remote-mcp/src/oauth-state-store.ts": "9785c628b2a01d80c06267a0c39beb93f9d9b7a11b26369d48aa2cc705bf7906",
   "workers/remote-mcp/src/oauth-token-family.ts": "fc0cb5c82b0d698139a0caf3dfae34d267e7366b6d073b4d1b901c8267af0eb6",
 });
@@ -317,7 +317,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/tsconfig.json": "03d5bac68efb117ed224ec2091bb0918370cb4453ae2fa04bd5fd1d7aff26f54",
 });
 export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
-  "marketplace/openai/SUBMISSION.md": "e12e0ba723c42c09d7fff01c6f7eeca158750bb88d573ed21a7aab03494eccb7",
+  "marketplace/openai/SUBMISSION.md": "ad5a06d2b137fd9bd8d93ee2a916c493eb6b94119c26c04e4932fcb603d428b4",
   "marketplace/openai/chatgpt-app-submission.json": "3b80cf9422bb7e2779497cb81b1638fae253f0af32d5445aeddd2e0e27d9f1cf",
   "marketplace/openai/chatgpt-app-submission.v1.schema.json": "aa7d1bd554e6c615d411c03e5b73bb464816be603461eb5813bb589645550304",
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
