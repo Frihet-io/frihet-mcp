@@ -88,7 +88,7 @@ not merely portal copy to complete at submission time:
 | Test cases were incorrect or inconsistent | Generate exactly five positive and three negative cases from the frozen descriptor, seed deterministic review data, and execute every case successfully in both ChatGPT web and mobile against the release candidate. Record the expected and observed outcomes. |
 | Returned user-data categories were not fully disclosed | Keep recursively closed output schemas, runtime redaction, the dedicated connector privacy notice, and explicit disclosures for internal linking/snapshots, notifications, analytics, referrals, and owner-configured webhook deliveries. |
 | The app solicited sensitive personal data | Expose no dedicated government-ID, banking, credential, precise-address, raw-document, or regulated-payload fields. Every reviewed user-entered free-text field must warn against credentials, card data, health data, and official identifiers. |
-| Submission metadata was incomplete or invalid | Live-smoke the canonical website, connector support URL, connector privacy URL, and support contact; verify the generated five/three test cases contain concrete expected outcomes before uploading the JSON. |
+| Submission metadata was incomplete or invalid | Live-smoke the canonical website, connector support URL, connector privacy URL, support contact, and reviewer-accessible demo-recording URL; verify the generated five/three test cases contain concrete expected outcomes before uploading the JSON. |
 
 Do not mark a row complete from local source alone. Public identity, URLs,
 OAuth behavior, and test outcomes require release-candidate evidence. Portal
@@ -276,6 +276,14 @@ after the evidence has been reviewed.
   the Frihet team. If any case is not independently reproducible, **STOP before
   the portal**. Never commit, paste into workflow inputs, or upload the reviewer
   credential values as evidence.
+- Record the exact released candidate in ChatGPT Developer Mode and provide a
+  reviewer-accessible HTTPS demo URL. The recording must show the main submitted
+  workflows and tool behavior across the supported ChatGPT platforms, be usable
+  without a Frihet/OpenAI team login, expiring invitation, MFA, email approval,
+  or private network, and contain no customer data, credentials, tokens, or
+  private release evidence. Validate the final link from a signed-out browser.
+  The submission JSON cannot populate this portal-only field; **STOP before the
+  portal** if the final recording or its anonymous readback is missing.
 - This connector does not declare a workspace-domain restriction. Its sole
   OAuth scope remains `frihet:workspace.manage`; do not add or imply UserInfo,
   `openid`, or `email` support. Those identity claims are needed only if a

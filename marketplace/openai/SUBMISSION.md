@@ -80,11 +80,17 @@ Enter the manual portal fields exactly as follows after those URLs are live:
 - connector support: `https://openai-mcp.frihet.io/support`;
 - privacy policy: `https://openai-mcp.frihet.io/privacy`;
 - terms: `https://www.frihet.io/es/terms`;
-- support email: `ayuda@frihet.io`.
+- support email: `ayuda@frihet.io`;
+- demo recording URL: a reviewer-accessible HTTPS recording of the exact live
+  candidate running its submitted cases in ChatGPT Developer Mode. The link
+  must not require a Frihet/OpenAI team login, an expiring invitation, MFA,
+  email approval, or a private network. Validate it in a signed-out browser and
+  keep customer data, credentials, tokens, and private release evidence out of
+  the recording.
 
-The upload schema cannot populate these ownership, URL, or contact fields, so
-schema validation of `chatgpt-app-submission.json` is not evidence that the
-portal values are complete.
+The upload schema cannot populate these ownership, URL, contact, or recording
+fields, so schema validation of `chatgpt-app-submission.json` is not evidence
+that the portal values are complete.
 
 Use the checked-in 512 px PNG assets for the portal previews; do not export or
 resize them during submission:
