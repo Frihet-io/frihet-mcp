@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "status": "hold",
+  "reason": "separate-full-oauth-authority-not-implemented",
+  "accessProfile": "full",
+  "oauthResource": "https://mcp.frihet.io",
+  "authorityUrl": null,
+  "credentialName": null,
+  "sharedOpenAiCredentialAllowed": false
+}

@@ -96,15 +96,29 @@ submission remains a separate, explicitly confirmed action.
 ## Controlled OpenAI profile release
 
 The reviewed host is not deployed by the npm/full-profile release workflow.
-First complete `.github/workflows/release-mcp-npm.yml` and verify that its tag,
-npm artifact, and `https://mcp.frihet.io/health` all identify the same current
-`origin/main` commit. Then use `.github/workflows/deploy-openai-mcp.yml` as a
-separate release ceremony:
+`.github/workflows/deploy-openai-mcp.yml` is an independent OpenAI-only release
+ceremony. It accepts one exact current `origin/main` SHA and binds that SHA to
+the workflow at the same commit, its successful required CI check, exact
+lockfiles, Wrangler OpenAI configuration, reviewed public assets, and the exact
+dry-run bundle. It does not depend on an npm publication, GitHub Release, tag,
+or the default/full Worker, and it cannot deploy or probe the full host.
 
-The dispatch `version` and `/health.releaseVersion` identify the package/runtime
-source release. They are intentionally distinct from the reviewed ChatGPT
+`/health.releaseVersion` identifies the package/runtime version derived from
+the exact source. It is intentionally distinct from the reviewed ChatGPT
 profile version, whose sole authority is `public-openai/releases.json`. The
-workflow records and live-verifies both values rather than relabelling either.
+workflow records and live-verifies both values and the frozen authority hashes
+rather than relabelling either.
+
+The default/full release is currently on explicit source-derived HOLD in
+`full-oauth-release-contract.json`: this source has no separately credentialed,
+server-derived Full OAuth lifecycle authority. A non-dry-run of
+`.github/workflows/release-mcp-npm.yml` therefore fails before build, publish,
+or deployment and leaves the existing live Full Worker untouched. Releasing a
+future Full source requires a separately reviewed authority and credential,
+changing that exact contract to `ready`, and changing the hostile contract
+tests. The OpenAI lifecycle credential must never authorize Full provisioning.
+Neither this HOLD nor the OpenAI workflow is evidence that a deployment has
+occurred.
 
 The current production topology predates the target Durable Object migration
 and dedicated OAuth KV binding. Cloudflare rollback does not undo Durable
@@ -124,7 +138,8 @@ marked `established`, use this ceremony:
    custom gate so ordinary post-mutation failures can switch traffic back
    without another human gate. Referencing an absent environment can create it
    without the intended controls; the environment-free preflight uses
-   `actions: read` to verify both live configurations before mutation.
+   `actions: read`, `checks: read`, and `contents: read` to verify both live
+   configurations and the exact current-source CI authority before mutation.
 2. In `openai-plugin-rollback`, configure minimum recovery-scoped
    `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and
    `OPENAI_ROLLBACK_ENV_GUARD`, plus the same one-time
@@ -169,10 +184,12 @@ marked `established`, use this ceremony:
    `initialize` plus `tools/list` against the compatible baseline before it
    marks the mutation boundary. Never put token values in inputs, logs,
    commands, repository variables, or artifacts.
-5. Dispatch from `main` with the exact released `version` and 40-character
-   `source_sha`, leaving `dry_run=true`. Retain the sanitized Wrangler artifact
-   proving `--env openai` resolves the dedicated KV, Assets and Durable Objects,
-   `FRIHET_OPENAI_MODE=true`, and `FRIHET_TOOL_MODE=full`.
+5. Dispatch from `main` with the exact 40-character current `source_sha`,
+   leaving `dry_run=true`. The workflow derives the runtime and reviewed-profile
+   versions from that exact source. Retain the sanitized Wrangler artifact and
+   its authority hashes proving `--env openai` resolves the dedicated KV,
+   Assets and Durable Objects, `FRIHET_OPENAI_MODE=true`, and
+   `FRIHET_TOOL_MODE=full`.
 6. Re-dispatch the same exact inputs with `dry_run=false`. Independent
    `openai-plugin-release` approval occurs only after every root, Worker,
    descriptor, submission, capability, onboarding, analytics, OpenAPI and

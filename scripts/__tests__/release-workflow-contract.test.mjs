@@ -57,10 +57,19 @@ const OPENAI_BOOTSTRAP_GUIDE = "docs/openai-topology-bootstrap.md";
 const OPENAI_COMPOSE = "scripts/test-openai-full-compose.mjs";
 const OPENAI_TOPOLOGY = "marketplace/openai/cloudflare-topology-baseline.json";
 const OPENAI_WRANGLER = "workers/remote-mcp/wrangler.toml";
+const FULL_OAUTH_RELEASE_CONTRACT = "workers/remote-mcp/full-oauth-release-contract.json";
 const CI_WORKFLOW = ".github/workflows/ci.yml";
 const ANCHOR = "scripts/assert-publish-anchor.mjs";
 const NO_LEAK = "scripts/no-public-leak.sh";
 const ANALYTICS = "scripts/check-no-analytics-emitters.mjs";
+
+const REVIEWED_ACTIONS = new Set([
+  "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+  "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+  "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+  "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+  "actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b",
+]);
 
 function loadWorkflow() {
   assert.ok(existsSync(WORKFLOW), `${WORKFLOW} must exist`);
@@ -112,6 +121,16 @@ function findStage(stages, id) {
   return stages.find((s) => s.id === id);
 }
 
+function transitivelyDependsOn(stages, startId, targetId, seen = new Set()) {
+  if (startId === targetId) return true;
+  if (seen.has(startId)) return false;
+  seen.add(startId);
+  const stage = findStage(stages, startId);
+  return Boolean(stage?.dependsOn.some(
+    (dependency) => transitivelyDependsOn(stages, dependency, targetId, new Set(seen)),
+  ));
+}
+
 function executableStageBody(stage) {
   return stage.body
     .split("\n")
@@ -127,6 +146,8 @@ function validateOpenAIWorkflowSupplyChain(yaml) {
   for (const reference of actionReferences) {
     if (!/^[^@\s]+@[0-9a-f]{40}$/.test(reference)) {
       errors.push(`mutable-action-reference:${reference}`);
+    } else if (!REVIEWED_ACTIONS.has(reference)) {
+      errors.push(`unreviewed-action-reference:${reference}`);
     }
   }
   for (const stage of parseWorkflowStages(yaml)) {
@@ -139,6 +160,64 @@ function validateOpenAIWorkflowSupplyChain(yaml) {
   if (nodeVersions.length === 0 || nodeVersions.some((version) => version !== "22.22.2")) {
     errors.push("floating-node-toolchain");
   }
+  return errors;
+}
+
+function validatePinnedActionReferences(yaml) {
+  const references = [...yaml.matchAll(/^\s+uses:\s*([^\s#]+)/gm)]
+    .map((match) => match[1]);
+  const errors = [];
+  if (references.length === 0) errors.push("no-action-references");
+  for (const reference of references) {
+    if (!/^[^@\s]+@[0-9a-f]{40}$/.test(reference)) {
+      errors.push(`mutable-action-reference:${reference}`);
+    } else if (!REVIEWED_ACTIONS.has(reference)) {
+      errors.push(`unreviewed-action-reference:${reference}`);
+    }
+  }
+  return errors;
+}
+
+function validateFullOAuthReleaseHold(yaml, contract) {
+  const stages = parseWorkflowStages(yaml);
+  const preflight = findStage(stages, "preflight");
+  const errors = [];
+  if (!preflight) return ["missing-preflight"];
+  const body = executableStageBody(preflight);
+  const guardOffset = body.indexOf("Fail closed while Full OAuth lacks a separate reviewed authority");
+  const protectedEnvironmentOffset = body.indexOf("Assert protected npm-release environment exists");
+  if (guardOffset < 0 || protectedEnvironmentOffset < 0 || guardOffset > protectedEnvironmentOffset) {
+    errors.push("full-hold-not-first-pre-mutation-authority");
+  }
+  const holdBody = guardOffset >= 0 && protectedEnvironmentOffset > guardOffset
+    ? body.slice(guardOffset, protectedEnvironmentOffset)
+    : "";
+  if (!holdBody.includes("if: inputs.dry_run != true")) errors.push("full-hold-breaks-dry-run-or-is-unconditional");
+  if (/continue-on-error:|\|\|\s*true/.test(holdBody)) errors.push("full-hold-error-can-be-ignored");
+  if (!holdBody.includes(`CONTRACT=${FULL_OAUTH_RELEASE_CONTRACT}`)) errors.push("full-hold-contract-not-source-derived");
+  if (!holdBody.includes('.status == "ready"') || contract.status !== "hold") {
+    errors.push("full-hold-status-not-explicit");
+  }
+  for (const exact of [
+    '.accessProfile == "full"',
+    '.oauthResource == "https://mcp.frihet.io"',
+    '.credentialName != "FRIHET_OAUTH_API_KEY"',
+    '.sharedOpenAiCredentialAllowed == false',
+    'FULL_OAUTH_LIFECYCLE_HOLD',
+    "exit 1",
+  ]) {
+    if (!holdBody.includes(exact)) errors.push(`full-hold-missing:${exact}`);
+  }
+  if (
+    contract.schemaVersion !== 1
+    || contract.status !== "hold"
+    || contract.reason !== "separate-full-oauth-authority-not-implemented"
+    || contract.accessProfile !== "full"
+    || contract.oauthResource !== "https://mcp.frihet.io"
+    || contract.authorityUrl !== null
+    || contract.credentialName !== null
+    || contract.sharedOpenAiCredentialAllowed !== false
+  ) errors.push("full-hold-contract-current-state-not-fail-closed");
   return errors;
 }
 
@@ -179,10 +258,70 @@ function validateOpenAIReleaseSemantics(yaml) {
   }
   if (errors.length) return errors;
 
+  const preflight = executableStageBody(byId.preflight);
+  const dryRun = executableStageBody(byId["wrangler-dry-run"]);
   const capture = executableStageBody(byId["capture-rollback-state"]);
   const deploy = executableStageBody(byId["deploy-openai"]);
   const publicVerify = executableStageBody(byId["verify-public"]);
   const rollback = executableStageBody(byId["rollback-openai"]);
+
+  if (
+    !preflight.includes("github.workflow_ref")
+    || !preflight.includes("github.workflow_sha")
+    || !preflight.includes("EXPECTED_WORKFLOW_REF")
+    || !preflight.includes('WORKFLOW_SHA" != "$INPUT_SOURCE_SHA')
+  ) errors.push("current-workflow-authority-not-proven");
+  if (
+    !/^      checks: read$/m.test(byId.preflight.body)
+    || !preflight.includes("/check-runs?per_page=100")
+    || !preflight.includes('and .conclusion == "success"')
+    || !preflight.includes('and .app.slug == "github-actions"')
+    || !preflight.includes("Build · Test · Drift audit")
+  ) errors.push("exact-current-source-ci-not-proven");
+  for (const output of [
+    "workflowSha256",
+    "configSha256",
+    "profileSha256",
+    "assetsManifestSha256",
+  ]) {
+    if (!byId.preflight.body.includes(`${output}:`)) errors.push(`missing-authority-output:${output}`);
+  }
+  if (
+    /refs\/tags|gh release view|npm view|https:\/\/mcp\.frihet\.io\/health/.test(preflight)
+    || /^      version:\s*$/m.test(yaml)
+  ) errors.push("openai-release-still-coupled-to-full-or-npm");
+  if (
+    /https:\/\/mcp\.frihet\.io(?:\/|\s|$)/.test(yaml)
+    || [...yaml.matchAll(/wrangler deploy(?: --dry-run)? --env openai/g)].length !== 3
+    || [...yaml.matchAll(/wrangler versions deploy[\s\S]{0,160}?--env openai/g)].length !== 1
+  ) errors.push("openai-workflow-can-target-full-worker");
+  if (
+    !dryRun.includes("EXPECTED_WORKFLOW_SHA256")
+    || !dryRun.includes("EXPECTED_CONFIG_SHA256")
+    || !dryRun.includes("EXPECTED_PROFILE_SHA256")
+    || !dryRun.includes("EXPECTED_ASSETS_MANIFEST_SHA256")
+    || !dryRun.includes("EXPECTED_WRANGLER_FILES")
+    || !dryRun.includes("sha256sum ./index.js")
+    || !dryRun.includes('echo "bundle_manifest_sha256=$BUNDLE_MANIFEST_SHA256"')
+    || !byId["wrangler-dry-run"].body.includes("bundleManifestSha256:")
+  ) errors.push("dry-run-provenance-not-frozen");
+  if (
+    !deploy.includes("EXPECTED_BUNDLE_MANIFEST_SHA256")
+    || !deploy.includes("JIT_BUNDLE_MANIFEST_SHA256")
+    || !deploy.includes('JIT_BUNDLE_MANIFEST_SHA256" != "$EXPECTED_BUNDLE_MANIFEST_SHA256')
+    || !deploy.includes("JIT OpenAI bundle differs from the reviewed dry-run bundle")
+    || [...deploy.matchAll(/sha256sum \.\/index\.js/g)].length !== 2
+    || [...deploy.matchAll(/WRANGLER_FILES/g)].length < 5
+    || !deploy.includes("--outdir \"$DEPLOY_OUTDIR\"")
+    || !deploy.includes('DEPLOYED_BUNDLE_MANIFEST_SHA256" != "$EXPECTED_BUNDLE_MANIFEST_SHA256')
+  ) errors.push("deployed-bundle-not-equal-reviewed-bundle");
+  if (
+    !publicVerify.includes("authorityHashes")
+    || !publicVerify.includes("WORKFLOW_SHA256")
+    || !publicVerify.includes("BUNDLE_MANIFEST_SHA256")
+    || !publicVerify.includes("/^[a-f0-9]{64}$/")
+    || !publicVerify.includes("equal(reviewedProfile, expectedReviewedProfile)")
+  ) errors.push("public-receipt-omits-authority-hashes");
 
   if (!byId["capture-rollback-state"].dependsOn.includes("wrangler-dry-run")) {
     errors.push("capture-before-dry-run");
@@ -250,6 +389,7 @@ function validateOpenAIReleaseSemantics(yaml) {
     .map((match) => match.index ?? -1);
   const firstJitUnchangedOffset = jitUnchangedOffsets[0] ?? -1;
   const finalJitUnchangedOffset = jitUnchangedOffsets.at(-1) ?? -1;
+  const finalRemoteMainOffset = deploy.indexOf("FINAL_REMOTE_MAIN=", finalJitUnchangedOffset);
   const jitOutputSerializationOffset = deploy.indexOf('} >> "$GITHUB_OUTPUT"', firstJitUnchangedOffset);
   const finalJitGuard = finalJitUnchangedOffset >= 0 && mutationOffset >= 0
     ? deploy.slice(finalJitUnchangedOffset, mutationOffset)
@@ -281,6 +421,16 @@ function validateOpenAIReleaseSemantics(yaml) {
     || !finalJitGuard.includes('--jit-before "$STATE_DIR/before-jit.json"')
     || !finalJitGuard.includes('--jit-after "$STATE_DIR/after-jit.json"')
   ) errors.push("jit-capture-budget-not-enforced");
+  if (
+    finalRemoteMainOffset <= finalJitUnchangedOffset
+    || finalRemoteMainOffset > mutationOffset
+    || !deploy.slice(finalRemoteMainOffset, mutationOffset).includes('FINAL_REMOTE_MAIN" != "$SOURCE_COMMIT')
+    || !deploy.slice(finalRemoteMainOffset, mutationOffset).includes("EXPECTED_WORKFLOW_SHA256")
+    || !deploy.slice(finalRemoteMainOffset, mutationOffset).includes("EXPECTED_CONFIG_SHA256")
+    || !deploy.slice(finalRemoteMainOffset, mutationOffset).includes("EXPECTED_PROFILE_SHA256")
+    || !deploy.slice(finalRemoteMainOffset, mutationOffset).includes("EXPECTED_ASSETS_MANIFEST_SHA256")
+    || !deploy.slice(finalRemoteMainOffset, mutationOffset).includes("EXPECTED_BUNDLE_MANIFEST_SHA256")
+  ) errors.push("final-source-and-authority-jit-missing");
   if (
     !deploy.includes("OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID")
     || !deploy.includes('INPUT_CHANGE_FREEZE_ID" != "$OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID')
@@ -965,13 +1115,14 @@ test("Release workflow — provenance chain invariant (3-link contract)", () => 
   assert.match(verifyNpm.body, /npm view .* gitHead/, "verify-npm must check gitHead");
 });
 
-test("OpenAI release workflow — exact released source is the sole authority", () => {
+test("OpenAI release workflow — current source and frozen OpenAI profile are independent authorities", () => {
   const wf = loadOpenAIWorkflow();
   const stages = parseWorkflowStages(wf);
   const preflight = findStage(stages, "preflight");
   assert.ok(preflight, "OpenAI preflight must exist");
 
   assert.match(wf, /^      source_sha:\s*$/m, "dispatch must require an exact source SHA input");
+  assert.doesNotMatch(wf, /^      version:\s*$/m, "OpenAI dispatch must not accept npm/full version authority");
   assert.match(wf, /^        default: true\s*$/m, "dry_run must default safe/true");
   assert.match(
     preflight.body,
@@ -989,23 +1140,85 @@ test("OpenAI release workflow — exact released source is the sole authority", 
   assert.match(preflight.body, /workers\/remote-mcp\/public-openai\/releases\.json/);
   assert.match(preflight.body, /reviewed_profile_version=\$PROFILE_VERSION/);
   assert.match(preflight.body, /\.surface == "openai-chatgpt"/);
-  assert.match(preflight.body, /git rev-parse "\$\{TAG\}\^\{commit\}"/);
-  assert.match(preflight.body, /gh release view "\$TAG"/);
-  assert.match(preflight.body, /\.isPrerelease.*!= "false"/s);
-  assert.match(preflight.body, /https:\/\/mcp\.frihet\.io\/health/);
-  for (const field of ["releaseSha", "releaseVersion", "releaseSource"]) {
-    assert.match(preflight.body, new RegExp(field), `full-profile readback must assert ${field}`);
-  }
+  assert.match(preflight.body, /github\.workflow_ref/);
+  assert.match(preflight.body, /github\.workflow_sha/);
+  assert.match(preflight.body, /EXPECTED_WORKFLOW_REF/);
+  assert.match(preflight.body, /check-runs\?per_page=100/);
+  assert.match(preflight.body, /Build · Test · Drift audit/);
+  assert.match(preflight.body, /\.app\.slug == "github-actions"/);
+  for (const path of [
+    ".github/workflows/deploy-openai-mcp.yml",
+    "workers/remote-mcp/wrangler.toml",
+    "workers/remote-mcp/public-openai/releases.json",
+  ]) assert.ok(preflight.body.includes(path), `preflight must freeze ${path}`);
+  for (const output of [
+    "workflowSha256",
+    "configSha256",
+    "profileSha256",
+    "assetsManifestSha256",
+  ]) assert.ok(preflight.body.includes(`${output}:`), `preflight must expose ${output}`);
+  assert.doesNotMatch(preflight.body, /refs\/tags|gh release view|npm view/);
+  assert.doesNotMatch(preflight.body, /https:\/\/mcp\.frihet\.io\/health/);
+});
+
+test("Full release workflow — current OpenAI-only lifecycle source remains on explicit HOLD", () => {
+  const workflow = loadWorkflow();
+  const stages = parseWorkflowStages(workflow);
+  assert.ok(existsSync(FULL_OAUTH_RELEASE_CONTRACT), `${FULL_OAUTH_RELEASE_CONTRACT} must exist`);
+  const contract = JSON.parse(readFileSync(FULL_OAUTH_RELEASE_CONTRACT, "utf8"));
+  assert.deepEqual(validateFullOAuthReleaseHold(workflow, contract), []);
   assert.match(
-    preflight.body,
-    /\.releaseSource == "wrangler-var"/,
-    "full-profile provenance must come from the guarded Wrangler release path",
+    findStage(stages, "gates").body,
+    /node --test scripts\/__tests__\/release-workflow-contract\.test\.mjs/,
+    "future Full readiness must change both the exact source contract and its hostile tests",
+  );
+  for (const mutatingStage of ["publish-npm", "deploy-worker", "release-github", "cascade"]) {
+    assert.ok(
+      transitivelyDependsOn(stages, mutatingStage, "preflight"),
+      `${mutatingStage} must remain downstream of the source-derived Full HOLD`,
+    );
+  }
+
+  const bypass = workflow.replace(
+    '            echo "The live Full Worker remains untouched until a separate Full authority and credential are implemented, tested, and independently reviewed."\n            exit 1',
+    '            echo "mutant continues past the Full HOLD"',
+  );
+  assert.ok(
+    validateFullOAuthReleaseHold(bypass, contract).includes("full-hold-missing:exit 1"),
+    "removing the current Full HOLD must fail",
+  );
+  const sharedCredential = workflow.replace(
+    '.credentialName != "FRIHET_OAUTH_API_KEY"',
+    '.credentialName == "FRIHET_OAUTH_API_KEY"',
+  );
+  assert.ok(
+    validateFullOAuthReleaseHold(sharedCredential, contract)
+      .includes('full-hold-missing:.credentialName != "FRIHET_OAUTH_API_KEY"'),
+    "reusing the OpenAI lifecycle credential for Full must fail",
+  );
+  const unconditional = workflow.replace(
+    "      - name: Fail closed while Full OAuth lacks a separate reviewed authority\n        if: inputs.dry_run != true",
+    "      - name: Fail closed while Full OAuth lacks a separate reviewed authority",
+  );
+  assert.ok(
+    validateFullOAuthReleaseHold(unconditional, contract)
+      .includes("full-hold-breaks-dry-run-or-is-unconditional"),
+    "dry-run must remain non-mutating and usable while Full is held",
+  );
+  const ignoredFailure = workflow.replace(
+    "      - name: Fail closed while Full OAuth lacks a separate reviewed authority\n",
+    "      - name: Fail closed while Full OAuth lacks a separate reviewed authority\n        continue-on-error: true\n",
+  );
+  assert.ok(
+    validateFullOAuthReleaseHold(ignoredFailure, contract).includes("full-hold-error-can-be-ignored"),
+    "Full HOLD failures must never be ignored",
   );
 });
 
 test("OpenAI release workflow — privileged runner and actions are immutable inputs", () => {
   const workflow = loadOpenAIWorkflow();
   assert.deepEqual(validateOpenAIWorkflowSupplyChain(workflow), []);
+  assert.deepEqual(validatePinnedActionReferences(loadWorkflow()), []);
 
   const mutableAction = workflow.replace(
     "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
@@ -1015,6 +1228,15 @@ test("OpenAI release workflow — privileged runner and actions are immutable in
     validateOpenAIWorkflowSupplyChain(mutableAction)
       .some((error) => error.startsWith("mutable-action-reference:")),
     "moving an external action back to a mutable tag must fail",
+  );
+  const unknownPin = workflow.replace(
+    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+    "actions/checkout@0000000000000000000000000000000000000000",
+  );
+  assert.ok(
+    validateOpenAIWorkflowSupplyChain(unknownPin)
+      .some((error) => error.startsWith("unreviewed-action-reference:")),
+    "an arbitrary SHA40 action pin must still fail the reviewed allowlist",
   );
   const floatingRunner = workflow.replace("runs-on: ubuntu-24.04", "runs-on: ubuntu-latest");
   assert.ok(validateOpenAIWorkflowSupplyChain(floatingRunner).some((error) => error.startsWith("floating-runner:")));
@@ -1031,7 +1253,10 @@ test("OpenAI release workflow — approval and compatible recovery environments 
   const rollback = findStage(stages, "rollback-openai");
   assert.ok(preflight && capture && deploy && rollback);
 
-  assert.match(preflight.body, /^    permissions:\n      actions: read$/m);
+  assert.match(
+    preflight.body,
+    /^    permissions:\n      actions: read\n      checks: read\n      contents: read$/m,
+  );
   assert.doesNotMatch(preflight.body, /^    environment:/m);
   for (const environment of [
     "openai-plugin-release",
@@ -1154,6 +1379,15 @@ test("OpenAI release workflow — dry-run proves the dedicated binding set", () 
   assert.match(dryRun.body, /OAUTH_STATE.*OAuthStateStore/s);
   assert.match(dryRun.body, /ASSETS/);
   assert.match(dryRun.body, /openai-bundle-files\.sha256/);
+  assert.match(dryRun.body, /EXPECTED_WRANGLER_FILES/);
+  assert.match(dryRun.body, /sha256sum \.\/index\.js/);
+  assert.match(dryRun.body, /bundle_manifest_sha256=\$BUNDLE_MANIFEST_SHA256/);
+  for (const hash of [
+    "EXPECTED_WORKFLOW_SHA256",
+    "EXPECTED_CONFIG_SHA256",
+    "EXPECTED_PROFILE_SHA256",
+    "EXPECTED_ASSETS_MANIFEST_SHA256",
+  ]) assert.ok(dryRun.body.includes(hash), `dry-run must consume ${hash}`);
   assert.match(dryRun.body, /wrangler-openai-dry-run\.json/);
   assert.doesNotMatch(
     dryRun.body,
@@ -1175,14 +1409,22 @@ test("OpenAI release workflow — mutation and production readback are exact and
     3,
     "every active compatible-version proof must bind deployment and version timestamps",
   );
-  assert.match(
-    deploy.body,
-    /git fetch --force origin "refs\/tags\/v\$\{VERSION\}:refs\/tags\/v\$\{VERSION\}"/,
-  );
   assert.match(deploy.body, /\.\/node_modules\/\.bin\/wrangler deploy --env openai/);
   assert.doesNotMatch(deploy.body, /wrangler deploy --env ""/);
+  assert.doesNotMatch(deploy.body, /refs\/tags|gh release|npm view|mcp\.frihet\.io\/health/);
   assert.match(deploy.body, /RELEASE_SOURCE_SHA:\$\{SOURCE_COMMIT\}/);
   assert.match(deploy.body, /RELEASE_VERSION:\$\{VERSION\}/);
+  assert.match(deploy.body, /--outdir "\$DEPLOY_OUTDIR"/);
+  assert.match(deploy.body, /EXPECTED_BUNDLE_MANIFEST_SHA256/);
+  assert.match(deploy.body, /JIT_BUNDLE_MANIFEST_SHA256/);
+  assert.match(deploy.body, /JIT OpenAI bundle differs from the reviewed dry-run bundle/);
+  assert.match(deploy.body, /deployed Wrangler bundle differs from the reviewed dry-run bundle/);
+  for (const hash of [
+    "EXPECTED_WORKFLOW_SHA256",
+    "EXPECTED_CONFIG_SHA256",
+    "EXPECTED_PROFILE_SHA256",
+    "EXPECTED_ASSETS_MANIFEST_SHA256",
+  ]) assert.ok(deploy.body.includes(hash), `deploy must JIT consume ${hash}`);
 
   for (const path of [
     "/health",
@@ -1202,9 +1444,13 @@ test("OpenAI release workflow — mutation and production readback are exact and
   }
   assert.match(verify.body, /attempt <= 18/);
   assert.match(verify.body, /current\.body\.version === version/);
+  assert.match(verify.body, /equal\(reviewedProfile, expectedReviewedProfile\)/);
+  assert.match(verify.body, /live reviewed-profile asset differs from the exact-source asset/);
   assert.match(verify.body, /reviewedProfile\.version === reviewedProfileVersion/);
   assert.match(verify.body, /sourceReleaseVersion: version/);
   assert.match(verify.body, /reviewedProfileVersion/);
+  assert.match(verify.body, /authorityHashes/);
+  assert.match(verify.body, /Object\.values\(authorityHashes\).*\^\[a-f0-9\]\{64\}\$/s);
   assert.match(verify.body, /tools_count === 33/);
   assert.match(verify.body, /discovery_meta_tools_count === 0/);
   assert.match(verify.body, /resources_count === 0/);
@@ -1237,6 +1483,63 @@ test("OpenAI release workflow — mutation and production readback are exact and
 test("OpenAI release workflow — semantic mutants cannot bypass topology recovery or token readiness", () => {
   const workflow = loadOpenAIWorkflow();
   assert.deepEqual(validateOpenAIReleaseSemantics(workflow), []);
+
+  const staleWorkflowAuthority = workflow.replace(
+    'if [ "$WORKFLOW_REF" != "$EXPECTED_WORKFLOW_REF" ] || [ "$WORKFLOW_SHA" != "$INPUT_SOURCE_SHA" ]; then',
+    'if [ "$WORKFLOW_REF" != "$EXPECTED_WORKFLOW_REF" ]; then',
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(staleWorkflowAuthority).includes("current-workflow-authority-not-proven"),
+    "dispatching an old workflow against a newer source must fail",
+  );
+  const missingChecksPermission = workflow.replace("      checks: read\n", "");
+  assert.ok(
+    validateOpenAIReleaseSemantics(missingChecksPermission).includes("exact-current-source-ci-not-proven"),
+    "the Check Runs proof must have explicit least-privilege checks:read",
+  );
+  const wrongCiConclusion = workflow.replace(
+    'and .conclusion == "success"',
+    'and .conclusion != "success"',
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(wrongCiConclusion).includes("exact-current-source-ci-not-proven"),
+    "a non-successful current-source CI check must never authorize release",
+  );
+  const missingBundleEquality = workflow.replace(
+    'if [ "$DEPLOYED_BUNDLE_MANIFEST_SHA256" != "$EXPECTED_BUNDLE_MANIFEST_SHA256" ]; then',
+    'if [ "$DEPLOYED_BUNDLE_MANIFEST_SHA256" = "$EXPECTED_BUNDLE_MANIFEST_SHA256" ]; then',
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(missingBundleEquality)
+      .includes("deployed-bundle-not-equal-reviewed-bundle"),
+    "deploy must compare its exact output bundle against the reviewed dry-run bundle",
+  );
+  const missingJitBundleEquality = workflow.replace(
+    'if [ "$JIT_BUNDLE_MANIFEST_SHA256" != "$EXPECTED_BUNDLE_MANIFEST_SHA256" ]; then',
+    'if [ "$JIT_BUNDLE_MANIFEST_SHA256" = "$EXPECTED_BUNDLE_MANIFEST_SHA256" ]; then',
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(missingJitBundleEquality)
+      .includes("deployed-bundle-not-equal-reviewed-bundle"),
+    "the protected job must compare its pre-mutation JIT bundle against the reviewed bundle",
+  );
+  const staleMainAtMutation = workflow.replace(
+    '|| [ "$FINAL_REMOTE_MAIN" != "$SOURCE_COMMIT" ]; then',
+    '|| [ "$FINAL_REMOTE_MAIN" = "$SOURCE_COMMIT" ]; then',
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(staleMainAtMutation)
+      .includes("final-source-and-authority-jit-missing"),
+    "origin/main must be re-read after JIT validation and immediately before mutation",
+  );
+  const npmCoupling = workflow.replace(
+    "      source_sha:\n",
+    "      version:\n        required: true\n        type: string\n      source_sha:\n",
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(npmCoupling).includes("openai-release-still-coupled-to-full-or-npm"),
+    "OpenAI deploy must not regain a caller-supplied npm/full release dependency",
+  );
 
   const wrongHost = workflow.replaceAll("https://openai-mcp.frihet.io", "https://mcp.frihet.io");
   assert.ok(

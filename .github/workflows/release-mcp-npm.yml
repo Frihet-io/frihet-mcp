@@ -6,6 +6,9 @@ name: Release @frihet/mcp-server
 # It deploys only the default Wrangler environment at mcp.frihet.io. It does
 # NOT deploy `wrangler --env openai` or verify openai-mcp.frihet.io; that
 # dedicated review surface requires a separately reviewed release path.
+# The checked-in Full OAuth release contract currently has status `hold`, so
+# every non-dry-run stops in preflight and the existing Full Worker stays
+# untouched until a separate Full lifecycle authority is reviewed.
 #
 # ── Why this exists ─────────────────────────────────────────────────────────
 # Before this workflow, the release path was:
@@ -89,7 +92,7 @@ jobs:
       workerLockSha256: ${{ steps.locks.outputs.worker_lock_sha256 }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # Full clone, not a shallow one, so npm records the right gitHead
           # and so `git ls-remote origin refs/heads/main` resolves the anchor.
@@ -144,6 +147,32 @@ jobs:
           node scripts/assert-publish-anchor.mjs
           echo "source_commit=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "worktree_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Fail closed while Full OAuth lacks a separate reviewed authority
+        if: inputs.dry_run != true
+        run: |
+          set -euo pipefail
+          CONTRACT=workers/remote-mcp/full-oauth-release-contract.json
+          git ls-files --error-unmatch "$CONTRACT" >/dev/null
+          if jq -e '
+            .schemaVersion == 1
+            and .status == "ready"
+            and .accessProfile == "full"
+            and .oauthResource == "https://mcp.frihet.io"
+            and (.authorityUrl | type == "string" and startswith("https://"))
+            and .authorityUrl != "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning"
+            and (.credentialName | type == "string" and length > 0)
+            and .credentialName != "FRIHET_OAUTH_API_KEY"
+            and .sharedOpenAiCredentialAllowed == false
+          ' "$CONTRACT" >/dev/null; then
+            echo "OK — separately credentialed, server-derived Full OAuth authority is release-ready"
+          else
+            STATUS="$(jq -r '.status // "invalid"' "$CONTRACT" 2>/dev/null || printf invalid)"
+            REASON="$(jq -r '.reason // "contract-invalid"' "$CONTRACT" 2>/dev/null || printf contract-invalid)"
+            echo "::error::FULL_OAUTH_LIFECYCLE_HOLD status=${STATUS} reason=${REASON}"
+            echo "The live Full Worker remains untouched until a separate Full authority and credential are implemented, tested, and independently reviewed."
+            exit 1
+          fi
 
       - name: Assert protected npm-release environment exists
         if: inputs.dry_run != true
@@ -200,12 +229,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: Setup Node (pinned to MCP CI authority)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           # MCP CI pins Node 22. The lockfile integrity check below consumes
           # the exact byte digests frozen by preflight from this source SHA.
@@ -233,6 +262,9 @@ jobs:
 
       - name: Install (inert — no lifecycle hooks before gates)
         run: npm ci --ignore-scripts
+
+      - name: Release topology and Full OAuth authority contract
+        run: node --test scripts/__tests__/release-workflow-contract.test.mjs
 
       - name: Cross-surface contract authority (consumer-required ops)
         # consumer-specific OpenAPI pin. Fails the workflow if the ERP
@@ -277,12 +309,12 @@ jobs:
       file_manifest_sha256: ${{ steps.pack.outputs.file_manifest_sha256 }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: Setup Node (pinned to MCP CI authority)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22.23.2
           cache: npm
@@ -352,7 +384,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload deterministic package evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mcp-release-evidence-${{ inputs.version }}
           path: .release-evidence/
@@ -395,10 +427,10 @@ jobs:
           echo "OK — release guard and all downstream credentials are present"
 
       - name: Checkout exact release source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node for pinned Wrangler
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -464,12 +496,12 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22.23.2
           cache: npm
@@ -553,12 +585,12 @@ jobs:
     environment: npm-release
     steps:
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
       - name: Download deterministic package evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: mcp-release-evidence-${{ inputs.version }}
           path: .release-evidence
@@ -637,12 +669,12 @@ jobs:
     environment: npm-release
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -706,7 +738,7 @@ jobs:
     environment: npm-release
     steps:
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -769,7 +801,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -844,7 +876,7 @@ jobs:
       contents: read
     steps:
       - name: Trigger MCP Registry publish (workflow_call)
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
         with:
           script: |
             // publish-mcp-registry.yml is the only existing surface that

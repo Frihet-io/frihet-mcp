@@ -26,6 +26,16 @@ surface:
   administration, regulated filing, payroll/HR, banking, or accommodation/POS;
 - GET and HEAD `/openapi.json` and `/openapi.yaml` return 404.
 
+The candidate may be released only through the independent OpenAI-specific
+workflow, bound to one exact current `origin/main` source, the workflow and
+successful CI at that source, exact configuration/assets, and an exact
+dry-run/deploy bundle digest. It does not inherit authority from npm, a GitHub
+Release, a tag, or the default/full Worker. The Full release is separately on
+HOLD until Frihet implements and independently reviews a dedicated,
+server-derived Full OAuth lifecycle authority and separate credential. This
+document describes the candidate contract; it does not claim that either
+deployment or the provider submission has occurred.
+
 Ten confirmed writes can deliver full events to active endpoints previously
 configured by the workspace owner. These deliveries sit outside the reviewed
 MCP response schema and can include the complete underlying record, including
