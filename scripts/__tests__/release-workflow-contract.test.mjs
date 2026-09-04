@@ -272,6 +272,25 @@ function validateOpenAIReleaseSemantics(yaml) {
     || !preflight.includes('WORKFLOW_SHA" != "$INPUT_SOURCE_SHA')
   ) errors.push("current-workflow-authority-not-proven");
   if (
+    !/^      owner_confirmation:\s*$/m.test(yaml)
+    || !preflight.includes("github.actor")
+    || !preflight.includes("github.triggering_actor")
+    || !preflight.includes('if [ "$ACTOR" != "berthelius" ]')
+    || !preflight.includes('|| [ "$TRIGGERING_ACTOR" != "berthelius" ]; then')
+    || !preflight.includes('EXPECTED_OWNER_CONFIRMATION="CONFIRM_OPENAI_DEPLOY_${INPUT_SOURCE_SHA}_berthelius"')
+    || !preflight.includes('DRY_RUN" != "true"')
+    || !preflight.includes('OWNER_CONFIRMATION" != "$EXPECTED_OWNER_CONFIRMATION')
+  ) errors.push("owner-action-time-confirmation-not-source-bound");
+  if (
+    !preflight.includes("assert_owner_only_environment openai-plugin-release")
+    || !preflight.includes("assert_owner_only_environment openai-plugin-rollback")
+    || !preflight.includes(".can_admins_bypass == false")
+    || !preflight.includes('.protection_rules | type == "array" and length == 0')
+    || !preflight.includes(".deployment_branch_policy.protected_branches == false")
+    || !preflight.includes(".deployment_branch_policy.custom_branch_policies == true")
+    || /required_reviewers|prevent_self_review/.test(preflight)
+  ) errors.push("owner-only-environment-governance-not-enforced");
+  if (
     !/^      checks: read$/m.test(byId.preflight.body)
     || !preflight.includes("/check-runs?per_page=100")
     || !preflight.includes('and .conclusion == "success"')
@@ -1217,8 +1236,14 @@ test("Full release workflow — current OpenAI-only lifecycle source remains on 
 
 test("OpenAI release workflow — privileged runner and actions are immutable inputs", () => {
   const workflow = loadOpenAIWorkflow();
+  const fullWorkflow = loadWorkflow();
   assert.deepEqual(validateOpenAIWorkflowSupplyChain(workflow), []);
-  assert.deepEqual(validatePinnedActionReferences(loadWorkflow()), []);
+  assert.deepEqual(validatePinnedActionReferences(fullWorkflow), []);
+  assert.match(
+    fullWorkflow,
+    /actions\/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # reviewed immutable commit/,
+  );
+  assert.doesNotMatch(fullWorkflow, /github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7\.0\.1/);
 
   const mutableAction = workflow.replace(
     "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
@@ -1244,7 +1269,7 @@ test("OpenAI release workflow — privileged runner and actions are immutable in
   assert.ok(validateOpenAIWorkflowSupplyChain(floatingNode).includes("floating-node-toolchain"));
 });
 
-test("OpenAI release workflow — approval and compatible recovery environments fail closed", () => {
+test("OpenAI release workflow — truthful sole-owner governance and recovery fail closed", () => {
   const wf = loadOpenAIWorkflow();
   const stages = parseWorkflowStages(wf);
   const preflight = findStage(stages, "preflight");
@@ -1264,10 +1289,27 @@ test("OpenAI release workflow — approval and compatible recovery environments 
   ]) {
     assert.ok(preflight.body.includes(environment), `${environment} must be checked before mutation`);
   }
-  assert.match(preflight.body, /select\(\.type == "required_reviewers"\)/);
-  assert.match(preflight.body, /prevent_self_review/);
+  assert.match(wf, /^      owner_confirmation:\s*$/m);
+  assert.match(preflight.body, /github\.actor/);
+  assert.match(preflight.body, /github\.triggering_actor/);
+  assert.match(preflight.body, /ACTOR" != "berthelius"/);
+  assert.match(preflight.body, /TRIGGERING_ACTOR" != "berthelius"/);
+  assert.match(
+    preflight.body,
+    /EXPECTED_OWNER_CONFIRMATION="CONFIRM_OPENAI_DEPLOY_\$\{INPUT_SOURCE_SHA\}_berthelius"/,
+  );
+  assert.match(preflight.body, /OWNER_CONFIRMATION" != "\$EXPECTED_OWNER_CONFIRMATION/);
+  assert.match(preflight.body, /\.can_admins_bypass == false/);
+  assert.match(preflight.body, /\.protection_rules \| type == "array" and length == 0/);
+  assert.match(preflight.body, /\.deployment_branch_policy\.protected_branches == false/);
+  assert.match(preflight.body, /\.deployment_branch_policy\.custom_branch_policies == true/);
+  assert.doesNotMatch(preflight.body, /required_reviewers|prevent_self_review/);
   assert.match(preflight.body, /branch_policies.*length == 1.*name == "main"/s);
-  assert.match(preflight.body, /openai-plugin-rollback must have no reviewer, wait timer, or custom gate/);
+  assert.ok(
+    preflight.body.indexOf("EXPECTED_OWNER_CONFIRMATION")
+      > preflight.body.indexOf('REMOTE_MAIN" != "$INPUT_SOURCE_SHA'),
+    "action-time confirmation must bind only after current-main source authority is established",
+  );
 
   assert.match(capture.body, /^    environment: openai-plugin-rollback$/m);
   assert.match(deploy.body, /^    environment: openai-plugin-release$/m);
@@ -1491,6 +1533,51 @@ test("OpenAI release workflow — semantic mutants cannot bypass topology recove
   assert.ok(
     validateOpenAIReleaseSemantics(staleWorkflowAuthority).includes("current-workflow-authority-not-proven"),
     "dispatching an old workflow against a newer source must fail",
+  );
+  const differentActor = workflow.replace(
+    'ACTOR" != "berthelius"',
+    'ACTOR" != "someone-else"',
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(differentActor)
+      .includes("owner-action-time-confirmation-not-source-bound"),
+    "a dispatcher other than the verified sole owner must fail",
+  );
+  const genericOwnerConfirmation = workflow.replace(
+    'EXPECTED_OWNER_CONFIRMATION="CONFIRM_OPENAI_DEPLOY_${INPUT_SOURCE_SHA}_berthelius"',
+    'EXPECTED_OWNER_CONFIRMATION="CONFIRM_OPENAI_DEPLOY"',
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(genericOwnerConfirmation)
+      .includes("owner-action-time-confirmation-not-source-bound"),
+    "a generic confirmation must not authorize a different source",
+  );
+  const adminBypass = workflow.replace(
+    ".can_admins_bypass == false",
+    ".can_admins_bypass == true",
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(adminBypass)
+      .includes("owner-only-environment-governance-not-enforced"),
+    "administrators must not bypass the exact environment governance",
+  );
+  const humanGate = workflow.replace(
+    '.protection_rules | type == "array" and length == 0',
+    '.protection_rules | type == "array" and length > 0',
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(humanGate)
+      .includes("owner-only-environment-governance-not-enforced"),
+    "a fictional reviewer, wait timer, or custom gate must not enter the sole-owner ceremony",
+  );
+  const blockedRecovery = workflow.replace(
+    "assert_owner_only_environment openai-plugin-rollback",
+    "# mutant skips non-blocking recovery governance",
+  );
+  assert.ok(
+    validateOpenAIReleaseSemantics(blockedRecovery)
+      .includes("owner-only-environment-governance-not-enforced"),
+    "automatic recovery must remain free of a blocking environment gate",
   );
   const missingChecksPermission = workflow.replace("      checks: read\n", "");
   assert.ok(
@@ -2093,6 +2180,14 @@ test("OpenAI release workflow — portal hard stops remain explicit", () => {
   assert.match(guide, /OPENAI_TOKEN_TOPOLOGY_SHA256/);
   assert.match(guide, /OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID/);
   assert.match(guide, /same freeze ID as dispatch `change_freeze_id`/);
+  assert.match(guide, /owner_confirmation/);
+  assert.match(guide, /CONFIRM_OPENAI_DEPLOY_<source_sha>_berthelius/);
+  assert.match(guide, /github\.actor.*github\.triggering_actor/s);
+  assert.match(guide, /can_admins_bypass=false/);
+  assert.doesNotMatch(guide, /must\s+have at least one required independent reviewer/);
+  assert.match(guide, /do not configure a fictitious independent reviewer/);
+  assert.match(guide, /portal options available.*values to select/s);
+  assert.doesNotMatch(guide, /portal selections observed/);
   assert.match(guide, /two fresh live prestate snapshots/);
   assert.match(guide, /exposes no compare-and-swap deployment primitive/);
   assert.match(guide, /exact version ID from this run's account-bound JIT\s+prestate/);

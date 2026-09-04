@@ -65,9 +65,10 @@ npm run gate:agent-onboarding
 bash scripts/analytics-tripwire.sh
 ```
 
-The verified portal selections observed on 2026-09-04 are Identity
-`Business — Frihet` and Plugin Author `Frihet`. They must match the live
-connector privacy/support ownership statement, JSON-LD publisher evidence, and
+The portal options available in the verified 2026-09-04 draft include the
+values to select: Identity `Business — Frihet` and Plugin Author `Frihet`.
+They must match the live connector privacy/support ownership statement,
+JSON-LD publisher evidence, and
 generated submission description before a draft is submitted. The public
 evidence must keep the legal chain explicit: Frihet is the trade name owned and
 operated in Spain by `VICTOR BERTHELIUS PATO`. Do not substitute the Individual
@@ -132,14 +133,17 @@ treated as a way to cross this topology boundary.
 After the final-topology baseline receipt has been independently reviewed and
 marked `established`, use this ceremony:
 
-1. Create two exact-main-only GitHub environments. `openai-plugin-release` must
-   have at least one required independent reviewer with prevent-self-review
-   enabled. `openai-plugin-rollback` must have no reviewer, wait timer, or
-   custom gate so ordinary post-mutation failures can switch traffic back
-   without another human gate. Referencing an absent environment can create it
-   without the intended controls; the environment-free preflight uses
-   `actions: read`, `checks: read`, and `contents: read` to verify both live
-   configurations and the exact current-source CI authority before mutation.
+1. Create both exact-main-only GitHub environments before dispatch.
+   `openai-plugin-release` and `openai-plugin-rollback` must each set
+   `can_admins_bypass=false`, use custom branch policy with exactly `main`, and
+   have zero reviewer, wait-timer, or custom-gate protection rules. Frihet has
+   one repository owner, so do not configure a fictitious independent reviewer
+   or claim prevent-self-review governance that cannot exist. Recovery must
+   remain automatically runnable after mutation. Referencing an absent
+   environment can create it with unintended defaults; the environment-free
+   preflight uses `actions: read`, `checks: read`, and `contents: read` to verify
+   both live configurations, exact actor and triggering actor `berthelius`, and
+   the exact current-source CI authority before mutation.
 2. In `openai-plugin-rollback`, configure minimum recovery-scoped
    `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and
    `OPENAI_ROLLBACK_ENV_GUARD`, plus the same one-time
@@ -177,9 +181,10 @@ marked `established`, use this ceremony:
    active baseline version, and `OPENAI_TOKEN_TOPOLOGY_SHA256` to the reviewed
    anchor topology hash, alongside `OPENAI_RELEASE_ENV_GUARD`, a one-time
    64-hex `OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID`, and the scoped Cloudflare
-   credentials. Pass the same freeze ID as dispatch `change_freeze_id`; approval
-   attests that every other Cloudflare/portal mutation path is frozen for this
-   run. Close Inspector. This is an attainable pre-mutation ceremony:
+   credentials. Pass the same freeze ID as dispatch `change_freeze_id`; the
+   owner action-time confirmation attests that every other Cloudflare/portal
+   mutation path is frozen for this run. Close Inspector. This is an attainable
+   pre-mutation ceremony:
    the workflow validates the attestations and performs authenticated
    `initialize` plus `tools/list` against the compatible baseline before it
    marks the mutation boundary. Never put token values in inputs, logs,
@@ -190,11 +195,14 @@ marked `established`, use this ceremony:
    its authority hashes proving `--env openai` resolves the dedicated KV,
    Assets and Durable Objects, `FRIHET_OPENAI_MODE=true`, and
    `FRIHET_TOOL_MODE=full`.
-6. Re-dispatch the same exact inputs with `dry_run=false`. Independent
-   `openai-plugin-release` approval occurs only after every root, Worker,
-   descriptor, submission, capability, onboarding, analytics, OpenAPI and
-   topology gates, the asserted Wrangler dry-run, baseline capture, token
-   attestation, and authenticated readiness. Inside the already approved job,
+6. Re-dispatch the same exact source and freeze with `dry_run=false`, setting
+   `owner_confirmation` to exactly
+   `CONFIRM_OPENAI_DEPLOY_<source_sha>_berthelius`. No generic or stale-source
+   confirmation is valid, and both `github.actor` and `github.triggering_actor`
+   must be exactly `berthelius`. Every root, Worker, descriptor, submission,
+   capability, onboarding, analytics, OpenAPI and topology gate, asserted
+   Wrangler dry-run, baseline capture, token attestation, and authenticated
+   readiness must still pass before mutation. Inside the release job,
    immediately before mutation, it re-reads `origin/main`, the 100%-active
    deployment/version, account identity, zone, route/subdomain policy, complete
    resource set and exact public-health provenance twice and requires both JIT
@@ -202,7 +210,7 @@ marked `established`, use this ceremony:
    exposes no compare-and-swap deployment primitive: GitHub concurrency blocks
    another copy of this workflow, while the approved one-time freeze attestation
    is the mandatory out-of-band exclusion for every other mutation path. There
-   is no environment approval after deploy:
+   is no manual environment gate after deploy:
    authenticated exact-descriptor compose runs automatically in the same
    protected job immediately after the deployment command.
 7. Require the uploaded production evidence: exact `/health` SHA/version

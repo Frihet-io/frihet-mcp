@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: ""
+      owner_confirmation:
+        description: Exact action-time owner confirmation CONFIRM_OPENAI_DEPLOY_<source_sha>_berthelius; required for real runs.
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -65,7 +70,11 @@ jobs:
         env:
           DISPATCH_SHA: ${{ github.sha }}
           DISPATCH_REF: ${{ github.ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
           INPUT_SOURCE_SHA: ${{ inputs.source_sha }}
+          OWNER_CONFIRMATION: ${{ inputs.owner_confirmation }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
@@ -76,6 +85,10 @@ jobs:
           fi
           if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
             echo "::error::OpenAI deployment must be dispatched from main; got $DISPATCH_REF"
+            exit 1
+          fi
+          if [ "$ACTOR" != "berthelius" ] || [ "$TRIGGERING_ACTOR" != "berthelius" ]; then
+            echo "::error::OpenAI deployment is restricted to the verified repository owner"
             exit 1
           fi
           EXPECTED_WORKFLOW_REF="${GITHUB_REPOSITORY}/.github/workflows/deploy-openai-mcp.yml@refs/heads/main"
@@ -91,6 +104,12 @@ jobs:
             || [ "$REMOTE_MAIN" != "$INPUT_SOURCE_SHA" ]; then
             echo "::error::source authority mismatch"
             echo "Requested source must equal checkout HEAD, dispatch SHA, and current origin/main."
+            exit 1
+          fi
+          EXPECTED_OWNER_CONFIRMATION="CONFIRM_OPENAI_DEPLOY_${INPUT_SOURCE_SHA}_berthelius"
+          if [ "$DRY_RUN" != "true" ] \
+            && [ "$OWNER_CONFIRMATION" != "$EXPECTED_OWNER_CONFIRMATION" ]; then
+            echo "::error::real OpenAI deployment requires the exact current-source owner confirmation"
             exit 1
           fi
 
@@ -175,18 +194,18 @@ jobs:
               return 1
             fi
           }
-          assert_protected() {
+          assert_owner_only_environment() {
             local name="$1"
             local environment_json
             environment_json="$(read_environment "$name")"
-            local reviewer_count
-            local prevent_self_review
-            reviewer_count="$(jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length' <<< "$environment_json")"
-            prevent_self_review="$(jq -r '[.protection_rules[]? | select(.type == "required_reviewers") | .prevent_self_review] | any' <<< "$environment_json")"
             if [ "$(jq -r '.name // ""' <<< "$environment_json")" != "$name" ] \
-              || [ "$reviewer_count" -lt 1 ] \
-              || [ "$prevent_self_review" != "true" ]; then
-              echo "::error::$name must have a required reviewer and prevent self-review"
+              || ! jq -e '
+                .can_admins_bypass == false
+                and (.protection_rules | type == "array" and length == 0)
+                and .deployment_branch_policy.protected_branches == false
+                and .deployment_branch_policy.custom_branch_policies == true
+              ' <<< "$environment_json" >/dev/null; then
+              echo "::error::$name must be non-bypassable, main-only, and free of reviewer, timer, or custom gates"
               return 1
             fi
           }
@@ -207,16 +226,11 @@ jobs:
             fi
           }
 
-          assert_protected openai-plugin-release
+          assert_owner_only_environment openai-plugin-release
           assert_main_only openai-plugin-release
-          ROLLBACK_JSON="$(read_environment openai-plugin-rollback)"
-          if [ "$(jq -r '.name // ""' <<< "$ROLLBACK_JSON")" != "openai-plugin-rollback" ] \
-            || [ "$(jq '[.protection_rules[]?] | length' <<< "$ROLLBACK_JSON")" -ne 0 ]; then
-            echo "::error::openai-plugin-rollback must have no reviewer, wait timer, or custom gate"
-            exit 1
-          fi
+          assert_owner_only_environment openai-plugin-rollback
           assert_main_only openai-plugin-rollback
-          echo "OK — protected release and non-blocking main-only recovery environments exist"
+          echo "OK — non-bypassable owner-only release and non-blocking recovery environments exist"
 
       - name: Freeze exact-source lockfile digests
         id: locks
@@ -926,7 +940,7 @@ jobs:
               --environment openai
           }
 
-          # Two complete snapshots are taken inside the already approved job.
+          # Two complete snapshots are taken inside the owner-confirmed job.
           # Their canonical security projections must be identical after
           # excluding only their independently recorded observation times.
           capture_snapshot before
