@@ -10,8 +10,9 @@
  * (`https://<region>-<project>.cloudfunctions.net/publicApi/api`), NOT at
  * `https://api.frihet.io`. Both this worker (mcp.frihet.io) and the API proxy
  * (api.frihet.io) live on the SAME Cloudflare zone — a Worker→same-zone-Worker
- * subrequest returns HTTP 522 (connection refused, ~140ms), so every API call
- * (tool calls AND OAuth provisioning) fails when the base is api.frihet.io.
+ * subrequest returns HTTP 522 (connection refused, ~140ms), so every tool API
+ * call fails when the base is api.frihet.io. OAuth key provisioning uses a
+ * separate, exact Gen1 function authority below.
  * The api proxy's own upstream (workers/api-proxy/wrangler.toml
  * FRIHET_UPSTREAM_URL) is the canonical value. Verified live 26-jun-2026.
  */
@@ -26,9 +27,16 @@ const DEFAULT_API_BASE =
 const TRUSTED_CLOUD_FUNCTION_HOST =
   "europe-west1-gen-lang-client-0335716041.cloudfunctions.net";
 
+/**
+ * Dedicated OpenAI OAuth credential lifecycle authority. This is deliberately
+ * independent of FRIHET_API_BASE: neither the publicApi function nor the
+ * api.frihet.io proxy may receive the Firebase/service credentials.
+ */
+export const OAUTH_API_KEY_PROVISIONING_URL =
+  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning";
+
 interface ParsedApiBase {
   toolBase: string;
-  oauthRoot: string;
 }
 
 function parseApiBase(apiBase: string): ParsedApiBase {
@@ -66,7 +74,7 @@ function parseApiBase(apiBase: string): ParsedApiBase {
       throw new Error("FRIHET_API_BASE Frihet path must be / or /v1");
     }
     const origin = `https://${hostname}`;
-    return { toolBase: `${origin}/v1`, oauthRoot: origin };
+    return { toolBase: `${origin}/v1` };
   }
 
   if (hostname === TRUSTED_CLOUD_FUNCTION_HOST) {
@@ -80,7 +88,7 @@ function parseApiBase(apiBase: string): ParsedApiBase {
       throw new Error("FRIHET_API_BASE Cloud Function path is not trusted");
     }
     const root = `https://${TRUSTED_CLOUD_FUNCTION_HOST}/publicApi/api`;
-    return { toolBase: `${root}/v1`, oauthRoot: root };
+    return { toolBase: `${root}/v1` };
   }
 
   throw new Error("FRIHET_API_BASE hostname is not trusted");
@@ -99,20 +107,14 @@ export function resolveApiBaseUrl(apiBase?: string): string {
 }
 
 /**
- * Build the OAuth API-key provisioning URL from FRIHET_API_BASE.
+ * Resolve the dedicated OAuth API-key lifecycle authority.
  *
- * The provisioning endpoint lives at the API ORIGIN ROOT
- * (`https://api.frihet.io/oauth/api-key`), NOT under `/v1`. FRIHET_API_BASE
- * may be configured in either the origin form ("https://api.frihet.io") or
- * the full form ("https://api.frihet.io/v1"); the auth handler must strip a
- * trailing `/v1` segment before appending `/oauth/api-key`, otherwise it hits
- * `/v1/oauth/api-key` which does NOT match the provisioning route and the
- * Firebase Bearer token is rejected as an invalid API key (HTTP 401) →
- * "Failed to provision API key" for every OAuth connection.
- *
- * Falls back to the production origin when the env var is absent.
+ * FRIHET_API_BASE is still parsed fail-closed because a malformed Worker
+ * deployment must not silently pass configuration validation. Its value never
+ * selects the credential-bearing destination: provisioning is OpenAI-only and
+ * always targets the exact dedicated function above.
  */
 export function resolveOAuthApiKeyUrl(apiBase?: string): string {
-  const { oauthRoot } = parseApiBase(apiBase || DEFAULT_API_BASE);
-  return `${oauthRoot}/oauth/api-key`;
+  parseApiBase(apiBase || DEFAULT_API_BASE);
+  return OAUTH_API_KEY_PROVISIONING_URL;
 }

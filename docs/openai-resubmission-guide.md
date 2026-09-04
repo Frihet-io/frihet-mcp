@@ -65,11 +65,15 @@ npm run gate:agent-onboarding
 bash scripts/analytics-tripwire.sh
 ```
 
-The portal publisher selection must be the approved Business identity
-`VICTOR BERTHELIUS PATO`. It must match the live connector privacy/support
-ownership statement, JSON-LD publisher evidence, and generated submission
-description before a draft is submitted. Do not substitute the Individual
-identity or rely on the Frihet display name alone as ownership evidence.
+The portal options available in the verified 2026-09-04 draft include the
+values to select: Identity `Business — Frihet` and Plugin Author `Frihet`.
+They must match the live connector privacy/support ownership statement,
+JSON-LD publisher evidence, and
+generated submission description before a draft is submitted. The public
+evidence must keep the legal chain explicit: Frihet is the trade name owned and
+operated in Spain by `VICTOR BERTHELIUS PATO`. Do not substitute the Individual
+identity, rely on the display name alone as ownership evidence, or search for a
+nonexistent `Business — VICTOR BERTHELIUS PATO` portal option.
 
 ## Historical rejection regression matrix
 
@@ -78,7 +82,7 @@ not merely portal copy to complete at submission time:
 
 | Prior review issue | Required evidence before resubmission |
 | --- | --- |
-| Developer or business identity did not match | Select the approved **Business** identity `VICTOR BERTHELIUS PATO`; keep that exact legal name in the generated description and on the live connector support, privacy, JSON-LD, agent, and MCP publisher surfaces. |
+| Developer or business identity did not match | Select Identity `Business — Frihet` and Plugin Author `Frihet`; keep the exact legal owner/controller `VICTOR BERTHELIUS PATO` in the generated description and on the live website, connector support, privacy, terms, JSON-LD, agent, and MCP publisher surfaces. |
 | App or trademark ownership could not be confirmed | Keep the public chain explicit: the legal person owns and operates the Frihet trade name, and the live Frihet privacy policy and terms identify the same controller and service provider. Do not rely on logo or display-name similarity. |
 | `openWorldHint` values were missing or inconsistent | All 33 tools must carry explicit boolean `readOnlyHint`, `openWorldHint`, and `destructiveHint` values, with tool-specific external-effect explanations enforced by the descriptor and submission gates. |
 | Test cases were incorrect or inconsistent | Generate exactly five positive and three negative cases from the frozen descriptor, seed deterministic review data, and execute every case successfully in both ChatGPT web and mobile against the release candidate. Record the expected and observed outcomes. |
@@ -93,15 +97,29 @@ submission remains a separate, explicitly confirmed action.
 ## Controlled OpenAI profile release
 
 The reviewed host is not deployed by the npm/full-profile release workflow.
-First complete `.github/workflows/release-mcp-npm.yml` and verify that its tag,
-npm artifact, and `https://mcp.frihet.io/health` all identify the same current
-`origin/main` commit. Then use `.github/workflows/deploy-openai-mcp.yml` as a
-separate release ceremony:
+`.github/workflows/deploy-openai-mcp.yml` is an independent OpenAI-only release
+ceremony. It accepts one exact current `origin/main` SHA and binds that SHA to
+the workflow at the same commit, its successful required CI check, exact
+lockfiles, Wrangler OpenAI configuration, reviewed public assets, and the exact
+dry-run bundle. It does not depend on an npm publication, GitHub Release, tag,
+or the default/full Worker, and it cannot deploy or probe the full host.
 
-The dispatch `version` and `/health.releaseVersion` identify the package/runtime
-source release. They are intentionally distinct from the reviewed ChatGPT
+`/health.releaseVersion` identifies the package/runtime version derived from
+the exact source. It is intentionally distinct from the reviewed ChatGPT
 profile version, whose sole authority is `public-openai/releases.json`. The
-workflow records and live-verifies both values rather than relabelling either.
+workflow records and live-verifies both values and the frozen authority hashes
+rather than relabelling either.
+
+The default/full release is currently on explicit source-derived HOLD in
+`full-oauth-release-contract.json`: this source has no separately credentialed,
+server-derived Full OAuth lifecycle authority. A non-dry-run of
+`.github/workflows/release-mcp-npm.yml` therefore fails before build, publish,
+or deployment and leaves the existing live Full Worker untouched. Releasing a
+future Full source requires a separately reviewed authority and credential,
+changing that exact contract to `ready`, and changing the hostile contract
+tests. The OpenAI lifecycle credential must never authorize Full provisioning.
+Neither this HOLD nor the OpenAI workflow is evidence that a deployment has
+occurred.
 
 The current production topology predates the target Durable Object migration
 and dedicated OAuth KV binding. Cloudflare rollback does not undo Durable
@@ -115,13 +133,17 @@ treated as a way to cross this topology boundary.
 After the final-topology baseline receipt has been independently reviewed and
 marked `established`, use this ceremony:
 
-1. Create two exact-main-only GitHub environments. `openai-plugin-release` must
-   have at least one required independent reviewer with prevent-self-review
-   enabled. `openai-plugin-rollback` must have no reviewer, wait timer, or
-   custom gate so ordinary post-mutation failures can switch traffic back
-   without another human gate. Referencing an absent environment can create it
-   without the intended controls; the environment-free preflight uses
-   `actions: read` to verify both live configurations before mutation.
+1. Create both exact-main-only GitHub environments before dispatch.
+   `openai-plugin-release` and `openai-plugin-rollback` must each set
+   `can_admins_bypass=false`, use custom branch policy with exactly `main`, and
+   have zero reviewer, wait-timer, or custom-gate protection rules. Frihet has
+   one repository owner, so do not configure a fictitious independent reviewer
+   or claim prevent-self-review governance that cannot exist. Recovery must
+   remain automatically runnable after mutation. Referencing an absent
+   environment can create it with unintended defaults; the environment-free
+   preflight uses `actions: read`, `checks: read`, and `contents: read` to verify
+   both live configurations, exact actor and triggering actor `berthelius`, and
+   the exact current-source CI authority before mutation.
 2. In `openai-plugin-rollback`, configure minimum recovery-scoped
    `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and
    `OPENAI_ROLLBACK_ENV_GUARD`, plus the same one-time
@@ -159,22 +181,28 @@ marked `established`, use this ceremony:
    active baseline version, and `OPENAI_TOKEN_TOPOLOGY_SHA256` to the reviewed
    anchor topology hash, alongside `OPENAI_RELEASE_ENV_GUARD`, a one-time
    64-hex `OPENAI_CLOUDFLARE_CHANGE_FREEZE_ID`, and the scoped Cloudflare
-   credentials. Pass the same freeze ID as dispatch `change_freeze_id`; approval
-   attests that every other Cloudflare/portal mutation path is frozen for this
-   run. Close Inspector. This is an attainable pre-mutation ceremony:
+   credentials. Pass the same freeze ID as dispatch `change_freeze_id`; the
+   owner action-time confirmation attests that every other Cloudflare/portal
+   mutation path is frozen for this run. Close Inspector. This is an attainable
+   pre-mutation ceremony:
    the workflow validates the attestations and performs authenticated
    `initialize` plus `tools/list` against the compatible baseline before it
    marks the mutation boundary. Never put token values in inputs, logs,
    commands, repository variables, or artifacts.
-5. Dispatch from `main` with the exact released `version` and 40-character
-   `source_sha`, leaving `dry_run=true`. Retain the sanitized Wrangler artifact
-   proving `--env openai` resolves the dedicated KV, Assets and Durable Objects,
-   `FRIHET_OPENAI_MODE=true`, and `FRIHET_TOOL_MODE=full`.
-6. Re-dispatch the same exact inputs with `dry_run=false`. Independent
-   `openai-plugin-release` approval occurs only after every root, Worker,
-   descriptor, submission, capability, onboarding, analytics, OpenAPI and
-   topology gates, the asserted Wrangler dry-run, baseline capture, token
-   attestation, and authenticated readiness. Inside the already approved job,
+5. Dispatch from `main` with the exact 40-character current `source_sha`,
+   leaving `dry_run=true`. The workflow derives the runtime and reviewed-profile
+   versions from that exact source. Retain the sanitized Wrangler artifact and
+   its authority hashes proving `--env openai` resolves the dedicated KV,
+   Assets and Durable Objects, `FRIHET_OPENAI_MODE=true`, and
+   `FRIHET_TOOL_MODE=full`.
+6. Re-dispatch the same exact source and freeze with `dry_run=false`, setting
+   `owner_confirmation` to exactly
+   `CONFIRM_OPENAI_DEPLOY_<source_sha>_berthelius`. No generic or stale-source
+   confirmation is valid, and both `github.actor` and `github.triggering_actor`
+   must be exactly `berthelius`. Every root, Worker, descriptor, submission,
+   capability, onboarding, analytics, OpenAPI and topology gate, asserted
+   Wrangler dry-run, baseline capture, token attestation, and authenticated
+   readiness must still pass before mutation. Inside the release job,
    immediately before mutation, it re-reads `origin/main`, the 100%-active
    deployment/version, account identity, zone, route/subdomain policy, complete
    resource set and exact public-health provenance twice and requires both JIT
@@ -182,7 +210,7 @@ marked `established`, use this ceremony:
    exposes no compare-and-swap deployment primitive: GitHub concurrency blocks
    another copy of this workflow, while the approved one-time freeze attestation
    is the mandatory out-of-band exclusion for every other mutation path. There
-   is no environment approval after deploy:
+   is no manual environment gate after deploy:
    authenticated exact-descriptor compose runs automatically in the same
    protected job immediately after the deployment command.
 7. Require the uploaded production evidence: exact `/health` SHA/version
@@ -222,15 +250,17 @@ after the evidence has been reviewed.
 
 ## Submission-time hard stops
 
-- Sign in to the **same OpenAI organization and project** where Business
-  verification is approved as `VICTOR BERTHELIUS PATO`. Before creating or
-  editing the draft, confirm that this selected identity is visible and that the
-  operator has Apps Management / `api.apps.write`. Messages delivered to an old
-  account such as `marketing@rewinder.eco`, or the legal name appearing in app
-  copy, do not prove that the active portal identity is correct. **STOP before
-  creating the draft** if organization, project, Business identity, or permission
-  differs. Record a screenshot of the selected identity and project as review
-  evidence, with tokens, credentials, and personal session details redacted.
+- Sign in to the **same OpenAI organization and project** where the verified
+  portal selections are Identity `Business — Frihet` and Plugin Author
+  `Frihet`. Before creating or editing the draft, confirm both selections are
+  visible and that the operator has Apps Management / `api.apps.write`.
+  Historical review messages delivered to an old account such as
+  `marketing@rewinder.eco`, or the legal name appearing in app copy, do not
+  prove that the active portal identity is correct. **STOP before
+  creating the draft** if organization, project, Identity, Plugin Author, or
+  permission differs. Record a screenshot of the selected identity and project
+  as review evidence; the frame must also show the Plugin Author selection.
+  Redact tokens, credentials, and personal session details.
 - In that exact project, confirm visually that data residency is **Global**.
   OpenAI does not permit MCP plugin submission from a project with EU data
   residency. **STOP before creating or editing the draft** if the selected
@@ -275,7 +305,7 @@ confirmation.
 
 **Release notes**
 
-> Fourth resubmission: Frihet now exposes only 33 reviewed business tools with complete schemas and explicit action hints; removes discovery tools, prompts, resources, OpenAPI, regulated workflows, raw documents, and dedicated sensitive-identifier fields; aligns the verified Business identity, OAuth scope, privacy disclosures, and five positive plus three negative review cases.
+> Fourth resubmission: Frihet now exposes only 33 reviewed business tools with complete schemas and explicit action hints; removes discovery tools, prompts, resources, OpenAPI, regulated workflows, raw documents, and dedicated sensitive-identifier fields; aligns the verified Identity `Business — Frihet` and Plugin Author `Frihet`, OAuth scope, privacy disclosures, and five positive plus three negative review cases.
 
 **Availability**
 

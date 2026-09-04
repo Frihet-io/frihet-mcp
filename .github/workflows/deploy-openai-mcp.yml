@@ -1,18 +1,14 @@
 name: Deploy OpenAI-reviewed MCP profile
 
-# This is deliberately separate from release-mcp-npm.yml. The canonical release
-# must first prove npm + the full-profile Worker + GitHub tag from one exact
-# origin/main commit. Only then may an independently approved run deploy the
-# narrower, reviewed OpenAI profile from that same commit.
+# This is deliberately independent from release-mcp-npm.yml. The narrower,
+# reviewed OpenAI profile is provenance-bound directly to one exact current
+# origin/main commit and to its frozen OpenAI configuration/assets/bundle.
+# It never deploys, probes, or otherwise mutates the default/full Worker.
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: Exact package/runtime source release. Must match package.json and vVERSION.
-        required: true
-        type: string
       source_sha:
-        description: Exact 40-character origin/main SHA already released by the full-profile workflow.
+        description: Exact reviewed 40-character current origin/main SHA to deploy to the OpenAI Worker only.
         required: true
         type: string
       dry_run:
@@ -22,6 +18,11 @@ on:
         default: true
       change_freeze_id:
         description: One-time 64-hex change-freeze nonce; required for real runs and matched inside protected environments.
+        required: false
+        type: string
+        default: ""
+      owner_confirmation:
+        description: Exact action-time owner confirmation CONFIRM_OPENAI_DEPLOY_<source_sha>_berthelius; required for real runs.
         required: false
         type: string
         default: ""
@@ -35,16 +36,21 @@ concurrency:
 
 jobs:
   preflight:
-    name: Preflight — exact released source · protected environment
+    name: Preflight — exact current source · profile · workflow authority
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       actions: read
+      checks: read
       contents: read
     outputs:
       version: ${{ steps.identity.outputs.version }}
       sourceCommit: ${{ steps.identity.outputs.source_commit }}
       reviewedProfileVersion: ${{ steps.identity.outputs.reviewed_profile_version }}
+      workflowSha256: ${{ steps.hashes.outputs.workflow_sha256 }}
+      configSha256: ${{ steps.hashes.outputs.config_sha256 }}
+      profileSha256: ${{ steps.hashes.outputs.profile_sha256 }}
+      assetsManifestSha256: ${{ steps.hashes.outputs.assets_manifest_sha256 }}
       rootLockSha256: ${{ steps.locks.outputs.root_lock_sha256 }}
       workerLockSha256: ${{ steps.locks.outputs.worker_lock_sha256 }}
     steps:
@@ -59,26 +65,35 @@ jobs:
         with:
           node-version: 22.22.2
 
-      - name: Assert exact origin/main + package + release tag source
+      - name: Assert exact current origin/main + workflow + reviewed profile source
         id: identity
         env:
-          GH_TOKEN: ${{ github.token }}
           DISPATCH_SHA: ${{ github.sha }}
           DISPATCH_REF: ${{ github.ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
           INPUT_SOURCE_SHA: ${{ inputs.source_sha }}
-          INPUT_VERSION: ${{ inputs.version }}
+          OWNER_CONFIRMATION: ${{ inputs.owner_confirmation }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
           if ! [[ "$INPUT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::source_sha must be one exact lowercase 40-character commit SHA"
             exit 1
           fi
-          if ! [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
-            echo "::error::version '$INPUT_VERSION' is not strict semver"
-            exit 1
-          fi
           if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
             echo "::error::OpenAI deployment must be dispatched from main; got $DISPATCH_REF"
+            exit 1
+          fi
+          if [ "$ACTOR" != "berthelius" ] || [ "$TRIGGERING_ACTOR" != "berthelius" ]; then
+            echo "::error::OpenAI deployment is restricted to the verified repository owner"
+            exit 1
+          fi
+          EXPECTED_WORKFLOW_REF="${GITHUB_REPOSITORY}/.github/workflows/deploy-openai-mcp.yml@refs/heads/main"
+          if [ "$WORKFLOW_REF" != "$EXPECTED_WORKFLOW_REF" ] || [ "$WORKFLOW_SHA" != "$INPUT_SOURCE_SHA" ]; then
+            echo "::error::OpenAI deployment workflow authority is not the reviewed current-main workflow"
             exit 1
           fi
 
@@ -91,10 +106,16 @@ jobs:
             echo "Requested source must equal checkout HEAD, dispatch SHA, and current origin/main."
             exit 1
           fi
+          EXPECTED_OWNER_CONFIRMATION="CONFIRM_OPENAI_DEPLOY_${INPUT_SOURCE_SHA}_berthelius"
+          if [ "$DRY_RUN" != "true" ] \
+            && [ "$OWNER_CONFIRMATION" != "$EXPECTED_OWNER_CONFIRMATION" ]; then
+            echo "::error::real OpenAI deployment requires the exact current-source owner confirmation"
+            exit 1
+          fi
 
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-          if [ "$PACKAGE_VERSION" != "$INPUT_VERSION" ]; then
-            echo "::error::package.json version '$PACKAGE_VERSION' != requested '$INPUT_VERSION'"
+          SOURCE_VERSION="$(node -p "require('./package.json').version")"
+          if ! [[ "$SOURCE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "::error::source package version '$SOURCE_VERSION' is not strict semver"
             exit 1
           fi
 
@@ -124,53 +145,38 @@ jobs:
             exit 1
           fi
 
-          TAG="v${INPUT_VERSION}"
-          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
-          TAG_COMMIT="$(git rev-parse "${TAG}^{commit}")"
-          if [ "$TAG_COMMIT" != "$INPUT_SOURCE_SHA" ]; then
-            echo "::error::$TAG resolves to $TAG_COMMIT, not $INPUT_SOURCE_SHA"
-            exit 1
-          fi
-
-          RELEASE_JSON="$(gh release view "$TAG" --json tagName,isDraft,isPrerelease)"
-          if [ "$(jq -r '.tagName' <<< "$RELEASE_JSON")" != "$TAG" ] \
-            || [ "$(jq -r '.isDraft' <<< "$RELEASE_JSON")" != "false" ] \
-            || [ "$(jq -r '.isPrerelease' <<< "$RELEASE_JSON")" != "false" ]; then
-            echo "::error::GitHub Release $TAG is absent, draft, prerelease, or does not match the source tag"
-            exit 1
-          fi
-
           git diff --exit-code -- .
           test -z "$(git status --porcelain)"
           {
-            echo "version=$INPUT_VERSION"
+            echo "version=$SOURCE_VERSION"
             echo "source_commit=$INPUT_SOURCE_SHA"
             echo "reviewed_profile_version=$PROFILE_VERSION"
           } >> "$GITHUB_OUTPUT"
-          echo "OK — exact released source is $INPUT_SOURCE_SHA ($TAG)"
+          echo "OK — exact current OpenAI source is $INPUT_SOURCE_SHA; reviewed profile is $PROFILE_VERSION"
 
-      - name: Require successful full-profile release readback
+      - name: Require successful CI for the exact current source
         env:
+          GH_TOKEN: ${{ github.token }}
           SOURCE_COMMIT: ${{ steps.identity.outputs.source_commit }}
-          VERSION: ${{ steps.identity.outputs.version }}
         run: |
           set -euo pipefail
-          HEALTH_FILE="$(mktemp)"
-          trap 'rm -f "$HEALTH_FILE"' EXIT
-          curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 \
-            --connect-timeout 10 --max-time 45 \
-            -H 'Cache-Control: no-cache' \
-            "https://mcp.frihet.io/health?release=${SOURCE_COMMIT}" > "$HEALTH_FILE"
+          CHECKS_FILE="$(mktemp)"
+          trap 'rm -f "$CHECKS_FILE"' EXIT
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/commits/${SOURCE_COMMIT}/check-runs?per_page=100" > "$CHECKS_FILE"
           jq -e \
             --arg sha "$SOURCE_COMMIT" \
-            --arg version "$VERSION" \
-            '.status == "ok"
-              and .version == $version
-              and .releaseSha == $sha
-              and .releaseVersion == $version
-              and .releaseSource == "wrangler-var"' \
-            "$HEALTH_FILE" >/dev/null
-          echo "OK — full-profile Worker already proves this exact release"
+            --arg check "Build · Test · Drift audit" \
+            '[.check_runs[]
+              | select(.name == $check
+                and .head_sha == $sha
+                and .status == "completed"
+                and .conclusion == "success"
+                and .app.slug == "github-actions")] | length == 1' \
+            "$CHECKS_FILE" >/dev/null
+          echo "OK — exact current source has one successful GitHub Actions CI authority"
 
       - name: Assert protected release and non-blocking recovery environments
         if: inputs.dry_run != true
@@ -188,18 +194,18 @@ jobs:
               return 1
             fi
           }
-          assert_protected() {
+          assert_owner_only_environment() {
             local name="$1"
             local environment_json
             environment_json="$(read_environment "$name")"
-            local reviewer_count
-            local prevent_self_review
-            reviewer_count="$(jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length' <<< "$environment_json")"
-            prevent_self_review="$(jq -r '[.protection_rules[]? | select(.type == "required_reviewers") | .prevent_self_review] | any' <<< "$environment_json")"
             if [ "$(jq -r '.name // ""' <<< "$environment_json")" != "$name" ] \
-              || [ "$reviewer_count" -lt 1 ] \
-              || [ "$prevent_self_review" != "true" ]; then
-              echo "::error::$name must have a required reviewer and prevent self-review"
+              || ! jq -e '
+                .can_admins_bypass == false
+                and (.protection_rules | type == "array" and length == 0)
+                and .deployment_branch_policy.protected_branches == false
+                and .deployment_branch_policy.custom_branch_policies == true
+              ' <<< "$environment_json" >/dev/null; then
+              echo "::error::$name must be non-bypassable, main-only, and free of reviewer, timer, or custom gates"
               return 1
             fi
           }
@@ -220,16 +226,11 @@ jobs:
             fi
           }
 
-          assert_protected openai-plugin-release
+          assert_owner_only_environment openai-plugin-release
           assert_main_only openai-plugin-release
-          ROLLBACK_JSON="$(read_environment openai-plugin-rollback)"
-          if [ "$(jq -r '.name // ""' <<< "$ROLLBACK_JSON")" != "openai-plugin-rollback" ] \
-            || [ "$(jq '[.protection_rules[]?] | length' <<< "$ROLLBACK_JSON")" -ne 0 ]; then
-            echo "::error::openai-plugin-rollback must have no reviewer, wait timer, or custom gate"
-            exit 1
-          fi
+          assert_owner_only_environment openai-plugin-rollback
           assert_main_only openai-plugin-rollback
-          echo "OK — protected release and non-blocking main-only recovery environments exist"
+          echo "OK — non-bypassable owner-only release and non-blocking recovery environments exist"
 
       - name: Freeze exact-source lockfile digests
         id: locks
@@ -242,6 +243,33 @@ jobs:
             echo "root_lock_sha256=$ROOT_LOCK_SHA"
             echo "worker_lock_sha256=$WORKER_LOCK_SHA"
           } >> "$GITHUB_OUTPUT"
+          echo "OK — exact-source dependency locks are frozen"
+
+      - name: Freeze OpenAI workflow, config, profile and asset hashes
+        id: hashes
+        run: |
+          set -euo pipefail
+          WORKFLOW=.github/workflows/deploy-openai-mcp.yml
+          CONFIG=workers/remote-mcp/wrangler.toml
+          PROFILE=workers/remote-mcp/public-openai/releases.json
+          ASSETS=workers/remote-mcp/public-openai
+          git ls-files --error-unmatch "$WORKFLOW" "$CONFIG" "$PROFILE" >/dev/null
+          test -n "$(find "$ASSETS" -type f -print -quit)"
+          WORKFLOW_SHA="$(sha256sum "$WORKFLOW" | awk '{print $1}')"
+          CONFIG_SHA="$(sha256sum "$CONFIG" | awk '{print $1}')"
+          PROFILE_SHA="$(sha256sum "$PROFILE" | awk '{print $1}')"
+          ASSETS_SHA="$(find "$ASSETS" -type f -print0 \
+            | LC_ALL=C sort -z \
+            | xargs -0 sha256sum \
+            | sha256sum \
+            | awk '{print $1}')"
+          {
+            echo "workflow_sha256=$WORKFLOW_SHA"
+            echo "config_sha256=$CONFIG_SHA"
+            echo "profile_sha256=$PROFILE_SHA"
+            echo "assets_manifest_sha256=$ASSETS_SHA"
+          } >> "$GITHUB_OUTPUT"
+          echo "OK — OpenAI workflow/config/profile/assets authority hashes are frozen"
 
   gates:
     name: Gates — root · Worker · reviewed OpenAI contracts
@@ -312,6 +340,8 @@ jobs:
     needs: [preflight, gates]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    outputs:
+      bundleManifestSha256: ${{ steps.bundle.outputs.bundle_manifest_sha256 }}
     steps:
       - name: Checkout exact source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -341,17 +371,29 @@ jobs:
           npm ci --ignore-scripts
           npm ci --prefix workers/remote-mcp --ignore-scripts
 
-      - name: Build and assert OpenAI bindings without deploying
+      - name: Build, hash and assert OpenAI bindings without deploying
+        id: bundle
         env:
           NO_COLOR: "1"
           SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
           VERSION: ${{ needs.preflight.outputs.version }}
           REVIEWED_PROFILE_VERSION: ${{ needs.preflight.outputs.reviewedProfileVersion }}
+          EXPECTED_WORKFLOW_SHA256: ${{ needs.preflight.outputs.workflowSha256 }}
+          EXPECTED_CONFIG_SHA256: ${{ needs.preflight.outputs.configSha256 }}
+          EXPECTED_PROFILE_SHA256: ${{ needs.preflight.outputs.profileSha256 }}
+          EXPECTED_ASSETS_MANIFEST_SHA256: ${{ needs.preflight.outputs.assetsManifestSha256 }}
         working-directory: workers/remote-mcp
         run: |
           set -euo pipefail
           RAW_LOG="$(mktemp)"
           OUTDIR="$(mktemp -d)"
+          ROOT="$PWD/../.."
+          test "$(cd "$ROOT" && sha256sum .github/workflows/deploy-openai-mcp.yml | awk '{print $1}')" = "$EXPECTED_WORKFLOW_SHA256"
+          test "$(cd "$ROOT" && sha256sum workers/remote-mcp/wrangler.toml | awk '{print $1}')" = "$EXPECTED_CONFIG_SHA256"
+          test "$(cd "$ROOT" && sha256sum workers/remote-mcp/public-openai/releases.json | awk '{print $1}')" = "$EXPECTED_PROFILE_SHA256"
+          ASSETS_SHA="$(cd "$ROOT" && find workers/remote-mcp/public-openai -type f -print0 \
+            | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          test "$ASSETS_SHA" = "$EXPECTED_ASSETS_MANIFEST_SHA256"
           if ! ./node_modules/.bin/wrangler deploy --dry-run --env openai \
             --outdir "$OUTDIR" \
             --var "RELEASE_SOURCE_SHA:${SOURCE_COMMIT}" \
@@ -381,21 +423,40 @@ jobs:
 
           EVIDENCE_DIR="$PWD/../../.openai-release-evidence"
           mkdir -p "$EVIDENCE_DIR"
-          test -n "$(find "$OUTDIR" -type f -print -quit)"
-          (
-            cd "$OUTDIR"
-            find . -type f -print0 \
-              | LC_ALL=C sort -z \
-              | xargs -0 sha256sum
-          ) > "$EVIDENCE_DIR/openai-bundle-files.sha256"
+          EXPECTED_WRANGLER_FILES=$'./README.md\n./index.js\n./index.js.map'
+          ACTUAL_WRANGLER_FILES="$(cd "$OUTDIR" && find . -type f -print | LC_ALL=C sort)"
+          if [ "$ACTUAL_WRANGLER_FILES" != "$EXPECTED_WRANGLER_FILES" ]; then
+            echo "::error::Wrangler OpenAI output file set changed"
+            exit 1
+          fi
+          # README.md contains a generation timestamp and index.js.map embeds
+          # the temporary outdir in sourceRoot. They are non-runtime metadata;
+          # the exact deployable module is hashed while their file-set presence
+          # remains closed above. Static assets have their own exact hash.
+          (cd "$OUTDIR" && sha256sum ./index.js) \
+            > "$EVIDENCE_DIR/openai-bundle-files.sha256"
+          BUNDLE_MANIFEST_SHA256="$(sha256sum "$EVIDENCE_DIR/openai-bundle-files.sha256" | awk '{print $1}')"
+          echo "bundle_manifest_sha256=$BUNDLE_MANIFEST_SHA256" >> "$GITHUB_OUTPUT"
           jq -n \
             --arg sourceSha "$SOURCE_COMMIT" \
             --arg version "$VERSION" \
             --arg reviewedProfileVersion "$REVIEWED_PROFILE_VERSION" \
+            --arg workflowSha256 "$EXPECTED_WORKFLOW_SHA256" \
+            --arg configSha256 "$EXPECTED_CONFIG_SHA256" \
+            --arg profileSha256 "$EXPECTED_PROFILE_SHA256" \
+            --arg assetsManifestSha256 "$EXPECTED_ASSETS_MANIFEST_SHA256" \
+            --arg bundleManifestSha256 "$BUNDLE_MANIFEST_SHA256" \
             '{
               sourceSha: $sourceSha,
               sourceReleaseVersion: $version,
               reviewedProfileVersion: $reviewedProfileVersion,
+              authorityHashes: {
+                workflowSha256: $workflowSha256,
+                configSha256: $configSha256,
+                profileSha256: $profileSha256,
+                assetsManifestSha256: $assetsManifestSha256,
+                bundleManifestSha256: $bundleManifestSha256
+              },
               wranglerDryRun: true,
               environment: "openai",
               profile: { openaiMode: true, toolMode: "full" },
@@ -410,7 +471,7 @@ jobs:
       - name: Upload sanitized dry-run evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: openai-wrangler-dry-run-${{ inputs.version }}
+          name: openai-wrangler-dry-run-${{ needs.preflight.outputs.reviewedProfileVersion }}
           path: .openai-release-evidence/
           retention-days: 90
 
@@ -605,7 +666,7 @@ jobs:
       - name: Upload sanitized pre-mutation evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: openai-pre-mutation-${{ inputs.version }}
+          name: openai-pre-mutation-${{ needs.preflight.outputs.reviewedProfileVersion }}
           path: .openai-release-evidence/
           retention-days: 90
 
@@ -736,6 +797,11 @@ jobs:
           SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
           VERSION: ${{ needs.preflight.outputs.version }}
           REVIEWED_PROFILE_VERSION: ${{ needs.preflight.outputs.reviewedProfileVersion }}
+          EXPECTED_WORKFLOW_SHA256: ${{ needs.preflight.outputs.workflowSha256 }}
+          EXPECTED_CONFIG_SHA256: ${{ needs.preflight.outputs.configSha256 }}
+          EXPECTED_PROFILE_SHA256: ${{ needs.preflight.outputs.profileSha256 }}
+          EXPECTED_ASSETS_MANIFEST_SHA256: ${{ needs.preflight.outputs.assetsManifestSha256 }}
+          EXPECTED_BUNDLE_MANIFEST_SHA256: ${{ needs.wrangler-dry-run.outputs.bundleManifestSha256 }}
           PREVIOUS_DEPLOYMENT_ID: ${{ needs.capture-rollback-state.outputs.previousDeploymentId }}
           PREVIOUS_VERSION_ID: ${{ needs.capture-rollback-state.outputs.previousVersionId }}
           PREVIOUS_HEALTH_SHA256: ${{ needs.capture-rollback-state.outputs.previousHealthSha256 }}
@@ -755,6 +821,13 @@ jobs:
           test "$ENVIRONMENT" = "openai"
           test "$ZONE_NAME" = "frihet.io"
           test "$(sha256sum "$CONTRACT" | awk '{print $1}')" = "$BASELINE_RECEIPT_SHA256"
+          ROOT="$PWD/../.."
+          test "$(cd "$ROOT" && sha256sum .github/workflows/deploy-openai-mcp.yml | awk '{print $1}')" = "$EXPECTED_WORKFLOW_SHA256"
+          test "$(cd "$ROOT" && sha256sum workers/remote-mcp/wrangler.toml | awk '{print $1}')" = "$EXPECTED_CONFIG_SHA256"
+          test "$(cd "$ROOT" && sha256sum workers/remote-mcp/public-openai/releases.json | awk '{print $1}')" = "$EXPECTED_PROFILE_SHA256"
+          JIT_ASSETS_SHA="$(cd "$ROOT" && find workers/remote-mcp/public-openai -type f -print0 \
+            | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          test "$JIT_ASSETS_SHA" = "$EXPECTED_ASSETS_MANIFEST_SHA256"
 
           # There is no Cloudflare compare-and-swap primitive for deployments.
           # The protected one-time freeze nonce is therefore an explicit hard
@@ -763,15 +836,38 @@ jobs:
           # permitted until this run reaches a terminal state.
           HEAD_SHA="$(git rev-parse HEAD)"
           REMOTE_MAIN="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
-          git fetch --force origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
-          TAG_COMMIT="$(git rev-parse "v${VERSION}^{commit}")"
           if [ "$HEAD_SHA" != "$SOURCE_COMMIT" ] \
-            || [ "$REMOTE_MAIN" != "$SOURCE_COMMIT" ] \
-            || [ "$TAG_COMMIT" != "$SOURCE_COMMIT" ]; then
+            || [ "$REMOTE_MAIN" != "$SOURCE_COMMIT" ]; then
             echo "::error::source authority moved after review; refusing deployment"
             exit 1
           fi
           test -z "$(git status --porcelain)"
+
+          # Rebuild the exact deploy bundle inside the protected job before
+          # any provider mutation. This closes dependency/runtime drift between
+          # the reviewed dry-run job and the final mutation boundary.
+          JIT_BUNDLE_OUTDIR="$STATE_DIR/jit-reviewed-bundle"
+          if ! ./node_modules/.bin/wrangler deploy --dry-run --env openai \
+            --outdir "$JIT_BUNDLE_OUTDIR" \
+            --var "RELEASE_SOURCE_SHA:${SOURCE_COMMIT}" \
+            --var "RELEASE_VERSION:${VERSION}" > "$STATE_DIR/jit-dry-run.log" 2>&1; then
+            echo "::error::JIT OpenAI bundle build failed; output withheld"
+            exit 1
+          fi
+          test -n "$(find "$JIT_BUNDLE_OUTDIR" -type f -print -quit)"
+          EXPECTED_WRANGLER_FILES=$'./README.md\n./index.js\n./index.js.map'
+          JIT_WRANGLER_FILES="$(cd "$JIT_BUNDLE_OUTDIR" && find . -type f -print | LC_ALL=C sort)"
+          if [ "$JIT_WRANGLER_FILES" != "$EXPECTED_WRANGLER_FILES" ]; then
+            echo "::error::JIT Wrangler output file set changed"
+            exit 1
+          fi
+          (cd "$JIT_BUNDLE_OUTDIR" && sha256sum ./index.js) \
+            > "$STATE_DIR/jit-bundle-files.sha256"
+          JIT_BUNDLE_MANIFEST_SHA256="$(sha256sum "$STATE_DIR/jit-bundle-files.sha256" | awk '{print $1}')"
+          if [ "$JIT_BUNDLE_MANIFEST_SHA256" != "$EXPECTED_BUNDLE_MANIFEST_SHA256" ]; then
+            echo "::error::JIT OpenAI bundle differs from the reviewed dry-run bundle"
+            exit 1
+          fi
 
           api_get() {
             curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 \
@@ -844,7 +940,7 @@ jobs:
               --environment openai
           }
 
-          # Two complete snapshots are taken inside the already approved job.
+          # Two complete snapshots are taken inside the owner-confirmed job.
           # Their canonical security projections must be identical after
           # excluding only their independently recorded observation times.
           capture_snapshot before
@@ -886,9 +982,25 @@ jobs:
             --require-jit-unchanged \
             --jit-before "$STATE_DIR/before-jit.json" \
             --jit-after "$STATE_DIR/after-jit.json"
+          FINAL_REMOTE_MAIN="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+          if [ "$(git rev-parse HEAD)" != "$SOURCE_COMMIT" ] \
+            || [ "$FINAL_REMOTE_MAIN" != "$SOURCE_COMMIT" ]; then
+            echo "::error::origin/main moved during JIT validation; refusing deployment"
+            exit 1
+          fi
+          test "$(cd "$ROOT" && sha256sum .github/workflows/deploy-openai-mcp.yml | awk '{print $1}')" = "$EXPECTED_WORKFLOW_SHA256"
+          test "$(cd "$ROOT" && sha256sum workers/remote-mcp/wrangler.toml | awk '{print $1}')" = "$EXPECTED_CONFIG_SHA256"
+          test "$(cd "$ROOT" && sha256sum workers/remote-mcp/public-openai/releases.json | awk '{print $1}')" = "$EXPECTED_PROFILE_SHA256"
+          FINAL_ASSETS_SHA="$(cd "$ROOT" && find workers/remote-mcp/public-openai -type f -print0 \
+            | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          test "$FINAL_ASSETS_SHA" = "$EXPECTED_ASSETS_MANIFEST_SHA256"
+          test "$JIT_BUNDLE_MANIFEST_SHA256" = "$EXPECTED_BUNDLE_MANIFEST_SHA256"
+          test -z "$(git status --porcelain)"
           echo "started=true" >> "$GITHUB_OUTPUT"
+          DEPLOY_OUTDIR="$STATE_DIR/deployed-bundle"
           if ! ./node_modules/.bin/wrangler deploy --env openai \
             --name "$WORKER_NAME" \
+            --outdir "$DEPLOY_OUTDIR" \
             --var "RELEASE_SOURCE_SHA:${SOURCE_COMMIT}" \
             --var "RELEASE_VERSION:${VERSION}" \
             --message "OpenAI reviewed runtime ${VERSION} from ${SOURCE_COMMIT}" \
@@ -921,6 +1033,19 @@ jobs:
               fi
             fi
             echo "::error::OpenAI Worker deployment failed; inspect Cloudflare deployment state"
+            exit 1
+          fi
+          test -n "$(find "$DEPLOY_OUTDIR" -type f -print -quit)"
+          DEPLOYED_WRANGLER_FILES="$(cd "$DEPLOY_OUTDIR" && find . -type f -print | LC_ALL=C sort)"
+          if [ "$DEPLOYED_WRANGLER_FILES" != "$EXPECTED_WRANGLER_FILES" ]; then
+            echo "::error::deployed Wrangler output file set changed"
+            exit 1
+          fi
+          (cd "$DEPLOY_OUTDIR" && sha256sum ./index.js) \
+            > "$STATE_DIR/deployed-bundle-files.sha256"
+          DEPLOYED_BUNDLE_MANIFEST_SHA256="$(sha256sum "$STATE_DIR/deployed-bundle-files.sha256" | awk '{print $1}')"
+          if [ "$DEPLOYED_BUNDLE_MANIFEST_SHA256" != "$EXPECTED_BUNDLE_MANIFEST_SHA256" ]; then
+            echo "::error::deployed Wrangler bundle differs from the reviewed dry-run bundle"
             exit 1
           fi
           ./node_modules/.bin/wrangler deployments status \
@@ -958,6 +1083,11 @@ jobs:
             --arg sourceSha "$SOURCE_COMMIT" \
             --arg version "$VERSION" \
             --arg reviewedProfileVersion "$REVIEWED_PROFILE_VERSION" \
+            --arg workflowSha256 "$EXPECTED_WORKFLOW_SHA256" \
+            --arg configSha256 "$EXPECTED_CONFIG_SHA256" \
+            --arg profileSha256 "$EXPECTED_PROFILE_SHA256" \
+            --arg assetsManifestSha256 "$EXPECTED_ASSETS_MANIFEST_SHA256" \
+            --arg bundleManifestSha256 "$DEPLOYED_BUNDLE_MANIFEST_SHA256" \
             --arg deploymentId "$DEPLOYMENT_ID" \
             --arg versionId "$VERSION_ID" \
             --arg jitPrestateSha256 "$JIT_PRESTATE_SHA" \
@@ -965,6 +1095,13 @@ jobs:
               sourceSha: $sourceSha,
               sourceReleaseVersion: $version,
               reviewedProfileVersion: $reviewedProfileVersion,
+              authorityHashes: {
+                workflowSha256: $workflowSha256,
+                configSha256: $configSha256,
+                profileSha256: $profileSha256,
+                assetsManifestSha256: $assetsManifestSha256,
+                bundleManifestSha256: $bundleManifestSha256
+              },
               environment: "openai",
               jitPrestateSha256: $jitPrestateSha256,
               deploymentId: $deploymentId,
@@ -998,14 +1135,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: openai-deploy-${{ inputs.version }}
+          name: openai-deploy-${{ needs.preflight.outputs.reviewedProfileVersion }}
           path: .openai-release-evidence/
           if-no-files-found: warn
           retention-days: 90
 
   verify-public:
     name: Verify public OpenAI production 33 · 0 · 0 + OAuth metadata
-    needs: [preflight, deploy-openai]
+    needs: [preflight, wrangler-dry-run, deploy-openai]
     if: inputs.dry_run != true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -1027,6 +1164,11 @@ jobs:
           SOURCE_COMMIT: ${{ needs.preflight.outputs.sourceCommit }}
           VERSION: ${{ needs.preflight.outputs.version }}
           REVIEWED_PROFILE_VERSION: ${{ needs.preflight.outputs.reviewedProfileVersion }}
+          WORKFLOW_SHA256: ${{ needs.preflight.outputs.workflowSha256 }}
+          CONFIG_SHA256: ${{ needs.preflight.outputs.configSha256 }}
+          PROFILE_SHA256: ${{ needs.preflight.outputs.profileSha256 }}
+          ASSETS_MANIFEST_SHA256: ${{ needs.preflight.outputs.assetsManifestSha256 }}
+          BUNDLE_MANIFEST_SHA256: ${{ needs.wrangler-dry-run.outputs.bundleManifestSha256 }}
         run: |
           set -euo pipefail
           mkdir -p .openai-release-evidence
@@ -1039,8 +1181,22 @@ jobs:
           const sourceSha = process.env.SOURCE_COMMIT;
           const version = process.env.VERSION;
           const reviewedProfileVersion = process.env.REVIEWED_PROFILE_VERSION;
+          const authorityHashes = {
+            workflowSha256: process.env.WORKFLOW_SHA256,
+            configSha256: process.env.CONFIG_SHA256,
+            profileSha256: process.env.PROFILE_SHA256,
+            assetsManifestSha256: process.env.ASSETS_MANIFEST_SHA256,
+            bundleManifestSha256: process.env.BUNDLE_MANIFEST_SHA256,
+          };
+          assert(
+            Object.values(authorityHashes).every((value) => /^[a-f0-9]{64}$/.test(value || "")),
+            "OpenAI authority hash output is absent or malformed",
+          );
           const snapshot = JSON.parse(
             await readFile("src/__tests__/fixtures/openai-review-descriptor.snapshot.json", "utf8"),
+          );
+          const expectedReviewedProfile = JSON.parse(
+            await readFile("workers/remote-mcp/public-openai/releases.json", "utf8"),
           );
           const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           const request = (path, init = {}) => fetch(
@@ -1099,6 +1255,10 @@ jobs:
           assert(health, "OpenAI /health did not converge to the exact release within 180 seconds");
 
           const { body: reviewedProfile } = await json("/releases.json");
+          assert(
+            equal(reviewedProfile, expectedReviewedProfile),
+            "live reviewed-profile asset differs from the exact-source asset",
+          );
           assert(
             reviewedProfile.version === reviewedProfileVersion,
             "live reviewed-profile version disagrees with the frozen OpenAI asset",
@@ -1193,6 +1353,7 @@ jobs:
               sourceSha,
               sourceReleaseVersion: version,
               reviewedProfileVersion,
+              authorityHashes,
               health: {
                 status: health.status,
                 version: health.version,
@@ -1219,7 +1380,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: openai-public-readback-${{ inputs.version }}
+          name: openai-public-readback-${{ needs.preflight.outputs.reviewedProfileVersion }}
           path: .openai-release-evidence/
           if-no-files-found: warn
           retention-days: 90
@@ -1533,7 +1694,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: openai-rollback-proof-${{ inputs.version }}
+          name: openai-rollback-proof-${{ needs.preflight.outputs.reviewedProfileVersion }}
           path: .openai-release-evidence/
           if-no-files-found: warn
           retention-days: 90

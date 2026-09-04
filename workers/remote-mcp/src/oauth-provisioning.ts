@@ -5,13 +5,9 @@ type FetchImplementation = (
 
 const OAUTH_LIFECYCLE_TIMEOUT_MS = 10_000;
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-const FRIHET_OAUTH_API_KEY_URL = "https://api.frihet.io/oauth/api-key";
-const CLOUD_FUNCTION_OAUTH_API_KEY_URL =
-  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/oauth/api-key";
-const TRUSTED_OAUTH_API_KEY_URLS = new Set([
-  FRIHET_OAUTH_API_KEY_URL,
-  CLOUD_FUNCTION_OAUTH_API_KEY_URL,
-]);
+const OAUTH_API_KEY_PROVISIONING_URL =
+  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning";
+const FULL_MCP_OAUTH_RESOURCE = "https://mcp.frihet.io";
 
 /**
  * Cross-repo golden shared with the ERP provisioning authority.
@@ -21,8 +17,15 @@ const TRUSTED_OAUTH_API_KEY_URLS = new Set([
  * cannot turn this into inert documentation.
  */
 export const OAUTH_PROVISIONING_CONTRACT = {
-  contractVersion: "2026-08-30",
-  candidateRequestKeys: ["accessProfile", "correlationId", "oauthResource", "uid"],
+  contractVersion: "2026-09-04",
+  candidateRequestKeys: ["correlationId", "uid"],
+  recoveryRequestKeys: [
+    "correlationId",
+    "identityEmail",
+    "operation",
+    "runId",
+    "uid",
+  ],
   legacyRequestKeys: ["uid"],
   responseKeys: ["apiKey", "expiresAt", "keyId"],
   candidateLifetimeDays: 30,
@@ -30,11 +33,10 @@ export const OAUTH_PROVISIONING_CONTRACT = {
   keyIdPattern: "^[A-Za-z0-9]{20}$",
   bindings: {
     openai: "https://openai-mcp.frihet.io",
-    full: "https://mcp.frihet.io",
   },
   /**
-   * Baseline permissions written to legacy (1.16.x-compatible) keys and to
-   * candidate keys when the caller does not match a registered profile.
+   * Baseline permissions written to legacy (1.16.x-compatible) keys and to the
+   * server-derived OpenAI candidate profile.
    * Mirror of ERP @berthelius/Frihet-ERP OAUTH_PROVISIONING_CONTRACT — keep
    * byte-for-byte identical.
    */
@@ -47,14 +49,34 @@ export const OAUTH_PROVISIONING_CONTRACT = {
    */
   permissionsByProfile: {
     openai: ["read", "write"],
-    full: ["read", "write", "einvoice:*"],
+  },
+  cleanupVerification: {
+    deleteResponseIsIndependentProof: false,
+    liveCanaryProbe: {
+      requiredWhenRawKeyAvailable: true,
+      method: "GET",
+      path: "/api/v1/permissions/me",
+      expectedActiveStatus: 200,
+      expectedRevokedStatus: 401,
+    },
+    crashRecovery: {
+      rawKeyMayBeUnavailable: true,
+      evidence: "correlation-tombstone-plus-zero-active-keys",
+      rollbackBlockedOnResidue: true,
+    },
   },
 } as const;
 
+/**
+ * The callback still models both Worker profiles locally so this leaf can
+ * reject the full profile before any credential-bearing network request.
+ */
 export type OAuthProvisioningBinding = {
   uid: string;
   accessProfile: "openai" | "full";
-  oauthResource: (typeof OAUTH_PROVISIONING_CONTRACT.bindings)["openai" | "full"];
+  oauthResource:
+    | (typeof OAUTH_PROVISIONING_CONTRACT.bindings)["openai"]
+    | typeof FULL_MCP_OAUTH_RESOURCE;
 };
 
 export type ProvisionedOAuthApiKey = OAuthProvisioningBinding & {
@@ -79,7 +101,12 @@ export function isValidOAuthServiceSecret(value: unknown): value is string {
  * fragments, alternate paths, and lookalike hosts must all fail closed.
  */
 export function isTrustedOAuthApiKeyUrl(value: string): boolean {
-  return TRUSTED_OAUTH_API_KEY_URLS.has(value);
+  return value === OAUTH_API_KEY_PROVISIONING_URL;
+}
+
+function isExactOpenAiBinding(binding: OAuthProvisioningBinding): boolean {
+  return binding.accessProfile === "openai"
+    && binding.oauthResource === OAUTH_PROVISIONING_CONTRACT.bindings.openai;
 }
 
 /** Accept only the exact one-time credential tuple issued by Frihet. */
@@ -139,6 +166,9 @@ export function provisionOAuthApiKey(
   if (!UUID_V4_PATTERN.test(correlationId)) {
     throw new Error("OAuth API-key correlation is invalid");
   }
+  if (!isExactOpenAiBinding(binding)) {
+    throw new Error("OAuth API-key provisioning is restricted to the OpenAI profile");
+  }
   return fetchImpl(provisioningUrl, {
     method: "POST",
     redirect: "error",
@@ -148,7 +178,7 @@ export function provisionOAuthApiKey(
       Authorization: `Bearer ${idToken}`,
       "x-frihet-oauth-key": serviceSecret,
     },
-    body: JSON.stringify({ ...binding, correlationId }),
+    body: JSON.stringify({ uid: binding.uid, correlationId }),
   });
 }
 
@@ -165,6 +195,12 @@ export function revokeOAuthApiKey(
   if (!isValidOAuthServiceSecret(serviceSecret)) {
     throw new Error("OAuth API-key service authentication is not configured");
   }
+  if (!isExactOpenAiBinding(binding)) {
+    throw new Error("OAuth API-key revocation is restricted to the OpenAI profile");
+  }
+  if (!new RegExp(OAUTH_PROVISIONING_CONTRACT.keyIdPattern, "u").test(binding.keyId)) {
+    throw new Error("OAuth API-key identifier is invalid");
+  }
   return fetchImpl(provisioningUrl, {
     method: "DELETE",
     redirect: "error",
@@ -173,6 +209,6 @@ export function revokeOAuthApiKey(
       "Content-Type": "application/json",
       "x-frihet-oauth-key": serviceSecret,
     },
-    body: JSON.stringify(binding),
+    body: JSON.stringify({ uid: binding.uid, keyId: binding.keyId }),
   });
 }
