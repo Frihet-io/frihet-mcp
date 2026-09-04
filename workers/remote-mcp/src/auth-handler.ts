@@ -45,6 +45,9 @@ import {
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 const OAUTH_CALLBACK_MAX_BODY_BYTES = 20 * 1024;
 
+import { readRecoveryBody } from "./recovery-body.js";
+export { readRecoveryBody } from "./recovery-body.js";
+
 const app = new Hono<{ Bindings: AuthEnv }>();
 
 function validateReviewedAuthorizeQuery(request: Request): string | undefined {
@@ -385,6 +388,20 @@ app.post("/callback", async (c) => {
       },
     });
     // State is single-use, so any retry starts a fresh authorization flow.
+    //
+    // The provisioning endpoint (oauthApiKeyHandler) is contract-bound
+    // to emit 409 with a recovery state for an idempotent replay of a
+    // committed credential, and 410 for revoked/expired same-tuple
+    // requests that require a NEW correlationId. The OAuth caller
+    // (ChatGPT connector, Claude Desktop, etc.) needs the recovery
+    // state in the body so it can decide between "credential exists,
+    // user must revoke and re-auth" (409) and "credential gone, start
+    // fresh" (410). Folding both to 502 here is what masked the
+    // recovery contract in PR #1784 review.
+    if (upstreamStatus === 409 || upstreamStatus === 410) {
+      const recoveryBody = await readRecoveryBody(apiKeyResponse);
+      return c.json(recoveryBody, upstreamStatus as 409 | 410);
+    }
     // Preserve common client errors (400/401/403/429) verbatim; map every other
     // status (including opaque 5xx) to 502 Bad Gateway.
     const clientStatus: 400 | 401 | 403 | 429 | 502 =
