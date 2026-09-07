@@ -32,6 +32,12 @@
 
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import type { IFrihetClient } from "../client-interface.js";
+import { registerProductTools } from "../tools/products.js";
 
 import {
   fiscalModeloSummaryOutput,
@@ -40,7 +46,83 @@ import {
   invoiceItemOutput,
   expenseItemOutput,
   clientItemOutput,
+  listContent,
+  getContent,
+  mutateContent,
+  handleToolError,
 } from "../tools/shared.js";
+
+describe("content annotations — client compatibility", () => {
+  for (const [operation, contentHelper] of [["list", listContent], ["get", getContent]] as const) {
+    test(`${operation} preserves text and audience without an optional priority`, () => {
+      const text = "Synthetic product\nDetails remain intact: á, €, 0.5";
+      const result = { content: [contentHelper(text)], structuredContent: { id: "synthetic-product" } };
+
+      // SDK validation alone permits fractional priorities; absence also pins
+      // compatibility with clients that fail to decode those valid numbers.
+      assert.deepEqual(CallToolResultSchema.parse(result), result);
+      assert.deepEqual(result.content, [{ type: "text", text, annotations: { audience: ["user", "assistant"] } }]);
+    });
+  }
+
+  test("mutation and error responses retain their user audience and highest priority", () => {
+    const mutation = { content: [mutateContent("Synthetic update")], structuredContent: { id: "synthetic-product" } };
+    const error = handleToolError({ statusCode: 404, errorCode: "not_found", message: "Synthetic missing product" });
+
+    for (const result of [mutation, error]) {
+      assert.deepEqual(CallToolResultSchema.parse(result), result);
+      assert.deepEqual(result.content[0].annotations, { audience: ["user"], priority: 1 });
+    }
+    assert.equal(error.isError, true);
+    assert.equal(error.content[0].text, "Error: Resource not found. / Recurso no encontrado.");
+  });
+
+  test("product reads preserve payloads and tool safety annotations through the real SDK", async () => {
+    const product = { id: "synthetic-product", name: "Synthetic product", unitPrice: 12.5, description: "Complete synthetic details" };
+    const page = { data: [{ id: product.id }], total: 1, limit: 1, offset: 0 };
+    const backend = {
+      listProducts: async (params: { fields?: string; limit?: number }) => {
+        assert.equal(params.fields, "id");
+        assert.equal(params.limit, 1);
+        return page;
+      },
+      getProduct: async (id: string) => {
+        assert.equal(id, product.id);
+        return product;
+      },
+    } as unknown as IFrihetClient;
+    const server = new McpServer({ name: "content-contract", version: "0.0.0" });
+    registerProductTools(server, backend);
+    const client = new Client({ name: "content-contract-client", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+      const { tools } = await client.listTools();
+      for (const name of ["list_products", "get_product"]) {
+        assert.deepEqual(tools.find(tool => tool.name === name)?.annotations, {
+          readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false,
+        });
+      }
+      const list = await client.callTool({ name: "list_products", arguments: { limit: 1, fields: "id" } }, CallToolResultSchema);
+      const get = await client.callTool({ name: "get_product", arguments: { id: product.id } }, CallToolResultSchema);
+      assert.deepEqual(list.structuredContent, page);
+      assert.deepEqual(get.structuredContent, product);
+      assert.deepEqual(list.content, [{
+        type: "text",
+        text: `Found 1 products (showing 1, offset 0):\n\n${JSON.stringify(page.data[0], null, 2)}\n---`,
+        annotations: { audience: ["user", "assistant"] },
+      }]);
+      assert.deepEqual(get.content, [{
+        type: "text", text: `Product:\n${JSON.stringify(product, null, 2)}`,
+        annotations: { audience: ["user", "assistant"] },
+      }]);
+      assert.ok(!list.isError && !get.isError);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});
 
 // ── Fixtures: representative CF responses ────────────────────────────────────
 

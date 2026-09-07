@@ -27,16 +27,17 @@ export const DELETE_ANNOTATIONS: ToolAnnotations = { readOnlyHint: false, destru
 /*  Content annotations for tool responses                             */
 /* ------------------------------------------------------------------ */
 
-/** List operations: useful to both user and assistant for navigation, medium priority. */
+// MCP permits fractional priorities, but some clients (including Codex CLI
+// 0.153.4) fail to decode them. Omit this optional hint on read responses while
+// retaining their audience. See https://github.com/openai/codex/issues/38979.
+/** List operations: useful to both user and assistant for navigation. */
 export const LIST_CONTENT_ANNOTATIONS: Annotations = {
   audience: ["user", "assistant"],
-  priority: 0.5,
 } as const;
 
-/** Get/read operations: useful to both, higher priority as specifically requested data. */
+/** Get/read operations: useful to both user and assistant. */
 export const GET_CONTENT_ANNOTATIONS: Annotations = {
   audience: ["user", "assistant"],
-  priority: 0.7,
 } as const;
 
 /** Mutating operations (create/update/delete): primarily for the user, highest priority. */
