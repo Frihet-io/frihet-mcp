@@ -412,7 +412,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `face_status` | Poll submission status from FACe for a submitted invoice |
 | `ticketbai_submit` | Submit TicketBAI fiscal record to Basque Country tax authority (Hacienda) |
 | `ticketbai_status` | Poll TicketBAI submission status from the Basque tax authority |
-| `ksef_submit` | Submit invoice to KSeF (Poland) — *stub: transport is infra-ready in Frihet-ERP but not yet exposed as a live endpoint (production gated on KSeF cert); returns a labeled "unavailable" error until activated* |
+| `ksef_submit` | **NOT_DEPLOYED** — Submit invoice to KSeF (Poland) — *stub: transport is infra-ready in Frihet-ERP but not yet exposed as a live endpoint (production gated on KSeF cert); returns a labeled "unavailable" error until activated* |
 
 ### Time Tracking (6)
 
@@ -487,14 +487,14 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `frihet_modelo_415_summary` | M415 annual operations >€3,005 (Canarias equivalent of M347) — not deployed, returns `NOT_DEPLOYED` |
 | `frihet_modelo_425_summary` | M425 annual IGIC recap for Canary Islands businesses — not deployed, returns `NOT_DEPLOYED` |
 | `frihet_modelo_418_summary` | M418 monthly individual IGIC return, régimen especial del grupo de entidades — not deployed, returns `NOT_DEPLOYED` |
-| `frihet_aiem_calculate` | Calculate AIEM (Arbitrio Importación) for imported/produced goods in Canarias |
+| `frihet_aiem_calculate` | AIEM (Arbitrio Importación) calculation for Canarias — not deployed, returns `NOT_DEPLOYED` |
 
 ### Impuesto sobre Sociedades — Corporate Tax (2)
 
 | Tool | What it does |
 |------|-------------|
-| `frihet_modelo_200_summary` | Modelo 200 annual IS return (taxable base, deductions, net payable) |
-| `frihet_modelo_202_summary` | Modelo 202 installment payments (1P April, 2P October, 3P December) |
+| `frihet_modelo_200_summary` | Modelo 200 annual IS return — not deployed, returns `NOT_DEPLOYED` |
+| `frihet_modelo_202_summary` | Modelo 202 installment payments (1P/2P/3P) — not deployed, returns `NOT_DEPLOYED` |
 
 ### Bank Categorization Rules (2)
 
@@ -542,7 +542,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `get_modelo_303_summary` | Quarterly IVA return (Modelo 303) — collected vs deductible, net payable |
 | `get_modelo_130_summary` | Quarterly IRPF installment for self-employed (Modelo 130) |
 | `get_modelo_390_summary` | Annual IVA summary (Modelo 390) |
-| `get_modelo_180_summary` | Annual withholding summary for rentals (Modelo 180) |
+| `get_modelo_180_summary` | Annual withholding summary for rentals (Modelo 180) — not deployed, returns `NOT_DEPLOYED` |
 | `get_modelo_347_summary` | Annual third-party transactions >€3,005 (Modelo 347) |
 | `verifactu_status` | Get VeriFactu submission status for a fiscal record |
 | `verifactu_resubmit` | Resubmit a rejected VeriFactu fiscal record |

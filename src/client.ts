@@ -301,7 +301,7 @@ export class FrihetApiError extends Error {
     public readonly errorCode: string,
     message?: string,
     public readonly detail?: string,
-    /** Backend correlation id (`meta.requestId` or `X-Request-Id`), when safe to echo. */
+    /** Backend correlation id (`meta.requestId` or `X-Request-Id`); carried for diagnostics, never echoed to agents. */
     public readonly requestId?: string,
   ) {
     super(

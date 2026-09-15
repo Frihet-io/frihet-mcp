@@ -115,9 +115,11 @@ async function fiscalServer(): Promise<StubMcpServer> {
   const server = new StubMcpServer();
   const { registerFiscalTools } = await import("../tools/fiscal.js");
   const { registerIgicTools } = await import("../tools/igic.js");
+  const { registerImpuestoSociedadesTools } = await import("../tools/impuesto_sociedades.js");
   const client = new FrihetClient("fri_test_key", "https://api.example.test/v1");
   registerFiscalTools(server as never, client as never);
   registerIgicTools(server as never, client as never);
+  registerImpuestoSociedadesTools(server as never, client as never);
   return server;
 }
 
@@ -180,6 +182,35 @@ describe("fiscal summaries fail closed on period mismatch / invalid input", () =
     assert.equal(result.structuredContent!["code"], "PERIOD_MISMATCH");
   });
 
+  // publicApi.ts emits BOTH `modeloCode` and `model` (303/130/390 ~3285-3313, 347 ~3165).
+  const modeloMismatches: Array<[string, Record<string, unknown>]> = [
+    ["another modelo in both keys", { modeloCode: "130", model: "130" }],
+    ["keys disagree with each other", { modeloCode: "303", model: "130" }],
+    ["legacy model-only key for another modelo", { model: "390" }],
+    ["no modelo key at all", {}],
+  ];
+  for (const [label, codes] of modeloMismatches) {
+    test(`303 request answered with ${label} → MODELO_MISMATCH, figures withheld`, async () => {
+      installBackend(() => json(200, {
+        data: { ...codes, period: "2025-Q2", modelo130: { rendimientoNeto: 999 }, readonly: true },
+        meta: { requestId: "req_test_123" },
+      }));
+      const server = await fiscalServer();
+      const result = await server.tools.get("get_modelo_303_summary")!.handler({ period: "2025-Q2" });
+      assert.equal(result.isError, true);
+      assert.equal(result.structuredContent!["code"], "MODELO_MISMATCH");
+      assert.equal(result.structuredContent!["requestedModelo"], "303");
+      assert.doesNotMatch(JSON.stringify(result), /999/);
+    });
+  }
+
+  test("legacy model-only reply for the requested modelo is accepted", async () => {
+    installBackend(() => json(200, { data: { model: "347", period: "2024", year: 2024, readonly: true }, meta: {} }));
+    const server = await fiscalServer();
+    const result = await server.tools.get("get_modelo_347_summary")!.handler({ period: "2024" });
+    assert.ok(!result.isError, result.content[0]?.text);
+  });
+
   test("backend response with no period label at all → PERIOD_MISMATCH (cannot prove period)", async () => {
     installBackend(() => json(200, { data: { modeloCode: "390", model: "390", readonly: true }, meta: {} }));
     const server = await fiscalServer();
@@ -218,6 +249,10 @@ describe("fiscal tools without a backend are honest NOT_DEPLOYED errors", () => 
     ["frihet_modelo_415_summary", { year: "2025" }],
     ["frihet_modelo_418_summary", { period: "2026-04" }],
     ["frihet_modelo_425_summary", { year: "2025" }],
+    // Frihet-ERP origin/main publicApi.ts: no /igic/aiem and no /is/modelo route.
+    ["frihet_aiem_calculate", { ncCode: "8471", amount: 1000 }],
+    ["frihet_modelo_200_summary", { year: "2025" }],
+    ["frihet_modelo_202_summary", { year: "2026", installment: "1P" }],
   ] as const) {
     test(`${tool} → isError NOT_DEPLOYED without an HTTP call`, async () => {
       installBackend((url) => fakeFiscalBackend(url));
@@ -303,6 +338,14 @@ describe("backend requestId survives into the MCP error", () => {
     const client = new FrihetClient("fri_test_key", "https://api.example.test/v1");
     const caught = await client.getMonthlySummary().catch((e: unknown) => e);
     assert.equal((caught as { requestId?: string }).requestId, undefined);
+  });
+
+  test("an identifier-shaped but unknown error name is never echoed", () => {
+    const error = new Error("boom");
+    error.name = "sk_live_abc123secret";
+    const mapped = handleToolError(error, "any_tool") as ToolResult;
+    assert.doesNotMatch(JSON.stringify(mapped), /sk_live_abc123secret/);
+    assert.equal(mapped.structuredContent?.["errorClass"], "UnknownError");
   });
 
   test("unexpected errors name the error class but never the message", () => {

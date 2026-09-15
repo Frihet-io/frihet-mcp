@@ -6,13 +6,13 @@
  *   2. frihet_modelo_425_summary — M425 resumen anual IGIC (Canarias) — NOT DEPLOYED
  *   3. frihet_modelo_418_summary — M418 autoliquidacion mensual individual, regimen especial
  *                                  del grupo de entidades (ATC) — NOT DEPLOYED
- *   4. frihet_aiem_calculate     — Arbitrio sobre Importaciones y Entrega de Mercancías calculation
+ *   4. frihet_aiem_calculate     — AIEM (Arbitrio sobre Importaciones y Entrega de Mercancías) — NOT DEPLOYED
  *
  * NOTE: ATC SOAP integration skipped — internal infrastructure, not exposed via MCP.
  *
- * REST surface: Frihet-ERP functions/src/publicApi.ts has NO /v1/igic/modelo/*
- * route, so 415/418/425 return NOT_DEPLOYED without calling (capability
- * truth: `unavailable`, src/capability-truth.ts).
+ * REST surface: Frihet-ERP functions/src/publicApi.ts has NO /v1/igic/* route
+ * (neither modelo summaries nor AIEM), so all four tools return NOT_DEPLOYED
+ * without calling (capability truth: `unavailable`, src/capability-truth.ts).
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -20,14 +20,12 @@ import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
 import {
   withToolLogging,
-  formatRecord,
-  getContent,
   openObjectOutput,
   READ_ONLY_ANNOTATIONS,
 } from "./shared.js";
-import { withBackendGuard, notDeployedError } from "./backend-availability.js";
+import { notDeployedError } from "./backend-availability.js";
 
-export function registerIgicTools(server: McpServer, client: IFrihetClient): void {
+export function registerIgicTools(server: McpServer, _client: IFrihetClient): void {
   // -- frihet_modelo_415_summary -------------------------------------------
 
   server.registerTool(
@@ -108,13 +106,10 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
     {
       title: "Calculate AIEM (Arbitrio Importación Canarias)",
       description:
-        "Calculate the AIEM (Arbitrio sobre Importaciones y Entrega de Mercancias) for goods imported " +
-        "to or produced in the Canary Islands. " +
-        "Returns applicable AIEM rate, tax base, and amount due for the given product. " +
-        "AIEM is a Canarian surcharge on top of IGIC for protected local industries. " +
-        "Example: ncCode='8471', amount=1000, description='Ordenadores portatiles'. " +
-        "/ Calcula el AIEM para mercancias importadas o producidas en Canarias. " +
-        "Devuelve tipo aplicable, base imponible y cuota. El AIEM protege la industria local canaria.",
+        "NOT DEPLOYED: AIEM (Arbitrio sobre Importaciones y Entrega de Mercancias, Canary Islands) calculation " +
+        "has no Frihet backend yet; calling this tool returns a NOT_DEPLOYED error and never a rate or amount. " +
+        "/ NO DESPLEGADO: el calculo del AIEM (Canarias) aun no tiene backend en Frihet; " +
+        "devuelve un error NOT_DEPLOYED y nunca un tipo ni una cuota.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         ncCode: z.string().describe("Nomenclatura Combinada (NC) tariff code / Codigo NC (nomenclatura combinada)"),
@@ -125,14 +120,8 @@ export function registerIgicTools(server: McpServer, client: IFrihetClient): voi
         "AIEM calculation result: applicable rate, tax base and amount due / Resultado AIEM: tipo aplicable, base imponible y cuota",
       ),
     },
-    async ({ ncCode, amount, description }) => withToolLogging("frihet_aiem_calculate", () =>
-      withBackendGuard("frihet_aiem_calculate", "/v1/igic/aiem", async () => {
-        const result = await client.calculateAiem({ ncCode, amount, description });
-        return {
-          content: [getContent(formatRecord(`AIEM Calculation (NC: ${ncCode})`, result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+    async () => withToolLogging("frihet_aiem_calculate", async () =>
+      notDeployedError("frihet_aiem_calculate", "/v1/igic/aiem/calculate"),
     ),
   );
 }

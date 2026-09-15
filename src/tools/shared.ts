@@ -96,6 +96,16 @@ function isFrihetApiError(error: unknown): error is FrihetApiErrorLike {
   );
 }
 
+/** Error class names safe to echo from the unexpected-error path. */
+const UNEXPECTED_ERROR_CLASSES = new Set([
+  "FrihetApiError",
+  "TypeError",
+  "SyntaxError",
+  "RangeError",
+  "AbortError",
+  "ZodError",
+]);
+
 const FORBIDDEN_FRIENDLY_MESSAGE =
   "Access denied. Reconnect Frihet or use configured credentials with permission for this action. / Acceso denegado. Vuelve a conectar Frihet o usa credenciales con permiso para esta accion.";
 
@@ -200,9 +210,10 @@ export function handleToolError(error: unknown, toolName?: string): {
     },
   });
 
-  // Class name only (e.g. TypeError) — never the message or stack, which can
-  // carry request data or secrets.
-  const errorClass = error instanceof Error && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(error.name)
+  // Class name only, from a fixed allowlist — never the message, stack, or an
+  // arbitrary `name` (a thrown object can set `name` to any identifier-shaped
+  // value, including a secret).
+  const errorClass = error instanceof Error && UNEXPECTED_ERROR_CLASSES.has(error.name)
     ? error.name
     : "UnknownError";
   return {

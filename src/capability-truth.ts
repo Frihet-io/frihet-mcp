@@ -43,14 +43,11 @@ const RUNTIME_CHECKED = new Set([
   "anomaly_list",
   "attendance_clock_in",
   "attendance_clock_out",
-  "frihet_aiem_calculate",
   "frihet_bank_rule_create",
   "frihet_bank_rules_list",
   "frihet_gl_entry_approve",
   "frihet_gl_entry_audit_log",
   "frihet_gl_entry_reject",
-  "frihet_modelo_200_summary",
-  "frihet_modelo_202_summary",
   "frihet_portal_domain_add",
   "frihet_portal_domain_remove",
   "frihet_portal_domain_verify",
@@ -99,13 +96,17 @@ const DEFERRED = new Set([
 ]);
 
 // No Frihet-ERP route exists: publicApi.ts serves /fiscal/modelo/{303,130,390,347}
-// only, and there is no /igic/* route. Handlers return NOT_DEPLOYED without a call.
+// only, and has no /igic/* (modelo or AIEM) and no /is/modelo/* route. These
+// handlers return NOT_DEPLOYED without a call (ksef_submit: labelled unavailable).
 const UNAVAILABLE = new Set([
   "ksef_submit",
   "get_modelo_180_summary",
   "frihet_modelo_415_summary",
   "frihet_modelo_418_summary",
   "frihet_modelo_425_summary",
+  "frihet_aiem_calculate",
+  "frihet_modelo_200_summary",
+  "frihet_modelo_202_summary",
 ]);
 
 const DESTRUCTIVE_UPDATES = new Set([

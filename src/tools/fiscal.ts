@@ -48,7 +48,9 @@ function fiscalPeriodError(
 /**
  * READ-ONLY modelo summary with a fail-closed period contract:
  *   1. a supplied period must match the backend's own format, or no call is made;
- *   2. the period the backend reports must be well-formed and, when one was
+ *   2. the modelo the backend reports (`modeloCode`/`model`) must be the one
+ *      requested, or the figures are withheld (MODELO_MISMATCH);
+ *   3. the period the backend reports must be well-formed and, when one was
  *      requested, identical to it — otherwise the figures belong to another
  *      period and are withheld (PERIOD_MISMATCH), never shown under the
  *      requested label.
@@ -79,6 +81,28 @@ async function fiscalModeloSummary(
     return notDeployedError(toolName, `/v1/fiscal/modelo/${modeloCode}`);
   }
   const result = await client.getFiscalModeloSummary(modeloCode, period);
+  // The backend names the modelo in `modeloCode` and/or legacy `model`
+  // (Frihet-ERP publicApi.ts). Every key present must name the requested
+  // modelo, and at least one must be present; otherwise another modelo's
+  // figures would be shown under this one's label.
+  const returnedModelos = [result["modeloCode"], result["model"]].filter((v) => v !== undefined);
+  const modeloAgrees =
+    returnedModelos.length > 0 && returnedModelos.every((v) => v === modeloCode);
+  if (!modeloAgrees) {
+    return fiscalPeriodError(
+      toolName,
+      {
+        error: "modelo_mismatch",
+        code: "MODELO_MISMATCH",
+        requestedModelo: modeloCode,
+        returnedModelo: returnedModelos.map((v) => (typeof v === "string" ? v : null)),
+      },
+      `Frihet returned a summary that is not identifiable as Modelo ${modeloCode}, so no figures are shown ` +
+        `(they would be mislabelled). Do NOT state any amount for this modelo; retry or contact support. ` +
+        `/ Frihet devolvio un resumen que no corresponde al Modelo ${modeloCode}; no se muestran cifras. ` +
+        `NO indiques ningun importe para este modelo.`,
+    );
+  }
   const returned = typeof result["period"] === "string" ? result["period"] : null;
   const year = result["year"];
   const yearAgrees = year === undefined || (returned !== null && String(year) === returned);
