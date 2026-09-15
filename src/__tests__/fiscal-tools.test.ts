@@ -202,13 +202,15 @@ describe("get_modelo_390_summary — success path", () => {
   });
 });
 
-describe("get_modelo_180_summary — success path", () => {
-  test("returns modeloCode 180", async () => {
+describe("get_modelo_180_summary — not deployed", () => {
+  // Frihet-ERP functions/src/publicApi.ts only serves /fiscal/modelo/{303,130,390,347};
+  // a "success" here would be fabricated. See fiscal-period-contract.test.ts.
+  test("returns NOT_DEPLOYED without calling the client", async () => {
     const server = await makeServer(makeSuccessClient);
     const tool = server.tools.get("get_modelo_180_summary")!;
     const result = await tool.handler({ period: "2025" });
-    assert.ok(!result.isError);
-    assert.equal(result.structuredContent!["modeloCode"], "180");
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent!["code"], "NOT_DEPLOYED");
   });
 });
 

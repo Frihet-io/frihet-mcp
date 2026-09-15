@@ -20,8 +20,9 @@ import type {
   UpdateWebhookInput,
   Webhook,
 } from "./types.js";
-import { sanitizeServerRemediation } from "./redaction.js";
+import { safeRequestId, sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
+import { fiscalModeloQuery } from "./fiscal-period.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
 const OAUTH_CLOUD_FUNCTION_BASE_URL =
@@ -300,6 +301,8 @@ export class FrihetApiError extends Error {
     public readonly errorCode: string,
     message?: string,
     public readonly detail?: string,
+    /** Backend correlation id (`meta.requestId` or `X-Request-Id`); carried for diagnostics, never echoed to agents. */
+    public readonly requestId?: string,
   ) {
     super(
       statusCode === 403
@@ -362,11 +365,17 @@ function normalizeApiError(
   value: unknown,
   statusCode: number,
   statusText: string,
-): ApiError {
+): ApiError & { requestId?: string } {
   const fallbackError = `http_${statusCode}`;
   const record = typeof value === "object" && value !== null
     ? value as Record<string, unknown>
     : undefined;
+  // publicApi error envelopes carry `meta: { requestId }` (Frihet-ERP
+  // functions/src/publicApi.ts, e.g. the 401/404 branches).
+  const meta = typeof record?.meta === "object" && record.meta !== null
+    ? record.meta as Record<string, unknown>
+    : undefined;
+  const requestId = safeRequestId(meta?.requestId);
   const error = typeof record?.error === "string" && record.error.trim()
     ? record.error
     : fallbackError;
@@ -377,6 +386,7 @@ function normalizeApiError(
     error,
     message,
     ...(typeof record?.detail === "string" ? { detail: record.detail } : {}),
+    ...(requestId ? { requestId } : {}),
   };
 }
 
@@ -540,7 +550,7 @@ export class FrihetClient {
     // Error responses
     if (!response.ok) {
       logApiCall(method, path, response.status, durationMs);
-      let errorBody: ApiError;
+      let errorBody: ApiError & { requestId?: string };
       try {
         errorBody = normalizeApiError(
           await response.json(),
@@ -556,6 +566,7 @@ export class FrihetClient {
         errorBody.error,
         errorBody.message ?? errorBody.error,
         typeof errorBody.detail === "string" ? errorBody.detail : undefined,
+        errorBody.requestId ?? safeRequestId(response.headers.get("x-request-id")),
       );
     }
 
@@ -793,6 +804,7 @@ export class FrihetClient {
           errorBody.error,
           errorBody.message ?? errorBody.error,
           typeof errorBody.detail === "string" ? errorBody.detail : undefined,
+          errorBody.requestId ?? safeRequestId(response.headers.get("x-request-id")),
         );
       }
 
@@ -1857,9 +1869,15 @@ export class FrihetClient {
     modeloCode: string,
     period?: string,
   ): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("GET", `/fiscal/modelo/${encodeURIComponent(modeloCode)}`, undefined, {
-      period,
-    });
+    // The backend reads `?quarter=` (303/130) or `?year=` (390/347) and
+    // silently answers the CURRENT period for any other param, so the param
+    // name comes from the shared rule table, never a generic `?period=`.
+    return this.requestUnwrapped(
+      "GET",
+      `/fiscal/modelo/${encodeURIComponent(modeloCode)}`,
+      undefined,
+      fiscalModeloQuery(modeloCode, period),
+    );
   }
 
   async getVerifactuStatus(invoiceId: string): Promise<Record<string, unknown>> {

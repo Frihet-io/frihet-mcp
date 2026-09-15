@@ -19,6 +19,17 @@
 /** Sentinel left in place of a redacted value in cloned (tracing) payloads. */
 export const REDACTED = "[redacted]";
 
+/** Opaque backend correlation id (publicApi `meta.requestId` / `X-Request-Id`). */
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
+/**
+ * Return a backend request id only when it is a short opaque token that is
+ * safe to echo to an agent (no whitespace, no prose, no instructions).
+ */
+export function safeRequestId(value: unknown): string | undefined {
+  return typeof value === "string" && REQUEST_ID_PATTERN.test(value) ? value : undefined;
+}
+
 const MAX_SERVER_REMEDIATION_CHARS = 500;
 const SERVER_REMEDIATION_PROSE_ALPHABET = /^[\p{L}\p{N} .,;:!?'"()_/*+\-]+$/u;
 const LIVE_EINVOICE_SCOPE_REMEDIATION =

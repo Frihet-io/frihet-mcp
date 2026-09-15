@@ -39,10 +39,10 @@ export function registerTeamTools(server: McpServer, client: IFrihetClient): voi
       title: "List Team Members",
       description:
         "List active workspace team members and pending invitations. The workspace owner is NOT a member row and is excluded. " +
-        "Each row carries member ID, name, email, role, and invite status (pending/active). " +
+        "Each row carries member ID, name, email, role, and status (active/pending/expired/invalid; role is null on invalid invitations). " +
         "Useful for reviewing team access and outstanding invitations. " +
         "/ Lista miembros activos del equipo e invitaciones pendientes. El propietario del espacio NO aparece como miembro y queda excluido. " +
-        "Cada fila lleva ID, nombre, email, rol y estado de invitacion (pendiente/activo). " +
+        "Cada fila lleva ID, nombre, email, rol y estado (active/pending/expired/invalid; rol null en invitaciones invalidas). " +
         "Util para revisar el acceso del equipo y las invitaciones pendientes.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
@@ -51,9 +51,9 @@ export function registerTeamTools(server: McpServer, client: IFrihetClient): voi
           .optional()
           .describe("Filter by role / Filtrar por rol"),
         status: z
-          .enum(["active", "pending"])
+          .enum(["active", "pending", "expired", "invalid"])
           .optional()
-          .describe("Filter by invite status / Filtrar por estado de invitacion"),
+          .describe("Filter by status / Filtrar por estado"),
         limit: z.number().int().min(1).max(100).optional().describe("Max results (1-100) / Resultados maximos"),
         offset: z.number().int().min(0).optional().describe("Offset / Desplazamiento"),
       },

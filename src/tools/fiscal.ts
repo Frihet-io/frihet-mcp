@@ -12,10 +12,9 @@
  *
  * NOTE: ticketbai_status is registered by einvoice.ts (canonical, more complete impl).
  *
- * REST surface: /v1/fiscal/* (documented: pending — backend ships separately)
- *
- * NOTE: ERP backend endpoints /v1/fiscal/* are planned. Tools are wired
- * and will surface 404 errors until the backend ships.
+ * REST surface: Frihet-ERP functions/src/publicApi.ts serves READ-ONLY
+ * GET /v1/fiscal/modelo/{303,130,390,347}. Modelo 180 has no route; its tool
+ * returns NOT_DEPLOYED without calling. Period params: src/fiscal-period.ts.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -31,7 +30,102 @@ import {
   fiscalModeloSummaryOutput,
   verifactuStatusOutput,
 } from "./shared.js";
-import { withBackendGuard, isBackendNotFound } from "./backend-availability.js";
+import { withBackendGuard, isBackendNotFound, notDeployedError } from "./backend-availability.js";
+import { FISCAL_PERIOD_RULES } from "../fiscal-period.js";
+
+function fiscalPeriodError(
+  toolName: string,
+  structured: Record<string, unknown>,
+  message: string,
+) {
+  return {
+    content: [{ type: "text" as const, text: `Error: ${message}`, annotations: ERROR_CONTENT_ANNOTATIONS }],
+    structuredContent: { ...structured, tool: toolName, message },
+    isError: true as const,
+  };
+}
+
+/**
+ * READ-ONLY modelo summary with a fail-closed period contract:
+ *   1. a supplied period must match the backend's own format, or no call is made;
+ *   2. the modelo the backend reports (`modeloCode`/`model`) must be the one
+ *      requested, or the figures are withheld (MODELO_MISMATCH);
+ *   3. the period the backend reports must be well-formed and, when one was
+ *      requested, identical to it — otherwise the figures belong to another
+ *      period and are withheld (PERIOD_MISMATCH), never shown under the
+ *      requested label.
+ */
+function invalidFiscalPeriod(toolName: string, modeloCode: string, period: string | undefined) {
+  const rule = FISCAL_PERIOD_RULES[modeloCode];
+  if (!rule) {
+    return notDeployedError(toolName, `/v1/fiscal/modelo/${modeloCode}`);
+  }
+  if (period === undefined || rule.pattern.test(period)) return undefined;
+  return fiscalPeriodError(
+    toolName,
+    { error: "invalid_period", code: "INVALID_PERIOD", modeloCode, requested: period, expectedFormat: rule.format },
+    `Invalid period for Modelo ${modeloCode}: use ${rule.format}. No request was sent. ` +
+      `/ Periodo no valido para el Modelo ${modeloCode}: usa ${rule.format}. No se ha enviado ninguna peticion.`,
+  );
+}
+
+async function fiscalModeloSummary(
+  client: IFrihetClient,
+  toolName: string,
+  modeloCode: string,
+  period: string | undefined,
+  title: string,
+) {
+  const rule = FISCAL_PERIOD_RULES[modeloCode];
+  if (!rule) {
+    return notDeployedError(toolName, `/v1/fiscal/modelo/${modeloCode}`);
+  }
+  const result = await client.getFiscalModeloSummary(modeloCode, period);
+  // The backend names the modelo in `modeloCode` and/or legacy `model`
+  // (Frihet-ERP publicApi.ts). Every key present must name the requested
+  // modelo, and at least one must be present; otherwise another modelo's
+  // figures would be shown under this one's label.
+  const returnedModelos = [result["modeloCode"], result["model"]].filter((v) => v !== undefined);
+  const modeloAgrees =
+    returnedModelos.length > 0 && returnedModelos.every((v) => v === modeloCode);
+  if (!modeloAgrees) {
+    return fiscalPeriodError(
+      toolName,
+      {
+        error: "modelo_mismatch",
+        code: "MODELO_MISMATCH",
+        requestedModelo: modeloCode,
+        returnedModelo: returnedModelos.map((v) => (typeof v === "string" ? v : null)),
+      },
+      `Frihet returned a summary that is not identifiable as Modelo ${modeloCode}, so no figures are shown ` +
+        `(they would be mislabelled). Do NOT state any amount for this modelo; retry or contact support. ` +
+        `/ Frihet devolvio un resumen que no corresponde al Modelo ${modeloCode}; no se muestran cifras. ` +
+        `NO indiques ningun importe para este modelo.`,
+    );
+  }
+  const returned = typeof result["period"] === "string" ? result["period"] : null;
+  const year = result["year"];
+  const yearAgrees = year === undefined || (returned !== null && String(year) === returned);
+  const matches =
+    returned !== null &&
+    rule.pattern.test(returned) &&
+    yearAgrees &&
+    (period === undefined || returned === period);
+  if (!matches) {
+    return fiscalPeriodError(
+      toolName,
+      { error: "period_mismatch", code: "PERIOD_MISMATCH", modeloCode, requested: period ?? null, returned },
+      `Frihet returned a Modelo ${modeloCode} summary whose period does not match the request, so no figures are shown ` +
+        `(they would be mislabelled). Do NOT state any amount for this period; retry or contact support. ` +
+        `/ Frihet devolvio un resumen del Modelo ${modeloCode} de un periodo distinto al solicitado; no se muestran cifras. ` +
+        `NO indiques ningun importe para este periodo.`,
+    );
+  }
+  return {
+    content: [getContent(formatRecord(title, result))],
+    structuredContent: result as unknown as Record<string, unknown>,
+  };
+}
 
 export function registerFiscalTools(server: McpServer, client: IFrihetClient): void {
   // -- get_modelo_303_summary --
@@ -51,18 +145,15 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
         period: z
           .string()
           .optional()
-          .describe("Period in format YYYY-QN (e.g. '2026-Q1') or YYYY for annual / Periodo en formato YYYY-QN o YYYY"),
+          .describe("Quarter in format YYYY-QN (e.g. '2026-Q1'); defaults to the current quarter / Trimestre en formato YYYY-QN; por defecto el trimestre actual"),
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_303_summary", () =>
-      withBackendGuard("get_modelo_303_summary", "/v1/fiscal/303", async () => {
-        const result = await client.getFiscalModeloSummary("303", period);
-        return {
-          content: [getContent(formatRecord("Modelo 303 Summary", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+    async ({ period }) => withToolLogging("get_modelo_303_summary", async () =>
+      invalidFiscalPeriod("get_modelo_303_summary", "303", period) ??
+        withBackendGuard("get_modelo_303_summary", "/v1/fiscal/modelo/303", () =>
+          fiscalModeloSummary(client, "get_modelo_303_summary", "303", period, "Modelo 303 Summary"),
+        ),
     ),
   );
 
@@ -83,18 +174,15 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
         period: z
           .string()
           .optional()
-          .describe("Period in format YYYY-QN (e.g. '2026-Q1') / Periodo en formato YYYY-QN"),
+          .describe("Quarter in format YYYY-QN (e.g. '2026-Q1'); defaults to the current quarter / Trimestre en formato YYYY-QN; por defecto el trimestre actual"),
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_130_summary", () =>
-      withBackendGuard("get_modelo_130_summary", "/v1/fiscal/130", async () => {
-        const result = await client.getFiscalModeloSummary("130", period);
-        return {
-          content: [getContent(formatRecord("Modelo 130 Summary", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+    async ({ period }) => withToolLogging("get_modelo_130_summary", async () =>
+      invalidFiscalPeriod("get_modelo_130_summary", "130", period) ??
+        withBackendGuard("get_modelo_130_summary", "/v1/fiscal/modelo/130", () =>
+          fiscalModeloSummary(client, "get_modelo_130_summary", "130", period, "Modelo 130 Summary"),
+        ),
     ),
   );
 
@@ -119,14 +207,11 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_390_summary", () =>
-      withBackendGuard("get_modelo_390_summary", "/v1/fiscal/390", async () => {
-        const result = await client.getFiscalModeloSummary("390", period);
-        return {
-          content: [getContent(formatRecord("Modelo 390 Summary", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+    async ({ period }) => withToolLogging("get_modelo_390_summary", async () =>
+      invalidFiscalPeriod("get_modelo_390_summary", "390", period) ??
+        withBackendGuard("get_modelo_390_summary", "/v1/fiscal/modelo/390", () =>
+          fiscalModeloSummary(client, "get_modelo_390_summary", "390", period, "Modelo 390 Summary"),
+        ),
     ),
   );
 
@@ -137,11 +222,10 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
     {
       title: "Get Modelo 180 Summary (IRPF Rentals Annual)",
       description:
-        "Get IRPF annual informative summary for rental income withholdings (Modelo 180, Spain). " +
-        "Returns total retentions per tenant, property, and annual aggregate. " +
-        "Example: period='2025' / " +
-        "Obtiene el resumen anual de retenciones sobre alquileres para el Modelo 180. " +
-        "Devuelve retenciones totales por inquilino, inmueble y agregado anual.",
+        "NOT DEPLOYED: Modelo 180 (annual informative return of IRPF withholdings on rental income, Spain) has no Frihet backend yet; " +
+        "calling this tool returns a NOT_DEPLOYED error and never data. " +
+        "/ NO DESPLEGADO: el Modelo 180 (resumen anual de retenciones sobre alquileres) aun no tiene backend en Frihet; " +
+        "esta herramienta devuelve un error NOT_DEPLOYED y nunca datos.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         period: z
@@ -151,14 +235,8 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_180_summary", () =>
-      withBackendGuard("get_modelo_180_summary", "/v1/fiscal/180", async () => {
-        const result = await client.getFiscalModeloSummary("180", period);
-        return {
-          content: [getContent(formatRecord("Modelo 180 Summary", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+    async () => withToolLogging("get_modelo_180_summary", async () =>
+      notDeployedError("get_modelo_180_summary", "/v1/fiscal/modelo/180"),
     ),
   );
 
@@ -183,14 +261,11 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
       },
       outputSchema: fiscalModeloSummaryOutput,
     },
-    async ({ period }) => withToolLogging("get_modelo_347_summary", () =>
-      withBackendGuard("get_modelo_347_summary", "/v1/fiscal/347", async () => {
-        const result = await client.getFiscalModeloSummary("347", period);
-        return {
-          content: [getContent(formatRecord("Modelo 347 Summary", result))],
-          structuredContent: result as unknown as Record<string, unknown>,
-        };
-      }),
+    async ({ period }) => withToolLogging("get_modelo_347_summary", async () =>
+      invalidFiscalPeriod("get_modelo_347_summary", "347", period) ??
+        withBackendGuard("get_modelo_347_summary", "/v1/fiscal/modelo/347", () =>
+          fiscalModeloSummary(client, "get_modelo_347_summary", "347", period, "Modelo 347 Summary"),
+        ),
     ),
   );
 

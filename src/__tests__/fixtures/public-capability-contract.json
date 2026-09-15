@@ -675,7 +675,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_aiem_calculate",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -794,7 +794,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "get_modelo_180_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -811,7 +811,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_200_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -828,7 +828,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_202_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -896,7 +896,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_415_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -913,7 +913,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_418_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -930,7 +930,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_425_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -1317,7 +1317,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "get_modelo_180_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -3572,7 +3572,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_aiem_calculate",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -3691,7 +3691,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "get_modelo_180_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -3708,7 +3708,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_200_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -3725,7 +3725,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_202_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -3793,7 +3793,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_415_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -3810,7 +3810,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_418_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -3827,7 +3827,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "frihet_modelo_425_summary",
             "writesFrihet": false,
             "externalInteraction": false,
@@ -4214,7 +4214,7 @@
           },
           "capability": {
             "registered": true,
-            "callability": "runtime_checked",
+            "callability": "unavailable",
             "canonicalOperation": "get_modelo_180_summary",
             "writesFrihet": false,
             "externalInteraction": false,

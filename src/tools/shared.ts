@@ -96,6 +96,16 @@ function isFrihetApiError(error: unknown): error is FrihetApiErrorLike {
   );
 }
 
+/** Error class names safe to echo from the unexpected-error path. */
+const UNEXPECTED_ERROR_CLASSES = new Set([
+  "FrihetApiError",
+  "TypeError",
+  "SyntaxError",
+  "RangeError",
+  "AbortError",
+  "ZodError",
+]);
+
 const FORBIDDEN_FRIENDLY_MESSAGE =
   "Access denied. Reconnect Frihet or use configured credentials with permission for this action. / Acceso denegado. Vuelve a conectar Frihet o usa credenciales con permiso para esta accion.";
 
@@ -105,9 +115,14 @@ const FORBIDDEN_FRIENDLY_MESSAGE =
  */
 export function handleToolError(error: unknown, toolName?: string): {
   content: AnnotatedTextContent[];
+  structuredContent?: Record<string, unknown>;
   isError: true;
   _meta?: Record<string, unknown>;
 } {
+  // NOTE: FrihetApiError carries the backend `requestId`, but it is NOT echoed
+  // here: `requestId` is in SENSITIVE_FIELD_NAMES (src/redaction.ts), whose
+  // values must not leave the process. Surfacing it needs an explicit policy
+  // change, not a side effect of error formatting.
   if (isFrihetApiError(error)) {
     const loggedMessage = error.statusCode === 403 ? "Forbidden" : error.message;
     const loggedCode = error.statusCode === 403 ? "forbidden" : error.errorCode;
@@ -195,8 +210,19 @@ export function handleToolError(error: unknown, toolName?: string): {
     },
   });
 
+  // Class name only, from a fixed allowlist — never the message, stack, or an
+  // arbitrary `name` (a thrown object can set `name` to any identifier-shaped
+  // value, including a secret).
+  const errorClass = error instanceof Error && UNEXPECTED_ERROR_CLASSES.has(error.name)
+    ? error.name
+    : "UnknownError";
   return {
-    content: [{ type: "text", text: "Error: An unexpected error occurred. Contact support if this persists.", annotations: ERROR_CONTENT_ANNOTATIONS }],
+    content: [{
+      type: "text",
+      text: `Error: An unexpected error occurred (${errorClass}). Contact support if this persists.`,
+      annotations: ERROR_CONTENT_ANNOTATIONS,
+    }],
+    structuredContent: { error: "unexpected_error", errorClass },
     isError: true,
   };
 }
@@ -768,7 +794,9 @@ export const posTerminalItemOutput = z.object({
   label: z.string().optional(),
   deviceType: z.string().optional(),
   locationId: z.string().optional(),
-  status: z.enum(["online", "offline", "unknown"]).optional(),
+  // Raw stored value: Frihet-ERP apps/erp/modules/pos/schema/collections.ts
+  // (posTerminals.status), returned verbatim by publicApi/families/pos.ts.
+  status: z.enum(["active", "paused", "retired"]).optional(),
   stripeReaderId: z.string().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
@@ -1072,8 +1100,11 @@ export const teamMemberItemOutput = z.object({
   id: z.string(),
   name: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
-  role: z.enum(["owner", "admin", "editor", "accountant", "viewer"]).optional(),
-  status: z.enum(["active", "pending"]).optional(),
+  // Frihet-ERP functions/src/publicApi.ts team listing: invitation rows whose
+  // stored role is not assignable are rendered with `role: null` and
+  // `status: 'invalid'`; past-expiry invitations surface as `expired`.
+  role: z.enum(["owner", "admin", "editor", "accountant", "viewer"]).nullable().optional(),
+  status: z.enum(["active", "pending", "expired", "invalid"]).optional(),
   invitedAt: z.string().nullable().optional(),
   joinedAt: z.string().nullable().optional(),
   createdAt: z.string().nullable().optional(),

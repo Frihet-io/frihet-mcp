@@ -30,6 +30,7 @@ import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
 import { registerAllTools } from "../tools/register-all.js";
 import { applyToolExposureProfile, GROUPS } from "../tool-exposure.js";
+import { buildPublicCapabilityTruth } from "../capability-truth.js";
 import {
   applyOpenAIReviewProfiles,
   OPENAI_REVIEW_CONFIRM_REQUIRED_TOOLS,
@@ -865,6 +866,59 @@ describe("C38 — group blurbs only claim capabilities that have tools", () => {
           meta.blurb,
           /\bOCR\b/i,
           `group "${groupId}" advertises OCR but zero tools implement it`,
+        );
+      }
+    }
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Unavailable tools are never advertised as working                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Derived, not enumerated: the `unavailable` set comes from the same
+ * capability truth the runtime publishes (src/capability-truth.ts), so a tool
+ * moved into UNAVAILABLE without fixing its public copy turns this red.
+ */
+describe("UNAVAILABLE tools — README and group blurbs do not claim they work", () => {
+  const unavailable = [...makeServer().server.tools.keys()]
+    .filter((name) => buildPublicCapabilityTruth(name, {}).callability === "unavailable")
+    .sort();
+
+  test("the unavailable set is non-empty (guards against a vacuous pass)", () => {
+    assert.ok(unavailable.length > 0);
+  });
+
+  for (const tool of unavailable) {
+    test(`README: every row for ${tool} is marked NOT_DEPLOYED`, () => {
+      const rows = readRepoFile("README.md")
+        .split("\n")
+        .filter((line) => line.startsWith(`| \`${tool}\` |`));
+      assert.ok(rows.length > 0, `README has no table row for ${tool}`);
+      for (const row of rows) {
+        assert.match(row, /NOT_DEPLOYED/, `README row advertises ${tool} as working: ${row}`);
+      }
+    });
+  }
+
+  /** The token a blurb would use to advertise the tool. */
+  function blurbToken(tool: string): RegExp {
+    const modelo = /_(\d{3})_summary$/.exec(tool);
+    if (modelo) return new RegExp(`(?<!\\d)${modelo[1]}(?!\\d)`);
+    if (tool.includes("aiem")) return /AIEM/i;
+    if (tool.includes("ksef")) return /KSeF/i;
+    throw new Error(`No blurb token mapping for unavailable tool ${tool}; extend blurbToken`);
+  }
+
+  test("group blurbs mention unavailable tools only inside a 'not deployed' clause", () => {
+    for (const [groupId, meta] of Object.entries(GROUPS)) {
+      const advertised = meta.blurb.replace(/\([^)]*not deployed[^)]*\)/gi, "");
+      for (const tool of unavailable) {
+        assert.doesNotMatch(
+          advertised,
+          blurbToken(tool),
+          `${groupId} blurb advertises unavailable ${tool}: ${meta.blurb}`,
         );
       }
     }
