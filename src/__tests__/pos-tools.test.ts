@@ -53,7 +53,8 @@ const MOCK_TERMINAL = {
   label: "Front Desk",
   deviceType: "bbpos_wisepos_e",
   locationId: "loc_tenerife",
-  status: "online",
+  // Real stored enum: Frihet-ERP apps/erp/modules/pos/schema/collections.ts (posTerminals.status).
+  status: "active",
   stripeReaderId: "tmr_xxxx",
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
@@ -188,7 +189,7 @@ describe("list_terminals — success path", () => {
     const first = (result.structuredContent!["data"] as Record<string, unknown>[])[0]!;
     assert.equal(first["id"], "term_001");
     assert.equal(first["label"], "Front Desk");
-    assert.equal(first["status"], "online");
+    assert.equal(first["status"], "active");
     assert.equal(first["deviceType"], "bbpos_wisepos_e");
   });
 

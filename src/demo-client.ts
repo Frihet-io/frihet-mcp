@@ -602,7 +602,8 @@ export class DemoFrihetClient implements IFrihetClient {
 
   // ---------------------------------------------------------------- Fiscal (simulated / read summaries)
   async getFiscalModeloSummary(modeloCode: string, period?: string): Promise<Rec> {
-    return { model: modeloCode, period: period ?? "2026-Q2", readonly: true, summary: { totalRevenue: 3960.4, totalExpenses: 405.6 }, ...FISCAL_STAMP };
+    const defaultPeriod = modeloCode === "390" || modeloCode === "347" ? "2026" : "2026-Q2";
+    return { model: modeloCode, period: period ?? defaultPeriod, readonly: true, summary: { totalRevenue: 3960.4, totalExpenses: 405.6 }, ...FISCAL_STAMP };
   }
   async getVerifactuStatus(invoiceId: string): Promise<Rec> {
     return { invoiceId, status: "accepted", accepted: true, submittedAt: DEMO_NOW, ...FISCAL_STAMP };

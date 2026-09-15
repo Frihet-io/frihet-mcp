@@ -51,9 +51,6 @@ const RUNTIME_CHECKED = new Set([
   "frihet_gl_entry_reject",
   "frihet_modelo_200_summary",
   "frihet_modelo_202_summary",
-  "frihet_modelo_415_summary",
-  "frihet_modelo_418_summary",
-  "frihet_modelo_425_summary",
   "frihet_portal_domain_add",
   "frihet_portal_domain_remove",
   "frihet_portal_domain_verify",
@@ -61,7 +58,6 @@ const RUNTIME_CHECKED = new Set([
   "frihet_tax_id_vies_lookup",
   "gestoria_template_create",
   "get_modelo_130_summary",
-  "get_modelo_180_summary",
   "get_modelo_303_summary",
   "get_modelo_347_summary",
   "get_modelo_390_summary",
@@ -102,7 +98,15 @@ const DEFERRED = new Set([
   "sync_channel",
 ]);
 
-const UNAVAILABLE = new Set(["ksef_submit"]);
+// No Frihet-ERP route exists: publicApi.ts serves /fiscal/modelo/{303,130,390,347}
+// only, and there is no /igic/* route. Handlers return NOT_DEPLOYED without a call.
+const UNAVAILABLE = new Set([
+  "ksef_submit",
+  "get_modelo_180_summary",
+  "frihet_modelo_415_summary",
+  "frihet_modelo_418_summary",
+  "frihet_modelo_425_summary",
+]);
 
 const DESTRUCTIVE_UPDATES = new Set([
   // These writes can synchronously enqueue delivery to workspace webhooks.

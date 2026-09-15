@@ -484,9 +484,9 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 
 | Tool | What it does |
 |------|-------------|
-| `frihet_modelo_415_summary` | M415 annual operations >€3,005 (Canarias equivalent of M347) |
-| `frihet_modelo_425_summary` | M425 annual IGIC recap for Canary Islands businesses |
-| `frihet_modelo_418_summary` | M418 monthly IGIC return for large enterprises (grandes empresas) |
+| `frihet_modelo_415_summary` | M415 annual operations >€3,005 (Canarias equivalent of M347) — not deployed, returns `NOT_DEPLOYED` |
+| `frihet_modelo_425_summary` | M425 annual IGIC recap for Canary Islands businesses — not deployed, returns `NOT_DEPLOYED` |
+| `frihet_modelo_418_summary` | M418 monthly individual IGIC return, régimen especial del grupo de entidades — not deployed, returns `NOT_DEPLOYED` |
 | `frihet_aiem_calculate` | Calculate AIEM (Arbitrio Importación) for imported/produced goods in Canarias |
 
 ### Impuesto sobre Sociedades — Corporate Tax (2)

@@ -91,7 +91,7 @@ export const GROUPS: Record<ToolGroupId, GroupMeta> = {
   fiscal: {
     label: "Fiscal & compliance / Fiscal y cumplimiento",
     blurb:
-      "Spanish/EU fiscal depth served on demand: Modelo 303/130/390/180/347/200/202/415/425/418, " +
+      "Spanish/EU fiscal depth served on demand: Modelo 303/130/390/347/200/202 (180/415/425/418 registered but not deployed), " +
       "VeriFactu, TicketBAI, Facturae/FACe/KSeF e-invoicing, IGIC/AIEM, GL audit, period close, VIES.",
   },
   banking: {

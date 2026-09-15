@@ -279,11 +279,13 @@ test("canonical callability classes remain conservative and exhaustive", async (
     assert.ok(callability);
     counts[callability] = (counts[callability] ?? 0) + 1;
   }
+  // 180/415/418/425 moved runtime_checked → unavailable: Frihet-ERP has no
+  // route for them (publicApi.ts serves fiscal/modelo/{303,130,390,347} only).
   assert.deepEqual(counts, {
     api_dependent: 100,
-    runtime_checked: 49,
+    runtime_checked: 45,
     deferred: 8,
-    unavailable: 1,
+    unavailable: 5,
   });
   const deferred = canonicalRemoteTools(contract)
     .filter((tool) => tool.capability?.callability === "deferred")

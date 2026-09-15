@@ -107,6 +107,15 @@ export function backendUnavailableError(
  * )
  * ```
  */
+export function notDeployedError(
+  toolName: string,
+  endpoint: string,
+): BackendGuardErrorResult {
+  const result = backendUnavailableError(toolName, endpoint);
+  result.structuredContent = { ...result.structuredContent, code: "NOT_DEPLOYED" };
+  return result;
+}
+
 export async function withBackendGuard<T extends { content: unknown[] }>(
   toolName: string,
   endpoint: string | undefined,
