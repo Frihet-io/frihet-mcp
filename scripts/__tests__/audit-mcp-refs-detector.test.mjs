@@ -190,8 +190,14 @@ describe('watch-list patterns', () => {
 
 describe('--root override', () => {
   /** Runs the real CLI against a hermetic fixture repo. */
+  // The published version is pinned so these runs never reach the npm
+  // registry: a unit test that calls a live registry is a unit test that goes
+  // red when someone else's network does.
   const runAudit = (args) =>
-    spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
+    spawnSync(process.execPath, [SCRIPT, ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, FRIHET_MCP_PUBLISHED_VERSION: '1.17.0' },
+    });
 
   const fixtureRepo = () => {
     const root = mkdtempSync(join(tmpdir(), 'mcp-refs-root-'));
