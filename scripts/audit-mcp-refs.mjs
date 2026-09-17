@@ -45,10 +45,10 @@
 // Whitelist: lines matching SAFE_PATTERNS skip the tool-count check.
 // Inline: append "// mcp-refs:ok" or "# mcp-refs:ok" to ignore one line.
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, realpathSync } from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
 import { resolve, join, dirname, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
@@ -100,8 +100,8 @@ const MAX_METADATA_BYTES = 2 * 1024 * 1024;
 const MAX_TARBALL_BYTES = 8 * 1024 * 1024;
 const MAX_UNPACKED_BYTES = 48 * 1024 * 1024;
 
-async function boundedFetch(url, maxBytes) {
-  const response = await fetch(url, {
+async function boundedFetch(url, maxBytes, fetchImpl) {
+  const response = await fetchImpl(url, {
     redirect: 'error', signal: AbortSignal.timeout(20_000),
   });
   if (!response.ok) throw new Error(`npm registry answered HTTP ${response.status}`);
@@ -145,6 +145,7 @@ export function readNpmTarball(tarball, integrity) {
     };
     const checksum = header.reduce((sum, byte, index) => sum + (index >= 148 && index < 156 ? 32 : byte), 0);
     if (checksum !== octal(148, 8)) throw new Error('npm tarball header checksum mismatch');
+    if (field(header, 257, 6) !== 'ustar' || field(header, 263, 2) !== '00') throw new Error('npm tarball is not supported ustar');
     const prefix = field(header, 345, 155);
     const name = `${prefix ? `${prefix}/` : ''}${field(header, 0, 100)}`;
     const size = octal(124, 12);
@@ -167,15 +168,49 @@ export function inspectPublishedArtifact(metadata, tarball, requestedVersion) {
   const artifactPackage = JSON.parse(files.get('package/package.json')?.toString('utf8') ?? 'null');
   if (artifactPackage?.name !== metadata.name || artifactPackage.version !== metadata.version) throw new Error('npm tarball package identity differs from metadata');
   const names = new Set();
+  // Existing adapters intercept registration, but do not add canonical calls.
+  // Only their known bind/assignment/type-check shapes are supported. Moving a
+  // registration outside the canonical modules must stop this audit, not lower
+  // the count and rewrite public claims with a partial catalogue.
+  const adapterFiles = new Set([
+    'package/dist/tools/register-all.js', 'package/dist/capability-truth.js',
+    'package/dist/openai-profile.js', 'package/dist/tool-exposure.js',
+  ]);
+  const isAdapterAccess = (path, access) => {
+    if (!adapterFiles.has(path) || !ts.isIdentifier(access.expression) || access.expression.text !== 'server') return false;
+    const parent = access.parent;
+    if (ts.isTypeOfExpression(parent)) return path === 'package/dist/openai-profile.js';
+    if (ts.isBinaryExpression(parent) && parent.left === access && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      return ts.isArrowFunction(parent.right) || ts.isFunctionExpression(parent.right);
+    }
+    if (!ts.isPropertyAccessExpression(parent) || parent.name.text !== 'bind') return false;
+    const call = parent.parent;
+    return ts.isCallExpression(call) && call.expression === parent && call.arguments.length === 1 &&
+      ts.isIdentifier(call.arguments[0]) && call.arguments[0].text === 'server';
+  };
   for (const [path, bytes] of files) {
-    if (!/^package\/dist\/tools\/[^/]+\.js$/.test(path) || path.endsWith('/register-all.js')) continue;
+    if (!/\.(?:js|mjs|cjs|jsx)$/.test(path)) continue;
+    const canonicalFile = /^package\/dist\/tools\/[^/]+\.js$/.test(path) && !path.endsWith('/register-all.js');
     const source = ts.createSourceFile(path, bytes.toString('utf8'), ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
     if (source.parseDiagnostics.length) throw new Error(`unparseable published JavaScript: ${path}`);
+    const unsupported = () => { throw new Error(`unsupported published registerTool shape or location: ${path}`); };
     const visit = (node) => {
-      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'registerTool') {
-        const name = node.arguments[0];
-        if (!name || !ts.isStringLiteral(name) || names.has(name.text)) throw new Error('published tool registration is dynamic or duplicated');
-        names.add(name.text);
+      if (ts.isIdentifier(node) && node.text === 'registerTool') {
+        const access = node.parent;
+        if (!ts.isPropertyAccessExpression(access) || access.name !== node) unsupported();
+        const call = access.parent;
+        if (ts.isCallExpression(call) && call.expression === access) {
+          if (!canonicalFile || access.questionDotToken || call.questionDotToken) unsupported();
+          const name = call.arguments[0];
+          if (!name || !ts.isStringLiteral(name) || names.has(name.text)) throw new Error('published tool registration is dynamic or duplicated');
+          names.add(name.text);
+        } else if (!isAdapterAccess(path, access)) unsupported();
+      }
+      if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.text === 'registerTool') {
+        const parent = node.parent;
+        if ((ts.isElementAccessExpression(parent) && parent.argumentExpression === node) ||
+            (ts.isBindingElement(parent) && parent.propertyName === node) ||
+            (ts.isPropertyAssignment(parent) && parent.name === node)) unsupported();
       }
       ts.forEachChild(node, visit);
     };
@@ -188,16 +223,16 @@ export function inspectPublishedArtifact(metadata, tarball, requestedVersion) {
   };
 }
 
-async function fetchPublishedArtifact(requestedVersion) {
+export async function fetchPublishedArtifact(requestedVersion, { fetchImpl = fetch } = {}) {
   if (requestedVersion && !PLAIN_SEMVER.test(requestedVersion)) throw new Error(`published version ${JSON.stringify(requestedVersion)} is not plain semver`);
   const metadata = JSON.parse(await boundedFetch(
     `https://registry.npmjs.org/${PACKAGE_NAME.replace('/', '%2f')}/${requestedVersion || 'latest'}`,
-    MAX_METADATA_BYTES,
+    MAX_METADATA_BYTES, fetchImpl,
   ));
   const url = new URL(metadata?.dist?.tarball);
   if (url.origin !== 'https://registry.npmjs.org' || url.username || url.password || url.search || url.hash ||
       url.pathname !== `/@frihet/mcp-server/-/mcp-server-${metadata.version}.tgz`) throw new Error('npm tarball URL is outside the expected package');
-  const artifact = inspectPublishedArtifact(metadata, await boundedFetch(url.href, MAX_TARBALL_BYTES), requestedVersion);
+  const artifact = inspectPublishedArtifact(metadata, await boundedFetch(url.href, MAX_TARBALL_BYTES, fetchImpl), requestedVersion);
   return { ...artifact, source: requestedVersion ? `${PUBLISHED_VERSION_ENV}=${requestedVersion} (npm version lookup)` : 'npm dist-tags.latest' };
 }
 
@@ -707,7 +742,10 @@ export function checkCurrentReleaseProjections(input, expectedVersion) {
 
 // Run the full audit only when invoked as a CLI. When imported (e.g. by tests)
 // the module exposes its pure helpers without executing the audit or exiting.
-const isMain = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+// Node resolves symlinks for import.meta.url but retains the CLI argv spelling.
+// Comparing URL strings would silently exit 0 for an aliased entrypoint.
+const isMain = process.argv[1] && existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
 
 if (isMain) {
 
@@ -1053,9 +1091,14 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
       // Findings whose `line` is not an integer (server.json's `.version`,
       // server-meta's FULL_TOOL_COUNT) are written by their own handlers above,
       // so they are excluded here rather than silently skipped mid-loop.
-      const flagged = (kind) => findings.filter(
-        (f) => f.repo === repoName && f.file === rel && f.kind === kind && Number.isInteger(f.line),
-      );
+      const flagged = (kind) => {
+        const unique = new Map();
+        for (const finding of findings) {
+          if (finding.repo !== repoName || finding.file !== rel || finding.kind !== kind || !Number.isInteger(finding.line)) continue;
+          unique.set(JSON.stringify([finding.line, finding.found]), finding);
+        }
+        return [...unique.values()];
+      };
       const unreplaced = [];
 
       // Tool counts. This pattern MUST stay symmetric with TOOL_COUNT_RE: a

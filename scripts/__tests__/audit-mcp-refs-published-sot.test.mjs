@@ -4,10 +4,12 @@
  * network, local git tags, and future releases. No real repository is rewritten.
  */
 import assert from 'node:assert/strict';
-import { inspectPublishedArtifact } from '../audit-mcp-refs.mjs';
+import { inspectPublishedArtifact, fetchPublishedArtifact, readNpmTarball } from '../audit-mcp-refs.mjs';
+import { createHash } from 'node:crypto';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import { publishedFixture } from './helpers/published-artifact-fixture.mjs';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -94,6 +96,20 @@ describe('published source of truth for sister repos', () => {
 });
 
 describe('INCONCLUSIVE beats a guess', () => {
+  test('an aliased CLI entrypoint still runs the offline self-audit', (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'mcp-cli-alias-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const alias = join(root, 'audit.mjs');
+    symlinkSync(SCRIPT, alias);
+    const run = spawnSync(process.execPath, [alias, '--repo', 'frihet-mcp'], {
+      encoding: 'utf8',
+      env: { ...process.env, FRIHET_MCP_PUBLISHED_VERSION: '' },
+    });
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    assert.match(run.stdout, /SoT \(frihet-mcp, HEAD\):/);
+    assert.match(run.stdout, /OK — all refs match SoT/);
+  });
+
   test('an unpublished npm version exits 4 and fixes nothing', () => {
     const line = 'Install @frihet/mcp-server v1.16.6 today';
     const root = fixture([line]);
@@ -178,5 +194,134 @@ describe('npm byte integrity and static registration parsing', () => {
       const { metadata, tarball } = publishedFixture({ source });
       assert.throws(() => inspectPublishedArtifact(metadata, tarball), /dynamic or duplicated|no static|unparseable/);
     }
+  });
+});
+
+describe('unsupported published registration layouts fail closed', () => {
+  test('a registration outside canonical modules cannot yield a partial count', () => {
+    for (const path of ['package/dist/tools/sub/banking.js', 'package/dist/server-composition.js', 'package/dist/tools/new.mjs', 'package/dist/tools/new.cjs', 'package/dist/tools/register-all.js']) {
+      const { metadata, tarball } = publishedFixture({ extra: [[path, 'server.registerTool("hidden", {}, () => {});']] });
+      assert.throws(() => inspectPublishedArtifact(metadata, tarball), /unsupported published registerTool/);
+    }
+  });
+  test('computed, destructured and call-style registrations cannot be ignored', () => {
+    for (const registration of [
+      'server["registerTool"]("hidden", {});',
+      'server[`registerTool`]("hidden", {});',
+      'const { registerTool } = server; registerTool("hidden", {});',
+      'const { "registerTool": alias } = server; alias("hidden", {});',
+      'server.registerTool.call(server, "hidden", {});',
+      'server?.registerTool("hidden", {});',
+    ]) {
+      const { metadata, tarball } = publishedFixture({ source: `server.registerTool("visible", {}); ${registration}` });
+      assert.throws(() => inspectPublishedArtifact(metadata, tarball), /unsupported published registerTool/);
+    }
+  });
+  test('known interception shapes are allowed only in the existing adapters', () => {
+    const source = 'const bound = server.registerTool.bind(server); server.registerTool = (name, config, handler) => bound(name, config, handler);';
+    const valid = publishedFixture({ extra: [['package/dist/capability-truth.js', source]] });
+    assert.equal(inspectPublishedArtifact(valid.metadata, valid.tarball).toolCount, 157);
+    const relocated = publishedFixture({ extra: [['package/dist/new-adapter.js', source]] });
+    assert.throws(() => inspectPublishedArtifact(relocated.metadata, relocated.tarball), /unsupported published registerTool/);
+  });
+});
+
+describe('registry transport and archive limits', () => {
+  test('both requests refuse redirects and carry a timeout signal', async () => {
+    const { metadata, tarball } = publishedFixture();
+    const urls = [];
+    const result = await fetchPublishedArtifact(undefined, { fetchImpl: async (url, options) => {
+      urls.push(String(url));
+      assert.equal(options.redirect, 'error');
+      assert.ok(options.signal instanceof AbortSignal);
+      assert.equal(options.signal.aborted, false);
+      return new Response(urls.length === 1 ? JSON.stringify(metadata) : tarball);
+    } });
+    assert.equal(result.toolCount, 157);
+    assert.deepEqual(urls, ['https://registry.npmjs.org/@frihet%2fmcp-server/latest', metadata.dist.tarball]);
+  });
+  test('a foreign host, package, credential, port, query or fragment is refused before downloading', async () => {
+    const fixture = publishedFixture();
+    for (const url of [
+      'https://example.com/@frihet/mcp-server/-/mcp-server-1.17.0.tgz',
+      'https://registry.npmjs.org/another/-/mcp-server-1.17.0.tgz',
+      'https://user@registry.npmjs.org/@frihet/mcp-server/-/mcp-server-1.17.0.tgz',
+      'https://registry.npmjs.org:444/@frihet/mcp-server/-/mcp-server-1.17.0.tgz',
+      `${fixture.metadata.dist.tarball}?secret=1`, `${fixture.metadata.dist.tarball}#fragment`,
+    ]) {
+      let calls = 0;
+      await assert.rejects(fetchPublishedArtifact(undefined, { fetchImpl: async () => {
+        calls += 1;
+        const metadata = { ...fixture.metadata, dist: { ...fixture.metadata.dist, tarball: url } };
+        return new Response(calls === 1 ? JSON.stringify(metadata) : fixture.tarball);
+      } }), /outside the expected package/);
+      assert.equal(calls, 1);
+    }
+  });
+  test('redirect, HTTP error and body-read failure cannot establish publication', async () => {
+    for (const status of [302, 404, 500]) {
+      await assert.rejects(fetchPublishedArtifact(undefined, { fetchImpl: async () => new Response('', { status }) }), new RegExp(`HTTP ${status}`));
+    }
+    await assert.rejects(fetchPublishedArtifact(undefined, { fetchImpl: async () => ({
+      ok: true, body: (async function* () { throw new Error('body transfer failed'); })(),
+    }) }), /body transfer failed/);
+  });
+  test('metadata and compressed response byte ceilings are enforced while reading', async () => {
+    const { metadata } = publishedFixture();
+    for (const metadataOversize of [true, false]) {
+      let calls = 0;
+      await assert.rejects(fetchPublishedArtifact(undefined, { fetchImpl: async () => {
+        calls += 1;
+        if (!metadataOversize && calls === 1) return new Response(JSON.stringify(metadata));
+        const size = (metadataOversize ? 2 : 8) * 1024 * 1024 + 1;
+        return { ok: true, body: (async function* () { yield Buffer.alloc(size); })() };
+      } }), /bounded size limit/);
+    }
+  });
+  test('symlinks, PAX entries and excessive decompression are refused', () => {
+    for (const type of [50, 120]) {
+      const { metadata, tarball } = publishedFixture({ extra: [['package/link', 'target', type]] });
+      assert.throws(() => inspectPublishedArtifact(metadata, tarball), /unsupported or duplicate entry/);
+    }
+    const tarball = gzipSync(Buffer.alloc(48 * 1024 * 1024 + 1));
+    const integrity = `sha512-${createHash('sha512').update(tarball).digest('base64')}`;
+    assert.throws(() => readNpmTarball(tarball, integrity), /maxOutputLength|larger than|Cannot create a Buffer/);
+    assert.throws(() => readNpmTarball(Buffer.alloc(8 * 1024 * 1024 + 1), integrity), /tarball exceeds size limit/);
+  });
+  test('invalid archive headers and missing terminators are refused', () => {
+    const { tarball } = publishedFixture();
+    const original = gunzipSync(tarball);
+    const compressed = (bytes) => {
+      const tar = gzipSync(bytes);
+      return [tar, `sha512-${createHash('sha512').update(tar).digest('base64')}`];
+    };
+    const corrupt = Buffer.from(original); corrupt[0] ^= 1;
+    assert.throws(() => readNpmTarball(...compressed(corrupt)), /header checksum mismatch/);
+    assert.throws(() => readNpmTarball(...compressed(original.subarray(0, original.length - 1024))), /complete terminator/);
+  });
+});
+
+describe('repeated findings are rewritten once per line and value', () => {
+  test('a version repeated on the same line does not create an unfixable false failure', () => {
+    const root = fixture(['Install @frihet/mcp-server@1.16.6 or @frihet/mcp-server@1.16.6']);
+    const run = audit(root, ['--fix']);
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    assert.equal((read(root).match(/1\.17\.0/g) ?? []).length, 2);
+    assert.doesNotMatch(run.stdout, /unfixable-version/);
+  });
+  test('a count repeated on the same line does not create an unfixable false failure', () => {
+    const root = fixture(['MCP catalogue: 999 tools, exactly 999 tools']);
+    const run = audit(root, ['--fix']);
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    assert.equal((read(root).match(/157 tools/g) ?? []).length, 2);
+    assert.doesNotMatch(run.stdout, /unfixable-tool-count/);
+  });
+  test('a version on an unrelated line survives correction', () => {
+    const unrelated = 'A different package used version 1.16.6';
+    const root = fixture(['Install @frihet/mcp-server@1.16.6', unrelated]);
+    const run = audit(root, ['--fix']);
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    assert.ok(read(root).includes(unrelated));
+    assert.match(read(root), /@frihet\/mcp-server@1\.17\.0/);
   });
 });

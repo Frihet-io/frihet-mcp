@@ -294,7 +294,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
-  "scripts/audit-mcp-refs.mjs": "7c60694321443652b20523f20fcd3806a7d8b4a82fa19a94c2ee57b64ab32ed6", // feat/mcp-refs-published-sot: sister repos judged against the published artifact (npm dist-tags.latest + its release tag), INCONCLUSIVE exit 4 when it cannot be established, line-scoped --fix
+  "scripts/audit-mcp-refs.mjs": "6120d98922f199b5f31ba931977cbc8ee4c99e8b969606d77d0d4775a64536b3", // MCP recovery: bounded npm metadata + sha512-verified tarball, in-memory archive/AST inspection without package execution; exit 4 on unverifiable bytes; line-scoped --fix (review details in docs/reviews/mcp-published-recovery/pin-review.md)
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
   "scripts/check-openai-worker-topology.mjs": "9faa435df74bda80ef9a1ecf52d322e7604f3d751c67f6ecab4213643e98172f",
   "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",
