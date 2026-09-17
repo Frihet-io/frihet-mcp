@@ -21,12 +21,17 @@
 //     or add "// mcp-refs:ok" annotation to skip a line.
 //   - Sister repos must be cloned at ~/Documents/<repo-name>.
 //
+// Watch lists accept glob patterns (`*`, `**/`) as well as literal paths; a
+// pattern that matches no file is reported as a warning, never treated as
+// clean. Detector coverage is pinned by
+// scripts/__tests__/audit-mcp-refs-detector.test.mjs.
+//
 // Whitelist: lines matching SAFE_PATTERNS skip the tool-count check.
 // Inline: append "// mcp-refs:ok" or "# mcp-refs:ok" to ignore one line.
 
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { resolve, join, dirname } from 'node:path';
+import { resolve, join, dirname, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir } from 'node:os';
 
@@ -66,6 +71,33 @@ for (const f of readdirSync(toolDir)) {
 }
 const TOOL_COUNT = total;
 
+// === TARGET EXPANSION ===
+// A watch list of literal paths cannot cover a fan-out surface: the ERP ships
+// one copy of the integrations card per language, so a list would have to name
+// 34 files and would go stale the day a locale is added. Patterns keep the
+// coverage honest. Supported: `*` (within one path segment) and `**/`.
+const isGlob = (pattern) => pattern.includes('*');
+
+function expandGlob(root, pattern) {
+  const prefix = pattern.slice(0, pattern.indexOf('*')).replace(/\/[^/]*$/, '');
+  const dir = prefix ? join(root, prefix) : root;
+  if (!existsSync(dir)) return [];
+  // `**/` is split out first rather than swapped through a placeholder
+  // character: a sentinel byte in the source makes git treat this file as
+  // binary, which silently costs every future reviewer the diff.
+  const rx = new RegExp(`^${pattern
+    .split('**/')
+    .map((part) => part.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*'))
+    .join('(?:.*/)?')}$`);
+  return readdirSync(dir, { recursive: true })
+    .map((entry) => {
+      const rel = prefix ? `${prefix}/${entry}` : String(entry);
+      return rel.split(sep).join('/');
+    })
+    .filter((rel) => rx.test(rel) && statSync(join(root, rel)).isFile())
+    .sort();
+}
+
 // === TARGETS ===
 const REPOS = {
   'frihet-mcp': {
@@ -98,6 +130,11 @@ const REPOS = {
       'packages/manifest/src/emit/schema-org.ts',
       'packages/ui/src/manifestBrowser/data.json',
       'docs/dev/mcp-tools-coverage.md',
+      // The integrations card names the MCP server once per language. Its
+      // hardcoded "31 tools" was stale for months in 34 files while this audit
+      // watched everything around it (fixed ERP-side in #1968; the pattern is
+      // what stops the next one).
+      'apps/erp/locales/**/*.ts',
     ],
   },
   'Frihet-Saas-Website': {
@@ -130,6 +167,8 @@ const TOOL_NOUNS = [
   'strumento', 'strumenti',
   'ferramenta', 'ferramentas',
   'verktyg',
+  'værktøj', 'værktøjer',
+  'verktøy', 'verktøyer',
   'tyokalu', 'tyokalua', 'työkalu', 'työkalua',
   'gereedschap', 'gereedschappen',
   'narzedzie', 'narzedzi', 'narzędzie', 'narzędzi',
@@ -140,10 +179,29 @@ const TOOL_NOUNS = [
   'ツール',
 ];
 const TOOL_NOUN_RE = TOOL_NOUNS.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-// e.g. "94 tools", "94 herramientas", and "157 MCP tools" (one optional qualifier
-// word between the number and the noun — the worker JSON-LD said "151 MCP tools"
-// and slipped past the tighter `\d+ tools` pattern, letting the count drift).
-const TOOL_COUNT_RE = new RegExp(`\\b(\\d{1,4})[\\s_-]+(?:MCP[\\s_-]+)?(${TOOL_NOUN_RE})\\b`, 'gi');
+// e.g. "94 tools", "94 herramientas", "157 MCP tools", "157 source-verified
+// tools", "31 de instrumente", "31ツール".
+//
+// Three drift classes escaped the previous pattern
+// (`\b(\d{1,4})[\s_-]+(?:MCP[\s_-]+)?(NOUN)\b`). Each was found in files this
+// audit already watched, so the gate reported clean while the numbers rotted:
+//   - Only the literal "MCP" was accepted as a qualifier, so the four
+//     "157 source-verified tools" claims in Frihet-ERP/apps/erp/public/llms.txt
+//     — a public AI-discovery surface — drifted unseen.
+//   - The trailing `\b` is ASCII-only without the `u` flag, so a noun ending in
+//     a non-ASCII letter could never match. `araç`, `εργαλεία` and `ツール` sat
+//     in TOOL_NOUNS as unreachable entries.
+//   - CJK writes the count with no separator at all ("31ツール").
+// Together these are why the ERP's stale "31 tools" was visible in only 22 of
+// its 34 locale files.
+//
+// Group 1 is the number. Group 2 is the separator + any qualifier words + the
+// noun, so --fix rewrites the count and preserves the wording verbatim. Keep
+// the --fix replacement pattern symmetric with this one.
+const TOOL_COUNT_RE = new RegExp(
+  `(?<![\\p{L}\\p{N}])(\\d{1,4})([\\s_-]*(?:[\\p{L}][\\p{L}-]*[\\s_-]+){0,2}?(?:${TOOL_NOUN_RE}))(?![\\p{L}\\p{N}])`,
+  'giu',
+);
 
 // Files whose tool-count entries are entirely historical/narrative — skip count checks.
 // These files record past release totals as changelog entries (not current-state claims).
@@ -185,6 +243,13 @@ const SAFE_PATTERNS = [
 // Only flagged when line context contains MCP markers.
 const VERSION_RE = /v?(\d+\.\d+\.\d+(?:-[a-z]+\.\d+)?)/g;
 const MCP_CONTEXT_RE = /(@frihet\/mcp-server|frihet-mcp|servidor\s+mcp|mcp\s+server|mcp\.frihet\.io)/i;
+
+// Exported for the unit tests in scripts/__tests__/. The detector is the whole
+// value of this gate, so its matching surface is asserted directly rather than
+// inferred from an end-to-end run against whatever happens to be on disk.
+// Importing this module does not run the audit (see the `isMain` guard below).
+export { TOOL_NOUNS, TOOL_NOUN_RE, TOOL_COUNT_RE, SAFE_PATTERNS, MCP_CONTEXT_RE, HISTORY_FILES };
+export { isGlob, expandGlob, REPOS };
 
 // === server.json version gate (special case) ===
 // server.json carries the version as BARE JSON values (root `.version` and
@@ -583,7 +648,24 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
     findings.push({ repo: repoName, severity: 'warn', msg: `repo dir not found: ${cfg.root}` });
     continue;
   }
-  for (const rel of cfg.files) {
+  const targets = [];
+  for (const entry of cfg.files) {
+    if (!isGlob(entry)) {
+      targets.push(entry);
+      continue;
+    }
+    const expanded = expandGlob(cfg.root, entry);
+    // A pattern matching nothing looks exactly like a clean repo in the output.
+    // Renaming the locales directory would otherwise switch this coverage off
+    // in silence, so an empty expansion is reported rather than skipped.
+    if (expanded.length === 0) {
+      findings.push({ repo: repoName, file: entry, severity: 'warn', msg: 'pattern matched no files' });
+      continue;
+    }
+    targets.push(...expanded);
+  }
+
+  for (const rel of targets) {
     const abs = join(cfg.root, rel);
     if (!existsSync(abs)) {
       findings.push({ repo: repoName, file: rel, severity: 'warn', msg: 'file missing' });
@@ -774,14 +856,36 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
     if (FIX) {
       let txt = readFileSync(abs, 'utf8');
       let mutated = false;
-      // Replace tool-count: only on flagged file lines
+      // Replace tool-count: only on flagged file lines. This pattern MUST stay
+      // symmetric with TOOL_COUNT_RE. A detector that sees more than the
+      // rewriter can touch makes `--fix` exit 0 having written nothing, which
+      // is the quietest possible way for a drift gate to fail open — measured:
+      // with the widened detector and the old narrow replacement, 6 of 7 real
+      // stale lines were detected and left on disk.
       const fileFails = findings.filter((f) => f.repo === repoName && f.file === rel && f.kind === 'tool-count');
+      const unreplaced = [];
       for (const fail of fileFails) {
-        // Replace "N tools/herramientas" and "N MCP tools" → "TOOL_COUNT $qualifier+noun"
-        // ($1 captures the optional "MCP " qualifier + noun so it is preserved).
-        const re = new RegExp(`\\b${fail.found}([\\s_-]+(?:MCP[\\s_-]+)?(?:${TOOL_NOUN_RE}))\\b`, 'gi');
+        // $1 carries the separator, the qualifier words and the noun, so the
+        // original wording survives the rewrite in every language.
+        const re = new RegExp(
+          `(?<![\\p{L}\\p{N}])${fail.found}([\\s_-]*(?:[\\p{L}][\\p{L}-]*[\\s_-]+){0,2}?(?:${TOOL_NOUN_RE}))(?![\\p{L}\\p{N}])`,
+          'giu',
+        );
         const newTxt = txt.replace(re, `${TOOL_COUNT}$1`);
         if (newTxt !== txt) { txt = newTxt; mutated = true; }
+        else unreplaced.push(fail);
+      }
+      for (const fail of unreplaced) {
+        findings.push({
+          repo: repoName,
+          file: rel,
+          line: fail.line,
+          severity: 'fail',
+          kind: 'unfixable-tool-count',
+          found: fail.found,
+          expected: TOOL_COUNT,
+          snippet: `--fix detected this count but could not rewrite it (detector/rewriter disagree): ${fail.snippet}`,
+        });
       }
       const verFails = findings.filter((f) => f.repo === repoName && f.file === rel && f.kind === 'version');
       for (const fail of verFails) {
@@ -830,7 +934,8 @@ if (JSON_OUT) {
 
 const exitFail = findings.some((f) => f.severity === 'fail');
 const unfixableProjectionFail = findings.some(
-  (f) => f.severity === 'fail' && f.kind === 'release-projection',
+  (f) => f.severity === 'fail'
+    && (f.kind === 'release-projection' || f.kind === 'unfixable-tool-count'),
 );
 process.exit((exitFail && !FIX) || unfixableProjectionFail ? 1 : 0);
 
