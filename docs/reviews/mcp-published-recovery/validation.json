@@ -1,0 +1,52 @@
+{
+  "verifiedAt": "2026-09-17T03:02:49.988007+00:00",
+  "mainCommit": "4113a9be4657e4424f99429c99cfb0efb76be418",
+  "pr182Base": "8a036512d509d8395048aee75c2a35c528b80781",
+  "npm": {
+    "version": "1.17.0",
+    "gitHead": null,
+    "tarball": "https://registry.npmjs.org/@frihet/mcp-server/-/mcp-server-1.17.0.tgz",
+    "integrity": "sha512-5xHVE1rA8tEKkaH9vI0/QezHIUZH/hRPyvhfcEu/VLehxMniYzLrpJ77kw1dzrVTE2iBIo1RlVQF+6rltr7IIw==",
+    "tarballSha256": "0b5e0cdaa1307adf886f4a8224397605e3f160084c734ed47b2197d94fc4bf06",
+    "canonicalStaticRegistrations": 157
+  },
+  "publishedDrift": {
+    "mainRun": 35168915019,
+    "before181Run": 35095192647,
+    "verdict": "UNPUBLISHED_VERSION",
+    "repoVersion": "1.18.0",
+    "npmVersion": "1.17.0",
+    "registryVersion": "1.17.0",
+    "releaseHoldFile": "workers/remote-mcp/full-oauth-release-contract.json"
+  },
+  "localValidation": {
+    "rootTests": {
+      "passed": 1023,
+      "failed": 0
+    },
+    "workerTests": {
+      "passed": 112,
+      "failed": 0
+    },
+    "targetedTests": {
+      "passed": 56,
+      "failed": 0
+    },
+    "workerTypecheck": "passed",
+    "conformanceBaseline": "passed",
+    "openaiDescriptor": "passed",
+    "openaiSubmission": "passed",
+    "openaiSubmissionSchema": "passed",
+    "agentOnboarding": "passed",
+    "publicCapabilityContract": "passed",
+    "selfReferenceAudit": "passed",
+    "noPublicLeak": "passed",
+    "analyticsTests": {
+      "passed": 22,
+      "failed": 0
+    },
+    "analyticsSource": "passed",
+    "analyticsBuilt": "passed"
+  },
+  "scope": "Static canonical registration names in the installable npm bytes; not a live Worker endpoint or runtime authorization assertion."
+}

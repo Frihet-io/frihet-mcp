@@ -190,11 +190,9 @@ describe('watch-list patterns', () => {
 
 describe('--root override', () => {
   /** Runs the real CLI against a hermetic fixture repo. */
-  // The published version is pinned so these runs never reach the npm
-  // registry: a unit test that calls a live registry is a unit test that goes
-  // red when someone else's network does.
+  // Synthetic npm responses keep this CLI test independent of tags and network.
   const runAudit = (args) =>
-    spawnSync(process.execPath, [SCRIPT, ...args], {
+    spawnSync(process.execPath, ['--import', join(dirname(SCRIPT), '__tests__/helpers/published-fetch-preload.mjs'), SCRIPT, ...args], {
       encoding: 'utf8',
       env: { ...process.env, FRIHET_MCP_PUBLISHED_VERSION: '1.17.0' },
     });
