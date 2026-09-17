@@ -24,3 +24,13 @@ Do not interpret updated hash consistency as independent approval or as permissi
 The coordinating agent independently read the auditor at sha256 `d2302bb7036e4dc7933705350f54f89b9a616a7a21bd50a924b0877ec563b6ca`, both test helpers and the suite, and authorized only the two documented operational hashes and their literal assertions. CI hash `ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27` matches main. Package scripts and all other hash pins are unchanged by this recovery.
 
 This records local cross-review, not external reviewer acceptance, merge authorization, successful remote CI or release approval. Those remain with the coordinating agent.
+
+## Review follow-up
+
+An external review identified unsupported registration layouts that could produce a partial count, missing regression coverage for transport/archive limits, and duplicate findings that caused false rewrite failures. A separate golden also reproduced an inherited aliased-entrypoint false success.
+
+The follow-up scans every shipped JavaScript module for supported registration syntax and rejects uncounted references or locations. The only allowed adapter accesses are the existing bind/assignment/type-check shapes in four named adapter modules. `isMain` compares both real paths. The transport tests inspect redirect policy and abort signals and exercise URL, response-size, gzip, tar-type, checksum and termination failures. Rewrites deduplicate the same line and original value.
+
+The coordinating agent read the complete follow-up diff and authorized only the auditor hash and its literal assertion, now `6120d98922f199b5f31ba931977cbc8ee4c99e8b969606d77d0d4775a64536b3`. CI and package scripts pins are unchanged in this follow-up. Final external review and remote CI remain pending on the committed head.
+
+This is a static audit of recognized registration syntax. It does not execute the package, prove arbitrary JavaScript semantics, establish runtime reachability/permissions or verify a hosted Worker. Dynamic code generation, reflective aliases and arbitrary computed behavior cannot be certified by this structural check; unsupported recognized forms stop the run rather than authorize a partial rewrite.

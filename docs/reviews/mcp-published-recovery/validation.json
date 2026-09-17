@@ -21,7 +21,7 @@
   },
   "localValidation": {
     "rootTests": {
-      "passed": 1023,
+      "passed": 1036,
       "failed": 0
     },
     "workerTests": {
@@ -29,7 +29,7 @@
       "failed": 0
     },
     "targetedTests": {
-      "passed": 56,
+      "passed": 69,
       "failed": 0
     },
     "workerTypecheck": "passed",
@@ -48,5 +48,33 @@
     "analyticsSource": "passed",
     "analyticsBuilt": "passed"
   },
-  "scope": "Static canonical registration names in the installable npm bytes; not a live Worker endpoint or runtime authorization assertion."
+  "scope": "Static canonical registration names in the installable npm bytes; not a live Worker endpoint or runtime authorization assertion.",
+  "auditSourceSha256": "6120d98922f199b5f31ba931977cbc8ee4c99e8b969606d77d0d4775a64536b3",
+  "goldenRegressions": [
+    {
+      "case": "Tagless shallow checkout, same eight CLI behavior cases",
+      "beforeCommit": "8a036512d509d8395048aee75c2a35c528b80781",
+      "beforePassed": 0,
+      "beforeFailed": 8,
+      "afterPassed": 8,
+      "afterFailed": 0,
+      "artifact": "synthetic npm fixture, separate from real npm byte evidence"
+    },
+    {
+      "case": "Nested/computed/destructured registrations and repeated version/count fixes",
+      "beforeCommit": "fb5d4e394bc59ab0a9dd68077c47634596547306",
+      "beforePassed": 0,
+      "beforeFailed": 5,
+      "afterPassed": 5,
+      "afterFailed": 0
+    },
+    {
+      "case": "Symlinked CLI entrypoint executes audit",
+      "beforeCommit": "fb5d4e394bc59ab0a9dd68077c47634596547306",
+      "beforePassed": 0,
+      "beforeFailed": 1,
+      "afterPassed": 1,
+      "afterFailed": 0
+    }
+  ]
 }

@@ -4,7 +4,7 @@ import { gzipSync } from 'node:zlib';
 
 export function archiveFixture(entries) {
   const chunks = [];
-  for (const [name, content] of entries) {
+  for (const [name, content, type = 48] of entries) {
     const bytes = Buffer.from(content);
     const header = Buffer.alloc(512);
     header.write(name, 0, 100);
@@ -14,7 +14,7 @@ export function archiveFixture(entries) {
     header.write(`${bytes.length.toString(8).padStart(11, '0')}\0`, 124, 12);
     header.write('00000000000\0', 136, 12);
     header.fill(32, 148, 156);
-    header[156] = 48;
+    header[156] = type;
     header.write('ustar\0', 257, 6);
     header.write('00', 263, 2);
     const checksum = header.reduce((sum, byte) => sum + byte, 0);
