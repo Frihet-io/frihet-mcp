@@ -19,8 +19,20 @@
 // Exit codes:
 //   0 = clean (or --fix succeeded)
 //   1 = stale refs found
-//   2 = invalid --repo argument
+//   2 = invalid --repo or --root argument
 //   3 = sister repo dirty (use --allow-dirty to override)
+//   4 = INCONCLUSIVE — the published artifact could not be established
+//
+// Source of truth is dual, and deliberately so:
+//   frihet-mcp itself → package.json + registerTool at HEAD (what is being
+//     prepared; its own README/CHANGELOG/release metadata must match it).
+//   sister repos      → what npm actually serves. Version is
+//     `dist-tags.latest`; the tool count is read from the git tag of THAT
+//     version, so both describe the same installable artifact.
+// If npm cannot be reached and no version is pinned, or the release tag is
+// absent, the run is INCONCLUSIVE (exit 4) and never applies --fix.
+// FRIHET_MCP_PUBLISHED_VERSION pins the published version for offline CI; the
+// pinned value is printed, because a silent pin is another way to lie.
 //
 // Limitations:
 //   - grep-based, not AST. False positives possible — extend SAFE_PATTERNS
@@ -36,7 +48,7 @@
 // Inline: append "// mcp-refs:ok" or "# mcp-refs:ok" to ignore one line.
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { resolve, join, dirname, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir } from 'node:os';
@@ -76,6 +88,71 @@ for (const f of readdirSync(toolDir)) {
   else total += matches;
 }
 const TOOL_COUNT = total;
+
+// === PUBLISHED SOURCE OF TRUTH (sister repos only) ===
+// frihet-mcp measures ITSELF against HEAD: package.json plus the registerTool
+// count above describe what is being prepared, and its own README, CHANGELOG
+// and release metadata must agree with that.
+//
+// Sister repos are a different question. Their files are public claims about a
+// package a reader can install, so their source of truth is what npm actually
+// serves. Measured 2026-09-17: HEAD said 1.18.0 with 158 tools while npm's
+// latest was 1.17.0 with 157, and 1.17.1 — named by an ERP contract — returned
+// E404. Syncing sister repos to HEAD would have written a version nobody can
+// install and a count for code nobody can download.
+//
+// The count comes from the git tag of the published version, not from HEAD and
+// not from parsing the npm description, so the version and the count describe
+// the SAME artifact.
+const PACKAGE_NAME = pkg.name;
+const PUBLISHED_VERSION_ENV = 'FRIHET_MCP_PUBLISHED_VERSION';
+const PLAIN_SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/;
+
+async function fetchPublishedVersion() {
+  try {
+    const response = await fetch(
+      `https://registry.npmjs.org/${PACKAGE_NAME.replace('/', '%2f')}`,
+      { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) },
+    );
+    if (!response.ok) return { error: `npm registry answered HTTP ${response.status}` };
+    const latest = (await response.json())?.['dist-tags']?.latest;
+    if (!latest) return { error: "npm packument carries no 'dist-tags.latest'" };
+    return { version: latest, source: 'npm dist-tags.latest' };
+  } catch (error) {
+    return { error: `npm registry unreachable: ${error.message}` };
+  }
+}
+
+// Counts registerTool at a release tag. `tag` is validated against PLAIN_SEMVER
+// by the caller, and every invocation below goes through execFileSync with an
+// argument array — no shell, so a tag name from the network cannot become a
+// command even if the validation is later loosened.
+function toolCountAtTag(tag) {
+  const git = (args) =>
+    execFileSync('git', args, { cwd: SELF, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+  try {
+    git(['rev-parse', '-q', '--verify', `refs/tags/${tag}`]);
+  } catch {
+    return { error: `release tag ${tag} is not in this checkout (a --depth 1 clone has no tags)` };
+  }
+  let files;
+  try {
+    files = git(['ls-tree', '-r', '--name-only', tag, '--', 'src/tools'])
+      .split('\n')
+      .filter((f) => f.endsWith('.ts'));
+  } catch (error) {
+    return { error: `cannot read src/tools at ${tag}: ${error.message}` };
+  }
+  if (files.length === 0) return { error: `${tag} carries no src/tools/*.ts` };
+  let tools = 0;
+  let meta = 0;
+  for (const file of files) {
+    const matches = (git(['show', `${tag}:${file}`]).match(/registerTool/g) || []).length;
+    if (file.endsWith('/register-all.ts')) meta = matches;
+    else tools += matches;
+  }
+  return { toolCount: tools, metaCount: meta };
+}
 
 // === TARGET EXPANSION ===
 // A watch list of literal paths cannot cover a fan-out surface: the ERP ships
@@ -624,6 +701,56 @@ for (let i = 0; i < ARGS.length; i += 1) {
   REPOS[name].root = target;
 }
 
+// The published lookup runs ONLY when a sister repo is in scope. `--repo
+// frihet-mcp` is what prepublishOnly and ci.yml run, and it must stay offline.
+const SISTER_IN_SCOPE = REPO_FILTER !== 'frihet-mcp';
+let PUBLISHED = null;
+if (SISTER_IN_SCOPE) {
+  const pinned = process.env[PUBLISHED_VERSION_ENV];
+  let version = null;
+  let source = null;
+  let failure = null;
+
+  if (pinned) {
+    version = pinned;
+    source = `${PUBLISHED_VERSION_ENV}=${pinned}`;
+  } else {
+    const looked = await fetchPublishedVersion();
+    if (looked.error) failure = looked.error;
+    else ({ version, source } = looked);
+  }
+
+  if (version && !PLAIN_SEMVER.test(version)) {
+    failure = `published version ${JSON.stringify(version)} is not plain semver`;
+    version = null;
+  }
+
+  let counts = null;
+  if (version && !failure) {
+    counts = toolCountAtTag(`v${version}`);
+    if (counts.error) failure = counts.error;
+  }
+
+  // No published truth means no verdict. Not a pass, not a fix: a gate with no
+  // source of truth that rewrites files is worse than no gate at all.
+  if (failure) {
+    console.error(`INCONCLUSIVE: cannot establish what npm publishes — ${failure}`);
+    console.error('Sister-repo files are public claims about an installable package, so');
+    console.error('they are checked against the published artifact. Without it this audit');
+    console.error('can neither pass nor fix.');
+    console.error(`Offline runs: set ${PUBLISHED_VERSION_ENV}=<version> and make sure the`);
+    console.error('matching release tag is fetched (git fetch --depth 1 origin tag v<version>).');
+    process.exit(4);
+  }
+
+  PUBLISHED = {
+    version,
+    source,
+    toolCount: counts.toolCount,
+    metaCount: counts.metaCount,
+  };
+}
+
 // Worktree-clean guard for sister repos when --fix is active.
 // Skip self-repo guard (caller likely on dev branch in frihet-mcp itself).
 function isDirty(root) {
@@ -699,6 +826,15 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
     }
     targets.push(...expanded);
   }
+
+  // frihet-mcp is judged against its own HEAD; every sister repo against the
+  // published artifact. Everything below reads `expected` and never the
+  // module-level VERSION/TOOL_COUNT, so the two sources cannot cross over.
+  // PUBLISHED is non-null whenever a sister repo is reachable here: the run
+  // exits 4 above if the published artifact could not be established.
+  const expected = repoName === 'frihet-mcp'
+    ? { version: VERSION, toolCount: TOOL_COUNT }
+    : { version: PUBLISHED.version, toolCount: PUBLISHED.toolCount };
 
   for (const rel of targets) {
     const abs = join(cfg.root, rel);
@@ -844,7 +980,7 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
         let m;
         while ((m = TOOL_COUNT_RE.exec(line)) !== null) {
           const n = parseInt(m[1], 10);
-          if (n === TOOL_COUNT) continue;
+          if (n === expected.toolCount) continue;
           // Heuristic: only flag if number is in MCP context OR it's an obviously MCP-related file.
           // All files inside frihet-mcp repo are MCP-related by definition.
           const mcpFile = repoName === 'frihet-mcp'
@@ -857,7 +993,7 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
             severity: 'fail',
             kind: 'tool-count',
             found: n,
-            expected: TOOL_COUNT,
+            expected: expected.toolCount,
             snippet: line.trim().slice(0, 120),
           });
         }
@@ -871,7 +1007,7 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
           const ver = v[1];
           // Only flag versions that look like @frihet/mcp-server (semver with optional prerelease, 0.x or 1.x for now)
           if (!/^\d+\.\d+\.\d+/.test(ver)) continue;
-          if (ver === VERSION) continue;
+          if (ver === expected.version) continue;
           // Skip schema URL versions (e.g., "2025-12-11")
           if (/\d{4}-\d{2}-\d{2}/.test(line) && !line.includes('@frihet/mcp-server')) continue;
           findings.push({
@@ -881,7 +1017,7 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
             severity: 'fail',
             kind: 'version',
             found: ver,
-            expected: VERSION,
+            expected: expected.version,
             snippet: line.trim().slice(0, 120),
           });
         }
@@ -889,47 +1025,68 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
     });
 
     if (FIX) {
-      let txt = readFileSync(abs, 'utf8');
+      const lineTexts = readFileSync(abs, 'utf8').split('\n');
       let mutated = false;
-      // Replace tool-count: only on flagged file lines. This pattern MUST stay
-      // symmetric with TOOL_COUNT_RE. A detector that sees more than the
-      // rewriter can touch makes `--fix` exit 0 having written nothing, which
-      // is the quietest possible way for a drift gate to fail open — measured:
-      // with the widened detector and the old narrow replacement, 6 of 7 real
-      // stale lines were detected and left on disk.
-      const fileFails = findings.filter((f) => f.repo === repoName && f.file === rel && f.kind === 'tool-count');
+
+      // Rewrites are LINE-SCOPED, and that is the whole point of this block.
+      // The previous implementation built its pattern from the stale NUMBER and
+      // replaced across the whole file, so it rewrote lines the detector had
+      // deliberately refused to flag. Demonstrated on a fixture: the whitelisted
+      // `- Banking (5 tools) — MCP server` never appears in the findings, yet
+      // --fix turned it into `(158 tools)`. SAFE_PATTERNS protected detection
+      // but not rewriting. The same bug in the version branch turns
+      // `npm latest 1.16.6` into a claim about npm that npm does not support.
+      // Only the exact flagged line is touched now.
+      //
+      // Findings whose `line` is not an integer (server.json's `.version`,
+      // server-meta's FULL_TOOL_COUNT) are written by their own handlers above,
+      // so they are excluded here rather than silently skipped mid-loop.
+      const flagged = (kind) => findings.filter(
+        (f) => f.repo === repoName && f.file === rel && f.kind === kind && Number.isInteger(f.line),
+      );
       const unreplaced = [];
-      for (const fail of fileFails) {
+
+      // Tool counts. This pattern MUST stay symmetric with TOOL_COUNT_RE: a
+      // detector that sees more than the rewriter can touch makes --fix exit 0
+      // having written nothing, the quietest way for a drift gate to fail open.
+      for (const fail of flagged('tool-count')) {
+        const idx = fail.line - 1;
+        const before = lineTexts[idx] ?? '';
         // $1 carries the separator, the qualifier words and the noun, so the
         // original wording survives the rewrite in every language.
         const re = new RegExp(
           `(?<![\\p{L}\\p{N}])${fail.found}([\\s_-]*(?:[\\p{L}][\\p{L}-]*[\\s_-]+){0,2}?(?:${TOOL_NOUN_RE}))(?![\\p{L}\\p{N}])`,
           'giu',
         );
-        const newTxt = txt.replace(re, `${TOOL_COUNT}$1`);
-        if (newTxt !== txt) { txt = newTxt; mutated = true; }
-        else unreplaced.push(fail);
+        const after = before.replace(re, `${expected.toolCount}$1`);
+        if (after !== before) { lineTexts[idx] = after; mutated = true; }
+        else unreplaced.push({ fail, kind: 'unfixable-tool-count', want: expected.toolCount });
       }
-      for (const fail of unreplaced) {
+
+      for (const fail of flagged('version')) {
+        const idx = fail.line - 1;
+        const before = lineTexts[idx] ?? '';
+        const re = new RegExp(fail.found.replace(/\./g, '\\.'), 'g');
+        const after = before.replace(re, expected.version);
+        if (after !== before) { lineTexts[idx] = after; mutated = true; }
+        else unreplaced.push({ fail, kind: 'unfixable-version', want: expected.version });
+      }
+
+      for (const { fail, kind, want } of unreplaced) {
         findings.push({
           repo: repoName,
           file: rel,
           line: fail.line,
           severity: 'fail',
-          kind: 'unfixable-tool-count',
+          kind,
           found: fail.found,
-          expected: TOOL_COUNT,
-          snippet: `--fix detected this count but could not rewrite it (detector/rewriter disagree): ${fail.snippet}`,
+          expected: want,
+          snippet: `--fix flagged this but could not rewrite the flagged line (detector/rewriter disagree): ${fail.snippet}`,
         });
       }
-      const verFails = findings.filter((f) => f.repo === repoName && f.file === rel && f.kind === 'version');
-      for (const fail of verFails) {
-        const re = new RegExp(fail.found.replace(/\./g, '\\.'), 'g');
-        const newTxt = txt.replace(re, VERSION);
-        if (newTxt !== txt) { txt = newTxt; mutated = true; }
-      }
+
       if (mutated) {
-        writeFileSync(abs, txt);
+        writeFileSync(abs, lineTexts.join('\n'));
         findings.push({ repo: repoName, file: rel, severity: 'fixed', msg: 'auto-replaced' });
       }
     }
@@ -939,10 +1096,18 @@ for (const [repoName, cfg] of Object.entries(REPOS)) {
 if (JSON_OUT) {
   console.log(JSON.stringify({
     sot: { version: VERSION, toolCount: TOOL_COUNT, metaCount },
+    publishedSot: PUBLISHED,
     findings,
   }, null, 2));
 } else {
-  console.log(`SoT: @frihet/mcp-server@${VERSION} · ${TOOL_COUNT} tools (+${metaCount} meta)`);
+  console.log(`SoT (frihet-mcp, HEAD): @frihet/mcp-server@${VERSION} · ${TOOL_COUNT} tools (+${metaCount} meta)`);
+  if (PUBLISHED) {
+    console.log(
+      `SoT (sister repos, published): @frihet/mcp-server@${PUBLISHED.version} · ${PUBLISHED.toolCount} tools (+${PUBLISHED.metaCount} meta)`,
+    );
+    console.log(`  published version resolved from: ${PUBLISHED.source}`);
+    console.log(`  tool count read from release tag: v${PUBLISHED.version}`);
+  }
   for (const [name, path] of ROOT_OVERRIDES) {
     console.log(`root override: ${name} -> ${path}`);
   }
@@ -974,7 +1139,9 @@ if (JSON_OUT) {
 const exitFail = findings.some((f) => f.severity === 'fail');
 const unfixableProjectionFail = findings.some(
   (f) => f.severity === 'fail'
-    && (f.kind === 'release-projection' || f.kind === 'unfixable-tool-count'),
+    && (f.kind === 'release-projection'
+      || f.kind === 'unfixable-tool-count'
+      || f.kind === 'unfixable-version'),
 );
 process.exit((exitFail && !FIX) || unfixableProjectionFail ? 1 : 0);
 
