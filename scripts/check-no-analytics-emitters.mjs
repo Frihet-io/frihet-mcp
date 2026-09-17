@@ -281,7 +281,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  ".github/workflows/ci.yml": "ea7fea18fef9eeacacc2115db7a0690d5300bd96921c1e0c23aea333b741be8d", // feat/mcp-refs-published-sot: checkout fetches tags, so the published tool count can be read from the release tag instead of going INCONCLUSIVE on a tagless shallow clone (no new step, no expression interpolation)
+  ".github/workflows/ci.yml": "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27", // MCP recovery: restored byte-for-byte to reviewed main; hermetic tests need no release tags
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "6799c971a773f04cd39d8e134c042474d23bfb1e949348df2e382b6fceb10023",
@@ -289,7 +289,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
-  "scripts/audit-mcp-refs.mjs": "7c60694321443652b20523f20fcd3806a7d8b4a82fa19a94c2ee57b64ab32ed6", // feat/mcp-refs-published-sot: sister repos judged against the published artifact (npm dist-tags.latest + its release tag), INCONCLUSIVE exit 4 when it cannot be established, line-scoped --fix
+  "scripts/audit-mcp-refs.mjs": "d2302bb7036e4dc7933705350f54f89b9a616a7a21bd50a924b0877ec563b6ca", // MCP recovery: bounded npm metadata + sha512-verified tarball, in-memory archive/AST inspection without package execution; exit 4 on unverifiable bytes; line-scoped --fix (review details in docs/reviews/mcp-published-recovery/pin-review.md)
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
   "scripts/check-openai-worker-topology.mjs": "448bb2a78c8df9ee70595c779ccfb5e65675730671db1e59da60363c16c02c20",
   "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Audit cross-repo refs to @frihet/mcp-server tool count + version.
-// Source of truth = this repo's package.json + actual registerTool count.
+// Self source: repository. Sister source: integrity-verified npm tarball.
 // Run from anywhere; flags any sister-repo file with stale numbers.
 //
 // Usage:
@@ -26,13 +26,11 @@
 // Source of truth is dual, and deliberately so:
 //   frihet-mcp itself → package.json + registerTool at HEAD (what is being
 //     prepared; its own README/CHANGELOG/release metadata must match it).
-//   sister repos      → what npm actually serves. Version is
-//     `dist-tags.latest`; the tool count is read from the git tag of THAT
-//     version, so both describe the same installable artifact.
-// If npm cannot be reached and no version is pinned, or the release tag is
-// absent, the run is INCONCLUSIVE (exit 4) and never applies --fix.
-// FRIHET_MCP_PUBLISHED_VERSION pins the published version for offline CI; the
-// pinned value is printed, because a silent pin is another way to lie.
+//   sister repos      → the package metadata and integrity-verified npm tarball.
+// No source code or lifecycle script from the package is executed. Missing or
+// unverifiable bytes mean INCONCLUSIVE (exit 4), and --fix writes nothing.
+// FRIHET_MCP_PUBLISHED_VERSION requests a specific npm version, not an offline
+// override or proof that this version is currently latest. It is always printed.
 //
 // Limitations:
 //   - grep-based, not AST. False positives possible — extend SAFE_PATTERNS
@@ -52,6 +50,9 @@ import { execSync, execFileSync } from 'node:child_process';
 import { resolve, join, dirname, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
+import ts from 'typescript';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SELF = resolve(__dirname, '..');
@@ -90,68 +91,114 @@ for (const f of readdirSync(toolDir)) {
 const TOOL_COUNT = total;
 
 // === PUBLISHED SOURCE OF TRUTH (sister repos only) ===
-// frihet-mcp measures ITSELF against HEAD: package.json plus the registerTool
-// count above describe what is being prepared, and its own README, CHANGELOG
-// and release metadata must agree with that.
-//
-// Sister repos are a different question. Their files are public claims about a
-// package a reader can install, so their source of truth is what npm actually
-// serves. Measured 2026-09-17: HEAD said 1.18.0 with 158 tools while npm's
-// latest was 1.17.0 with 157, and 1.17.1 — named by an ERP contract — returned
-// E404. Syncing sister repos to HEAD would have written a version nobody can
-// install and a count for code nobody can download.
-//
-// The count comes from the git tag of the published version, not from HEAD and
-// not from parsing the npm description, so the version and the count describe
-// the SAME artifact.
+// A version tag is not evidence of npm bytes: 1.17.0 has no npm gitHead.
+// Read the downloaded dist JavaScript as syntax, without importing or running it.
 const PACKAGE_NAME = pkg.name;
 const PUBLISHED_VERSION_ENV = 'FRIHET_MCP_PUBLISHED_VERSION';
-const PLAIN_SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/;
+const PLAIN_SEMVER = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
+const MAX_METADATA_BYTES = 2 * 1024 * 1024;
+const MAX_TARBALL_BYTES = 8 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 48 * 1024 * 1024;
 
-async function fetchPublishedVersion() {
-  try {
-    const response = await fetch(
-      `https://registry.npmjs.org/${PACKAGE_NAME.replace('/', '%2f')}`,
-      { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) },
-    );
-    if (!response.ok) return { error: `npm registry answered HTTP ${response.status}` };
-    const latest = (await response.json())?.['dist-tags']?.latest;
-    if (!latest) return { error: "npm packument carries no 'dist-tags.latest'" };
-    return { version: latest, source: 'npm dist-tags.latest' };
-  } catch (error) {
-    return { error: `npm registry unreachable: ${error.message}` };
+async function boundedFetch(url, maxBytes) {
+  const response = await fetch(url, {
+    redirect: 'error', signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`npm registry answered HTTP ${response.status}`);
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of response.body) {
+    size += chunk.length;
+    if (size > maxBytes) throw new Error('npm response exceeds the bounded size limit');
+    chunks.push(chunk);
   }
+  return Buffer.concat(chunks);
 }
 
-// Counts registerTool at a release tag. `tag` is validated against PLAIN_SEMVER
-// by the caller, and every invocation below goes through execFileSync with an
-// argument array — no shell, so a tag name from the network cannot become a
-// command even if the validation is later loosened.
-function toolCountAtTag(tag) {
-  const git = (args) =>
-    execFileSync('git', args, { cwd: SELF, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
-  try {
-    git(['rev-parse', '-q', '--verify', `refs/tags/${tag}`]);
-  } catch {
-    return { error: `release tag ${tag} is not in this checkout (a --depth 1 clone has no tags)` };
+// Minimal, fail-closed reader for npm's regular-file ustar archives. Nothing is
+// extracted to disk. Links, PAX extensions, duplicate paths and traversal fail
+// closed rather than being interpreted differently from a package installer.
+export function readNpmTarball(tarball, integrity) {
+  if (tarball.length > MAX_TARBALL_BYTES) throw new Error('npm tarball exceeds size limit');
+  if (!/^sha512-[A-Za-z0-9+/]{86}==$/.test(integrity ?? '')) {
+    throw new Error('npm metadata must provide one sha512 integrity digest');
   }
-  let files;
-  try {
-    files = git(['ls-tree', '-r', '--name-only', tag, '--', 'src/tools'])
-      .split('\n')
-      .filter((f) => f.endsWith('.ts'));
-  } catch (error) {
-    return { error: `cannot read src/tools at ${tag}: ${error.message}` };
+  if (`sha512-${createHash('sha512').update(tarball).digest('base64')}` !== integrity) {
+    throw new Error('npm tarball integrity mismatch');
   }
-  if (files.length === 0) return { error: `${tag} carries no src/tools/*.ts` };
-  let tools = 0;
-  let meta = 0;
-  for (const file of files) {
-    const matches = (git(['show', `${tag}:${file}`]).match(/registerTool/g) || []).length;
-    if (file.endsWith('/register-all.ts')) meta = matches;
-    else tools += matches;
+  const data = gunzipSync(tarball, { maxOutputLength: MAX_UNPACKED_BYTES });
+  const files = new Map();
+  let offset = 0;
+  const field = (block, start, length) => block.subarray(start, start + length).toString('utf8').replace(/\0.*$/s, '');
+  while (offset + 512 <= data.length) {
+    const header = data.subarray(offset, offset + 512);
+    if (header.every((byte) => byte === 0)) {
+      if (data.length < offset + 1024 || !data.subarray(offset).every((byte) => byte === 0)) {
+        throw new Error('npm tarball has an invalid terminator');
+      }
+      return files;
+    }
+    const octal = (start, length) => {
+      const raw = field(header, start, length).trim();
+      if (!/^[0-7]+$/.test(raw)) throw new Error('npm tarball contains an invalid octal field');
+      return Number.parseInt(raw, 8);
+    };
+    const checksum = header.reduce((sum, byte, index) => sum + (index >= 148 && index < 156 ? 32 : byte), 0);
+    if (checksum !== octal(148, 8)) throw new Error('npm tarball header checksum mismatch');
+    const prefix = field(header, 345, 155);
+    const name = `${prefix ? `${prefix}/` : ''}${field(header, 0, 100)}`;
+    const size = octal(124, 12);
+    if (!name.startsWith('package/') || name.includes('\\') || name.split('/').some((part) => !part || part === '.' || part === '..')) {
+      throw new Error('npm tarball contains an unsafe path');
+    }
+    if (![0, 48].includes(header[156]) || files.has(name)) throw new Error('npm tarball contains an unsupported or duplicate entry');
+    offset += 512;
+    if (size > data.length - offset) throw new Error('npm tarball is truncated');
+    files.set(name, data.subarray(offset, offset + size));
+    offset += Math.ceil(size / 512) * 512;
   }
-  return { toolCount: tools, metaCount: meta };
+  throw new Error('npm tarball has no complete terminator');
+}
+
+export function inspectPublishedArtifact(metadata, tarball, requestedVersion) {
+  if (metadata?.name !== PACKAGE_NAME || !PLAIN_SEMVER.test(metadata?.version ?? '')) throw new Error('npm package identity is invalid');
+  if (requestedVersion && metadata.version !== requestedVersion) throw new Error('npm returned a different version');
+  const files = readNpmTarball(tarball, metadata.dist?.integrity);
+  const artifactPackage = JSON.parse(files.get('package/package.json')?.toString('utf8') ?? 'null');
+  if (artifactPackage?.name !== metadata.name || artifactPackage.version !== metadata.version) throw new Error('npm tarball package identity differs from metadata');
+  const names = new Set();
+  for (const [path, bytes] of files) {
+    if (!/^package\/dist\/tools\/[^/]+\.js$/.test(path) || path.endsWith('/register-all.js')) continue;
+    const source = ts.createSourceFile(path, bytes.toString('utf8'), ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
+    if (source.parseDiagnostics.length) throw new Error(`unparseable published JavaScript: ${path}`);
+    const visit = (node) => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'registerTool') {
+        const name = node.arguments[0];
+        if (!name || !ts.isStringLiteral(name) || names.has(name.text)) throw new Error('published tool registration is dynamic or duplicated');
+        names.add(name.text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  if (names.size === 0) throw new Error('npm tarball has no static canonical tool registrations');
+  return {
+    version: metadata.version, toolCount: names.size,
+    integrity: metadata.dist.integrity, toolNames: [...names].sort(),
+  };
+}
+
+async function fetchPublishedArtifact(requestedVersion) {
+  if (requestedVersion && !PLAIN_SEMVER.test(requestedVersion)) throw new Error(`published version ${JSON.stringify(requestedVersion)} is not plain semver`);
+  const metadata = JSON.parse(await boundedFetch(
+    `https://registry.npmjs.org/${PACKAGE_NAME.replace('/', '%2f')}/${requestedVersion || 'latest'}`,
+    MAX_METADATA_BYTES,
+  ));
+  const url = new URL(metadata?.dist?.tarball);
+  if (url.origin !== 'https://registry.npmjs.org' || url.username || url.password || url.search || url.hash ||
+      url.pathname !== `/@frihet/mcp-server/-/mcp-server-${metadata.version}.tgz`) throw new Error('npm tarball URL is outside the expected package');
+  const artifact = inspectPublishedArtifact(metadata, await boundedFetch(url.href, MAX_TARBALL_BYTES), requestedVersion);
+  return { ...artifact, source: requestedVersion ? `${PUBLISHED_VERSION_ENV}=${requestedVersion} (npm version lookup)` : 'npm dist-tags.latest' };
 }
 
 // === TARGET EXPANSION ===
@@ -706,49 +753,14 @@ for (let i = 0; i < ARGS.length; i += 1) {
 const SISTER_IN_SCOPE = REPO_FILTER !== 'frihet-mcp';
 let PUBLISHED = null;
 if (SISTER_IN_SCOPE) {
-  const pinned = process.env[PUBLISHED_VERSION_ENV];
-  let version = null;
-  let source = null;
-  let failure = null;
-
-  if (pinned) {
-    version = pinned;
-    source = `${PUBLISHED_VERSION_ENV}=${pinned}`;
-  } else {
-    const looked = await fetchPublishedVersion();
-    if (looked.error) failure = looked.error;
-    else ({ version, source } = looked);
-  }
-
-  if (version && !PLAIN_SEMVER.test(version)) {
-    failure = `published version ${JSON.stringify(version)} is not plain semver`;
-    version = null;
-  }
-
-  let counts = null;
-  if (version && !failure) {
-    counts = toolCountAtTag(`v${version}`);
-    if (counts.error) failure = counts.error;
-  }
-
-  // No published truth means no verdict. Not a pass, not a fix: a gate with no
-  // source of truth that rewrites files is worse than no gate at all.
-  if (failure) {
-    console.error(`INCONCLUSIVE: cannot establish what npm publishes — ${failure}`);
-    console.error('Sister-repo files are public claims about an installable package, so');
-    console.error('they are checked against the published artifact. Without it this audit');
-    console.error('can neither pass nor fix.');
-    console.error(`Offline runs: set ${PUBLISHED_VERSION_ENV}=<version> and make sure the`);
-    console.error('matching release tag is fetched (git fetch --depth 1 origin tag v<version>).');
+  try {
+    PUBLISHED = await fetchPublishedArtifact(process.env[PUBLISHED_VERSION_ENV]);
+  } catch (error) {
+    console.error(`INCONCLUSIVE: cannot establish what npm publishes — ${error.message}`);
+    console.error('Sister-repo claims require package identity, sha512 integrity and readable npm bytes.');
+    console.error('No files were changed. A version pin still requires registry access; a git tag is not evidence.');
     process.exit(4);
   }
-
-  PUBLISHED = {
-    version,
-    source,
-    toolCount: counts.toolCount,
-    metaCount: counts.metaCount,
-  };
 }
 
 // Worktree-clean guard for sister repos when --fix is active.
@@ -1103,10 +1115,10 @@ if (JSON_OUT) {
   console.log(`SoT (frihet-mcp, HEAD): @frihet/mcp-server@${VERSION} · ${TOOL_COUNT} tools (+${metaCount} meta)`);
   if (PUBLISHED) {
     console.log(
-      `SoT (sister repos, published): @frihet/mcp-server@${PUBLISHED.version} · ${PUBLISHED.toolCount} tools (+${PUBLISHED.metaCount} meta)`,
+      `SoT (sister repos, published): @frihet/mcp-server@${PUBLISHED.version} · ${PUBLISHED.toolCount} canonical registrations`,
     );
     console.log(`  published version resolved from: ${PUBLISHED.source}`);
-    console.log(`  tool count read from release tag: v${PUBLISHED.version}`);
+    console.log(`  canonical names read from npm dist/tools/*.js; integrity: ${PUBLISHED.integrity}`);
   }
   for (const [name, path] of ROOT_OVERRIDES) {
     console.log(`root override: ${name} -> ${path}`);

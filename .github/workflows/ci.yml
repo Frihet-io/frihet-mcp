@@ -15,15 +15,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          # The audit reads the published tool count from the release tag of
-          # whatever npm currently serves, so the version and the count it
-          # reports for the sister repos describe the same installable
-          # artifact. A default shallow checkout carries no tags at all, the
-          # lookup goes INCONCLUSIVE and the audit refuses to emit a verdict —
-          # correct behaviour, useless CI. Tags are fetched at depth 1, which
-          # brings each tag's tree without the full history.
-          fetch-tags: true
 
       - name: Validate GitHub Actions workflows
         # Use the real Actions-aware parser. Text/regex contract tests cannot

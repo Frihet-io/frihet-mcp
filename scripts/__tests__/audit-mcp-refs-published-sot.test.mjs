@@ -1,21 +1,11 @@
 /**
- * The audit has two sources of truth, and this file pins the difference.
- *
- * frihet-mcp measures itself against HEAD. Sister repos hold public claims
- * about a package a reader can install, so they are measured against what npm
- * actually serves: version from `dist-tags.latest`, tool count from the git tag
- * of THAT version, so both describe the same artifact.
- *
- * The regression being bought, measured on 2026-09-17: HEAD said 1.18.0 with
- * 158 tools while npm's latest was 1.17.0 with 157, and 1.17.1 — a version an
- * ERP contract still names — returned E404. Under the single HEAD source of
- * truth, `--fix` on a sister repo proposed writing 1.18.0 into user-facing copy
- * for a release nobody can install.
- *
- * Every run here pins the published version through the environment, so the
- * suite never touches the network.
+ * Dual source of truth and fail-closed npm byte verification.
+ * A synthetic registry/USTAR archive makes subprocess tests independent of
+ * network, local git tags, and future releases. No real repository is rewritten.
  */
 import assert from 'node:assert/strict';
+import { inspectPublishedArtifact } from '../audit-mcp-refs.mjs';
+import { publishedFixture } from './helpers/published-artifact-fixture.mjs';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,9 +15,10 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, '..', 'audit-mcp-refs.mjs');
+const PRELOAD = join(HERE, 'helpers/published-fetch-preload.mjs');
 const REPO = join(HERE, '..', '..');
 
-/** The published release this repository's history actually carries. */
+/** Synthetic registry fixture; values are not publication evidence. */
 const PUBLISHED = '1.17.0';
 const PUBLISHED_TOOLS = 157;
 
@@ -46,7 +37,7 @@ const read = (root) => readFileSync(join(root, 'apps/erp/public/llms.txt'), 'utf
 function audit(root, extra = [], version = PUBLISHED) {
   return spawnSync(
     process.execPath,
-    [SCRIPT, '--repo', 'Frihet-ERP', '--root', `Frihet-ERP=${root}`, ...extra],
+    ['--import', PRELOAD, SCRIPT, '--repo', 'Frihet-ERP', '--root', `Frihet-ERP=${root}`, ...extra],
     { encoding: 'utf8', env: { ...process.env, FRIHET_MCP_PUBLISHED_VERSION: version } },
   );
 }
@@ -66,10 +57,10 @@ describe('published source of truth for sister repos', () => {
     assert.match(run.stdout, /SoT \(frihet-mcp, HEAD\): @frihet\/mcp-server@/);
     assert.match(
       run.stdout,
-      new RegExp(`SoT \\(sister repos, published\\): @frihet/mcp-server@${PUBLISHED} · ${PUBLISHED_TOOLS} tools`)
+      new RegExp(`SoT \\(sister repos, published\\): @frihet/mcp-server@${PUBLISHED} · ${PUBLISHED_TOOLS} canonical registrations`)
     );
     assert.match(run.stdout, /published version resolved from: FRIHET_MCP_PUBLISHED_VERSION=1\.17\.0/);
-    assert.match(run.stdout, /tool count read from release tag: v1\.17\.0/);
+    assert.match(run.stdout, /canonical names read from npm dist\/tools\/\*\.js; integrity: sha512-/);
   });
 
   test('a sister repo is judged against the PUBLISHED version, never HEAD', () => {
@@ -103,13 +94,13 @@ describe('published source of truth for sister repos', () => {
 });
 
 describe('INCONCLUSIVE beats a guess', () => {
-  test('an unknown release tag exits 4 and fixes nothing', () => {
+  test('an unpublished npm version exits 4 and fixes nothing', () => {
     const line = 'Install @frihet/mcp-server v1.16.6 today';
     const root = fixture([line]);
     const run = audit(root, ['--fix'], '9.9.9');
     assert.equal(run.status, 4);
     assert.match(run.stderr, /INCONCLUSIVE/);
-    assert.match(run.stderr, /release tag v9\.9\.9 is not in this checkout/);
+    assert.match(run.stderr, /npm registry answered HTTP 404/);
     assert.equal(read(root).trim(), line, 'INCONCLUSIVE must never write');
   });
 
@@ -155,5 +146,37 @@ describe('--fix is line-scoped', () => {
     const after = read(root).split('\n');
     assert.equal(after[0], `MCP server catalogue: ${PUBLISHED_TOOLS} tools`);
     assert.equal(after[1], 'Este MCP server tardó 999 segundos en arrancar');
+  });
+});
+
+
+describe('npm byte integrity and static registration parsing', () => {
+  test('comments and strings do not inflate the canonical count', () => {
+    const { metadata, tarball } = publishedFixture({ source: `
+      // server.registerTool("fake_comment", {}, () => {});
+      const text = 'server.registerTool("fake_string")';
+      server.registerTool("real", {}, () => {});
+    ` });
+    assert.deepEqual(inspectPublishedArtifact(metadata, tarball).toolNames, ['real']);
+  });
+  test('tarball corruption, identity mismatches and missing integrity fail closed', () => {
+    const { metadata, tarball } = publishedFixture();
+    const corrupted = Buffer.from(tarball); corrupted[10] ^= 1;
+    assert.throws(() => inspectPublishedArtifact(metadata, corrupted), /integrity mismatch/);
+    assert.throws(() => inspectPublishedArtifact({ ...metadata, version: '1.17.1' }, tarball), /identity differs/);
+    assert.throws(() => inspectPublishedArtifact({ ...metadata, dist: {} }, tarball), /sha512/);
+    assert.throws(() => inspectPublishedArtifact(metadata, tarball, '1.17.1'), /different version/);
+  });
+  test('archive traversal and duplicate entries cannot be accepted', () => {
+    for (const path of ['package/../outside.js', 'package/package.json']) {
+      const { metadata, tarball } = publishedFixture({ extra: [[path, 'ignored']] });
+      assert.throws(() => inspectPublishedArtifact(metadata, tarball), /unsafe path|duplicate entry/);
+    }
+  });
+  test('dynamic names, duplicate names, empty catalogs and invalid JS fail closed', () => {
+    for (const source of ['server.registerTool(variable, {});', 'server.registerTool("same", {}); server.registerTool("same", {});', '', 'const = ;']) {
+      const { metadata, tarball } = publishedFixture({ source });
+      assert.throws(() => inspectPublishedArtifact(metadata, tarball), /dynamic or duplicated|no static|unparseable/);
+    }
   });
 });
