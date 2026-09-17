@@ -190,8 +190,12 @@ describe('watch-list patterns', () => {
 
 describe('--root override', () => {
   /** Runs the real CLI against a hermetic fixture repo. */
+  // Synthetic npm responses keep this CLI test independent of tags and network.
   const runAudit = (args) =>
-    spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
+    spawnSync(process.execPath, ['--import', join(dirname(SCRIPT), '__tests__/helpers/published-fetch-preload.mjs'), SCRIPT, ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, FRIHET_MCP_PUBLISHED_VERSION: '1.17.0' },
+    });
 
   const fixtureRepo = () => {
     const root = mkdtempSync(join(tmpdir(), 'mcp-refs-root-'));

@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "325e940edc15af211aed8a3371855b724346cf2321ea4234d01054aa5293b72a", // fix/mcp-refs-watch-locales: npm test adds scripts/__tests__/audit-mcp-refs-detector.test.mjs (no new lifecycle or network script)
+  "package.json": "8ad65e1f331f79c6b314cd5f467b57f760639a470547349b5f9e734e5bcb89f8", // feat/mcp-refs-published-sot: npm test adds scripts/__tests__/audit-mcp-refs-published-sot.test.mjs (no new lifecycle or network script; the suite pins the published version by env and never calls the registry)
   "workers/remote-mcp/package.json": "c7025291c46b023fac162d1a0e0a010d1173bf7bc5d218c6faaab515aba97c6b",
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -281,7 +281,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  ".github/workflows/ci.yml": "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27",
+  ".github/workflows/ci.yml": "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27", // MCP recovery: restored byte-for-byte to reviewed main; hermetic tests need no release tags
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "6799c971a773f04cd39d8e134c042474d23bfb1e949348df2e382b6fceb10023",
@@ -289,7 +289,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
-  "scripts/audit-mcp-refs.mjs": "06f01587aee4e12e732700a4ef47379b6271174304c1f53b2e0b76fba04a0f2b", // fix/mcp-refs-watch-locales: tool-count detector widened (qualifier words, non-ASCII noun endings, CJK), glob watch lists, --root override for hermetic fixtures, --fix kept symmetric with the detector
+  "scripts/audit-mcp-refs.mjs": "6120d98922f199b5f31ba931977cbc8ee4c99e8b969606d77d0d4775a64536b3", // MCP recovery: bounded npm metadata + sha512-verified tarball, in-memory archive/AST inspection without package execution; exit 4 on unverifiable bytes; line-scoped --fix (review details in docs/reviews/mcp-published-recovery/pin-review.md)
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
   "scripts/check-openai-worker-topology.mjs": "448bb2a78c8df9ee70595c779ccfb5e65675730671db1e59da60363c16c02c20",
   "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",
