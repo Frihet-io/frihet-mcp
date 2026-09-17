@@ -23,7 +23,14 @@
  * detector is how a gate starts crying wolf and gets switched off.
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), '..', 'audit-mcp-refs.mjs');
 
 import {
   TOOL_NOUNS,
@@ -178,6 +185,42 @@ describe('watch-list patterns', () => {
       shallow.every((f) => f.split('/').length === 2),
       'single * leaked into subdirectories'
     );
+  });
+});
+
+describe('--root override', () => {
+  /** Runs the real CLI against a hermetic fixture repo. */
+  const runAudit = (args) =>
+    spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
+
+  const fixtureRepo = () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcp-refs-root-'));
+    mkdirSync(join(root, 'apps/erp/locales/es'), { recursive: true });
+    writeFileSync(
+      join(root, 'apps/erp/locales/es/settings.ts'),
+      "        mcpServerDetail: '31 tools, npm @frihet/mcp-server',\n"
+    );
+    return root;
+  };
+
+  test('reads the relocated repo and reports the stale count', () => {
+    const root = fixtureRepo();
+    const run = runAudit(['--repo', 'Frihet-ERP', '--root', `Frihet-ERP=${root}`]);
+    assert.equal(run.status, 1, run.stdout + run.stderr);
+    assert.match(run.stdout, /apps\/erp\/locales\/es\/settings\.ts:1 \[tool-count\] found=31/);
+  });
+
+  test('the override is echoed — relocated inputs are never silent', () => {
+    const root = fixtureRepo();
+    const run = runAudit(['--repo', 'Frihet-ERP', '--root', `Frihet-ERP=${root}`]);
+    assert.match(run.stdout, new RegExp(`root override: Frihet-ERP -> ${root}`));
+  });
+
+  test('a malformed or unknown override is refused, not ignored', () => {
+    assert.equal(runAudit(['--root', 'Frihet-ERP']).status, 2);
+    assert.equal(runAudit(['--root', 'Frihet-ERP=']).status, 2);
+    assert.equal(runAudit(['--root', '=/tmp']).status, 2);
+    assert.equal(runAudit(['--root', 'not-a-repo=/tmp']).status, 2);
   });
 });
 

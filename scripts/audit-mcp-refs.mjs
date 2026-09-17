@@ -9,6 +9,12 @@
 //   node scripts/audit-mcp-refs.mjs --json         # machine-readable
 //   node scripts/audit-mcp-refs.mjs --repo <name>  # limit to one repo
 //   node scripts/audit-mcp-refs.mjs --allow-dirty  # bypass worktree-clean guard
+//   node scripts/audit-mcp-refs.mjs --root <repo>=<path>   # relocate a target
+//
+// --root is test/CI infrastructure: it changes WHERE a target repo is read
+// from, nothing else. The worktree-clean guard applies to the overridden path,
+// so it cannot be used to dodge a dirty repo, and every override is printed in
+// the report.
 //
 // Exit codes:
 //   0 = clean (or --fix succeeded)
@@ -248,8 +254,7 @@ const MCP_CONTEXT_RE = /(@frihet\/mcp-server|frihet-mcp|servidor\s+mcp|mcp\s+ser
 // value of this gate, so its matching surface is asserted directly rather than
 // inferred from an end-to-end run against whatever happens to be on disk.
 // Importing this module does not run the audit (see the `isMain` guard below).
-export { TOOL_NOUNS, TOOL_NOUN_RE, TOOL_COUNT_RE, SAFE_PATTERNS, MCP_CONTEXT_RE, HISTORY_FILES };
-export { isGlob, expandGlob, REPOS };
+export { TOOL_NOUNS, TOOL_COUNT_RE, SAFE_PATTERNS, MCP_CONTEXT_RE, isGlob, expandGlob, REPOS };
 
 // === server.json version gate (special case) ===
 // server.json carries the version as BARE JSON values (root `.version` and
@@ -589,6 +594,36 @@ if (REPO_FILTER && !Object.keys(REPOS).includes(REPO_FILTER)) {
   process.exit(2);
 }
 
+// --root <repo>=<path>, repeatable. Points a target repo somewhere other than
+// ~/Documents/<name>: hermetic test fixtures, and CI runners that check out the
+// sister repo into a temp directory.
+//
+// This is NOT an escape hatch. The override replaces the path only; every other
+// control still applies to whatever it points at, including the --fix
+// worktree-clean guard below, which reads the OVERRIDDEN root. Redirecting a
+// repo to dodge a dirty worktree is therefore impossible by construction.
+// Overrides are echoed in the report: an audit whose inputs are silently
+// relocated is an audit that can claim anything.
+const ROOT_OVERRIDES = new Map();
+for (let i = 0; i < ARGS.length; i += 1) {
+  if (ARGS[i] !== '--root') continue;
+  const spec = ARGS[i + 1] ?? '';
+  const eq = spec.indexOf('=');
+  if (eq < 1 || eq === spec.length - 1) {
+    console.error(`--root expects <repo>=<path>, received ${JSON.stringify(spec)}`);
+    process.exit(2);
+  }
+  const name = spec.slice(0, eq);
+  if (!Object.keys(REPOS).includes(name)) {
+    console.error(`--root names an unknown repo: ${name}`);
+    console.error(`Valid: ${Object.keys(REPOS).join(', ')}`);
+    process.exit(2);
+  }
+  const target = resolve(spec.slice(eq + 1));
+  ROOT_OVERRIDES.set(name, target);
+  REPOS[name].root = target;
+}
+
 // Worktree-clean guard for sister repos when --fix is active.
 // Skip self-repo guard (caller likely on dev branch in frihet-mcp itself).
 function isDirty(root) {
@@ -907,7 +942,11 @@ if (JSON_OUT) {
     findings,
   }, null, 2));
 } else {
-  console.log(`SoT: @frihet/mcp-server@${VERSION} · ${TOOL_COUNT} tools (+${metaCount} meta)\n`);
+  console.log(`SoT: @frihet/mcp-server@${VERSION} · ${TOOL_COUNT} tools (+${metaCount} meta)`);
+  for (const [name, path] of ROOT_OVERRIDES) {
+    console.log(`root override: ${name} -> ${path}`);
+  }
+  console.log('');
   const fails = findings.filter((f) => f.severity === 'fail');
   const warns = findings.filter((f) => f.severity === 'warn');
   const fixed = findings.filter((f) => f.severity === 'fixed');
