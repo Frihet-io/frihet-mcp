@@ -20,6 +20,7 @@
   <a href="https://www.npmjs.com/package/@frihet/mcp-server"><img src="https://img.shields.io/npm/dm/@frihet/mcp-server?style=flat&color=18181b&labelColor=09090b&label=downloads" alt="npm downloads"></a>
   <a href="https://smithery.ai/servers/frihet/frihet-mcp"><img src="https://smithery.ai/badge/frihet/frihet-mcp" alt="Smithery installs"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
+  <a href="https://github.com/mcp/io.frihet/erp"><img src="https://img.shields.io/badge/GitHub_MCP_Registry-Listed-18181b?style=flat&labelColor=09090b&logo=github" alt="Listed in GitHub MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
   <img src="https://img.shields.io/badge/catalogue-158_operations-18181b?style=flat&labelColor=09090b" alt="158 canonical catalogue operations">
   <img src="https://img.shields.io/badge/node-%3E%3D20-18181b?style=flat&labelColor=09090b" alt="node >=20">
@@ -40,6 +41,7 @@
 | **Remote endpoint** | Live | `https://mcp.frihet.io/mcp` (zero install, OAuth or API key) |
 | **Smithery** | Live | [smithery.ai/servers/frihet/frihet-mcp](https://smithery.ai/servers/frihet/frihet-mcp) |
 | **MCP Registry** | Live | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/?q=io.frihet) |
+| **GitHub MCP Registry** | Live | [github.com/mcp/io.frihet/erp](https://github.com/mcp/io.frihet/erp) |
 | **Glama** | Live | [glama.ai/mcp/servers/Frihet-io/frihet-mcp](https://glama.ai/mcp/servers/Frihet-io/frihet-mcp) |
 | **mcp.so** | Auto-index (unverified) | [mcp.so](https://mcp.so) — indexes from npm + GitHub |
 | **PulseMCP** | Auto-index (unverified) | [pulsemcp.com](https://pulsemcp.com) — indexes from npm + GitHub |
@@ -117,12 +119,7 @@ This repository is also a Claude Code plugin (`frihet-erp`): installing it wires
 claude --plugin-dir /path/to/frihet-mcp
 ```
 
-Once available in the community marketplace:
-
-```text
-/plugin marketplace add anthropics/claude-plugins-community
-/plugin install frihet-erp@claude-community
-```
+Marketplace availability is pending. Use the local plugin command above or the Claude Code MCP command below to connect today.
 
 Skill invocation: `/frihet-erp:frihet-mcp`. The bundled `.mcp.json` launches `@frihet/mcp-server` via `npx` — set `FRIHET_API_KEY` in your environment (get one at [app.frihet.io](https://app.frihet.io) → Settings → API keys).
 
@@ -873,7 +870,8 @@ npm run build   # must pass before submitting
 - [MCP server docs](https://docs.frihet.io/desarrolladores/mcp-server) -- Setup guides, troubleshooting
 - [npm](https://www.npmjs.com/package/@frihet/mcp-server) -- Package registry
 - [Smithery](https://smithery.ai/servers/frihet/frihet-mcp) -- Smithery marketplace
-- [MCP Registry](https://registry.modelcontextprotocol.io/?q=io.frihet) -- Anthropic official registry
+- [MCP Registry](https://registry.modelcontextprotocol.io/?q=io.frihet) -- Official Model Context Protocol registry
+- [GitHub MCP Registry](https://github.com/mcp/io.frihet/erp) -- Frihet listing on GitHub
 - [Remote endpoint](https://mcp.frihet.io) -- Hosted MCP server (Cloudflare Workers)
 - [OpenAPI spec](https://api.frihet.io/openapi.json) -- Machine-readable API definition
 - [Security policy](./SECURITY.md) -- Private vulnerability reporting guidance
