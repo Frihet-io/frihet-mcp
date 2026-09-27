@@ -89,8 +89,12 @@ app.get("/", (c) => {
     version: MCP_SERVER_VERSION,
     description:
       "AI-native business management — invoices, expenses, clients, products, quotes",
-    docs: "https://docs.frihet.io/desarrolladores/mcp-server",
-    openapi: "https://api.frihet.io/openapi.yaml",
+    // The reviewed host must not direct discovery clients to the full REST
+    // catalogue. Keep its public owner/support evidence on the scoped host.
+    docs: openai ? `${host}/support` : "https://docs.frihet.io/desarrolladores/mcp-server",
+    ...(openai
+      ? { privacy: `${host}/privacy` }
+      : { openapi: "https://api.frihet.io/openapi.yaml" }),
     mcp: `${host}/mcp`,
     status: "https://status.frihet.io",
     auth: {
