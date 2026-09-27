@@ -83,9 +83,15 @@ function validateReviewedAuthorizeQuery(request: Request): string | undefined {
 // The reviewed (ChatGPT-connector) host intercepts "GET /" before the request
 // ever reaches OAuthProvider's default handler — see the static
 // AI-discoverability block in index.ts. This handler is therefore only ever
-// reached on the full host, and always describes the full catalogue.
-app.get("/", (c) =>
-  c.json({
+// reached on the full host. It still refuses explicitly on the reviewed
+// profile rather than relying on that upstream routing alone: if a future
+// change ever forwards a reviewed-host request here in error, it must not
+// fall through to the full catalogue below.
+app.get("/", (c) => {
+  if (resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE) === "openai") {
+    return c.json({ error: "Not found" }, 404);
+  }
+  return c.json({
     name: "Frihet MCP Server",
     version: MCP_SERVER_VERSION,
     description:
@@ -105,8 +111,8 @@ app.get("/", (c) =>
     discoveryNames: GROUPED_META_TOOL_COUNT,
     resources: FULL_REMOTE_RESOURCE_COUNT,
     prompts: FULL_REMOTE_PROMPT_COUNT,
-  }),
-);
+  });
+});
 
 app.get("/health", (c) =>
   c.json({ status: "ok", timestamp: new Date().toISOString() }),

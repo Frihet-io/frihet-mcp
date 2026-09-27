@@ -105,12 +105,34 @@ test("network failure remains inconclusive rather than a missing-page claim", as
   assert.equal(JSON.stringify(result).includes("secret"), false);
 });
 
-test("a transient upstream health outage is inconclusive, not a release-metadata mismatch", async () => {
+test("a network error on discovery leaves root/discovery parity inconclusive, not a false mismatch", async () => {
   const values = fixtures();
-  values.health = () => Response.json({ status: "degraded", checks: { api: { status: "unreachable" } } }, { status: 503 });
+  values.discovery = () => { throw new Error("offline"); };
+  const result = await inspectPublicSurface({ fetchImpl: mocked(values) });
+  assert.equal(result.checks.find(c => c.id === "rootMatchesDiscovery").status, "unknown");
+  assert.equal(result.publicSurfaceStatus, "inconclusive");
+});
+
+test("a transient upstream outage on the correct release is inconclusive, not a mismatch", async () => {
+  const values = fixtures();
+  values.health = () => Response.json({
+    status: "degraded", checks: { api: { status: "unreachable" } },
+    version, releaseVersion: version, releaseSource: "wrangler-var", releaseSha: "a".repeat(40),
+  }, { status: 503 });
   const result = await inspectPublicSurface({ fetchImpl: mocked(values) });
   assert.equal(result.checks.find(c => c.id === "healthProvenance").status, "unknown");
   assert.equal(result.publicSurfaceStatus, "inconclusive");
+});
+
+test("a degraded host on the wrong release remains a mismatch — an outage is not cover for a stale deploy", async () => {
+  const values = fixtures();
+  values.health = () => Response.json({
+    status: "degraded", checks: { api: { status: "unreachable" } },
+    version: "0.0.0-wrong", releaseVersion: "0.0.0-wrong", releaseSource: "wrangler-var", releaseSha: "a".repeat(40),
+  }, { status: 503 });
+  const result = await inspectPublicSurface({ fetchImpl: mocked(values) });
+  assert.equal(result.checks.find(c => c.id === "healthProvenance").status, "fail");
+  assert.equal(result.publicSurfaceStatus, "fail");
 });
 
 test("a bad release version while healthy is still a mismatch, not inconclusive", async () => {

@@ -24,6 +24,14 @@ function findAll(node, predicate, out = []) {
 
 const indexSource = parse("index.ts", readFileSync(new URL("../index.ts", import.meta.url), "utf8"));
 
+/** Every enclosing node, innermost first. Requires the source to have been
+ * parsed with setParentNodes = true (see `parse` above). */
+function ancestorsOf(node) {
+  const out = [];
+  for (let current = node.parent; current; current = current.parent) out.push(current);
+  return out;
+}
+
 test("the reviewed host's GET / is intercepted before OAuthProvider and serves the same descriptor as /.well-known/mcp", () => {
   const rootIntercepts = findAll(indexSource, (node) =>
     ts.isIfStatement(node) && node.expression.getText(indexSource) === 'pathname === "/" && openai');
@@ -33,6 +41,16 @@ test("the reviewed host's GET / is intercepted before OAuthProvider and serves t
     rootIntercept.thenStatement.getText(indexSource),
     /new Response\(WELL_KNOWN_MCP_OPENAI/,
     "the reviewed root must serve the same constant as /.well-known/mcp and /mcp.json, not a hand-copied shape",
+  );
+
+  // The condition text alone survives a mutant that changes the enclosing
+  // "request.method === \"GET\"" guard to another method — the pathname/openai
+  // check would still be found, but a real GET request would never reach it.
+  const methodGuard = ancestorsOf(rootIntercept).find((node) =>
+    ts.isIfStatement(node) && node.expression.getText(indexSource) === 'request.method === "GET"');
+  assert.ok(
+    methodGuard,
+    'the reviewed-root interception must be nested inside a request.method === "GET" guard, or GET requests never reach it',
   );
 
   const providerDispatches = findAll(indexSource, (node) =>
@@ -68,10 +86,12 @@ test("OPENAI_MCP_DESCRIPTOR has the shape the public preflight checker actually 
 });
 
 // --------------------------------------------------------------------------
-// The full host's GET / (auth-handler.ts, reached via OAuthProvider's default
-// handler only when the request was never intercepted above, i.e. only on the
-// full host) has no reviewed-host branch left — the reviewed host never
-// reaches this file.
+// auth-handler.ts's GET / is reached via OAuthProvider's default handler only
+// when a request was never intercepted above. In production that means only
+// the full host, but this handler does not merely assume that — it refuses
+// explicitly on the reviewed profile, so a routing mistake upstream (e.g. a
+// future shortcut that forwards a reviewed-host request here) fails closed
+// instead of leaking the full catalogue.
 // --------------------------------------------------------------------------
 const authHandlerSource = parse("auth-handler.ts", readFileSync(new URL("../auth-handler.ts", import.meta.url), "utf8"));
 const rootHandlers = [];
@@ -83,19 +103,20 @@ for (const statement of authHandlerSource.statements) {
     rootHandlers.push(call.arguments[1].getText(authHandlerSource));
   }
 }
+assert.equal(rootHandlers.length, 1, "exactly one production GET / handler must be tested");
+const [rootHandlerSource] = rootHandlers;
 
-test("the full host's GET / handler in auth-handler.ts has exactly one definition and no reviewed-host branch", () => {
-  assert.equal(rootHandlers.length, 1, "exactly one production GET / handler must be tested");
-  assert.doesNotMatch(
-    rootHandlers[0],
-    /openai/i,
-    "auth-handler.ts's GET / only ever runs on the full host (see index.ts) and must not branch on the reviewed profile",
-  );
-});
-
-test("the full host's GET / advertises the full catalogue, never reviewed-host metadata", () => {
-  const body = vm.runInNewContext(`(${rootHandlers[0]})(c)`, {
-    c: { json: (value) => value },
+function evalRootHandler(openaiMode) {
+  return vm.runInNewContext(`(${rootHandlerSource})(c)`, {
+    c: {
+      env: { FRIHET_OPENAI_MODE: openaiMode },
+      json: (value, status = 200) => ({ body: value, status }),
+    },
+    resolveFrihetAccessProfile: (value) => {
+      if (value === "true") return "openai";
+      if (value === "false") return "full";
+      throw new Error("FRIHET_OPENAI_MODE must be explicitly set to true or false");
+    },
     MCP_SERVER_VERSION: "test-version",
     FULL_MCP_ORIGIN: "https://mcp.frihet.io",
     FULL_REMOTE_TOOL_COUNT: 166,
@@ -105,8 +126,13 @@ test("the full host's GET / advertises the full catalogue, never reviewed-host m
     FULL_REMOTE_RESOURCE_COUNT: 7,
     FULL_REMOTE_PROMPT_COUNT: 10,
   }, { timeout: 1000 });
+}
+
+test("the full host's GET / advertises the full catalogue, never reviewed-host metadata", () => {
+  const { body, status } = evalRootHandler("false");
   const root = JSON.parse(JSON.stringify(body));
 
+  assert.equal(status, 200);
   assert.equal(root.mcp, "https://mcp.frihet.io/mcp");
   assert.equal(root.docs, "https://docs.frihet.io/desarrolladores/mcp-server");
   assert.equal(root.openapi, "https://api.frihet.io/openapi.yaml");
@@ -118,4 +144,13 @@ test("the full host's GET / advertises the full catalogue, never reviewed-host m
   assert.equal(root.prompts, 10);
   assert.equal(Object.hasOwn(root, "privacy"), false, "the full host must not claim reviewed-host privacy metadata");
   assert.equal(Object.hasOwn(root, "reviewedBusinessOperations"), false, "the full host must not claim reviewed-host tool counts");
+});
+
+test("the reviewed profile is refused, not answered with the full descriptor", () => {
+  const { body, status } = evalRootHandler("true");
+  assert.equal(status, 404, "a reviewed-host request that reaches this handler must fail closed");
+  const text = JSON.stringify(body ?? {});
+  assert.equal(text.includes("mcp.frihet.io"), false, "must never leak the full host's endpoint");
+  assert.equal(text.includes("openapi"), false, "must never leak the full REST/OpenAPI surface");
+  assert.equal(Object.hasOwn(body ?? {}, "tools"), false);
 });

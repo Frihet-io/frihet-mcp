@@ -94,13 +94,14 @@ export async function inspectPublicSurface({ fetchImpl = globalThis.fetch, timeo
     checks.push({ id, status });
   };
   const count = contract.tools.length;
-  check("healthProvenance", "health", r => r.status === 200 && r.data?.status === "ok"
-    && r.data?.version === pkg.version && r.data?.releaseVersion === pkg.version
-    && r.data?.releaseSource === "wrangler-var" && /^[a-f0-9]{40}$/u.test(r.data?.releaseSha ?? ""),
-    // A transient upstream outage (503 "degraded") says nothing about whether
-    // the reviewed host's own release metadata is right — that is inconclusive,
-    // not a mismatch.
-    r => r.status === 503 && r.data?.status === "degraded");
+  const releaseProvenanceMatches = r => r.data?.version === pkg.version && r.data?.releaseVersion === pkg.version
+    && r.data?.releaseSource === "wrangler-var" && /^[a-f0-9]{40}$/u.test(r.data?.releaseSha ?? "");
+  check("healthProvenance", "health", r => r.status === 200 && r.data?.status === "ok" && releaseProvenanceMatches(r),
+    // A transient upstream outage (503 "degraded") is inconclusive only when
+    // the reviewed host's own release metadata still matches what is
+    // expected — a degraded response carrying the WRONG provenance is a
+    // deploy mismatch a stale release should not get to hide behind.
+    r => r.status === 503 && r.data?.status === "degraded" && releaseProvenanceMatches(r));
   // The Worker serves the identical reviewed descriptor at "/", "/.well-known/mcp", and "/mcp.json" —
   // one shared predicate keeps the three checks from drifting apart from what is actually served.
   for (const id of ["root", "discovery", "manifest"]) {
@@ -115,7 +116,12 @@ export async function inspectPublicSurface({ fetchImpl = globalThis.fetch, timeo
       && isDeepStrictEqual(r.data?.auth?.scopes, contract.oauth.authorizationServer.scopes_supported)
       && !Object.hasOwn(r.data, "openapi"));
   }
-  check("rootMatchesDiscovery", "root", r => isDeepStrictEqual(r.data, responses.discovery?.data));
+  check("rootMatchesDiscovery", "root", r => isDeepStrictEqual(r.data, responses.discovery?.data),
+    // The root probe itself may be fine while the discovery probe it is being
+    // compared against is not — a network error on discovery must not read
+    // back as a root/discovery mismatch. "A DNS failure is not a 404" applies
+    // here too.
+    () => Boolean(responses.discovery?.unavailable));
   check("authorizationMetadata", "authorization", r => r.status === 200 && isDeepStrictEqual(r.data, contract.oauth.authorizationServer));
   check("resourceMetadata", "resource", r => r.status === 200 && isDeepStrictEqual(r.data, contract.oauth.protectedResource));
   for (const id of ["privacy", "support"]) {

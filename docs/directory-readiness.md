@@ -23,18 +23,17 @@ followed and raw bodies are not recorded.
 Exit 0 means the **public surface** matches; exit 1 means an observed mismatch;
 exit 2 means it could not be established. A DNS failure is not a 404. The JSON
 report always sets `submissionReady` to false because this command cannot prove
-authenticated tool behavior, reviewer access, Cloudflare provenance, ownership
-selection in the portal, or provider approval. Runtime and reviewed-profile
-versions remain separate values.
+authenticated tool behavior, infrastructure provenance, or provider approval.
+Runtime and reviewed-profile versions remain separate values.
 
 Run its offline regressions with `npm run test:openai-public-surface`. They are
-also part of CI. The Worker suite verifies that the reviewed host's root
-response is served by the same pre-routing interception as its discovery
-metadata, and that the full host's separate root handler carries no
-reviewed-host branch.
+also part of CI. The Worker suite statically asserts that the reviewed host's
+root is served by the same pre-routing interception as its discovery metadata
+(index.ts cannot be imported under the node test runner), and separately
+exercises the full host's root handler, including its fail-closed refusal when
+the reviewed profile is set.
 
 ## References
 
 - https://developers.openai.com/plugins/deploy/app-review
 - https://developers.openai.com/plugins/build/auth
-- https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy
