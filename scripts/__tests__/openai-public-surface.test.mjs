@@ -21,8 +21,8 @@ function fixtures() {
     },
   };
   const values = {
-    root: { tools: count, reviewedBusinessOperations: count, discoveryNames: 0, resources: 0, prompts: 0,
-      mcp: `${REVIEW_ORIGIN}/mcp`, auth: scoped.auth, docs: scoped.docs, privacy: scoped.privacy },
+    // "/" serves the exact same reviewed descriptor as "/.well-known/mcp" and "/mcp.json".
+    root: scoped,
     health: { status: "ok", version, releaseVersion: version, releaseSource: "wrangler-var", releaseSha: "a".repeat(40) },
     discovery: scoped, manifest: structuredClone(scoped),
     authorization: descriptor.oauth.authorizationServer, resource: descriptor.oauth.protectedResource,
@@ -60,7 +60,7 @@ test("matching public metadata passes only the public check, never certifies rea
   assert.equal(calls, PUBLIC_PROBES.length);
   assert.equal(result.publicSurfaceStatus, "pass");
   assert.equal(result.submissionReady, false);
-  assert.equal(result.unverified.length, 5);
+  assert.equal(result.unverified.length, 1);
 });
 
 for (const [name, probe, data] of [
@@ -103,6 +103,22 @@ test("network failure remains inconclusive rather than a missing-page claim", as
   assert.equal(result.probes.find(p => p.id === "privacy").httpStatus, null);
   assert.equal(result.checks.find(c => c.id === "privacyOwnership").status, "unknown");
   assert.equal(JSON.stringify(result).includes("secret"), false);
+});
+
+test("a transient upstream health outage is inconclusive, not a release-metadata mismatch", async () => {
+  const values = fixtures();
+  values.health = () => Response.json({ status: "degraded", checks: { api: { status: "unreachable" } } }, { status: 503 });
+  const result = await inspectPublicSurface({ fetchImpl: mocked(values) });
+  assert.equal(result.checks.find(c => c.id === "healthProvenance").status, "unknown");
+  assert.equal(result.publicSurfaceStatus, "inconclusive");
+});
+
+test("a bad release version while healthy is still a mismatch, not inconclusive", async () => {
+  const values = fixtures();
+  values.health = () => Response.json({ status: "ok", version: "0.0.0-wrong" });
+  const result = await inspectPublicSurface({ fetchImpl: mocked(values) });
+  assert.equal(result.checks.find(c => c.id === "healthProvenance").status, "fail");
+  assert.equal(result.publicSurfaceStatus, "fail");
 });
 
 test("HTML login page, malformed JSON, and empty success are not valid metadata", async () => {

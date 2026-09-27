@@ -32,7 +32,6 @@ import {
   FISCAL_ALIAS_TOOL_COUNT,
 } from "./server-meta.js";
 import { GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
-import { OPENAI_ALLOWED_TOOL_COUNT } from "../../../src/openai-profile.js";
 import {
   FRIHET_CONNECTOR_SCOPE,
   FULL_MCP_ORIGIN,
@@ -81,41 +80,33 @@ function validateReviewedAuthorizeQuery(request: Request): string | undefined {
 // Public endpoints
 // ---------------------------------------------------------------------------
 
-app.get("/", (c) => {
-  const openai = resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE) === "openai";
-  const host = openai ? "https://openai-mcp.frihet.io" : "https://mcp.frihet.io";
-  return c.json({
+// The reviewed (ChatGPT-connector) host intercepts "GET /" before the request
+// ever reaches OAuthProvider's default handler — see the static
+// AI-discoverability block in index.ts. This handler is therefore only ever
+// reached on the full host, and always describes the full catalogue.
+app.get("/", (c) =>
+  c.json({
     name: "Frihet MCP Server",
     version: MCP_SERVER_VERSION,
     description:
       "AI-native business management — invoices, expenses, clients, products, quotes",
-    // The reviewed host must not direct discovery clients to the full REST
-    // catalogue. Keep its public owner/support evidence on the scoped host.
-    docs: openai ? `${host}/support` : "https://docs.frihet.io/desarrolladores/mcp-server",
-    ...(openai
-      ? { privacy: `${host}/privacy` }
-      : { openapi: "https://api.frihet.io/openapi.yaml" }),
-    mcp: `${host}/mcp`,
+    docs: "https://docs.frihet.io/desarrolladores/mcp-server",
+    openapi: "https://api.frihet.io/openapi.yaml",
+    mcp: `${FULL_MCP_ORIGIN}/mcp`,
     status: "https://status.frihet.io",
     auth: {
       type: "oauth2",
-      authorization_server: `${host}/.well-known/oauth-authorization-server`,
+      authorization_server: `${FULL_MCP_ORIGIN}/.well-known/oauth-authorization-server`,
     },
-    tools: openai
-      ? OPENAI_ALLOWED_TOOL_COUNT
-      : FULL_REMOTE_TOOL_COUNT,
-    ...(openai
-      ? { reviewedBusinessOperations: OPENAI_ALLOWED_TOOL_COUNT }
-      : {
-          catalogueOperations: FULL_TOOL_COUNT,
-          aliasNames: FISCAL_ALIAS_TOOL_COUNT,
-          capabilityMetadata: "io.frihet/capability",
-        }),
-    discoveryNames: openai ? 0 : GROUPED_META_TOOL_COUNT,
-    resources: openai ? 0 : FULL_REMOTE_RESOURCE_COUNT,
-    prompts: openai ? 0 : FULL_REMOTE_PROMPT_COUNT,
-  });
-});
+    tools: FULL_REMOTE_TOOL_COUNT,
+    catalogueOperations: FULL_TOOL_COUNT,
+    aliasNames: FISCAL_ALIAS_TOOL_COUNT,
+    capabilityMetadata: "io.frihet/capability",
+    discoveryNames: GROUPED_META_TOOL_COUNT,
+    resources: FULL_REMOTE_RESOURCE_COUNT,
+    prompts: FULL_REMOTE_PROMPT_COUNT,
+  }),
+);
 
 app.get("/health", (c) =>
   c.json({ status: "ok", timestamp: new Date().toISOString() }),

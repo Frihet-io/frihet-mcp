@@ -255,7 +255,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/openai-review-oauth.ts": "388035b1b9952b5c1f0ecc82dcac962a93320b1076dc23d3e4a155dbf9bf263f",
   "workers/api-proxy/worker.js": "640d3aa873f1a20b705f9e73cdafe368bcb0bbe43f187afe5c9583336373accb",
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
-  "workers/remote-mcp/src/auth-handler.ts": "374c912c5ff0eafb6ddd928d64f6a832e29b9f6afb2654192066036aa4f1875b",
+  "workers/remote-mcp/src/auth-handler.ts": "4b717e33b434df5a60749e7dd6ffac0eefe20776caae964f33cc868c157004bc", // #185: GET / no longer branches on the reviewed profile — the reviewed host is fully intercepted earlier in index.ts, so this handler only ever serves the full descriptor (same sink, no new destination)
   "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
   "workers/remote-mcp/src/index.ts": "da01005ac9ff156bbfa9c0421874e2065108ef2e9f24e8a346f16c4e0749b2e5", // #171: import readReleaseMeta + /health emits releaseSha/releaseVersion/releaseSource (no new outbound sinks)
   "workers/remote-mcp/src/login-page.ts": "1c4d6dcacbbcdc47db152242a4ca4adfb83b4f0229903e0550c63b973ab00ff5",
@@ -281,8 +281,8 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  "scripts/check-openai-public-surface.mjs": "c826bf9efe1f4198a4473500083199131281942b6668f3cc8cec450b2fe3c4fa",
-  "scripts/__tests__/openai-public-surface.test.mjs": "83504fbe6067132cc94f46f5e0f5a1898db6af76af81b9172a819526ee418cf8",
+  "scripts/check-openai-public-surface.mjs": "6f7b905e81c17c647f67c9dd75b058b803fde6e82f7d866ebf9cf9ae910a518f", // #185: root/discovery/manifest share one predicate matching what the Worker actually serves; unverified list generalized; a degraded-but-reachable health check is inconclusive, not a mismatch (no new sink)
+  "scripts/__tests__/openai-public-surface.test.mjs": "444ba53204a1d4a05261988a16bcc02a9396a572aba2b6e5181a62922d1bc318", // #185: fixtures updated to the real root shape; added the degraded-health regression case (no new sink)
   ".github/workflows/ci.yml": "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
