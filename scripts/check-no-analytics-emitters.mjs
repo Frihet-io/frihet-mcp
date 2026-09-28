@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "cb42daccaa261a7d4290003d4a422d812521c5e85ca6a97a33617b2a5339ff80", // directory-readiness: adds an explicit credential-free public probe and its offline tests; no lifecycle change
+  "package.json": "15cd1788bef4d6435e4268686789314e9d028c62717142d6fa068a9530e1ca62", // directory-readiness: adds an explicit credential-free public probe and its offline tests; no lifecycle change
   "workers/remote-mcp/package.json": "c7025291c46b023fac162d1a0e0a010d1173bf7bc5d218c6faaab515aba97c6b",
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -252,13 +252,13 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "d2358dd69504f7cac054ac980852522d94d00397c168c7fa573848fe7a8c877c", // fix/fiscal-period-wiring: fiscal modelo query param mapping + requestId read from the existing error response (same single fetch sink, no new destination); review F5 = doc-comment-only rewording of FrihetApiError.requestId
   "src/observability.ts": "d0bd50c57843f59d0ab61b18b59c1e2ccfcc9dcb83ab76a00a34882d6d1d7cd6",
-  "src/openai-review-oauth.ts": "388035b1b9952b5c1f0ecc82dcac962a93320b1076dc23d3e4a155dbf9bf263f",
+  "src/openai-review-oauth.ts": "25c502a72d3d1734d7bdee03caff6d8ce3edb89016882c1d71cb2a93bf871fe2",
   "workers/api-proxy/worker.js": "640d3aa873f1a20b705f9e73cdafe368bcb0bbe43f187afe5c9583336373accb",
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
-  "workers/remote-mcp/src/auth-handler.ts": "351a4cb280238f244990821ff1a1ec9986787cd7d7ae4d7c17c1ac74fa08c83e", // #185: GET / no longer branches on the reviewed profile and now fails closed (404) on it instead of assuming it is unreachable (same sink, no new destination)
+  "workers/remote-mcp/src/auth-handler.ts": "c012d2ea005c856a891e834485db3aad3a4b4722fbf8835422b28f5e32d1ecca", // #185: GET / no longer branches on the reviewed profile and now fails closed (404) on it instead of assuming it is unreachable (same sink, no new destination)
   "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
-  "workers/remote-mcp/src/index.ts": "da01005ac9ff156bbfa9c0421874e2065108ef2e9f24e8a346f16c4e0749b2e5", // #171: import readReleaseMeta + /health emits releaseSha/releaseVersion/releaseSource (no new outbound sinks)
-  "workers/remote-mcp/src/login-page.ts": "1c4d6dcacbbcdc47db152242a4ca4adfb83b4f0229903e0550c63b973ab00ff5",
+  "workers/remote-mcp/src/index.ts": "f7bb2fcd627d38e08f02495aa492212eae29f1628c1d1449a30f487687e35da8", // #171: import readReleaseMeta + /health emits releaseSha/releaseVersion/releaseSource (no new outbound sinks)
+  "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf",
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "2e129bb4b62a57eb6082f39f2004fae1a3bc26609bb43343928fb47bf73327d3",
   "workers/remote-mcp/src/oauth-state-store.ts": "9785c628b2a01d80c06267a0c39beb93f9d9b7a11b26369d48aa2cc705bf7906",
@@ -281,8 +281,8 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  "scripts/check-openai-public-surface.mjs": "8c3bf20da35a98092d007eb49a6427e3d3363a1f7ffe8567e4aea62057ac80e9", // #185: root/discovery/manifest share one predicate; a degraded health or root/discovery-parity check is inconclusive only when the reachable side's own data still matches, never a blanket pass-through (no new sink)
-  "scripts/__tests__/openai-public-surface.test.mjs": "b2cb04f23f18b4db26d10d7b8d3b2ad0eec72765050e000f3d7b636b226d59d9", // #185: fixtures updated to the real root shape; added degraded/wrong-provenance and discovery-unavailable regression cases (no new sink)
+  "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // #185: root/discovery/manifest share one predicate; a degraded health or root/discovery-parity check is inconclusive only when the reachable side's own data still matches, never a blanket pass-through (no new sink)
+  "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // #185: fixtures updated to the real root shape; added degraded/wrong-provenance and discovery-unavailable regression cases (no new sink)
   ".github/workflows/ci.yml": "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
@@ -312,7 +312,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/postinstall.js": "02947d11d324048f69bc92d253d7c41f947aa338d1d6315b1579492689d462e3",
   "scripts/published-artifact-drift.mjs": "29435fd9b25625db5f6835e0b11b0528daf7345eef1421c6c826879be00b4f95",
   "scripts/sync-openapi.mjs": "3d72c61a014b53887906fade05a13631e06d47977891b4b4fdb9a337322a4f32",
-  "scripts/test-openai-full-compose.mjs": "be4cd6488de2320f7bfaebdf47418e4f731661fd4b4fe436cafd5191f4dc7d3b",
+  "scripts/test-openai-full-compose.mjs": "24b6c922553fedcb6fe9836b768d88b1e10a93d6a6877ebbf2a67551be6b2b79",
   "scripts/validate-openai-submission-schema.mjs": "a3fa908a5ea83d6468f2d77345e464f1832845f45677df2627d2eebb423c548a",
   "tsconfig.json": "fee86899bb77179611ed16b73572159d567e76a4717522e567900dbb17ac0804",
   "workers/remote-mcp/scripts/capture-openai-review.mjs": "155921985f9df2f9ed029691b7baf021c8737a7d9cb485dc366ab7ff9c890be2",
@@ -325,7 +325,7 @@ export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
-  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "799b5e628ee0baacd1f50d61f2e584fce3931c9f0e87cbb7b6ab77be63b47088",
+  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "ecaa1cd4e744ac799574fa99014574c5eb743e21d3cf1fb257568d1e8325f440",
   "src/__tests__/fixtures/public-capability-contract.json": "8248f321a13b5a729e3dc2ec205328f163bfef27b5715542cab1557d37c8d05d",
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });

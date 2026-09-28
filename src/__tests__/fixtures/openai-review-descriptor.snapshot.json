@@ -38,15 +38,28 @@
         "header"
       ],
       "resource": "https://openai-mcp.frihet.io",
-      "resource_name": "Frihet ChatGPT connector",
+      "resource_name": "Frihet reviewed connector",
+      "scopes_supported": [
+        "frihet:workspace.manage"
+      ]
+    },
+    "protectedResourceMcp": {
+      "authorization_servers": [
+        "https://openai-mcp.frihet.io"
+      ],
+      "bearer_methods_supported": [
+        "header"
+      ],
+      "resource": "https://openai-mcp.frihet.io/mcp",
+      "resource_name": "Frihet reviewed connector",
       "scopes_supported": [
         "frihet:workspace.manage"
       ]
     },
     "providerPackageVersion": "0.3.0",
     "wwwAuthenticate": {
-      "missingTokenHeader": "Bearer realm=\"OAuth\", resource_metadata=\"https://openai-mcp.frihet.io/.well-known/oauth-protected-resource\", scope=\"frihet:workspace.manage\", error=\"invalid_token\", error_description=\"Missing or invalid access token\"",
-      "resourceMetadataUrl": "https://openai-mcp.frihet.io/.well-known/oauth-protected-resource"
+      "missingTokenHeader": "Bearer realm=\"OAuth\", resource_metadata=\"https://openai-mcp.frihet.io/.well-known/oauth-protected-resource/mcp\", scope=\"frihet:workspace.manage\", error=\"invalid_token\", error_description=\"Missing or invalid access token\"",
+      "resourceMetadataUrl": "https://openai-mcp.frihet.io/.well-known/oauth-protected-resource/mcp"
     }
   },
   "prompts": [],

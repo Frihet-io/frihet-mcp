@@ -327,6 +327,28 @@ test("OpenAI discovery points to dedicated scoped support and privacy pages", ()
   );
 });
 
+test("reviewed support, privacy and crawler copy names every client and its data recipient", () => {
+  // The same reviewed host serves the ChatGPT/Codex plugin and the Claude
+  // connector, so its legal pages must not name only one assistant provider.
+  const support = indexSrc.match(/const OPENAI_SUPPORT_HTML = `[\s\S]*?`;/)?.[0] ?? "";
+  const recipients = indexSrc.match(/const OPENAI_PRIVACY_RECIPIENTS_HTML = `[\s\S]*?`;/)?.[0] ?? "";
+  const privacy = indexSrc.match(/const OPENAI_PRIVACY_HTML = `[\s\S]*?`;/)?.[0] ?? "";
+  const llms = indexSrc.match(/const LLMS_TXT_OPENAI = `[\s\S]*?`;/)?.[0] ?? "";
+  for (const [label, block] of [["support", support], ["recipients", recipients], ["privacy", privacy], ["llms", llms]]) {
+    assert.ok(block, `${label} block must exist`);
+    assert.doesNotMatch(block, /ChatGPT connector|expose to ChatGPT|OpenAI\/ChatGPT connector/, label);
+  }
+  assert.match(support, /ChatGPT and Codex/);
+  assert.match(support, /Claude/);
+  assert.match(support, /https:\/\/openai-mcp\.frihet\.io\/mcp/);
+  assert.match(recipients, /OpenAI for ChatGPT and Codex, or Anthropic for Claude/);
+  assert.doesNotMatch(recipients, /OpenAI, which receives/);
+  assert.match(privacy, /\(OpenAI for ChatGPT and Codex, Anthropic for Claude\)/);
+  assert.match(privacy, /OpenAI and Anthropic each process/);
+  assert.doesNotMatch(privacy, /sent to OpenAI|sends OpenAI/);
+  assert.match(llms, /used by ChatGPT, Codex, and Claude/);
+});
+
 test("OpenAI public surfaces bind the Frihet trade name to the exact verified owner", () => {
   const openAIBlock = indexSrc.slice(
     indexSrc.indexOf('const OPENAI_HOST = "https://openai-mcp.frihet.io"'),

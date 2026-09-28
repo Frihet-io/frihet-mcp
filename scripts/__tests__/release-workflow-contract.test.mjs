@@ -1476,6 +1476,7 @@ test("OpenAI release workflow — mutation and production readback are exact and
     "/.well-known/mcp.json",
     "/.well-known/oauth-authorization-server",
     "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/mcp",
     "/support",
     "/privacy",
     "/openapi.json",
@@ -1498,6 +1499,11 @@ test("OpenAI release workflow — mutation and production readback are exact and
   assert.match(verify.body, /resources_count === 0/);
   assert.match(verify.body, /prompts_count === 0/);
   assert.match(verify.body, /frihet:workspace\.manage/);
+  assert.match(
+    verify.body,
+    /equal\(protectedResourceMcp, snapshot\.oauth\.protectedResourceMcp\)/,
+    "production readback must prove the path-inserted metadata the 401 challenge points to",
+  );
   assert.match(verify.body, /for \(const method of \["GET", "HEAD"\]\)/);
   assert.match(verify.body, /challenge\.status === 401/);
   assert.match(verify.body, /node --input-type=module <<'NODE'/);
