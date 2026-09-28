@@ -51,15 +51,21 @@ the reviewer workspace, and finish the manual fields in
 
 ## Claude Directory
 
-The Claude listing uses the reviewed connector at
+Nothing in this section is deployed yet. The live reviewed host serves an
+older release, so a Claude connection depends on the release dependencies
+above.
+
+The Claude listing is meant to use the reviewed connector at
 `https://openai-mcp.frihet.io/mcp`, not the full hosted catalogue; see
 [Anthropic SUBMISSION.md](../marketplace/anthropic/SUBMISSION.md) for the
-policy reasoning. The reviewed host's support and privacy pages name both
-assistant providers (OpenAI for ChatGPT and Codex, Anthropic for Claude) as
-recipients of tool inputs and results. Its 401 challenge points to
-`/.well-known/oauth-protected-resource/mcp`, whose `resource` equals the
-connector URL, as Claude requires; the root document keeps the origin and
-both values are accepted by the authorization boundary.
+policy reasoning. In the source on `main`, the reviewed host's support and
+privacy pages name the assistant providers (for example OpenAI for ChatGPT and
+Codex, Anthropic for Claude) as recipients of tool inputs and results. Its 401
+challenge points to `/.well-known/oauth-protected-resource/mcp`, whose
+`resource` equals the connector URL, as Claude requires. The root document
+keeps the origin. The authorization boundary and the `/token` rotation guard
+accept both values for this host only (see
+`workers/remote-mcp/src/__tests__/reviewed-oauth-e2e.test.ts`).
 
 Before submitting, connect Claude to the deployed endpoint as a custom
 connector with the reviewer workspace, confirm OAuth, capture the tool list,

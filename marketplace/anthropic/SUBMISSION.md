@@ -1,5 +1,16 @@
 # Anthropic connector surfaces
 
+> **Deployment status: not deployed.** Everything below describes the source on
+> `main`. As of 28 September 2026 the live reviewed host still serves an older
+> release (1.16.5) without the support/privacy pages, the path-inserted OAuth
+> metadata or the reviewed tool set described here. A Claude connection to
+> this endpoint only works after the release dependencies in
+> [hosted directory preparation](../../docs/directory-readiness.md#release-dependencies)
+> are completed: the ERP OAuth provisioning deployment, the Worker topology
+> bootstrap and a verified release. Do not submit the listing before an
+> authenticated connection from Claude has been tested against the deployed
+> endpoint.
+
 Frihet ERP uses the public MCP identity `io.frihet/erp`. Two hosted endpoints
 exist, and only one of them is intended for the Claude connectors directory.
 
@@ -32,20 +43,24 @@ API client, and that every tool carries `title`, `readOnlyHint` and
 Obtain the current tools from the authenticated deployed endpoint before
 submitting; repository counts alone do not establish what is live.
 
-## OAuth
+## OAuth (as implemented on `main`; not yet deployed)
 
-Claude discovers authorization through the `401` challenge on `/mcp`, whose
-`resource_metadata` points to
+In the source on `main`, the `401` challenge on `/mcp` points its
+`resource_metadata` to
 `https://openai-mcp.frihet.io/.well-known/oauth-protected-resource/mcp`. That
 document names `resource` as the exact connector URL
 `https://openai-mcp.frihet.io/mcp`, as
 [Claude's connector authentication guide](https://claude.com/docs/connectors/building/authentication)
-requires. The authorization server supports Dynamic Client Registration,
-S256 PKCE and the single scope `frihet:workspace.manage`. The root metadata
-document keeps the origin as `resource`, and the authorization boundary
-accepts both values for this host only.
+requires. The authorization server offers Dynamic Client Registration, S256
+PKCE and the single scope `frihet:workspace.manage`. The root metadata
+document keeps the origin as `resource`. The authorization boundary and the
+`/token` rotation guard accept either value for this host only, and the
+authorize → token → refresh flow for both values is covered by
+`workers/remote-mcp/src/__tests__/reviewed-oauth-e2e.test.ts`. That test uses
+the locked provider with in-memory storage; it is not a test against the
+deployed service.
 
-## Links for the listing
+## Links for the listing (valid only after deployment)
 
 - Support: `https://openai-mcp.frihet.io/support`
 - Privacy notice for the reviewed connector: `https://openai-mcp.frihet.io/privacy`
