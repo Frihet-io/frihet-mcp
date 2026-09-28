@@ -7,7 +7,7 @@
 > this endpoint only works after the release dependencies in
 > [hosted directory preparation](../../docs/directory-readiness.md#release-dependencies)
 > are completed: the ERP OAuth provisioning deployment, the Worker topology
-> bootstrap and a verified release. Do not submit the listing before an
+> bootstrap and a verified release. The listing is ready only after an
 > authenticated connection from Claude has been tested against the deployed
 > endpoint.
 
