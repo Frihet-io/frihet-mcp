@@ -1304,8 +1304,10 @@ jobs:
 
           const { body: authorizationServer } = await json("/.well-known/oauth-authorization-server");
           const { body: protectedResource } = await json("/.well-known/oauth-protected-resource");
+          const { body: protectedResourceMcp } = await json("/.well-known/oauth-protected-resource/mcp");
           assert(equal(authorizationServer, snapshot.oauth.authorizationServer), "authorization-server drift");
           assert(equal(protectedResource, snapshot.oauth.protectedResource), "protected-resource drift");
+          assert(equal(protectedResourceMcp, snapshot.oauth.protectedResourceMcp), "path-inserted protected-resource drift");
 
           const legal = {};
           for (const path of ["/support", "/privacy"]) {
@@ -1366,6 +1368,7 @@ jobs:
               oauth: {
                 issuer: authorizationServer.issuer,
                 resource: protectedResource.resource,
+                mcpResource: protectedResourceMcp.resource,
                 scopes: protectedResource.scopes_supported,
               },
               legal,

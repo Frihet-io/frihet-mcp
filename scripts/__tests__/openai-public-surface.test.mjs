@@ -26,6 +26,7 @@ function fixtures() {
     health: { status: "ok", version, releaseVersion: version, releaseSource: "wrangler-var", releaseSha: "a".repeat(40) },
     discovery: scoped, manifest: structuredClone(scoped),
     authorization: descriptor.oauth.authorizationServer, resource: descriptor.oauth.protectedResource,
+    resourceMcp: descriptor.oauth.protectedResourceMcp,
   };
   return Object.fromEntries(PUBLIC_PROBES.map(([id]) => {
     if (id.startsWith("openapi")) return [id, () => new Response(null, { status: 404 })];
@@ -69,6 +70,7 @@ for (const [name, probe, data] of [
   ["unbound health version", "health", { status: "ok", version: "1.16.5" }],
   ["broad OAuth scopes", "authorization", { ...descriptor.oauth.authorizationServer, scopes_supported: ["read", "write"] }],
   ["foreign OAuth resource", "resource", { ...descriptor.oauth.protectedResource, resource: "https://mcp.frihet.io" }],
+  ["origin-only path metadata", "resourceMcp", { ...descriptor.oauth.protectedResourceMcp, resource: REVIEW_ORIGIN }],
 ]) test(`${name} fails public parity`, async () => {
   const values = fixtures();
   values[probe] = () => Response.json(data);

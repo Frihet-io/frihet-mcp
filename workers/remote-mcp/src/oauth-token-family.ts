@@ -10,7 +10,6 @@ import type {
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_TOKEN_RESPONSE_BYTES = 16 * 1024;
 const INTERNAL_ORIGIN = "https://oauth-state.internal";
-const REVIEWED_RESOURCE = "https://openai-mcp.frihet.io";
 const REVIEWED_SCOPE = "frihet:workspace.manage";
 
 type StructuredOAuthCredential = {
@@ -21,6 +20,8 @@ type StructuredOAuthCredential = {
 
 type OAuthGrantRecord = {
   clientId?: unknown;
+  /** RFC 8707 resource the provider stored when the grant was authorized. */
+  resource?: unknown;
   authCodeId?: unknown;
   refreshTokenId?: unknown;
   previousRefreshTokenId?: unknown;
@@ -328,26 +329,41 @@ export class OAuthTokenFamilyExchange {
   private readonly credential: StructuredOAuthCredential;
   private readonly namespace: DurableObjectNamespace;
   private readonly oauthKv: KVNamespace;
+  private readonly acceptedResources: readonly string[];
+  /** Grant resource read in reserve(); settle() requires the response to echo it. */
+  private grantResource?: unknown;
 
   private constructor(
     kind: OAuthTokenKind,
     credential: StructuredOAuthCredential,
     namespace: DurableObjectNamespace,
     oauthKv: KVNamespace,
+    acceptedResources: readonly string[],
   ) {
     this.kind = kind;
     this.credential = credential;
     this.namespace = namespace;
     this.oauthKv = oauthKv;
+    this.acceptedResources = acceptedResources;
     this.familyHashPromise = hashOAuthFamilyCredential(kind, credential.raw);
     this.providerHashPromise = sha256Hex(credential.raw);
   }
 
+  /**
+   * `acceptedResources` is the reviewed host's RFC 8707 resource set
+   * (OPENAI_REVIEW_OAUTH_RESOURCES, passed in by index.ts so this module keeps
+   * no value imports). A missing or empty set throws instead of returning
+   * undefined, because undefined would let the provider answer unguarded.
+   */
   static fromForm(
     form: URLSearchParams,
     namespace: DurableObjectNamespace,
     oauthKv: KVNamespace,
+    acceptedResources: readonly string[],
   ): OAuthTokenFamilyExchange | undefined {
+    if (!Array.isArray(acceptedResources) || acceptedResources.length === 0) {
+      throw new TypeError("OAuth token family requires the reviewed resource set");
+    }
     const grantType = form.get("grant_type");
     const kind = grantType === "authorization_code"
       ? "authorization_code"
@@ -359,7 +375,7 @@ export class OAuthTokenFamilyExchange {
     if (!raw) return undefined;
     const credential = parseStructuredOAuthCredential(raw);
     return credential
-      ? new OAuthTokenFamilyExchange(kind, credential, namespace, oauthKv)
+      ? new OAuthTokenFamilyExchange(kind, credential, namespace, oauthKv, acceptedResources)
       : undefined;
   }
 
@@ -405,6 +421,7 @@ export class OAuthTokenFamilyExchange {
         { type: "json" },
       ),
     ]);
+    this.grantResource = grant?.resource;
     const currentProviderHash = this.kind === "authorization_code"
       ? grant?.authCodeId
       : grant?.refreshTokenId;
@@ -531,7 +548,12 @@ export class OAuthTokenFamilyExchange {
       || !parsed
       || parsed.token_type !== "bearer"
       || parsed.scope !== REVIEWED_SCOPE
-      || parsed.resource !== REVIEWED_RESOURCE
+      // The provider answers with `body.resource || grant.resource`, and it
+      // already refuses a body resource outside the grant. Require the exact
+      // stored grant resource, and that it is one of this host's identifiers.
+      || typeof this.grantResource !== "string"
+      || !this.acceptedResources.includes(this.grantResource)
+      || parsed.resource !== this.grantResource
       || typeof parsed.expires_in !== "number"
       || !Number.isSafeInteger(parsed.expires_in)
       || parsed.expires_in < 1

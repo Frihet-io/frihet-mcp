@@ -21,6 +21,7 @@ export const PUBLIC_PROBES = Object.freeze([
   ["manifest", "/mcp.json", "GET"],
   ["authorization", "/.well-known/oauth-authorization-server", "GET"],
   ["resource", "/.well-known/oauth-protected-resource", "GET"],
+  ["resourceMcp", "/.well-known/oauth-protected-resource/mcp", "GET"],
   ["privacy", "/privacy", "GET"],
   ["support", "/support", "GET"],
   ["openapiJson", "/openapi.json", "GET"],
@@ -124,6 +125,7 @@ export async function inspectPublicSurface({ fetchImpl = globalThis.fetch, timeo
     () => Boolean(responses.discovery?.unavailable));
   check("authorizationMetadata", "authorization", r => r.status === 200 && isDeepStrictEqual(r.data, contract.oauth.authorizationServer));
   check("resourceMetadata", "resource", r => r.status === 200 && isDeepStrictEqual(r.data, contract.oauth.protectedResource));
+  check("mcpResourceMetadata", "resourceMcp", r => r.status === 200 && isDeepStrictEqual(r.data, contract.oauth.protectedResourceMcp));
   for (const id of ["privacy", "support"]) {
     check(`${id}Ownership`, id, r => r.status === 200 && r.contentType.includes("text/html")
       && r.text.includes(OWNER) && r.text.includes("ayuda@frihet.io") && r.text.includes("openai-mcp.frihet.io"));

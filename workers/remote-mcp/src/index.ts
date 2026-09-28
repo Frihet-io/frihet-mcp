@@ -51,13 +51,17 @@ import { authHandler } from "./auth-handler.js";
 import {
   FRIHET_CONNECTOR_SCOPE,
   FULL_MCP_ORIGIN,
+  OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH,
+  OPENAI_REVIEW_OAUTH_RESOURCES,
   OPENAI_REVIEW_ORIGIN,
   OAUTH_PROVIDER_REVIEW_OPTIONS,
   buildOpenAIUnauthorizedChallenge,
+  buildReviewedMcpProtectedResourceMetadata,
   isValidPKCECodeVerifier,
   resolveFrihetAccessProfile,
   validateOAuthBoundary,
 } from "../../../src/openai-review-oauth.js";
+import { reviewedMcpProtectedResourceMetadataResponse } from "./protected-resource-metadata.js";
 import {
   MCP_SERVER_VERSION,
   FULL_REMOTE_PROMPT_COUNT,
@@ -652,35 +656,35 @@ const OPENAI_SCOPED_DESC =
 
 const OPENAI_SUPPORT_HTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Frihet ChatGPT connector support</title></head><body>
-<main><h1>Frihet ChatGPT connector support</h1>
-<p>This page covers the public Frihet plugin for ChatGPT and Codex at <code>openai-mcp.frihet.io</code>.</p>
+<title>Frihet reviewed connector support</title></head><body>
+<main><h1>Frihet reviewed connector support</h1>
+<p>This page covers the reviewed Frihet connector at <code>openai-mcp.frihet.io</code>: the MCP endpoint, <code>https://openai-mcp.frihet.io/mcp</code>, that ChatGPT, Codex and Claude connect to when a user adds the Frihet connector. Every client receives the same reviewed tools.</p>
 <p>Frihet is the trade name owned and operated in Spain by <strong>${OPENAI_VERIFIED_OWNER_NAME}</strong>.</p>
 <p>The reviewed surface contains exactly ${OPENAI_ALLOWED_TOOL_COUNT} business tools with complete model-facing descriptions for invoices, expenses, clients and CRM, products, quotes, vendors, and current business context. It exposes no discovery meta-tools, MCP prompts, or MCP resources.</p>
 <p>It does not provide raw document downloads, webhook administration, or dedicated fields for government identifiers, banking data, precise addresses, signing credentials, or regulated payloads. Payroll or HR, accommodation or POS, regulated filing, export workflows, direct quote-email delivery, the legacy monthly summary, updates to existing quotes, client-parent deletion, expense deletion, product deletion, and vendor deletion are excluded. It also does not publish a parallel REST/OpenAPI contract; the scanned MCP metadata is authoritative.</p>
-<p>Every write requires explicit authorization. Selected client contacts and client notes can be permanently deleted. A quote draft is eligible for permanent deletion only when it has no delivery, response, attachment, or conversion evidence; a protected draft is refused and left unchanged, while deleting a non-draft quote cancels it. Creating an invoice or quote draft reserves a Frihet document number and advances the workspace numbering counter; an invoice draft also counts toward monthly invoice usage and may send invoice-creation analytics to PostHog's EU-hosted analytics service. These drafts remain outside invoice issuance, hashing, emailing, payment, cancellation, crediting, duplication, and external filing. If expense creation needs a new vendor, that vendor is created in a separate backend step and may remain even if the later expense write fails. If a workspace owner previously configured active Frihet webhooks outside this connector, one of the ten disclosed webhook-capable writes may deliver one or more full business events to those endpoints. Webhook deliveries are outside the reviewed MCP response schema and can contain the complete underlying record, including fields this connector does not expose to ChatGPT; disable them in Frihet before using write tools if those deliveries are not wanted. Creating an invoice or expense may also create in-app and Novu notifications for eligible workspace admins or accountants whose preferences allow them; delivery can include the recipient's Frihet identifier and, when stored, name/email, plus the workspace name and relevant document number, client name, expense description, or vendor name. For a referred workspace, its first invoice or expense may update linked referral records and award activation credits to the referring Frihet account. The connector cannot list, create, update, or delete webhook configurations.</p>
-<h2>Contact</h2><p>Email <a href="mailto:ayuda@frihet.io">ayuda@frihet.io</a> for account, connection, or plugin support.</p>
+<p>Every write requires explicit authorization. Selected client contacts and client notes can be permanently deleted. A quote draft is eligible for permanent deletion only when it has no delivery, response, attachment, or conversion evidence; a protected draft is refused and left unchanged, while deleting a non-draft quote cancels it. Creating an invoice or quote draft reserves a Frihet document number and advances the workspace numbering counter; an invoice draft also counts toward monthly invoice usage and may send invoice-creation analytics to PostHog's EU-hosted analytics service. These drafts remain outside invoice issuance, hashing, emailing, payment, cancellation, crediting, duplication, and external filing. If expense creation needs a new vendor, that vendor is created in a separate backend step and may remain even if the later expense write fails. If a workspace owner previously configured active Frihet webhooks outside this connector, one of the ten disclosed webhook-capable writes may deliver one or more full business events to those endpoints. Webhook deliveries are outside the reviewed MCP response schema and can contain the complete underlying record, including fields this connector does not return to the AI assistant; disable them in Frihet before using write tools if those deliveries are not wanted. Creating an invoice or expense may also create in-app and Novu notifications for eligible workspace admins or accountants whose preferences allow them; delivery can include the recipient's Frihet identifier and, when stored, name/email, plus the workspace name and relevant document number, client name, expense description, or vendor name. For a referred workspace, its first invoice or expense may update linked referral records and award activation credits to the referring Frihet account. The connector cannot list, create, update, or delete webhook configurations.</p>
+<h2>Contact</h2><p>Email <a href="mailto:ayuda@frihet.io">ayuda@frihet.io</a> for account, connection, or connector support.</p>
 <p><a href="${OPENAI_PRIVACY_URL}">Connector privacy notice</a> · <a href="${LEGAL_TERMS_URL}">Terms</a> · <a href="https://www.frihet.io">Frihet website</a></p>
 </main></body></html>`;
 
-const OPENAI_PRIVACY_RECIPIENTS_HTML = `<h2>Recipients and external effects</h2><p>Data is processed by Frihet and its necessary service providers: Cloudflare for the connector edge and operational security logging; Google Cloud/Firebase for Frihet infrastructure and authentication; OpenAI, which receives the selected tool inputs and reviewed result fields when the user invokes the plugin; PostHog's EU-hosted analytics service for invoice-creation usage and activation analytics in the underlying Frihet service, including the Frihet user identifier, invoice identifier, document number, and source; and Novu when an invoice or expense creation generates a notification for an eligible workspace admin or accountant. The reviewed OpenAI host does not send MCP tool telemetry to Langfuse. Novu delivery can include the recipient's Frihet identifier and, when stored, name/email, plus the workspace name and relevant document number, client name, expense description, or vendor name. If the workspace owner has separately configured active Frihet webhooks, one of the ten disclosed webhook-capable writes may deliver one or more full business events to those owner-designated endpoints. Those deliveries are outside the reviewed MCP response schema and can contain the complete underlying record, including fields this connector does not expose to ChatGPT; disable the webhooks in Frihet before using write tools if those deliveries are not wanted. An invoice draft counts toward monthly invoice usage. For a referred workspace, its first invoice or expense may update existing referral records and award activation credits to the referring Frihet account.</p>`;
+const OPENAI_PRIVACY_RECIPIENTS_HTML = `<h2>Recipients and external effects</h2><p>Data is processed by Frihet and its necessary service providers: Cloudflare for the connector edge and operational security logging; Google Cloud/Firebase for Frihet infrastructure and authentication; the provider of the AI assistant the user connected, which receives the selected tool inputs and reviewed result fields when the user invokes a tool — for example, OpenAI for ChatGPT and Codex, or Anthropic for Claude; PostHog's EU-hosted analytics service for invoice-creation usage and activation analytics in the underlying Frihet service, including the Frihet user identifier, invoice identifier, document number, and source; and Novu when an invoice or expense creation generates a notification for an eligible workspace admin or accountant. This reviewed host does not send MCP tool telemetry to Langfuse. Novu delivery can include the recipient's Frihet identifier and, when stored, name/email, plus the workspace name and relevant document number, client name, expense description, or vendor name. If the workspace owner has separately configured active Frihet webhooks, one of the ten disclosed webhook-capable writes may deliver one or more full business events to those owner-designated endpoints. Those deliveries are outside the reviewed MCP response schema and can contain the complete underlying record, including fields this connector does not return to the AI assistant; disable the webhooks in Frihet before using write tools if those deliveries are not wanted. An invoice draft counts toward monthly invoice usage. For a referred workspace, its first invoice or expense may update existing referral records and award activation credits to the referring Frihet account.</p>`;
 
 const OPENAI_PRIVACY_HTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Frihet ChatGPT connector privacy notice</title></head><body>
-<main><h1>Frihet ChatGPT connector privacy notice</h1><p>Last updated: August 28, 2026</p>
-<p>This notice applies specifically to the reviewed Frihet plugin for ChatGPT and Codex and supplements the <a href="${LEGAL_PRIVACY_URL}">general Frihet Privacy Policy</a>. Where that general policy describes broader API or MCP integrations, this dedicated notice governs the narrower connector at <code>openai-mcp.frihet.io</code>.</p>
+<title>Frihet reviewed connector privacy notice</title></head><body>
+<main><h1>Frihet reviewed connector privacy notice</h1><p>Last updated: September 28, 2026</p>
+<p>This notice applies specifically to the reviewed Frihet connector (the MCP endpoint that ChatGPT, Codex and Claude connect to when a user adds the Frihet connector) and supplements the <a href="${LEGAL_PRIVACY_URL}">general Frihet Privacy Policy</a>. Where that general policy describes broader API or MCP integrations, this dedicated notice governs the narrower connector at <code>openai-mcp.frihet.io</code>.</p>
 <h2>Controller and contact</h2><p>The controller is ${OPENAI_VERIFIED_OWNER_NAME}, who owns and operates the trade name Frihet in Spain. For privacy rights, contact <a href="mailto:ayuda@frihet.io">ayuda@frihet.io</a>.</p>
-<h2>Data categories and purposes</h2><p>OAuth account and workspace identifiers are processed to authenticate and authorize access. At the user's request, the connector sends OpenAI the tool inputs and reviewed result fields needed for the selected operation. Depending on the tool, these may include client, vendor, and contact names, email addresses, and phone numbers; record identifiers and document numbers; descriptions, notes, and CRM activity text; line items, quantities, prices, discounts, tax rates, totals, and deductible classifications; lifecycle, payment, and activity statuses and business dates; and workspace name, country, language, currency, defaults, plan usage, recent activity, top clients, and current-month totals. Dedicated government or banking identifiers, precise postal addresses, credentials, and raw documents are excluded from the reviewed MCP schemas. When a new invoice, quote, or expense is linked by a stored client or vendor name, Frihet may use the matched record's existing identity and contact details internally to link or snapshot the new record, even though those dedicated fields are not returned through this connector. If expense creation needs a new vendor, that vendor is created in a separate backend step and may remain even if the later expense write fails. Technical connection and security data is processed to operate, protect, and troubleshoot the service.</p>
-<p>The sign-in page offers email/password and, when enabled for the Frihet project, Google, GitHub, or Microsoft sign-in through Firebase Authentication. Firebase and the selected identity provider process authentication credentials directly. The Frihet connector receives a Firebase ID token after successful sign-in; it does not receive the user's password, and authentication credentials are not sent to OpenAI as MCP tool input or output.</p>
+<h2>Data categories and purposes</h2><p>OAuth account and workspace identifiers are processed to authenticate and authorize access. At the user's request, the connector sends the provider of the connected AI assistant (for example, OpenAI for ChatGPT and Codex, or Anthropic for Claude) the tool inputs and reviewed result fields needed for the selected operation. Depending on the tool, these may include client, vendor, and contact names, email addresses, and phone numbers; record identifiers and document numbers; descriptions, notes, and CRM activity text; line items, quantities, prices, discounts, tax rates, totals, and deductible classifications; lifecycle, payment, and activity statuses and business dates; and workspace name, country, language, currency, defaults, plan usage, recent activity, top clients, and current-month totals. Dedicated government or banking identifiers, precise postal addresses, credentials, and raw documents are excluded from the reviewed MCP schemas. When a new invoice, quote, or expense is linked by a stored client or vendor name, Frihet may use the matched record's existing identity and contact details internally to link or snapshot the new record, even though those dedicated fields are not returned through this connector. If expense creation needs a new vendor, that vendor is created in a separate backend step and may remain even if the later expense write fails. Technical connection and security data is processed to operate, protect, and troubleshoot the service.</p>
+<p>The sign-in page offers email/password and, when enabled for the Frihet project, Google, GitHub, or Microsoft sign-in through Firebase Authentication. Firebase and the selected identity provider process authentication credentials directly. The Frihet connector receives a Firebase ID token after successful sign-in; it does not receive the user's password, and authentication credentials are not sent to the AI assistant provider as MCP tool input or output.</p>
 <p>The reviewed MCP schema has no dedicated input or output fields for precise postal addresses, government or banking identifiers, authentication secrets, raw document files, webhook configuration, or regulated filing/export payloads. User-entered names, labels, descriptions, line items, notes, and activity text may nevertheless contain personal data; do not place passwords, credentials, payment-card data, government identifiers, health data, or other special-category data in those free-text fields when you intend to access them through an AI assistant.</p>
 ${OPENAI_PRIVACY_RECIPIENTS_HTML}
-<h2>Retention</h2><p>Business records remain while the Frihet account exists. Cancelling a paid subscription downgrades the workspace and does not itself delete the account. An account-deletion request starts a 30-day grace and export period; after that period Frihet begins deletion, subject to technical completion and any records that must be retained for as long as law requires. OAuth authorization state is automatically deleted after 10 minutes. OAuth access tokens expire no later than one hour, refresh tokens no later than 30 days, and the bound backend credential no later than its grant; any can end sooner through expiry or revocation. Cloudflare security logs, PostHog analytics events, and Novu delivery records follow the provider-configured retention period needed for security, analytics, delivery, and troubleshooting, after which they are deleted or anonymized under the applicable Frihet and provider settings. Current provider-retention details are available through the privacy contact above. Anonymized aggregated usage data may be retained without a fixed end date. OpenAI processes plugin interactions under its own published privacy terms.</p>
+<h2>Retention</h2><p>Business records remain while the Frihet account exists. Cancelling a paid subscription downgrades the workspace and does not itself delete the account. An account-deletion request starts a 30-day grace and export period; after that period Frihet begins deletion, subject to technical completion and any records that must be retained for as long as law requires. OAuth authorization state is automatically deleted after 10 minutes. OAuth access tokens expire no later than one hour, refresh tokens no later than 30 days, and the bound backend credential no later than its grant; any can end sooner through expiry or revocation. Cloudflare security logs, PostHog analytics events, and Novu delivery records follow the provider-configured retention period needed for security, analytics, delivery, and troubleshooting, after which they are deleted or anonymized under the applicable Frihet and provider settings. Current provider-retention details are available through the privacy contact above. Anonymized aggregated usage data may be retained without a fixed end date. OpenAI and Anthropic each process the interactions in their own assistants under their own published privacy terms.</p>
 <h2>User controls</h2><p>Users can choose which tool to invoke, decline any write, revoke OAuth access, edit or delete eligible workspace records, disable existing webhooks in Frihet, request a data export, or exercise access, rectification, erasure, objection, portability, and restriction rights by emailing <a href="mailto:ayuda@frihet.io">ayuda@frihet.io</a>.</p>
 <p><a href="${OPENAI_SUPPORT_URL}">Connector support and scope</a> · <a href="${LEGAL_TERMS_URL}">Terms</a></p>
 </main></body></html>`;
 
-const LLMS_TXT_OPENAI = `# Frihet — AI-Native ERP for Freelancers and SMEs (ChatGPT connector)
+const LLMS_TXT_OPENAI = `# Frihet — AI-Native ERP for Freelancers and SMEs (reviewed connector)
 
 > Website: https://www.frihet.io
 > App: https://app.frihet.io
@@ -691,7 +695,7 @@ const LLMS_TXT_OPENAI = `# Frihet — AI-Native ERP for Freelancers and SMEs (Ch
 
 ## What this connector does
 
-This is the OpenAI/ChatGPT connector surface for Frihet. It exposes exactly ${OPENAI_ALLOWED_TOOL_COUNT} reviewed business tools with complete descriptions, covering:
+This is the reviewed Frihet connector surface used by ChatGPT, Codex, and Claude. It exposes exactly ${OPENAI_ALLOWED_TOOL_COUNT} reviewed business tools with complete descriptions, covering:
 - Invoicing — read and search invoices, or prepare numbered invoice drafts without issuing or filing them
 - Expenses — list, create, update
 - Clients & CRM — read/create/update clients (no parent deletion), contacts, activities, and notes; selected contacts and notes can be permanently deleted
@@ -734,7 +738,7 @@ const AGENTS_JSON_OPENAI = JSON.stringify({
     { name: "expenses", category: "finance", description: "Record and manage business expenses" },
     { name: "crm", category: "sales", description: "Client and vendor management with contacts, activities, and notes" },
     { name: "products", category: "finance", description: "Manage a catalogue of products and services" },
-    { name: "mcp_server", category: "developer", description: "MCP server with reviewed tools for ChatGPT and Codex" },
+    { name: "mcp_server", category: "developer", description: "MCP server with reviewed tools for ChatGPT, Codex and Claude" },
   ],
   examples: [
     { input: "Show me my current Frihet business context", description: "Read the current business context", expectedOutput: "Workspace defaults, plan usage, recent activity, and current-month totals through the reviewed DTO" },
@@ -808,7 +812,7 @@ const WELL_KNOWN_JSONLD_OPENAI = JSON.stringify([
       `${OPENAI_ALLOWED_TOOL_COUNT} reviewed business tools with complete descriptions for invoicing, expenses, clients/CRM, products, quotes, vendors, and current business context`,
       "OAuth 2.0 + PKCE authentication",
       "Reviewed MCP contract with OAuth 2.0 + PKCE",
-      "Designed for the Frihet ChatGPT connector",
+      "Designed for the reviewed Frihet connector for ChatGPT, Codex and Claude",
     ],
     "provider": { "@type": "Organization", "name": "Frihet", "legalName": OPENAI_VERIFIED_OWNER_NAME, "url": "https://www.frihet.io" },
   },
@@ -855,7 +859,7 @@ Trained-for-AI: yes
 Contact: ayuda@frihet.io
 License: ${LEGAL_TERMS_URL}
 
-# Machine-readable surfaces (ChatGPT connector)
+# Machine-readable surfaces (reviewed connector)
 Llms-txt: ${OPENAI_HOST}/llms.txt
 MCP: ${OPENAI_HOST}/.well-known/mcp
 MCP-Endpoint: ${OPENAI_HOST}/mcp
@@ -1041,7 +1045,7 @@ const openAIProviderOptions: OAuthProviderOptions<Env> = {
 };
 
 // Deliberately no resolveExternalToken: direct API keys are not part of the
-// reviewed ChatGPT connector and cannot authenticate against this provider.
+// reviewed connector and cannot authenticate against this provider.
 const openAIOAuthProvider = new OAuthProvider(openAIProviderOptions);
 
 function createGuardedOpenAIProvider(exchange: OAuthTokenFamilyExchange): OAuthProvider<Env> {
@@ -1193,6 +1197,19 @@ export default {
           headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
         },
       ), env);
+    }
+
+    // RFC 9728 path-inserted metadata for the reviewed MCP URL. The provider
+    // serves only the root document; the reviewed 401 challenge points here.
+    // Placed before the generic HEAD handler so HEAD/OPTIONS reach the module.
+    if (openai && url.pathname === OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH) {
+      return withSecurityHeaders(
+        reviewedMcpProtectedResourceMetadataResponse(
+          request,
+          buildReviewedMcpProtectedResourceMetadata(),
+        ),
+        env,
+      );
     }
 
     // The reviewed host exposes no parallel REST/OpenAPI contract under any
@@ -1624,7 +1641,7 @@ export default {
             requireResource: false,
             requireScope: false,
           },
-          OPENAI_REVIEW_ORIGIN,
+          OPENAI_REVIEW_OAUTH_RESOURCES,
         );
         if (!boundary.ok) {
           return withSecurityHeaders(
@@ -1695,6 +1712,7 @@ export default {
           reviewedTokenForm,
           env.OAUTH_STATE,
           env.OAUTH_KV,
+          OPENAI_REVIEW_OAUTH_RESOURCES,
         )
       : undefined;
     const tokenFamilyRevocation = openai && reviewedTokenForm

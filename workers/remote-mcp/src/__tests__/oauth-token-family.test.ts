@@ -9,6 +9,11 @@ import {
   OAuthTokenFamilyRevocation,
 } from "../oauth-token-family.ts";
 import { OAuthStateStore } from "../oauth-state-store.ts";
+import {
+  OPENAI_REVIEW_MCP_RESOURCE,
+  OPENAI_REVIEW_OAUTH_RESOURCES,
+  OPENAI_REVIEW_ORIGIN,
+} from "../../../../src/openai-review-oauth.ts";
 
 class FakeStorage {
   readonly values = new Map<string, unknown>();
@@ -175,6 +180,7 @@ function exchangeFor(
     form,
     namespace as unknown as DurableObjectNamespace,
     kv as unknown as KVNamespace,
+    OPENAI_REVIEW_OAUTH_RESOURCES,
   );
   assert.ok(exchange);
   return exchange;
@@ -208,6 +214,7 @@ test("every provider-valid Firebase UID shape remains inside both guards", () =>
       exchangeForm,
       namespace as unknown as DurableObjectNamespace,
       kv as unknown as KVNamespace,
+      OPENAI_REVIEW_OAUTH_RESOURCES,
     ), `exchange guard for ${JSON.stringify(userId)}`);
 
     const revocationForm = new URLSearchParams({ token: credential });
@@ -226,6 +233,7 @@ async function initializeThroughAuthorizationCode(
   const grantKey = `grant:${USER_ID}:${GRANT_ID}`;
   kv.putJson(grantKey, {
     clientId: CLIENT_ID,
+    resource: OPENAI_REVIEW_ORIGIN,
     authCodeId: await providerHash(CODE),
     expiresAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
   });
@@ -233,6 +241,7 @@ async function initializeThroughAuthorizationCode(
   await exchange.reserve(callbackOptions("authorization_code"), BINDING);
   kv.putJson(grantKey, {
     clientId: CLIENT_ID,
+    resource: OPENAI_REVIEW_ORIGIN,
     refreshTokenId: await providerHash(REFRESH_0),
     expiresAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
   });
@@ -256,6 +265,7 @@ test("the provider callback records validation only after family binding matches
   const kv = new FakeKv();
   kv.putJson(`grant:${USER_ID}:${GRANT_ID}`, {
     clientId: CLIENT_ID,
+    resource: OPENAI_REVIEW_ORIGIN,
     authCodeId: await providerHash(CODE),
     expiresAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
   });
@@ -280,6 +290,7 @@ test("two accepted authorization-code exchanges release zero token responses", a
   const kv = new FakeKv();
   kv.putJson(`grant:${USER_ID}:${GRANT_ID}`, {
     clientId: CLIENT_ID,
+    resource: OPENAI_REVIEW_ORIGIN,
     authCodeId: await providerHash(CODE),
     expiresAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
   });
@@ -420,6 +431,7 @@ test("a provider success with widened token metadata is withheld and revokes the
   const kv = new FakeKv();
   kv.putJson(`grant:${USER_ID}:${GRANT_ID}`, {
     clientId: CLIENT_ID,
+    resource: OPENAI_REVIEW_ORIGIN,
     authCodeId: await providerHash(CODE),
     expiresAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
   });
@@ -439,6 +451,7 @@ test("a legacy previous refresh token is treated as replay, never as family head
   const kv = new FakeKv();
   kv.putJson(`grant:${USER_ID}:${GRANT_ID}`, {
     clientId: CLIENT_ID,
+    resource: OPENAI_REVIEW_ORIGIN,
     refreshTokenId: await providerHash(REFRESH_1),
     previousRefreshTokenId: await providerHash(REFRESH_0),
     expiresAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
@@ -527,4 +540,58 @@ test("same-client access-token revocation does not destroy the refresh family", 
 
   const current = exchangeFor("refresh_token", REFRESH_0, namespace, kv);
   await current.reserve(callbackOptions("refresh_token"), BINDING);
+});
+
+async function reservedAuthorizationCode(
+  grantResource: unknown,
+): Promise<OAuthTokenFamilyExchange> {
+  const namespace = new FakeDurableObjectNamespace();
+  const kv = new FakeKv();
+  kv.putJson(`grant:${USER_ID}:${GRANT_ID}`, {
+    clientId: CLIENT_ID,
+    ...(grantResource === undefined ? {} : { resource: grantResource }),
+    authCodeId: await providerHash(CODE),
+    expiresAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+  });
+  const exchange = exchangeFor("authorization_code", CODE, namespace, kv);
+  await exchange.reserve(callbackOptions("authorization_code"), BINDING);
+  return exchange;
+}
+
+for (const resource of OPENAI_REVIEW_OAUTH_RESOURCES) {
+  test(`settle releases the token response when it echoes the grant resource ${resource}`, async () => {
+    const exchange = await reservedAuthorizationCode(resource);
+    const settlement = await exchange.settle(tokenResponse(REFRESH_0, { resource }));
+    assert.equal(settlement.response.status, 200);
+    assert.equal(settlement.revokeGrant, false);
+  });
+}
+
+for (const [label, grantResource, responseResource] of [
+  ["a response resource that differs from the grant", OPENAI_REVIEW_MCP_RESOURCE, OPENAI_REVIEW_ORIGIN],
+  ["a grant without a stored resource", undefined, OPENAI_REVIEW_ORIGIN],
+  ["a foreign grant resource echoed by the response", "https://mcp.frihet.io", "https://mcp.frihet.io"],
+  ["a non-string grant resource", [OPENAI_REVIEW_MCP_RESOURCE], OPENAI_REVIEW_MCP_RESOURCE],
+] as const) {
+  test(`settle withholds tokens and revokes the family for ${label}`, async () => {
+    const exchange = await reservedAuthorizationCode(grantResource);
+    const settlement = await exchange.settle(tokenResponse(REFRESH_0, { resource: responseResource }));
+    assert.equal(settlement.response.status, 400);
+    assert.equal(settlement.revokeGrant, true);
+  });
+}
+
+test("the exchange guard refuses to engage without the reviewed resource set", () => {
+  const form = new URLSearchParams({ grant_type: "authorization_code", code: CODE });
+  for (const accepted of [undefined, []]) {
+    assert.throws(
+      () => OAuthTokenFamilyExchange.fromForm(
+        form,
+        new FakeDurableObjectNamespace() as unknown as DurableObjectNamespace,
+        new FakeKv() as unknown as KVNamespace,
+        accepted as unknown as readonly string[],
+      ),
+      TypeError,
+    );
+  }
 });

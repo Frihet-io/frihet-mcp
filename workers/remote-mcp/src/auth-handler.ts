@@ -36,6 +36,7 @@ import {
   FRIHET_CONNECTOR_SCOPE,
   FULL_MCP_ORIGIN,
   isValidS256CodeChallenge,
+  OPENAI_REVIEW_OAUTH_RESOURCES,
   OPENAI_REVIEW_ORIGIN,
   resolveFrihetAccessProfile,
   validateOAuthBoundary,
@@ -163,7 +164,7 @@ app.get("/authorize", async (c) => {
         requireResource: true,
         requireScope: true,
       },
-      OPENAI_REVIEW_ORIGIN,
+      OPENAI_REVIEW_OAUTH_RESOURCES,
     );
     if (!boundary.ok) {
       log({
@@ -286,7 +287,7 @@ app.post("/callback", async (c) => {
         requireResource: true,
         requireScope: true,
       },
-      OPENAI_REVIEW_ORIGIN,
+      OPENAI_REVIEW_OAUTH_RESOURCES,
     );
     if (!boundary.ok) {
       log({
