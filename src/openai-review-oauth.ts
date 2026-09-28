@@ -27,9 +27,14 @@ export const OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH =
  * the path-inserted document existed), so clients using it keep working. Both
  * name this Worker only: the pinned provider matches a token audience by exact
  * origin plus path prefix, so neither value can authorize the full host.
- * Every runtime comparison of a resource value goes through this set; the
- * inventory test in workers/remote-mcp/src/__tests__/openai-review-oauth.test.ts
- * fails on any new comparison site.
+ * The runtime checks that use this set are validateOAuthBoundary (below) and
+ * the /token rotation guard in workers/remote-mcp/src/oauth-token-family.ts.
+ * The inventory test in workers/remote-mcp/src/__tests__/openai-review-oauth.test.ts
+ * lists every runtime line that reads a field named `resource` or `audience`
+ * (dot access, string-literal bracket access, or single-line destructuring)
+ * and fails on any new such line, whatever it compares or calls. It does not
+ * follow a value after it is copied into another variable, multi-line
+ * destructuring, or computed property names.
  * Grant props keep `oauthResource: OPENAI_REVIEW_ORIGIN` as the host-binding
  * identity checked at session init and API-key provisioning; that field is not
  * the RFC 8707 value, which the provider stores on the grant itself.

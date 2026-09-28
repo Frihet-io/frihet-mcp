@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -31,12 +31,22 @@ import { OAuthTokenFamilyExchange } from "../oauth-token-family.ts";
 
 const PROVIDER_IMPORT_LINE = 'import { WorkerEntrypoint } from "cloudflare:workers";';
 
-async function loadLockedProvider(): Promise<{
+type LockedProvider = {
   OAuthProvider: new (options: Record<string, unknown>) => {
     fetch(request: Request, env: Record<string, unknown>, ctx: unknown): Promise<Response>;
   };
   getOAuthApi: (options: Record<string, unknown>, env: Record<string, unknown>) => unknown;
-}> {
+};
+
+let lockedProvider: Promise<LockedProvider> | undefined;
+
+/** Imports the patched copy once per test file and deletes the temp copy right after. */
+function loadLockedProvider(): Promise<LockedProvider> {
+  lockedProvider ??= importLockedProvider();
+  return lockedProvider;
+}
+
+async function importLockedProvider(): Promise<LockedProvider> {
   const source = readFileSync(
     fileURLToPath(
       new URL(
@@ -53,9 +63,13 @@ async function loadLockedProvider(): Promise<{
     "the locked provider entry changed; re-review this harness",
   );
   const dir = mkdtempSync(join(tmpdir(), "frihet-oauth-provider-"));
-  const file = join(dir, "oauth-provider.mjs");
-  writeFileSync(file, `class WorkerEntrypoint {}${source.slice(newline)}`);
-  return import(pathToFileURL(file).href);
+  try {
+    const file = join(dir, "oauth-provider.mjs");
+    writeFileSync(file, `class WorkerEntrypoint {}${source.slice(newline)}`);
+    return await import(pathToFileURL(file).href) as LockedProvider;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 class FakeKv {

@@ -361,30 +361,64 @@ test("every reviewed boundary call site accepts exactly the shared resource set"
   ]);
 });
 
-test("every RFC 8707 resource or audience comparison in runtime source is inventoried", () => {
+/**
+ * Lines that read a field named `resource` or `audience`: dot access,
+ * string-literal bracket access, or single-line destructuring. Documented
+ * gaps: values copied into another variable, multi-line destructuring and
+ * computed keys.
+ */
+const RESOURCE_READ =
+  /\.(?:resource|audience)\b|\[\s*["'](?:resource|audience)["']\s*\]|\{[^}]*\b(?:resource|audience)\b[^}]*\}\s*=[^=]/u;
+
+test("the resource-read detector catches the known comparison forms and states its gaps", () => {
+  for (const line of [
+    "if (p.resource !== X) {",
+    "if (X !== p.resource) {",
+    "if (!S.includes(p.resource)) {",
+    "String(p.resource).startsWith(X)",
+    "new URL(p.resource).href !== X",
+    "const { resource } = p;",
+    'p["resource"] !== X',
+    "p.resource != X",
+    "|| p.resource",
+    "S.has(p.resource)",
+    "token.audience === X",
+  ]) {
+    assert.match(line, RESOURCE_READ, line);
+  }
+  for (const line of ["copied !== X", "const {", "resource: X,", "p[key] !== X", "oauthResource !== X"]) {
+    assert.doesNotMatch(line, RESOURCE_READ, line);
+  }
+});
+
+test("every runtime line that reads a resource or audience field is inventoried", () => {
   // A single-value comparison outside the shared set broke /token for the
-  // canonical /mcp resource once (oauth-token-family settle). Any new
-  // comparison must be reviewed and added here deliberately.
+  // canonical /mcp resource once (oauth-token-family settle). Any new read
+  // must be reviewed and added here deliberately.
   const roots = [
     fileURLToPath(new URL("../", import.meta.url)),
     fileURLToPath(new URL("../../../../src/", import.meta.url)),
   ];
-  const comparison =
-    /(\.resource\b|\baudience\b)\s*[!=]==|[!=]==\s*[\w.?]*(\.resource\b|\baudience\b)/u;
   const found: string[] = [];
   for (const root of roots) {
     for (const entry of readdirSync(root, { recursive: true }) as string[]) {
       if (!entry.endsWith(".ts") || entry.includes("__tests__") || entry.endsWith(".d.ts")) continue;
       const text = readFileSync(`${root}${entry}`, "utf8");
-      for (const line of text.split("\n")) {
-        if (comparison.test(line)) found.push(`${entry.split("/").pop()}: ${line.trim()}`);
+      for (const raw of text.split("\n")) {
+        const line = raw.trim();
+        if (line.startsWith("//") || line.startsWith("*") || line.startsWith("/*")) continue;
+        if (RESOURCE_READ.test(line)) found.push(`${entry.split("/").pop()}: ${line}`);
       }
     }
   }
   assert.deepEqual(found.sort(), [
+    "auth-handler.ts: resource: oauthReq.resource,",
+    "auth-handler.ts: resource: oauthReq.resource,",
+    "oauth-token-family.ts: this.grantResource = grant?.resource;",
     "oauth-token-family.ts: || parsed.resource !== this.grantResource",
     "openai-review-oauth.ts: if (parameters.resource === undefined && !parameters.requireResource) {",
     "openai-review-oauth.ts: typeof parameters.resource !== \"string\"",
+    "openai-review-oauth.ts: || !acceptedResources.includes(parameters.resource)",
   ]);
   const tokenFamilySource = readFileSync(
     fileURLToPath(new URL("../oauth-token-family.ts", import.meta.url)),

@@ -252,7 +252,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "d2358dd69504f7cac054ac980852522d94d00397c168c7fa573848fe7a8c877c", // fix/fiscal-period-wiring: fiscal modelo query param mapping + requestId read from the existing error response (same single fetch sink, no new destination); review F5 = doc-comment-only rewording of FrihetApiError.requestId
   "src/observability.ts": "d0bd50c57843f59d0ab61b18b59c1e2ccfcc9dcb83ab76a00a34882d6d1d7cd6",
-  "src/openai-review-oauth.ts": "83d07fc237e22bbc0b85add76eb93b6f165138a512c05445490f5e81fbc0b929", // directory-readiness: shared RFC 8707 resource set, path-inserted PRM builder and challenge pointer (pure metadata, no sink)
+  "src/openai-review-oauth.ts": "a9bcb39ea92d9df260e125a4dbd6ac584e9920ed0b1beb0baf2c369c30fd687f", // directory-readiness: shared RFC 8707 resource set, path-inserted PRM builder and challenge pointer (pure metadata, no sink)
   "workers/api-proxy/worker.js": "640d3aa873f1a20b705f9e73cdafe368bcb0bbe43f187afe5c9583336373accb",
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
   "workers/remote-mcp/src/auth-handler.ts": "c012d2ea005c856a891e834485db3aad3a4b4722fbf8835422b28f5e32d1ecca", // directory-readiness: authorize/callback boundary take OPENAI_REVIEW_OAUTH_RESOURCES (same sinks, no new destination)
