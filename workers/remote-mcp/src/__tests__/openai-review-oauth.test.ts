@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -361,6 +361,43 @@ test("every reviewed boundary call site accepts exactly the shared resource set"
   ]);
 });
 
+test("every RFC 8707 resource or audience comparison in runtime source is inventoried", () => {
+  // A single-value comparison outside the shared set broke /token for the
+  // canonical /mcp resource once (oauth-token-family settle). Any new
+  // comparison must be reviewed and added here deliberately.
+  const roots = [
+    fileURLToPath(new URL("../", import.meta.url)),
+    fileURLToPath(new URL("../../../../src/", import.meta.url)),
+  ];
+  const comparison =
+    /(\.resource\b|\baudience\b)\s*[!=]==|[!=]==\s*[\w.?]*(\.resource\b|\baudience\b)/u;
+  const found: string[] = [];
+  for (const root of roots) {
+    for (const entry of readdirSync(root, { recursive: true }) as string[]) {
+      if (!entry.endsWith(".ts") || entry.includes("__tests__") || entry.endsWith(".d.ts")) continue;
+      const text = readFileSync(`${root}${entry}`, "utf8");
+      for (const line of text.split("\n")) {
+        if (comparison.test(line)) found.push(`${entry.split("/").pop()}: ${line.trim()}`);
+      }
+    }
+  }
+  assert.deepEqual(found.sort(), [
+    "oauth-token-family.ts: || parsed.resource !== this.grantResource",
+    "openai-review-oauth.ts: if (parameters.resource === undefined && !parameters.requireResource) {",
+    "openai-review-oauth.ts: typeof parameters.resource !== \"string\"",
+  ]);
+  const tokenFamilySource = readFileSync(
+    fileURLToPath(new URL("../oauth-token-family.ts", import.meta.url)),
+    "utf8",
+  );
+  assert.doesNotMatch(tokenFamilySource, /"https:\/\/openai-mcp\.frihet\.io/u);
+  assert.match(tokenFamilySource, /!this\.acceptedResources\.includes\(this\.grantResource\)/u);
+  assert.match(
+    workerSource,
+    /OAuthTokenFamilyExchange\.fromForm\(\s*reviewedTokenForm,\s*env\.OAUTH_STATE,\s*env\.OAUTH_KV,\s*OPENAI_REVIEW_OAUTH_RESOURCES,\s*\)/u,
+  );
+});
+
 test("reviewed Worker serves the path-inserted protected-resource metadata before the provider", () => {
   const route = workerSource.match(
     /if \(openai && url\.pathname === OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH\) \{[\s\S]*?\n {4}\}\n/u,
@@ -373,5 +410,10 @@ test("reviewed Worker serves the path-inserted protected-resource metadata befor
   assert.match(route, /withSecurityHeaders\(/u);
   const routeIndex = workerSource.indexOf(route);
   const providerIndex = workerSource.indexOf("selectedProvider.fetch(providerRequest, env, ctx)");
+  const genericHeadIndex = workerSource.indexOf('if (request.method === "HEAD") {');
   assert.ok(routeIndex > 0 && routeIndex < providerIndex);
+  assert.ok(
+    genericHeadIndex > 0 && routeIndex < genericHeadIndex,
+    "HEAD for the metadata path must reach the dedicated module, not the generic 200",
+  );
 });

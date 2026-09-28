@@ -18,6 +18,8 @@
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -29,16 +31,30 @@ import {
 } from "../capability-truth.js";
 import type { IFrihetClient } from "../client-interface.js";
 import {
-  OPENAI_ALLOWED_TOOL_COUNT,
-  OPENAI_REVIEWED_TOOL_ALLOWLIST,
-} from "../openai-profile.js";
-import {
   registerMcpSurface,
   remoteMcpSurfaceComposition,
 } from "../server-composition.js";
 import { registerAllTools } from "../tools/register-all.js";
 
 type ToolAnnotations = Record<string, unknown> | undefined;
+
+/**
+ * Independent oracle: the frozen review snapshot, not the profile Set that
+ * decides registration (comparing against that Set would be tautological).
+ */
+const FROZEN_REVIEWED_TOOLS: readonly string[] = (
+  JSON.parse(
+    readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../src/__tests__/fixtures/openai-review-descriptor.snapshot.json",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    ),
+  ) as { tools: Array<{ name: string }> }
+).tools.map((tool) => tool.name).sort();
 
 /** Side effects a directory submission must not reach. */
 const DIRECTORY_EXCLUDED_EFFECTS: readonly ExternalSideEffect[] = [
@@ -117,13 +133,13 @@ async function connectReviewedSurface(calls: string[]) {
 }
 
 describe("reviewed connector satisfies the directory policy on the real MCP wire", () => {
-  test("tools/list is exactly the reviewed allowlist, with no resources, prompts or meta-tools", async () => {
+  test("tools/list equals the 33 tools of the frozen review snapshot, with no resources, prompts or meta-tools", async () => {
     const { server, client } = await connectReviewedSurface([]);
     try {
       const { tools } = await client.listTools();
       const names = tools.map((tool) => tool.name).sort();
-      assert.equal(names.length, OPENAI_ALLOWED_TOOL_COUNT);
-      assert.deepEqual(names, [...OPENAI_REVIEWED_TOOL_ALLOWLIST].sort());
+      assert.equal(FROZEN_REVIEWED_TOOLS.length, 33);
+      assert.deepEqual(names, FROZEN_REVIEWED_TOOLS);
       const capabilities = client.getServerCapabilities();
       assert.equal(capabilities?.resources, undefined);
       assert.equal(capabilities?.prompts, undefined);
@@ -186,22 +202,28 @@ describe("reviewed connector satisfies the directory policy on the real MCP wire
     }
   });
 
-  test("excluded operations cannot be called by name and never reach the backend client", async () => {
+  test("excluded operations are unknown by name (not merely invalid) and never reach the backend client", async () => {
     const calls: string[] = [];
     const { server, client } = await connectReviewedSurface(calls);
     try {
       for (const name of NAMED_EXCLUSIONS) {
-        let rejected = false;
+        // Only "tool not found" proves exclusion. An input-validation error
+        // would mean the tool is registered and merely rejected these args.
+        let message = "";
         try {
           const result = await client.callTool(
             { name, arguments: { id: "dir_policy_probe", confirm: true } },
             CallToolResultSchema,
           );
-          rejected = result.isError === true;
-        } catch {
-          rejected = true;
+          assert.equal(result.isError, true, `${name} was callable on the reviewed surface`);
+          message = (result.content as Array<{ type: string; text?: string }>)
+            .map((part) => (part.type === "text" ? part.text ?? "" : ""))
+            .join(" ");
+        } catch (error) {
+          message = error instanceof Error ? error.message : String(error);
         }
-        assert.equal(rejected, true, `${name} was callable on the reviewed surface`);
+        assert.match(message, new RegExp(`Tool ${name} not found`, "u"), `${name}: ${message}`);
+        assert.doesNotMatch(message, /validation/iu, `${name} is registered: ${message}`);
       }
       assert.deepEqual(calls, [], "no excluded call may reach the Frihet API client");
     } finally {

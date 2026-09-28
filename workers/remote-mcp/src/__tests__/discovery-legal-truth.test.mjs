@@ -338,13 +338,14 @@ test("reviewed support, privacy and crawler copy names every client and its data
     assert.ok(block, `${label} block must exist`);
     assert.doesNotMatch(block, /ChatGPT connector|expose to ChatGPT|OpenAI\/ChatGPT connector/, label);
   }
-  assert.match(support, /ChatGPT and Codex/);
-  assert.match(support, /Claude/);
+  assert.match(support, /ChatGPT, Codex and Claude connect to when a user adds the Frihet connector/);
+  assert.doesNotMatch(support, /connector for Claude|plugin for ChatGPT/);
   assert.match(support, /https:\/\/openai-mcp\.frihet\.io\/mcp/);
-  assert.match(recipients, /OpenAI for ChatGPT and Codex, or Anthropic for Claude/);
+  assert.match(recipients, /for example, OpenAI for ChatGPT and Codex, or Anthropic for Claude/);
   assert.doesNotMatch(recipients, /OpenAI, which receives/);
-  assert.match(privacy, /\(OpenAI for ChatGPT and Codex, Anthropic for Claude\)/);
+  assert.match(privacy, /\(for example, OpenAI for ChatGPT and Codex, or Anthropic for Claude\)/);
   assert.match(privacy, /OpenAI and Anthropic each process/);
+  assert.doesNotMatch(privacy, /connector for Claude|plugin for ChatGPT/);
   assert.doesNotMatch(privacy, /sent to OpenAI|sends OpenAI/);
   assert.match(llms, /used by ChatGPT, Codex, and Claude/);
 });

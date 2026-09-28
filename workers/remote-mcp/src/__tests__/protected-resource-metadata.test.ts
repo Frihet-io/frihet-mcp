@@ -43,6 +43,18 @@ test("browser clients get the same reflected CORS headers as the provider's root
   assert.equal(preflight.headers.get("access-control-allow-origin"), origin);
 });
 
+test("HEAD mirrors GET headers without a body", async () => {
+  const origin = "http://localhost:6274";
+  const head = reviewedMcpProtectedResourceMetadataResponse(
+    new Request(metadataUrl, { method: "HEAD", headers: { Origin: origin } }),
+    metadata,
+  );
+  assert.equal(head.status, 200);
+  assert.match(head.headers.get("content-type") ?? "", /^application\/json/u);
+  assert.equal(head.headers.get("access-control-allow-origin"), origin);
+  assert.equal(await head.text(), "");
+});
+
 test("non-read methods are refused instead of echoing metadata", () => {
   for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
     const response = reviewedMcpProtectedResourceMetadataResponse(

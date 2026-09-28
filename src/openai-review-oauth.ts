@@ -23,10 +23,13 @@ export const OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH =
 /**
  * The only RFC 8707 resource values the reviewed authorization boundary
  * accepts. The canonical MCP URL comes first; the bare origin is the value the
- * root metadata document published before the path-inserted document existed
- * and stays accepted so clients that registered against it keep working. Both
+ * root metadata document still publishes (and the only one it published before
+ * the path-inserted document existed), so clients using it keep working. Both
  * name this Worker only: the pinned provider matches a token audience by exact
  * origin plus path prefix, so neither value can authorize the full host.
+ * Every runtime comparison of a resource value goes through this set; the
+ * inventory test in workers/remote-mcp/src/__tests__/openai-review-oauth.test.ts
+ * fails on any new comparison site.
  * Grant props keep `oauthResource: OPENAI_REVIEW_ORIGIN` as the host-binding
  * identity checked at session init and API-key provisioning; that field is not
  * the RFC 8707 value, which the provider stores on the grant itself.
