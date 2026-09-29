@@ -33,9 +33,15 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  readFileSync,
+  chmodSync,
   existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -285,7 +291,9 @@ function validateOpenAIReleaseSemantics(yaml) {
     !preflight.includes("assert_owner_only_environment openai-plugin-release")
     || !preflight.includes("assert_owner_only_environment openai-plugin-rollback")
     || !preflight.includes(".can_admins_bypass == false")
-    || !preflight.includes('.protection_rules | type == "array" and length == 0')
+    || !preflight.includes('[.protection_rules[].type] == ["branch_policy"]')
+    || !preflight.includes('/environments/${name}/deployment_protection_rules"')
+    || !preflight.includes('.total_count == 0 and (.custom_deployment_protection_rules | type == "array" and length == 0)')
     || !preflight.includes(".deployment_branch_policy.protected_branches == false")
     || !preflight.includes(".deployment_branch_policy.custom_branch_policies == true")
     || /required_reviewers|prevent_self_review/.test(preflight)
@@ -1300,7 +1308,8 @@ test("OpenAI release workflow — truthful sole-owner governance and recovery fa
   );
   assert.match(preflight.body, /OWNER_CONFIRMATION" != "\$EXPECTED_OWNER_CONFIRMATION/);
   assert.match(preflight.body, /\.can_admins_bypass == false/);
-  assert.match(preflight.body, /\.protection_rules \| type == "array" and length == 0/);
+  assert.match(preflight.body, /\[\.protection_rules\[\]\.type\] == \["branch_policy"\]/);
+  assert.match(preflight.body, /\/deployment_protection_rules"/);
   assert.match(preflight.body, /\.deployment_branch_policy\.protected_branches == false/);
   assert.match(preflight.body, /\.deployment_branch_policy\.custom_branch_policies == true/);
   assert.doesNotMatch(preflight.body, /required_reviewers|prevent_self_review/);
@@ -1349,8 +1358,9 @@ test("OpenAI release workflow — truthful sole-owner governance and recovery fa
   assert.match(deploy.body, /wrangler whoami/);
   assert.match(
     deploy.body,
-    /\.\/node_modules\/\.bin\/wrangler secret list\s+\\\s*\n\s*--env openai --name frihet-openai-mcp --format json/,
+    /\.\/node_modules\/\.bin\/wrangler secret list\s+\\\s*\n\s*--env openai --format json/,
   );
+  assert.doesNotMatch(deploy.body, /wrangler secret [^\n]*(?:\\\s*\n[^\n]*)?--name/);
   assert.match(deploy.body, /targetTopology\.secretNames/);
   const topology = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
   assert.deepEqual(topology.targetTopology.secretNames, [
@@ -1359,6 +1369,235 @@ test("OpenAI release workflow — truthful sole-owner governance and recovery fa
     "FRIHET_API_BASE",
     "FRIHET_OAUTH_API_KEY",
   ]);
+});
+
+// Fixtures follow GitHub's documented `environment` example
+// (github/rest-api-description, components.examples.environment): a custom
+// branch policy is reported back as a built-in `branch_policy` protection rule.
+const BRANCH_POLICY_RULE = Object.freeze({ id: 3, node_id: "MDQ6R2F0ZTM=", type: "branch_policy" });
+const WAIT_TIMER_RULE = Object.freeze({ id: 4, node_id: "MDQ6R2F0ZTQ=", type: "wait_timer", wait_timer: 30 });
+const REVIEWER_RULE = Object.freeze({
+  id: 5,
+  node_id: "MDQ6R2F0ZTU=",
+  prevent_self_review: false,
+  type: "required_reviewers",
+  reviewers: [{ type: "User", reviewer: { login: "octocat", id: 1 } }],
+});
+const CUSTOM_APP_RULE = Object.freeze({
+  id: 6,
+  node_id: "MDQ6R2F0ZTY=",
+  enabled: true,
+  app: {
+    id: 1,
+    node_id: "MDQ6R2F0ZTc=",
+    slug: "a-custom-app",
+    integration_url: "https://api.github.com/apps/a-custom-app",
+  },
+});
+
+function githubEnvironment(overrides = {}) {
+  return {
+    id: 1,
+    node_id: "MDExOkVudmlyb25tZW50MQ==",
+    name: "openai-plugin-release",
+    can_admins_bypass: false,
+    protection_rules: [BRANCH_POLICY_RULE],
+    deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
+    ...overrides,
+  };
+}
+
+/** The jq filters inside the preflight's `assert_owner_only_environment` shell function. */
+function ownerOnlyEnvironmentFilters(yaml) {
+  const preflight = findStage(parseWorkflowStages(yaml), "preflight");
+  assert.ok(preflight, "OpenAI workflow must keep its preflight job");
+  const body = executableStageBody(preflight);
+  const start = body.indexOf("assert_owner_only_environment() {");
+  const end = body.indexOf("assert_main_only() {");
+  assert.ok(start >= 0 && end > start, "environment governance must stay in the named shell function");
+  const shellFunction = body.slice(start, end);
+  return {
+    shellFunction,
+    filters: [...shellFunction.matchAll(/jq -e '([^']*)'/g)].map((match) => match[1]),
+  };
+}
+
+/** Runs the workflow's own jq filter; true only when `jq -e` would let the step continue. */
+function jqAccepts(filter, value) {
+  const result = spawnSync("jq", ["-e", filter], { input: JSON.stringify(value), encoding: "utf8" });
+  assert.equal(result.error, undefined, "jq must be installed to execute the workflow's filters");
+  return result.status === 0;
+}
+
+test("OpenAI release environments — GitHub's branch_policy rule is the only accepted built-in rule", () => {
+  const { filters } = ownerOnlyEnvironmentFilters(loadOpenAIWorkflow());
+  const shapeFilters = filters.filter((filter) => filter.includes(".can_admins_bypass"));
+  assert.equal(shapeFilters.length, 1, "one environment-shape filter must gate both environments");
+  const [filter] = shapeFilters;
+
+  assert.equal(
+    jqAccepts(filter, githubEnvironment()),
+    true,
+    "the intended main-only environment carries GitHub's own branch_policy rule and must pass",
+  );
+  for (const [label, overrides] of Object.entries({
+    "wait timer": { protection_rules: [BRANCH_POLICY_RULE, WAIT_TIMER_RULE] },
+    "required reviewer": { protection_rules: [BRANCH_POLICY_RULE, REVIEWER_RULE] },
+    "GitHub's documented staging example": {
+      protection_rules: [WAIT_TIMER_RULE, REVIEWER_RULE, BRANCH_POLICY_RULE],
+    },
+    "unknown additional built-in rule": { protection_rules: [BRANCH_POLICY_RULE, { id: 7, node_id: "x", type: "future_gate" }] },
+    "unknown rule instead of branch_policy": { protection_rules: [{ id: 7, node_id: "x", type: "future_gate" }] },
+    "duplicated branch_policy": { protection_rules: [BRANCH_POLICY_RULE, BRANCH_POLICY_RULE] },
+    "empty rule list despite a custom branch policy": { protection_rules: [] },
+    "null rule list": { protection_rules: null },
+    "missing rule list": { protection_rules: undefined },
+    "administrator bypass": { can_admins_bypass: true },
+    "protected-branches policy": {
+      deployment_branch_policy: { protected_branches: true, custom_branch_policies: false },
+    },
+    "all branches allowed": { deployment_branch_policy: null },
+  })) {
+    assert.equal(jqAccepts(filter, githubEnvironment(overrides)), false, `${label} must fail closed`);
+  }
+});
+
+test("OpenAI release environments — GitHub App deployment protection rules are read and must be absent", () => {
+  const { shellFunction, filters } = ownerOnlyEnvironmentFilters(loadOpenAIWorkflow());
+  assert.match(
+    shellFunction,
+    /"repos\/\$\{GITHUB_REPOSITORY\}\/environments\/\$\{name\}\/deployment_protection_rules"/,
+    "built-in protection_rules omit GitHub App rules, so the dedicated endpoint must be read",
+  );
+  const customFilters = filters.filter((filter) => filter.includes("custom_deployment_protection_rules"));
+  assert.equal(customFilters.length, 1, "one filter must reject custom deployment protection rules");
+  const [filter] = customFilters;
+
+  assert.equal(jqAccepts(filter, { total_count: 0, custom_deployment_protection_rules: [] }), true);
+  for (const [label, value] of Object.entries({
+    "one enabled app rule": { total_count: 1, custom_deployment_protection_rules: [CUSTOM_APP_RULE] },
+    "count disagrees with list": { total_count: 0, custom_deployment_protection_rules: [CUSTOM_APP_RULE] },
+    "count without list": { total_count: 0 },
+    "list without count": { custom_deployment_protection_rules: [] },
+    "non-array list": { total_count: 0, custom_deployment_protection_rules: {} },
+  })) {
+    assert.equal(jqAccepts(filter, value), false, `${label} must fail closed`);
+  }
+});
+
+/** The dedented `run: |` script of a named workflow step. */
+function stepRunScript(yaml, stepName) {
+  const lines = yaml.split("\n");
+  const start = lines.indexOf(`      - name: ${stepName}`);
+  assert.ok(start >= 0, `${stepName} step must exist`);
+  const run = lines.findIndex((line, index) => index > start && line === "        run: |");
+  assert.ok(
+    run > start && !lines.slice(start + 1, run).some((line) => line.startsWith("      - ")),
+    `${stepName} must have its own run script`,
+  );
+  const body = [];
+  for (const line of lines.slice(run + 1)) {
+    if (line.trim() !== "" && !line.startsWith("          ")) break;
+    body.push(line.slice(10));
+  }
+  return body.join("\n");
+}
+
+// Answers the three GitHub reads of the environment step. STUB_* variables
+// replace one environment's answer; any other gh call is a hard failure.
+const GH_STUB = `#!/usr/bin/env bash
+set -euo pipefail
+url="\${!#}"
+case "$url" in
+  */deployment_protection_rules)
+    name="\${url%/deployment_protection_rules}"; name="\${name##*/}"
+    if [ "\${STUB_CUSTOM_FAIL_FOR:-}" = "$name" ]; then echo "gh: HTTP 403" >&2; exit 1; fi
+    if [ "\${STUB_CUSTOM_FOR:-}" = "$name" ]; then printf '%s' "$STUB_CUSTOM"; exit 0; fi
+    printf '%s' '{"total_count":0,"custom_deployment_protection_rules":[]}' ;;
+  */deployment-branch-policies*)
+    printf '%s' '{"total_count":1,"branch_policies":[{"id":1,"node_id":"x","name":"main","type":"branch"}]}' ;;
+  */environments/*)
+    name="\${url##*/}"
+    if [ "\${STUB_ENV_FAIL_FOR:-}" = "$name" ]; then echo "gh: HTTP 404" >&2; exit 1; fi
+    if [ "\${STUB_ENV_FOR:-}" = "$name" ]; then printf '%s' "$STUB_ENV"; exit 0; fi
+    printf '{"name":"%s","can_admins_bypass":false,"protection_rules":[{"id":3,"node_id":"x","type":"branch_policy"}],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' "$name" ;;
+  *) echo "unexpected gh call: $*" >&2; exit 97 ;;
+esac
+`;
+
+test("OpenAI release environments — the environment step itself fails closed under GitHub's answers", () => {
+  const script = stepRunScript(
+    loadOpenAIWorkflow(),
+    "Assert protected release and non-blocking recovery environments",
+  );
+  const dir = mkdtempSync(join(tmpdir(), "frihet-env-step-"));
+  try {
+    writeFileSync(join(dir, "gh"), GH_STUB);
+    chmodSync(join(dir, "gh"), 0o755);
+    writeFileSync(join(dir, "step.sh"), script);
+    const runStep = (stub) => spawnSync(
+      "bash",
+      ["--noprofile", "--norc", "-eo", "pipefail", join(dir, "step.sh")],
+      {
+        encoding: "utf8",
+        env: {
+          PATH: `${dir}:${process.env.PATH}`,
+          GITHUB_REPOSITORY: "Frihet-io/frihet-mcp",
+          GH_TOKEN: "stub",
+          ...stub,
+        },
+      },
+    );
+    const ok = "OK — non-bypassable owner-only release and non-blocking recovery environments exist";
+
+    const pass = runStep({});
+    assert.equal(pass.error, undefined, "bash and jq must be installed to execute the step");
+    assert.equal(pass.status, 0, `the intended environments must pass:\n${pass.stdout}${pass.stderr}`);
+    assert.ok(pass.stdout.includes(ok));
+
+    for (const [label, stub, error] of [
+      [
+        "unreadable custom rules on the recovery environment",
+        { STUB_CUSTOM_FAIL_FOR: "openai-plugin-rollback" },
+        "openai-plugin-rollback custom deployment protection rules are unreadable",
+      ],
+      [
+        "an enabled GitHub App rule on the release environment",
+        {
+          STUB_CUSTOM_FOR: "openai-plugin-release",
+          STUB_CUSTOM: JSON.stringify({ total_count: 1, custom_deployment_protection_rules: [CUSTOM_APP_RULE] }),
+        },
+        "openai-plugin-release must be free of custom deployment protection gates",
+      ],
+      [
+        "a wait timer on the recovery environment",
+        {
+          STUB_ENV_FOR: "openai-plugin-rollback",
+          STUB_ENV: JSON.stringify(githubEnvironment({
+            name: "openai-plugin-rollback",
+            protection_rules: [BRANCH_POLICY_RULE, WAIT_TIMER_RULE],
+          })),
+        },
+        "openai-plugin-rollback must be non-bypassable, main-only, and free of reviewer or timer gates",
+      ],
+      [
+        "an unreadable release environment",
+        { STUB_ENV_FAIL_FOR: "openai-plugin-release" },
+        "openai-plugin-release environment is missing or unreadable",
+      ],
+    ]) {
+      const result = runStep(stub);
+      assert.notEqual(result.status, 0, `${label} must stop the release`);
+      assert.deepEqual(
+        `${result.stdout}\n${result.stderr}`.split("\n").filter((line) => line.startsWith("::error::")),
+        [`::error::${error}`],
+        `${label} must stop at its own check and nowhere else`,
+      );
+      assert.ok(!result.stdout.includes(ok), `${label} must not report success`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("OpenAI release workflow — full gates and exact-source lockfiles precede deploy", () => {
@@ -1568,13 +1807,24 @@ test("OpenAI release workflow — semantic mutants cannot bypass topology recove
     "administrators must not bypass the exact environment governance",
   );
   const humanGate = workflow.replace(
-    '.protection_rules | type == "array" and length == 0',
-    '.protection_rules | type == "array" and length > 0',
+    '[.protection_rules[].type] == ["branch_policy"]',
+    '([.protection_rules[].type] | index("branch_policy") != null)',
   );
+  assert.notEqual(humanGate, workflow, "the built-in rule mutant must apply");
   assert.ok(
     validateOpenAIReleaseSemantics(humanGate)
       .includes("owner-only-environment-governance-not-enforced"),
-    "a fictional reviewer, wait timer, or custom gate must not enter the sole-owner ceremony",
+    "a fictional reviewer or wait timer must not enter the sole-owner ceremony",
+  );
+  const appGate = workflow.replace(
+    '.total_count == 0 and (.custom_deployment_protection_rules | type == "array" and length == 0)',
+    ".total_count >= 0",
+  );
+  assert.notEqual(appGate, workflow, "the custom-rule mutant must apply");
+  assert.ok(
+    validateOpenAIReleaseSemantics(appGate)
+      .includes("owner-only-environment-governance-not-enforced"),
+    "a GitHub App deployment gate must not enter the sole-owner ceremony",
   );
   const blockedRecovery = workflow.replace(
     "assert_owner_only_environment openai-plugin-rollback",
@@ -2098,6 +2348,85 @@ test("OpenAI topology bootstrap — irreversible boundary and force-cancel recov
   assert.match(guide, /does not exclude direct Wrangler,\s+API, dashboard, or unrelated-workflow changes/);
   assert.match(guide, /does not.*local Assets directory or\s+`run_worker_first`/s);
   assert.doesNotMatch(guide, /receipt must be no older than 24 hours/);
+  assert.doesNotMatch(guide, /wrangler (?:deploy|deployments|versions|rollback|secret)/iu);
+});
+
+test("OpenAI topology bootstrap — the reviewed-main bridge decision is explicit, irreversible and verifiable", () => {
+  const guide = readFileSync(OPENAI_BOOTSTRAP_GUIDE, "utf8");
+  const workflow = loadOpenAIWorkflow();
+  const topology = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
+
+  assert.match(guide, /^## Owner decision: the reviewed `main` commit is the bridge$/m);
+  assert.match(guide, /\*\*IRREVERSIBLE\.\*\*/);
+  assert.match(guide, /forward-only/);
+  assert.match(guide, /Every OAuth client registration, grant\s+and\s+token/);
+
+  // Exactly the reviewed secret-name set remains; the Langfuse names go.
+  for (const name of topology.targetTopology.secretNames) {
+    assert.match(guide, new RegExp(`\`${name}\``), `${name} must be named as a kept Worker secret`);
+  }
+  for (const name of ["LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"]) {
+    assert.match(guide, new RegExp(`\`${name}\``), `${name} removal must be explicit`);
+    assert.ok(!topology.targetTopology.secretNames.includes(name));
+  }
+  assert.match(guide, /`frihet-openai-mcp-openai`/, "the --name plus --env secret-command trap must be named");
+
+  // Every release secret the runbook names is one the workflow actually reads.
+  const releaseSecrets = new Set(guide.match(/\bOPENAI_[A-Z0-9_]+\b/g) ?? []);
+  assert.ok(releaseSecrets.has("OPENAI_TOKEN_TOPOLOGY_SHA256"));
+  for (const name of releaseSecrets) {
+    assert.match(workflow, new RegExp(`\\bsecrets\\.${name}\\b`), `${name} is not read by the release workflow`);
+  }
+  assert.match(guide, /`baseline\.topologySha256`/);
+  assert.match(workflow, /jq -r '\.baseline\.topologySha256'/);
+
+  // The Wrangler facts behind these sentences are pinned against the locked
+  // CLI in openai-wrangler-resolution.test.mjs.
+  assert.doesNotMatch(guide, /secrets-file/);
+  assert.match(guide, /has no deploy option that uploads secret values/);
+  assert.match(guide, /creates that Worker without asking/);
+  assert.match(
+    readFileSync("workers/remote-mcp/src/index.ts", "utf8"),
+    /initLangfuse\(openaiMode \? \{\} : \{/,
+    "the reviewed host must keep passing an empty Langfuse configuration",
+  );
+  assert.match(guide, /No Worker\s+named `frihet-openai-mcp-openai` exists/);
+
+  // Every test file the runbook cites exists, and the one it names as the pin
+  // of the locked Wrangler behavior really reads the locked CLI.
+  const citedTests = [...guide.matchAll(/`(scripts\/__tests__\/[a-z0-9-]+\.test\.mjs)`/g)].map((match) => match[1]);
+  assert.ok(citedTests.length > 0);
+  for (const file of citedTests) assert.ok(existsSync(file), `${file} is cited but does not exist`);
+  const wranglerPin = guide.match(/`(scripts\/__tests__\/[a-z0-9-]+\.test\.mjs)`\s+pins this behavior\s+against the locked Wrangler/);
+  assert.ok(wranglerPin, "the runbook must name the test that pins the locked Wrangler behavior");
+  assert.match(
+    readFileSync(wranglerPin[1], "utf8"),
+    /"workers\/remote-mcp\/node_modules\/wrangler\/wrangler-dist\/cli\.js"/,
+    `${wranglerPin[1]} does not read the locked Wrangler`,
+  );
+  assert.match(guide, /waives step 1/);
+  assert.match(guide, /missing or shorter than 32 bytes/);
+
+  for (const check of [
+    /releaseSource=wrangler-var/,
+    /migration\s+tag\s+`v2`/,
+    /`\/\.well-known\/oauth-protected-resource\/mcp`/,
+    /`https:\/\/mcp\.frihet\.io\/mcp`[^.]*401/s,
+    /33\s+tools,\s+0\s+resources\s+and\s+0\s+prompts/,
+    /scripts\/check-openai-worker-topology\.mjs/,
+    /scripts\/test-openai-full-compose\.mjs/,
+    /custom\s+connector\s+in\s+Claude/,
+    /ChatGPT\s+draft/,
+  ]) {
+    assert.match(guide, check);
+  }
+
+  assert.match(guide, /Last updated/);
+  assert.match(
+    readFileSync("workers/remote-mcp/src/index.ts", "utf8"),
+    /<p>Last updated: [A-Z][a-z]+ \d{1,2}, \d{4}<\/p>/,
+    "the privacy-date step must refer to a date the reviewed host actually serves",
+  );
   assert.doesNotMatch(guide, /wrangler (?:deploy|deployments|versions|rollback|secret)/iu);
 });
 
