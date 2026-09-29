@@ -117,7 +117,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.0"
+    "@modelcontextprotocol/sdk": "1.31.0"
   },
   "overrides": {
     "hono": "~4.12.34"

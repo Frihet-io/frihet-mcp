@@ -161,12 +161,12 @@ describe("anti-defang contract", () => {
       );
     }
     assert.deepEqual(APPROVED_LOCKFILE_HASHES, {
-      "package-lock.json": "b8eac56e1f88e2537c4239d1ee583dc3c11ef2643486a00ed1e80887ef661bec",
-      "workers/remote-mcp/package-lock.json": "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191",
+      "package-lock.json": "13ee75d4fe2946dacbdc7d9835e80c8bf5db668f742a8a4b8df4b989b9ca8408",
+      "workers/remote-mcp/package-lock.json": "90a8753f8f34faaceebfc89c2800ff0e6de67600fa691c0569042fa929aa3175",
     });
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES[".github/workflows/ci.yml"],
-      "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27",
+      "e3a830f620387e002ca532fac4efbf70ef0a2e9a03b6916def44053ba68e2da7",
     );
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES["scripts/audit-mcp-refs.mjs"],

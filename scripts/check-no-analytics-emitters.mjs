@@ -98,7 +98,7 @@ export const APPROVED_PACKAGE_RUNTIME_METADATA = Object.freeze({
 });
 export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
   "package.json": {
-    dependencies: { "@modelcontextprotocol/sdk": "^1.27.0" },
+    dependencies: { "@modelcontextprotocol/sdk": "1.31.0" },
     devDependencies: { "@types/node": "^22.0.0", ajv: "8.18.0", typescript: "^5.7.0", zod: "^3.25.1" },
     optionalDependencies: {},
     overrides: { hono: "~4.12.34" },
@@ -108,7 +108,7 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
   "workers/remote-mcp/package.json": {
     dependencies: {
       "@cloudflare/workers-oauth-provider": "0.3.0",
-      "@modelcontextprotocol/sdk": "^1.30.0",
+      "@modelcontextprotocol/sdk": "1.31.0",
       agents: "0.7.5",
       "firebase-auth-cloudflare-workers": "^2.0.6",
       hono: "~4.12.34",
@@ -122,7 +122,7 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
     optionalDependencies: {},
     overrides: {
       "@modelcontextprotocol/sdk": { "@hono/node-server": "2.0.12", hono: "~4.12.34" },
-      agents: { "@modelcontextprotocol/sdk": "1.30.0" },
+      agents: { "@modelcontextprotocol/sdk": "1.31.0" },
       nanoid: "5.1.16",
     },
     peerDependencies: {},
@@ -265,8 +265,8 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/oauth-token-family.ts": "4d95e867e2af6e9875860da99aa854e7d4cb614ad38cecbc07e09837479b50ce", // directory-readiness: settle() requires the stored grant resource from the injected reviewed set (same internal sink)
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "b8eac56e1f88e2537c4239d1ee583dc3c11ef2643486a00ed1e80887ef661bec",
-  "workers/remote-mcp/package-lock.json": "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191",
+  "package-lock.json": "13ee75d4fe2946dacbdc7d9835e80c8bf5db668f742a8a4b8df4b989b9ca8408",
+  "workers/remote-mcp/package-lock.json": "90a8753f8f34faaceebfc89c2800ff0e6de67600fa691c0569042fa929aa3175",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
@@ -283,7 +283,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
-  ".github/workflows/ci.yml": "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27",
+  ".github/workflows/ci.yml": "e3a830f620387e002ca532fac4efbf70ef0a2e9a03b6916def44053ba68e2da7",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "6799c971a773f04cd39d8e134c042474d23bfb1e949348df2e382b6fceb10023",
