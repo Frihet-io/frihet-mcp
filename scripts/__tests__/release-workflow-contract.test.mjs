@@ -2567,3 +2567,26 @@ test("OpenAI release workflow — portal hard stops remain explicit", () => {
     "removing the EU-residency submission stop must fail",
   );
 });
+
+
+test("OpenAI evidence uploads explicitly include only sanitized hidden artifacts", () => {
+  const stages = parseWorkflowStages(loadOpenAIWorkflow());
+  const expected = {
+    "wrangler-dry-run": ["openai-bundle-files.sha256", "wrangler-openai-dry-run.json"],
+    "capture-rollback-state": ["pre-mutation-state.json"],
+    "deploy-openai": ["pre-mutation-auth-readiness.json", "openai-deploy.json", "authenticated-compose.json"],
+    "verify-public": ["public-readback.json"],
+    "rollback-openai": ["rollback-proof.json"],
+  };
+  for (const [id, files] of Object.entries(expected)) {
+    const body = findStage(stages, id).body;
+    const upload = body.slice(body.indexOf("uses: actions/upload-artifact@"));
+    assert.match(upload, /include-hidden-files: true/, `${id} must upload its hidden evidence`);
+    const paths = [...upload.matchAll(/^            (\.openai-release-evidence\/[^\n]+)$/gm)].map((match) => match[1]);
+    assert.deepEqual(paths, files.map((file) => `.openai-release-evidence/${file}`), `${id} upload allowlist`);
+    assert.doesNotMatch(upload, /path: \.openai-release-evidence\/\s*$/, "do not upload the whole hidden directory");
+    if (["wrangler-dry-run", "capture-rollback-state"].includes(id)) {
+      assert.match(upload, /if-no-files-found: error/, `${id} cannot succeed without evidence`);
+    }
+  }
+});
