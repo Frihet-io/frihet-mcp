@@ -36,6 +36,7 @@ import {
   readFileSync,
   existsSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -57,6 +58,9 @@ const OPENAI_BOOTSTRAP_GUIDE = "docs/openai-topology-bootstrap.md";
 const OPENAI_COMPOSE = "scripts/test-openai-full-compose.mjs";
 const OPENAI_TOPOLOGY = "marketplace/openai/cloudflare-topology-baseline.json";
 const OPENAI_WRANGLER = "workers/remote-mcp/wrangler.toml";
+const WORKER_LOCK = "workers/remote-mcp/package-lock.json";
+const WRANGLER_PACKAGE = "workers/remote-mcp/node_modules/wrangler/package.json";
+const WRANGLER_CLI = "workers/remote-mcp/node_modules/wrangler/wrangler-dist/cli.js";
 const FULL_OAUTH_RELEASE_CONTRACT = "workers/remote-mcp/full-oauth-release-contract.json";
 const CI_WORKFLOW = ".github/workflows/ci.yml";
 const ANCHOR = "scripts/assert-publish-anchor.mjs";
@@ -285,7 +289,9 @@ function validateOpenAIReleaseSemantics(yaml) {
     !preflight.includes("assert_owner_only_environment openai-plugin-release")
     || !preflight.includes("assert_owner_only_environment openai-plugin-rollback")
     || !preflight.includes(".can_admins_bypass == false")
-    || !preflight.includes('.protection_rules | type == "array" and length == 0')
+    || !preflight.includes('[.protection_rules[].type] == ["branch_policy"]')
+    || !preflight.includes('/environments/${name}/deployment_protection_rules"')
+    || !preflight.includes('.total_count == 0 and (.custom_deployment_protection_rules | type == "array" and length == 0)')
     || !preflight.includes(".deployment_branch_policy.protected_branches == false")
     || !preflight.includes(".deployment_branch_policy.custom_branch_policies == true")
     || /required_reviewers|prevent_self_review/.test(preflight)
@@ -1300,7 +1306,8 @@ test("OpenAI release workflow — truthful sole-owner governance and recovery fa
   );
   assert.match(preflight.body, /OWNER_CONFIRMATION" != "\$EXPECTED_OWNER_CONFIRMATION/);
   assert.match(preflight.body, /\.can_admins_bypass == false/);
-  assert.match(preflight.body, /\.protection_rules \| type == "array" and length == 0/);
+  assert.match(preflight.body, /\[\.protection_rules\[\]\.type\] == \["branch_policy"\]/);
+  assert.match(preflight.body, /\/deployment_protection_rules"/);
   assert.match(preflight.body, /\.deployment_branch_policy\.protected_branches == false/);
   assert.match(preflight.body, /\.deployment_branch_policy\.custom_branch_policies == true/);
   assert.doesNotMatch(preflight.body, /required_reviewers|prevent_self_review/);
@@ -1349,8 +1356,9 @@ test("OpenAI release workflow — truthful sole-owner governance and recovery fa
   assert.match(deploy.body, /wrangler whoami/);
   assert.match(
     deploy.body,
-    /\.\/node_modules\/\.bin\/wrangler secret list\s+\\\s*\n\s*--env openai --name frihet-openai-mcp --format json/,
+    /\.\/node_modules\/\.bin\/wrangler secret list\s+\\\s*\n\s*--env openai --format json/,
   );
+  assert.doesNotMatch(deploy.body, /wrangler secret [^\n]*(?:\\\s*\n[^\n]*)?--name/);
   assert.match(deploy.body, /targetTopology\.secretNames/);
   const topology = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
   assert.deepEqual(topology.targetTopology.secretNames, [
@@ -1359,6 +1367,287 @@ test("OpenAI release workflow — truthful sole-owner governance and recovery fa
     "FRIHET_API_BASE",
     "FRIHET_OAUTH_API_KEY",
   ]);
+});
+
+// Fixtures follow GitHub's documented `environment` example
+// (github/rest-api-description, components.examples.environment): a custom
+// branch policy is reported back as a built-in `branch_policy` protection rule.
+const BRANCH_POLICY_RULE = Object.freeze({ id: 3, node_id: "MDQ6R2F0ZTM=", type: "branch_policy" });
+const WAIT_TIMER_RULE = Object.freeze({ id: 4, node_id: "MDQ6R2F0ZTQ=", type: "wait_timer", wait_timer: 30 });
+const REVIEWER_RULE = Object.freeze({
+  id: 5,
+  node_id: "MDQ6R2F0ZTU=",
+  prevent_self_review: false,
+  type: "required_reviewers",
+  reviewers: [{ type: "User", reviewer: { login: "octocat", id: 1 } }],
+});
+const CUSTOM_APP_RULE = Object.freeze({
+  id: 6,
+  node_id: "MDQ6R2F0ZTY=",
+  enabled: true,
+  app: {
+    id: 1,
+    node_id: "MDQ6R2F0ZTc=",
+    slug: "a-custom-app",
+    integration_url: "https://api.github.com/apps/a-custom-app",
+  },
+});
+
+function githubEnvironment(overrides = {}) {
+  return {
+    id: 1,
+    node_id: "MDExOkVudmlyb25tZW50MQ==",
+    name: "openai-plugin-release",
+    can_admins_bypass: false,
+    protection_rules: [BRANCH_POLICY_RULE],
+    deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
+    ...overrides,
+  };
+}
+
+/** The jq filters inside the preflight's `assert_owner_only_environment` shell function. */
+function ownerOnlyEnvironmentFilters(yaml) {
+  const preflight = findStage(parseWorkflowStages(yaml), "preflight");
+  assert.ok(preflight, "OpenAI workflow must keep its preflight job");
+  const body = executableStageBody(preflight);
+  const start = body.indexOf("assert_owner_only_environment() {");
+  const end = body.indexOf("assert_main_only() {");
+  assert.ok(start >= 0 && end > start, "environment governance must stay in the named shell function");
+  const shellFunction = body.slice(start, end);
+  return {
+    shellFunction,
+    filters: [...shellFunction.matchAll(/jq -e '([^']*)'/g)].map((match) => match[1]),
+  };
+}
+
+/** Runs the workflow's own jq filter; true only when `jq -e` would let the step continue. */
+function jqAccepts(filter, value) {
+  const result = spawnSync("jq", ["-e", filter], { input: JSON.stringify(value), encoding: "utf8" });
+  assert.equal(result.error, undefined, "jq must be installed to execute the workflow's filters");
+  return result.status === 0;
+}
+
+function lockedWranglerSource() {
+  const lock = JSON.parse(readFileSync(WORKER_LOCK, "utf8"));
+  const installed = JSON.parse(readFileSync(WRANGLER_PACKAGE, "utf8"));
+  assert.equal(
+    installed.version,
+    lock.packages["node_modules/wrangler"].version,
+    "the installed Wrangler must be the Worker-locked version",
+  );
+  return readFileSync(WRANGLER_CLI, "utf8");
+}
+
+function topLevelFunctionSource(source, name) {
+  const match = source.match(new RegExp(`^(?:async )?function ${name}\\([^)]*\\) \\{\\n[\\s\\S]*?\\n\\}$`, "m"));
+  assert.ok(match, `locked Wrangler no longer defines ${name}; re-review Worker name resolution`);
+  return match[0];
+}
+
+function wranglerTableName(toml, table) {
+  let current = "";
+  for (const line of toml.split("\n")) {
+    const header = line.match(/^\s*\[\[?\s*([^\]\s]+)\s*\]\]?\s*$/);
+    if (header) {
+      current = header[1];
+    } else if (current === table) {
+      const name = line.match(/^\s*name\s*=\s*"([^"]+)"\s*$/);
+      if (name) return name[1];
+    }
+  }
+  return undefined;
+}
+
+/** Every executable Wrangler invocation, with shell line continuations joined. */
+function wranglerInvocations(yaml) {
+  const joined = yaml
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n")
+    .replace(/\\\n\s*/g, " ");
+  return [...joined.matchAll(/\bwrangler [^\n]*/g)].map((match) => match[0]);
+}
+
+function commandFlag(command, flag) {
+  const match = command.match(new RegExp(`\\s${flag}(?:=|\\s+)("[^"]*"|'[^']*'|\\S+)`));
+  return match ? match[1].replace(/^(["'])(.*)\1$/, "$2") : undefined;
+}
+
+test("OpenAI release environments — GitHub's branch_policy rule is the only accepted built-in rule", () => {
+  const { filters } = ownerOnlyEnvironmentFilters(loadOpenAIWorkflow());
+  const shapeFilters = filters.filter((filter) => filter.includes(".can_admins_bypass"));
+  assert.equal(shapeFilters.length, 1, "one environment-shape filter must gate both environments");
+  const [filter] = shapeFilters;
+
+  assert.equal(
+    jqAccepts(filter, githubEnvironment()),
+    true,
+    "the intended main-only environment carries GitHub's own branch_policy rule and must pass",
+  );
+  for (const [label, overrides] of Object.entries({
+    "wait timer": { protection_rules: [BRANCH_POLICY_RULE, WAIT_TIMER_RULE] },
+    "required reviewer": { protection_rules: [BRANCH_POLICY_RULE, REVIEWER_RULE] },
+    "GitHub's documented staging example": {
+      protection_rules: [WAIT_TIMER_RULE, REVIEWER_RULE, BRANCH_POLICY_RULE],
+    },
+    "unknown additional built-in rule": { protection_rules: [BRANCH_POLICY_RULE, { id: 7, node_id: "x", type: "future_gate" }] },
+    "unknown rule instead of branch_policy": { protection_rules: [{ id: 7, node_id: "x", type: "future_gate" }] },
+    "duplicated branch_policy": { protection_rules: [BRANCH_POLICY_RULE, BRANCH_POLICY_RULE] },
+    "empty rule list despite a custom branch policy": { protection_rules: [] },
+    "null rule list": { protection_rules: null },
+    "missing rule list": { protection_rules: undefined },
+    "administrator bypass": { can_admins_bypass: true },
+    "protected-branches policy": {
+      deployment_branch_policy: { protected_branches: true, custom_branch_policies: false },
+    },
+    "all branches allowed": { deployment_branch_policy: null },
+  })) {
+    assert.equal(jqAccepts(filter, githubEnvironment(overrides)), false, `${label} must fail closed`);
+  }
+});
+
+test("OpenAI release environments — GitHub App deployment protection rules are read and must be absent", () => {
+  const { shellFunction, filters } = ownerOnlyEnvironmentFilters(loadOpenAIWorkflow());
+  assert.match(
+    shellFunction,
+    /"repos\/\$\{GITHUB_REPOSITORY\}\/environments\/\$\{name\}\/deployment_protection_rules"/,
+    "built-in protection_rules omit GitHub App rules, so the dedicated endpoint must be read",
+  );
+  const customFilters = filters.filter((filter) => filter.includes("custom_deployment_protection_rules"));
+  assert.equal(customFilters.length, 1, "one filter must reject custom deployment protection rules");
+  const [filter] = customFilters;
+
+  assert.equal(jqAccepts(filter, { total_count: 0, custom_deployment_protection_rules: [] }), true);
+  for (const [label, value] of Object.entries({
+    "one enabled app rule": { total_count: 1, custom_deployment_protection_rules: [CUSTOM_APP_RULE] },
+    "count disagrees with list": { total_count: 0, custom_deployment_protection_rules: [CUSTOM_APP_RULE] },
+    "count without list": { total_count: 0 },
+    "list without count": { custom_deployment_protection_rules: [] },
+    "non-array list": { total_count: 0, custom_deployment_protection_rules: {} },
+  })) {
+    assert.equal(jqAccepts(filter, value), false, `${label} must fail closed`);
+  }
+});
+
+// How each Worker-selecting subcommand of the locked Wrangler resolves its
+// target. Worker-secret commands append `-<env>` to an explicit `--name`; the
+// deploy, deployment and version commands use an explicit name as given.
+const WRANGLER_LEGACY_NAME_COMMANDS = Object.freeze([
+  "secretPutCommand",
+  "secretDeleteCommand",
+  "secretListCommand",
+  "secretBulkCommand",
+  "versionsSecretPutCommand",
+  "versionsSecretDeleteCommand",
+  "versionsSecretsListCommand",
+  "versionsSecretBulkCommand",
+]);
+const WRANGLER_INLINE_NAME_COMMANDS = Object.freeze([
+  "deploymentsStatusCommand",
+  "versionsViewCommand",
+  "versionsDeployCommand",
+]);
+const WRANGLER_WORKER_INVOCATIONS = Object.freeze([
+  { pattern: /^wrangler (?:versions )?secret [a-z]+\b/, resolution: "legacy" },
+  { pattern: /^wrangler deploy\b/, resolution: "plain" },
+  { pattern: /^wrangler deployments status\b/, resolution: "plain" },
+  { pattern: /^wrangler versions (?:view|deploy)\b/, resolution: "plain" },
+]);
+
+function wranglerCommandSegment(source, command) {
+  const start = source.indexOf(`    ${command} = createCommand(`);
+  assert.ok(start >= 0, `locked Wrangler no longer defines ${command}`);
+  return source.slice(start, source.indexOf("createCommand(", start + command.length + 20));
+}
+
+test("OpenAI release workflow — every Wrangler command addresses the reviewed Worker under locked resolution", () => {
+  const source = lockedWranglerSource();
+  // Pin the upstream behavior this invariant depends on. A Wrangler upgrade
+  // that changes any of it must fail here and be reviewed, not pass silently.
+  assert.match(
+    source,
+    /const useServiceEnvironments2 = !\(args\["legacy-env"\] \?\? rawConfig\.legacy_env \?\? true\);/,
+    "legacy (non-service) environments must remain the default",
+  );
+  assert.match(
+    source,
+    /\(rawEnv !== topLevelEnv \? rawEnv\[field\] : void 0\) \?\? transformFn\(topLevelEnv\?\.\[field\]\)/,
+    "a name declared inside [env.<name>] must still win over the suffixed top-level name",
+  );
+  for (const command of WRANGLER_LEGACY_NAME_COMMANDS) {
+    assert.match(wranglerCommandSegment(source, command), /getLegacyScriptName\(args, config\)/, `${command} resolution changed`);
+  }
+  const deploy = wranglerCommandSegment(source, "deployCommand");
+  assert.match(deploy, /let name2 = getScriptName\(args, config\);/, "deploy resolution changed");
+  assert.doesNotMatch(deploy, /getLegacyScriptName/, "deploy resolution changed");
+  for (const command of WRANGLER_INLINE_NAME_COMMANDS) {
+    const segment = wranglerCommandSegment(source, command);
+    assert.match(segment, /const workerName = args\.name \?\? config\.name;/, `${command} resolution changed`);
+    assert.doesNotMatch(segment, /getLegacyScriptName/, `${command} resolution changed`);
+  }
+  const getScriptNameSource = topLevelFunctionSource(source, "getScriptName");
+  assert.match(getScriptNameSource, /^  return args\.name \?\? config\.name;$/m, "getScriptName changed");
+  // Evaluates only resolver functions of the lockfile-pinned Wrangler bundle
+  // that the release job itself executes; no repository or runtime input is
+  // interpolated.
+  const resolvers = new Function(
+    `${topLevelFunctionSource(source, "useServiceEnvironments")}\n`
+      + `${topLevelFunctionSource(source, "getLegacyScriptName")}\n`
+      + `${getScriptNameSource}\n`
+      + "return { legacy: getLegacyScriptName, plain: getScriptName };",
+  )();
+
+  const toml = readFileSync(OPENAI_WRANGLER, "utf8");
+  assert.doesNotMatch(toml, /^\s*legacy_env\s*=/m, "the resolution below assumes Wrangler's default legacy environments");
+  const workerName = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8")).workerName;
+  assert.equal(workerName, "frihet-openai-mcp");
+  assert.equal(
+    wranglerTableName(toml, "env.openai"),
+    workerName,
+    "[env.openai] must name the reviewed Worker so `--env openai` alone addresses it",
+  );
+  const configFor = (environment) => ({
+    name: wranglerTableName(toml, environment ? `env.${environment}` : ""),
+    legacy_env: true,
+    legacy: {},
+  });
+  // The trap itself, executed against the locked resolvers.
+  assert.equal(resolvers.legacy({ name: workerName, env: "openai" }, configFor("openai")), `${workerName}-openai`);
+  assert.equal(resolvers.plain({ name: workerName, env: "openai" }, configFor("openai")), workerName);
+
+  // `$WORKER_NAME` stands for the reviewed Worker only where the same step
+  // derives it from the topology contract and asserts it before any use.
+  const workflow = loadOpenAIWorkflow();
+  for (const step of workflow.split(/^      - name: /m).slice(1)) {
+    const firstUse = step.search(/wrangler [^\n]*\$\{?WORKER_NAME/);
+    if (firstUse < 0) continue;
+    const proof = step.indexOf('test "$WORKER_NAME" = "frihet-openai-mcp"');
+    assert.ok(
+      step.includes("WORKER_NAME=\"$(jq -r '.workerName // \"\"' \"$CONTRACT\")\"") && proof >= 0 && proof < firstUse,
+      `step "${step.split("\n")[0]}" uses $WORKER_NAME before proving it`,
+    );
+  }
+
+  const seen = { legacy: 0, plain: 0 };
+  for (const invocation of wranglerInvocations(workflow)) {
+    const env = commandFlag(invocation, "--env");
+    let name = commandFlag(invocation, "--name");
+    const kind = WRANGLER_WORKER_INVOCATIONS.find(({ pattern }) => pattern.test(invocation));
+    if (!kind) {
+      assert.equal(env ?? name, undefined, `${invocation} selects a Worker through an unclassified subcommand`);
+      continue;
+    }
+    if (name === "$WORKER_NAME" || name === "${WORKER_NAME}") name = workerName;
+    assert.equal(env, "openai", `${invocation} must select the reviewed environment`);
+    assert.equal(
+      resolvers[kind.resolution]({ name, env }, configFor(env)),
+      workerName,
+      `${invocation} resolves to a different Worker than the one the release deploys`,
+    );
+    seen[kind.resolution] += 1;
+  }
+  assert.ok(seen.legacy > 0, "the release must inventory the reviewed Worker's secret names");
+  assert.ok(seen.plain > 0, "the release must deploy and read back the reviewed Worker");
 });
 
 test("OpenAI release workflow — full gates and exact-source lockfiles precede deploy", () => {
@@ -1568,13 +1857,24 @@ test("OpenAI release workflow — semantic mutants cannot bypass topology recove
     "administrators must not bypass the exact environment governance",
   );
   const humanGate = workflow.replace(
-    '.protection_rules | type == "array" and length == 0',
-    '.protection_rules | type == "array" and length > 0',
+    '[.protection_rules[].type] == ["branch_policy"]',
+    '([.protection_rules[].type] | index("branch_policy") != null)',
   );
+  assert.notEqual(humanGate, workflow, "the built-in rule mutant must apply");
   assert.ok(
     validateOpenAIReleaseSemantics(humanGate)
       .includes("owner-only-environment-governance-not-enforced"),
-    "a fictional reviewer, wait timer, or custom gate must not enter the sole-owner ceremony",
+    "a fictional reviewer or wait timer must not enter the sole-owner ceremony",
+  );
+  const appGate = workflow.replace(
+    '.total_count == 0 and (.custom_deployment_protection_rules | type == "array" and length == 0)',
+    ".total_count >= 0",
+  );
+  assert.notEqual(appGate, workflow, "the custom-rule mutant must apply");
+  assert.ok(
+    validateOpenAIReleaseSemantics(appGate)
+      .includes("owner-only-environment-governance-not-enforced"),
+    "a GitHub App deployment gate must not enter the sole-owner ceremony",
   );
   const blockedRecovery = workflow.replace(
     "assert_owner_only_environment openai-plugin-rollback",
@@ -2098,6 +2398,81 @@ test("OpenAI topology bootstrap — irreversible boundary and force-cancel recov
   assert.match(guide, /does not exclude direct Wrangler,\s+API, dashboard, or unrelated-workflow changes/);
   assert.match(guide, /does not.*local Assets directory or\s+`run_worker_first`/s);
   assert.doesNotMatch(guide, /receipt must be no older than 24 hours/);
+  assert.doesNotMatch(guide, /wrangler (?:deploy|deployments|versions|rollback|secret)/iu);
+});
+
+test("OpenAI topology bootstrap — the reviewed-main bridge decision is explicit, irreversible and verifiable", () => {
+  const guide = readFileSync(OPENAI_BOOTSTRAP_GUIDE, "utf8");
+  const workflow = loadOpenAIWorkflow();
+  const topology = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
+
+  assert.match(guide, /^## Owner decision: the reviewed `main` commit is the bridge$/m);
+  assert.match(guide, /\*\*IRREVERSIBLE\.\*\*/);
+  assert.match(guide, /forward-only/);
+  assert.match(guide, /Every OAuth client registration, grant\s+and\s+token/);
+
+  // Exactly the reviewed secret-name set remains; the Langfuse names go.
+  for (const name of topology.targetTopology.secretNames) {
+    assert.match(guide, new RegExp(`\`${name}\``), `${name} must be named as a kept Worker secret`);
+  }
+  for (const name of ["LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"]) {
+    assert.match(guide, new RegExp(`\`${name}\``), `${name} removal must be explicit`);
+    assert.ok(!topology.targetTopology.secretNames.includes(name));
+  }
+  assert.match(guide, /`frihet-openai-mcp-openai`/, "the --name plus --env secret-command trap must be named");
+
+  // Every release secret the runbook names is one the workflow actually reads.
+  const releaseSecrets = new Set(guide.match(/\bOPENAI_[A-Z0-9_]+\b/g) ?? []);
+  assert.ok(releaseSecrets.has("OPENAI_TOKEN_TOPOLOGY_SHA256"));
+  for (const name of releaseSecrets) {
+    assert.match(workflow, new RegExp(`\\bsecrets\\.${name}\\b`), `${name} is not read by the release workflow`);
+  }
+  assert.match(guide, /`baseline\.topologySha256`/);
+  assert.match(workflow, /jq -r '\.baseline\.topologySha256'/);
+
+  // Claims about the locked Wrangler that the runbook relies on.
+  const wrangler = lockedWranglerSource();
+  assert.doesNotMatch(guide, /secrets-file/);
+  assert.equal(wrangler.includes("secrets-file"), false, "re-review the secret step if Wrangler gains this option");
+  const deployArgs = [...wranglerCommandSegment(wrangler, "deployCommand").matchAll(/^ {8}"?([a-z][a-z-]*)"?: \{$/gm)]
+    .map((match) => match[1]);
+  assert.ok(deployArgs.includes("dry-run") && deployArgs.includes("var"), "deploy argument list not found");
+  assert.deepEqual(deployArgs.filter((arg) => /secret/.test(arg)), [], "deploy must still have no secret-value option");
+  const put = wranglerCommandSegment(wrangler, "secretPutCommand");
+  assert.match(put, /if \(isWorkerNotFoundError\(e9\)\) \{\s+const result = await createDraftWorker\(/);
+  assert.match(
+    topLevelFunctionSource(wrangler, "createDraftWorker"),
+    /fallbackValue: true/,
+    "a piped put into a missing Worker must still be documented as creating it",
+  );
+  assert.match(guide, /creates that Worker without asking/);
+  assert.match(
+    readFileSync("workers/remote-mcp/src/index.ts", "utf8"),
+    /initLangfuse\(openaiMode \? \{\} : \{/,
+    "the reviewed host must keep passing an empty Langfuse configuration",
+  );
+  assert.match(guide, /No Worker\s+named `frihet-openai-mcp-openai` exists/);
+
+  for (const check of [
+    /releaseSource=wrangler-var/,
+    /migration\s+tag\s+`v2`/,
+    /`\/\.well-known\/oauth-protected-resource\/mcp`/,
+    /`https:\/\/mcp\.frihet\.io\/mcp`[^.]*401/s,
+    /33\s+tools,\s+0\s+resources\s+and\s+0\s+prompts/,
+    /scripts\/check-openai-worker-topology\.mjs/,
+    /scripts\/test-openai-full-compose\.mjs/,
+    /custom\s+connector\s+in\s+Claude/,
+    /ChatGPT\s+draft/,
+  ]) {
+    assert.match(guide, check);
+  }
+
+  assert.match(guide, /Last updated/);
+  assert.match(
+    readFileSync("workers/remote-mcp/src/index.ts", "utf8"),
+    /<p>Last updated: [A-Z][a-z]+ \d{1,2}, \d{4}<\/p>/,
+    "the privacy-date step must refer to a date the reviewed host actually serves",
+  );
   assert.doesNotMatch(guide, /wrangler (?:deploy|deployments|versions|rollback|secret)/iu);
 });
 

@@ -197,15 +197,35 @@ jobs:
           assert_owner_only_environment() {
             local name="$1"
             local environment_json
+            local custom_rules_json
             environment_json="$(read_environment "$name")"
+            # GitHub reports a deployment branch policy as a built-in
+            # branch_policy protection rule, so the required custom main-only
+            # policy always yields exactly that rule. Any other built-in rule
+            # type (a reviewer or wait timer) would block the ceremony.
             if [ "$(jq -r '.name // ""' <<< "$environment_json")" != "$name" ] \
               || ! jq -e '
                 .can_admins_bypass == false
-                and (.protection_rules | type == "array" and length == 0)
+                and (.protection_rules | type == "array")
+                and ([.protection_rules[].type] == ["branch_policy"])
                 and .deployment_branch_policy.protected_branches == false
                 and .deployment_branch_policy.custom_branch_policies == true
               ' <<< "$environment_json" >/dev/null; then
-              echo "::error::$name must be non-bypassable, main-only, and free of reviewer, timer, or custom gates"
+              echo "::error::$name must be non-bypassable, main-only, and free of reviewer or timer gates"
+              return 1
+            fi
+            # Built-in protection_rules never list GitHub App (custom)
+            # deployment protection rules; they have their own endpoint.
+            if ! custom_rules_json="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/environments/${name}/deployment_protection_rules")"; then
+              echo "::error::$name custom deployment protection rules are unreadable"
+              return 1
+            fi
+            if ! jq -e '.total_count == 0 and (.custom_deployment_protection_rules | type == "array" and length == 0)' \
+              <<< "$custom_rules_json" >/dev/null; then
+              echo "::error::$name must be free of custom deployment protection gates"
               return 1
             fi
           }
@@ -760,8 +780,11 @@ jobs:
           ./node_modules/.bin/wrangler whoami >/dev/null 2>&1
           SECRET_LIST="$(mktemp)"
           trap 'rm -f "$SECRET_LIST"' EXIT
+          # Worker-secret commands resolve `--name X --env openai` to the
+          # Worker `X-openai`; `--env openai` alone selects the name declared
+          # in [env.openai], which is the Worker the deploy step targets.
           ./node_modules/.bin/wrangler secret list \
-            --env openai --name frihet-openai-mcp --format json > "$SECRET_LIST"
+            --env openai --format json > "$SECRET_LIST"
           if ! jq -e 'type == "array" and all(.[]; (.name | type) == "string")' \
             "$SECRET_LIST" >/dev/null; then
             echo "::error::Cloudflare returned an invalid OpenAI Worker secret inventory"

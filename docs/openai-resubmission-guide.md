@@ -136,7 +136,10 @@ marked `established`, use this ceremony:
 1. Create both exact-main-only GitHub environments before dispatch.
    `openai-plugin-release` and `openai-plugin-rollback` must each set
    `can_admins_bypass=false`, use custom branch policy with exactly `main`, and
-   have zero reviewer, wait-timer, or custom-gate protection rules. Frihet has
+   have zero reviewer, wait-timer, or custom-gate protection rules. GitHub
+   reports the custom branch policy itself as one `branch_policy` protection
+   rule; the workflow accepts exactly that rule and separately reads the
+   custom deployment protection rules, which must be empty. Frihet has
    one repository owner, so do not configure a fictitious independent reviewer
    or claim prevent-self-review governance that cannot exist. Recovery must
    remain automatically runnable after mutation. Referencing an absent
