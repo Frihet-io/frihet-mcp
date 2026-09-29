@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "15cd1788bef4d6435e4268686789314e9d028c62717142d6fa068a9530e1ca62", // directory-readiness: npm test runs dist/__tests__/directory-profile-policy.test.js (test list only)
+  "package.json": "6cde05b39f4480d773d0e1f2aabcc216478fdc60e3b925c940c4ae69dcc96a13", // openai-release-lane: npm test runs scripts/__tests__/openai-wrangler-resolution.test.mjs (test list only)
   "workers/remote-mcp/package.json": "c7025291c46b023fac162d1a0e0a010d1173bf7bc5d218c6faaab515aba97c6b",
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
