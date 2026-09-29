@@ -33,10 +33,15 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  readFileSync,
+  chmodSync,
   existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -1477,6 +1482,121 @@ test("OpenAI release environments — GitHub App deployment protection rules are
     "non-array list": { total_count: 0, custom_deployment_protection_rules: {} },
   })) {
     assert.equal(jqAccepts(filter, value), false, `${label} must fail closed`);
+  }
+});
+
+/** The dedented `run: |` script of a named workflow step. */
+function stepRunScript(yaml, stepName) {
+  const lines = yaml.split("\n");
+  const start = lines.indexOf(`      - name: ${stepName}`);
+  assert.ok(start >= 0, `${stepName} step must exist`);
+  const run = lines.findIndex((line, index) => index > start && line === "        run: |");
+  assert.ok(
+    run > start && !lines.slice(start + 1, run).some((line) => line.startsWith("      - ")),
+    `${stepName} must have its own run script`,
+  );
+  const body = [];
+  for (const line of lines.slice(run + 1)) {
+    if (line.trim() !== "" && !line.startsWith("          ")) break;
+    body.push(line.slice(10));
+  }
+  return body.join("\n");
+}
+
+// Answers the three GitHub reads of the environment step. STUB_* variables
+// replace one environment's answer; any other gh call is a hard failure.
+const GH_STUB = `#!/usr/bin/env bash
+set -euo pipefail
+url="\${!#}"
+case "$url" in
+  */deployment_protection_rules)
+    name="\${url%/deployment_protection_rules}"; name="\${name##*/}"
+    if [ "\${STUB_CUSTOM_FAIL_FOR:-}" = "$name" ]; then echo "gh: HTTP 403" >&2; exit 1; fi
+    if [ "\${STUB_CUSTOM_FOR:-}" = "$name" ]; then printf '%s' "$STUB_CUSTOM"; exit 0; fi
+    printf '%s' '{"total_count":0,"custom_deployment_protection_rules":[]}' ;;
+  */deployment-branch-policies*)
+    printf '%s' '{"total_count":1,"branch_policies":[{"id":1,"node_id":"x","name":"main","type":"branch"}]}' ;;
+  */environments/*)
+    name="\${url##*/}"
+    if [ "\${STUB_ENV_FAIL_FOR:-}" = "$name" ]; then echo "gh: HTTP 404" >&2; exit 1; fi
+    if [ "\${STUB_ENV_FOR:-}" = "$name" ]; then printf '%s' "$STUB_ENV"; exit 0; fi
+    printf '{"name":"%s","can_admins_bypass":false,"protection_rules":[{"id":3,"node_id":"x","type":"branch_policy"}],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' "$name" ;;
+  *) echo "unexpected gh call: $*" >&2; exit 97 ;;
+esac
+`;
+
+test("OpenAI release environments — the environment step itself fails closed under GitHub's answers", () => {
+  const script = stepRunScript(
+    loadOpenAIWorkflow(),
+    "Assert protected release and non-blocking recovery environments",
+  );
+  const dir = mkdtempSync(join(tmpdir(), "frihet-env-step-"));
+  try {
+    writeFileSync(join(dir, "gh"), GH_STUB);
+    chmodSync(join(dir, "gh"), 0o755);
+    writeFileSync(join(dir, "step.sh"), script);
+    const runStep = (stub) => spawnSync(
+      "bash",
+      ["--noprofile", "--norc", "-eo", "pipefail", join(dir, "step.sh")],
+      {
+        encoding: "utf8",
+        env: {
+          PATH: `${dir}:${process.env.PATH}`,
+          GITHUB_REPOSITORY: "Frihet-io/frihet-mcp",
+          GH_TOKEN: "stub",
+          ...stub,
+        },
+      },
+    );
+    const ok = "OK — non-bypassable owner-only release and non-blocking recovery environments exist";
+
+    const pass = runStep({});
+    assert.equal(pass.error, undefined, "bash and jq must be installed to execute the step");
+    assert.equal(pass.status, 0, `the intended environments must pass:\n${pass.stdout}${pass.stderr}`);
+    assert.ok(pass.stdout.includes(ok));
+
+    for (const [label, stub, error] of [
+      [
+        "unreadable custom rules on the recovery environment",
+        { STUB_CUSTOM_FAIL_FOR: "openai-plugin-rollback" },
+        "openai-plugin-rollback custom deployment protection rules are unreadable",
+      ],
+      [
+        "an enabled GitHub App rule on the release environment",
+        {
+          STUB_CUSTOM_FOR: "openai-plugin-release",
+          STUB_CUSTOM: JSON.stringify({ total_count: 1, custom_deployment_protection_rules: [CUSTOM_APP_RULE] }),
+        },
+        "openai-plugin-release must be free of custom deployment protection gates",
+      ],
+      [
+        "a wait timer on the recovery environment",
+        {
+          STUB_ENV_FOR: "openai-plugin-rollback",
+          STUB_ENV: JSON.stringify(githubEnvironment({
+            name: "openai-plugin-rollback",
+            protection_rules: [BRANCH_POLICY_RULE, WAIT_TIMER_RULE],
+          })),
+        },
+        "openai-plugin-rollback must be non-bypassable, main-only, and free of reviewer or timer gates",
+      ],
+      [
+        "an unreadable release environment",
+        { STUB_ENV_FAIL_FOR: "openai-plugin-release" },
+        "openai-plugin-release environment is missing or unreadable",
+      ],
+    ]) {
+      const result = runStep(stub);
+      assert.notEqual(result.status, 0, `${label} must stop the release`);
+      assert.deepEqual(
+        `${result.stdout}\n${result.stderr}`.split("\n").filter((line) => line.startsWith("::error::")),
+        [`::error::${error}`],
+        `${label} must stop at its own check and nowhere else`,
+      );
+      assert.ok(!result.stdout.includes(ok), `${label} must not report success`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
