@@ -492,7 +492,11 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-wrangler-dry-run-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/openai-bundle-files.sha256
+            .openai-release-evidence/wrangler-openai-dry-run.json
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 90
 
   capture-rollback-state:
@@ -687,7 +691,10 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-pre-mutation-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/pre-mutation-state.json
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 90
 
   deploy-openai:
@@ -1159,7 +1166,11 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-deploy-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/pre-mutation-auth-readiness.json
+            .openai-release-evidence/openai-deploy.json
+            .openai-release-evidence/authenticated-compose.json
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 90
 
@@ -1407,7 +1418,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-public-readback-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/public-readback.json
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 90
 
@@ -1721,6 +1734,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-rollback-proof-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/rollback-proof.json
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 90
