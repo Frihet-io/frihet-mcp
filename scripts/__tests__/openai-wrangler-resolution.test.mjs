@@ -51,14 +51,88 @@ function wranglerTableName(toml, table) {
   return undefined;
 }
 
-/** Every executable Wrangler invocation, with shell line continuations joined. */
-function wranglerInvocations(yaml) {
-  const joined = yaml
+/** Executable shell text: comment lines dropped, `\\` line continuations joined. */
+function executableShellText(text) {
+  return text
     .split("\n")
     .filter((line) => !/^\s*#/.test(line))
     .join("\n")
     .replace(/\\\n\s*/g, " ");
-  return [...joined.matchAll(/\bwrangler [^\n]*/g)].map((match) => match[0]);
+}
+
+/** Every executable Wrangler invocation in `text`, one per joined line. */
+function wranglerInvocations(text) {
+  return [...executableShellText(text).matchAll(/\bwrangler [^\n]*/g)].map((match) => match[0]);
+}
+
+const WORKER_NAME_USE = /\bwrangler [^\n]*\$\{?WORKER_NAME\b/;
+const WORKER_NAME_DERIVATION = `WORKER_NAME="$(jq -r '.workerName // ""' "$CONTRACT")"`;
+const TOPOLOGY_CONTRACT_ASSIGNMENT = "CONTRACT=../../marketplace/openai/cloudflare-topology-baseline.json";
+
+/**
+ * Returns "proven" when a step's `$WORKER_NAME` provably equals `expected` at
+ * its first Wrangler use, otherwise the reason it does not. Proven means:
+ * strict mode, the topology contract selected, exactly one write (the
+ * contract derivation), and a standalone literal `test` of the expected name,
+ * in that order and all before the first use.
+ */
+function workerNameProof(stepText, expected) {
+  const lines = stepText.split("\n").map((line) => line.trim());
+  const use = lines.findIndex((line) => WORKER_NAME_USE.test(line));
+  const strict = lines.indexOf("set -euo pipefail");
+  const contract = lines.indexOf(TOPOLOGY_CONTRACT_ASSIGNMENT);
+  const derivation = lines.indexOf(WORKER_NAME_DERIVATION);
+  const proof = lines.indexOf(`test "$WORKER_NAME" = "${expected}"`);
+  const writes = [...stepText.matchAll(/(?<!\$|\$\{)\bWORKER_NAME\b/g)].length;
+  if (derivation < 0) return "WORKER_NAME is not derived from the topology contract";
+  if (proof < 0) return `no standalone literal test of "${expected}"`;
+  if (strict < 0 || strict > proof) return "no strict mode before the literal test";
+  if (lines.slice(0, use).some((line) => /^set \+[a-z]*e/.test(line))) return "strict mode disabled before use";
+  if (contract < 0 || contract > derivation) return "topology contract not selected before the derivation";
+  if (writes !== 1) return `WORKER_NAME written ${writes} times; only the contract derivation may write it`;
+  if (proof < derivation || proof > use) return "the literal test is not between the derivation and the first use";
+  return "proven";
+}
+
+/**
+ * Resolves every Worker-selecting Wrangler invocation in the workflow with the
+ * locked resolvers. `$WORKER_NAME` is replaced by the reviewed name only inside
+ * a step that proves it; any other use is a violation.
+ */
+function workflowWorkerTargetViolations(workflow, { resolvers, configFor, workerName }) {
+  const errors = [];
+  const seen = { legacy: 0, plain: 0 };
+  let provenSteps = 0;
+  for (const step of workflow.split(/^      - name: /m)) {
+    const title = step.split("\n")[0];
+    const text = executableShellText(step);
+    const usesWorkerName = WORKER_NAME_USE.test(text);
+    const proof = usesWorkerName ? workerNameProof(text, workerName) : undefined;
+    if (proof === "proven") provenSteps += 1;
+    else if (usesWorkerName) errors.push(`${title}: ${proof}`);
+    for (const invocation of wranglerInvocations(text)) {
+      const env = commandFlag(invocation, "--env");
+      let name = commandFlag(invocation, "--name");
+      const kind = WRANGLER_WORKER_INVOCATIONS.find(({ pattern }) => pattern.test(invocation));
+      if (!kind) {
+        if ((env ?? name) !== undefined) errors.push(`unclassified Worker-selecting subcommand: ${invocation}`);
+        continue;
+      }
+      if (name === "$WORKER_NAME" || name === "${WORKER_NAME}") {
+        if (proof !== "proven") continue;
+        name = workerName;
+      }
+      if (env !== "openai") errors.push(`not the reviewed environment: ${invocation}`);
+      else if (resolvers[kind.resolution]({ name, env }, configFor(env)) !== workerName) {
+        errors.push(`resolves to a different Worker than the one the release deploys: ${invocation}`);
+      }
+      seen[kind.resolution] += 1;
+    }
+  }
+  if (provenSteps < 3) errors.push(`only ${provenSteps} steps prove $WORKER_NAME; expected the capture, deploy and recovery steps`);
+  if (seen.legacy === 0) errors.push("the release no longer inventories the reviewed Worker's secret names");
+  if (seen.plain === 0) errors.push("the release no longer deploys and reads back the reviewed Worker");
+  return errors;
 }
 
 function commandFlag(command, flag) {
@@ -152,39 +226,32 @@ test("OpenAI release workflow — every Wrangler command addresses the reviewed 
   assert.equal(resolvers.legacy({ name: workerName, env: "openai" }, configFor("openai")), `${workerName}-openai`);
   assert.equal(resolvers.plain({ name: workerName, env: "openai" }, configFor("openai")), workerName);
 
-  // `$WORKER_NAME` stands for the reviewed Worker only where the same step
-  // derives it from the topology contract and asserts it before any use.
   const workflow = readFileSync(OPENAI_WORKFLOW, "utf8");
-  for (const step of workflow.split(/^      - name: /m).slice(1)) {
-    const firstUse = step.search(/wrangler [^\n]*\$\{?WORKER_NAME/);
-    if (firstUse < 0) continue;
-    const proof = step.indexOf('test "$WORKER_NAME" = "frihet-openai-mcp"');
-    assert.ok(
-      step.includes("WORKER_NAME=\"$(jq -r '.workerName // \"\"' \"$CONTRACT\")\"") && proof >= 0 && proof < firstUse,
-      `step "${step.split("\n")[0]}" uses $WORKER_NAME before proving it`,
-    );
-  }
+  const context = { resolvers, configFor, workerName };
+  assert.deepEqual(workflowWorkerTargetViolations(workflow, context), []);
 
-  const seen = { legacy: 0, plain: 0 };
-  for (const invocation of wranglerInvocations(workflow)) {
-    const env = commandFlag(invocation, "--env");
-    let name = commandFlag(invocation, "--name");
-    const kind = WRANGLER_WORKER_INVOCATIONS.find(({ pattern }) => pattern.test(invocation));
-    if (!kind) {
-      assert.equal(env ?? name, undefined, `${invocation} selects a Worker through an unclassified subcommand`);
-      continue;
-    }
-    if (name === "$WORKER_NAME" || name === "${WORKER_NAME}") name = workerName;
-    assert.equal(env, "openai", `${invocation} must select the reviewed environment`);
-    assert.equal(
-      resolvers[kind.resolution]({ name, env }, configFor(env)),
-      workerName,
-      `${invocation} resolves to a different Worker than the one the release deploys`,
-    );
-    seen[kind.resolution] += 1;
+  // Mutants: each must be reported, so the proof above is not vacuous.
+  const proofLine = `test "$WORKER_NAME" = "${workerName}"`;
+  const mutants = {
+    "proof lines deleted": workflow.replaceAll(`          ${proofLine}\n`, ""),
+    "full-host Worker without a proof": workflow
+      .replaceAll(WORKER_NAME_DERIVATION, "WORKER_NAME=frihet-remote-mcp")
+      .replaceAll(`          ${proofLine}\n`, ""),
+    "full-host Worker reassigned after the proof": workflow.replaceAll(
+      `          ${proofLine}\n`,
+      `          ${proofLine}\n          WORKER_NAME=frihet-remote-mcp\n`,
+    ),
+    "proof neutralized": workflow.replaceAll(proofLine, `${proofLine} || true`),
+    "proof of the full-host name": workflow.replaceAll(proofLine, 'test "$WORKER_NAME" = "frihet-remote-mcp"'),
+    "secret inventory with an explicit name": workflow.replace(
+      "--env openai --format json",
+      '--env openai --name "$WORKER_NAME" --format json',
+    ),
+  };
+  for (const [label, mutant] of Object.entries(mutants)) {
+    assert.notEqual(mutant, workflow, `${label}: mutant must apply`);
+    assert.notDeepEqual(workflowWorkerTargetViolations(mutant, context), [], `${label} must be reported`);
   }
-  assert.ok(seen.legacy > 0, "the release must inventory the reviewed Worker's secret names");
-  assert.ok(seen.plain > 0, "the release must deploy and read back the reviewed Worker");
 });
 
 test("OpenAI topology bootstrap — the locked Wrangler facts the runbook states still hold", () => {
