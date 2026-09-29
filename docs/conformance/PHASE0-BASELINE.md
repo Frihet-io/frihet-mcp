@@ -263,6 +263,24 @@ identity rests on the exact `npx` spec plus that hash.
 
 ## Premise corrections for Phase 1
 
+Historical observations below describe the packages inspected for Phase 0, not
+the current upstream catalogue. On 2026-09-29, the official split TypeScript
+SDK packages are at [2.2.0](https://github.com/modelcontextprotocol/typescript-sdk/releases/tag/v2.2.0)
+and implement protocol `2026-07-28`; the maintained v1 package is
+[1.31.0](https://github.com/modelcontextprotocol/typescript-sdk/releases/tag/1.31.0).
+Frihet uses the 1.31.0 compatibility bridge in both stdio and the Worker.
+The current Agents `McpAgent` hosts the v1 sessionful transport; substituting
+a v2 server requires a separate transport migration and OAuth/session validation.
+The recorded Phase 0 artefacts remain unchanged as historical evidence.
+
+Bridge validation also ran the current `runMcpBaseline()` harness against both
+unchanged `b738e499f8e26ed864d13648a62e8ebcb866fd36` (SDK 1.30.0) and this
+SDK 1.31.0 candidate: their serialized reports were byte-identical (163 tool
+names, including 158 canonical operations). The older committed canary snapshot
+still expects 162 names and fails on both versions; it is not evidence of a
+bridge regression and has not been silently refreshed. The separate reviewed
+33-tool descriptor and submission parity gates pass on the bridge.
+
 Three claims in #1578 do not survive contact with the current packages. None of
 them block Phase 0, but Phase 1 is planned on top of them.
 
