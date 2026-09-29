@@ -2392,6 +2392,21 @@ test("OpenAI topology bootstrap — the reviewed-main bridge decision is explici
   );
   assert.match(guide, /No Worker\s+named `frihet-openai-mcp-openai` exists/);
 
+  // Every test file the runbook cites exists, and the one it names as the pin
+  // of the locked Wrangler behavior really reads the locked CLI.
+  const citedTests = [...guide.matchAll(/`(scripts\/__tests__\/[a-z0-9-]+\.test\.mjs)`/g)].map((match) => match[1]);
+  assert.ok(citedTests.length > 0);
+  for (const file of citedTests) assert.ok(existsSync(file), `${file} is cited but does not exist`);
+  const wranglerPin = guide.match(/`(scripts\/__tests__\/[a-z0-9-]+\.test\.mjs)`\s+pins this behavior\s+against the locked Wrangler/);
+  assert.ok(wranglerPin, "the runbook must name the test that pins the locked Wrangler behavior");
+  assert.match(
+    readFileSync(wranglerPin[1], "utf8"),
+    /"workers\/remote-mcp\/node_modules\/wrangler\/wrangler-dist\/cli\.js"/,
+    `${wranglerPin[1]} does not read the locked Wrangler`,
+  );
+  assert.match(guide, /waives step 1/);
+  assert.match(guide, /missing or shorter than 32 bytes/);
+
   for (const check of [
     /releaseSource=wrangler-var/,
     /migration\s+tag\s+`v2`/,

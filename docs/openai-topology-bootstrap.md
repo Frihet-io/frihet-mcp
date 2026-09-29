@@ -20,16 +20,16 @@ completed in separately reviewed changes.
 
 ## Owner decision: the reviewed `main` commit is the bridge
 
-The owner has decided how steps 1 and 2 of the required bridge release are
-satisfied for this bootstrap. The exact source of the active production version
-cannot be recovered, so no behavior-preserving bridge is built. The bridge is a
-reviewed commit of `main`, called `<S>` below. It introduces the final topology
-and the reviewed 33-tool surface in one change. Step 2 allows that only because
-`<S>` as a whole, surface switch included, receives exact-SHA review. Steps 3
-to 9 still apply, except that step 5 verifies the reviewed surface described
-below instead of an unchanged one. The first deployment of `<S>` is manual,
-because the release workflow refuses to mutate while the receipt is
-`pending-bootstrap`.
+For this bootstrap the owner waives step 1 of the required bridge release and
+satisfies step 2 as described here. The exact source of the active production
+version cannot be recovered, so no behavior-preserving bridge is built. The
+bridge is a reviewed commit of `main`, called `<S>` below. It introduces the
+final topology and the reviewed 33-tool surface in one change. Step 2 allows
+that only because `<S>` as a whole, surface switch included, receives exact-SHA
+review. Steps 3 to 9 still apply, except that step 5 verifies the reviewed
+surface described below instead of an unchanged one. The first deployment of
+`<S>` is manual, because the release workflow refuses to mutate while the
+receipt is `pending-bootstrap`.
 
 **IRREVERSIBLE.** Deploying `<S>` applies migration `v2`, which creates the
 `OAuthStateStore` Durable Object class. Cloudflare does not allow a rollback to
@@ -61,9 +61,10 @@ is live, and a submitted OpenAI draft needs a new scan.
    credential bound. It answers 405 to a GET. A DELETE that carries the
    Worker's service header with a deliberately wrong value is rejected before
    any request body is read: 401 with code `OAUTH_SERVICE_UNAUTHORIZED` means
-   the credential is bound, and 503 with `OAUTH_SERVICE_UNAVAILABLE` means it is
-   not. A POST cannot tell the two apart, because it checks the Firebase token
-   first. Without the endpoint, the OAuth callback answers 502.
+   the credential is bound, and 503 with `OAUTH_SERVICE_UNAVAILABLE` means it
+   is missing or shorter than 32 bytes. A POST cannot tell these apart, because
+   it checks the Firebase token first. Without the endpoint, the OAuth callback
+   answers 502.
 3. `FRIHET_OAUTH_API_KEY` exists once in Frihet's secret manager. The Worker
    later receives exactly the same bytes: at least 32 bytes and no trailing
    newline.
@@ -100,7 +101,7 @@ is live, and a submitted OpenAI draft needs a new scan.
    Listing then fails, but the `put` subcommand, when the value is piped,
    creates that Worker without asking and stores the credential there, while
    the reviewed host keeps answering 503.
-   `scripts/__tests__/release-workflow-contract.test.mjs` pins this behavior
+   `scripts/__tests__/openai-wrangler-resolution.test.mjs` pins this behavior
    against the locked Wrangler.
 5. Remove `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`
    from the Worker the same way; each removal deploys another version. The
