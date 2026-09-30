@@ -1166,6 +1166,14 @@ test("OpenAI release workflow — current source and frozen OpenAI profile are i
   assert.match(preflight.body, /require\('\.\/package\.json'\)\.version/);
   assert.match(preflight.body, /workers\/remote-mcp\/public-openai\/releases\.json/);
   assert.match(preflight.body, /reviewed_profile_version=\$PROFILE_VERSION/);
+  const reviewedProfile = JSON.parse(
+    readFileSync("workers/remote-mcp/public-openai/releases.json", "utf8"),
+  );
+  const submissionGuide = readFileSync("marketplace/openai/SUBMISSION.md", "utf8");
+  assert.ok(
+    submissionGuide.includes(`Release \`${reviewedProfile.version}\``),
+    "OpenAI submission guide must name the exact reviewed profile version",
+  );
   assert.match(preflight.body, /\.surface == "openai-chatgpt"/);
   assert.match(preflight.body, /github\.workflow_ref/);
   assert.match(preflight.body, /github\.workflow_sha/);
