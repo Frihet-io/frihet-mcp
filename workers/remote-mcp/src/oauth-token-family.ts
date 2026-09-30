@@ -1,4 +1,5 @@
 import type { TokenExchangeCallbackOptions } from "@cloudflare/workers-oauth-provider";
+import { OPENAI_REVIEW_OAUTH_SCOPES } from "../../../src/openai-review-oauth.js";
 import type {
   OAuthApiKeyBinding,
   OAuthTokenFamilyBeginResult,
@@ -10,7 +11,7 @@ import type {
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_TOKEN_RESPONSE_BYTES = 16 * 1024;
 const INTERNAL_ORIGIN = "https://oauth-state.internal";
-const REVIEWED_SCOPE = "frihet:workspace.manage";
+const REVIEWED_SCOPE = OPENAI_REVIEW_OAUTH_SCOPES.join(" ");
 
 type StructuredOAuthCredential = {
   raw: string;

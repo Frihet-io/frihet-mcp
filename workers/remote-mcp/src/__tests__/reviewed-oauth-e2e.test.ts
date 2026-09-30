@@ -19,10 +19,12 @@ import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
+  buildOpenAIUserInfo,
   FRIHET_CONNECTOR_SCOPE,
   OAUTH_PROVIDER_REVIEW_OPTIONS,
   OPENAI_REVIEW_MCP_RESOURCE,
   OPENAI_REVIEW_OAUTH_RESOURCES,
+  OPENAI_REVIEW_OAUTH_SCOPES,
   OPENAI_REVIEW_ORIGIN,
   validateOAuthBoundary,
 } from "../../../../src/openai-review-oauth.ts";
@@ -187,8 +189,13 @@ const PROPS = {
   keyId: BINDING.keyId,
   apiKeyExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
   userId: USER_ID,
+  email: "reviewer@example.com",
+  emailVerified: true,
   accessProfile: "openai",
   oauthScope: FRIHET_CONNECTOR_SCOPE,
+  oauthScopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
+  oauthIssuer: OPENAI_REVIEW_ORIGIN,
+  oauthAudience: OPENAI_REVIEW_MCP_RESOURCE,
   oauthResource: OPENAI_REVIEW_ORIGIN,
   authMethod: "oauth",
 };
@@ -214,7 +221,7 @@ async function harness() {
       return {
         accessTokenProps: options.props,
         newProps: options.props,
-        accessTokenScope: [FRIHET_CONNECTOR_SCOPE],
+        accessTokenScope: [...OPENAI_REVIEW_OAUTH_SCOPES],
         accessTokenTTL: 3600,
       };
     },
@@ -280,7 +287,7 @@ async function harness() {
       response_type: "code",
       client_id: clientId,
       redirect_uri: REDIRECT_URI,
-      scope: FRIHET_CONNECTOR_SCOPE,
+      scope: OPENAI_REVIEW_OAUTH_SCOPES.join(" "),
       state: "state-1",
       code_challenge: await s256(CODE_VERIFIER),
       code_challenge_method: "S256",
@@ -303,7 +310,7 @@ async function harness() {
       userId: USER_ID,
       metadata: {},
       scope: oauthReq.scope,
-      props: PROPS,
+      props: { ...PROPS, oauthAudience: resource },
     });
     const code = new URL(redirectTo).searchParams.get("code");
     assert.ok(code);
@@ -322,13 +329,20 @@ async function harness() {
     );
   }
 
-  return { authorize, token, callMcp };
+  async function userInfo(accessToken: string) {
+    const helpers = getOAuthApi(providerOptions(), env) as {
+      unwrapToken(token: string): Promise<Parameters<typeof buildOpenAIUserInfo>[0]>;
+    };
+    return buildOpenAIUserInfo(await helpers.unwrapToken(accessToken));
+  }
+
+  return { authorize, token, callMcp, userInfo };
 }
 
 for (const resource of OPENAI_REVIEW_OAUTH_RESOURCES) {
   for (const sendResourceAtToken of [false, true]) {
     test(`authorize -> token -> refresh -> /mcp succeeds for resource ${resource}${sendResourceAtToken ? " (echoed at /token)" : ""}`, async () => {
-      const { authorize, token, callMcp } = await harness();
+      const { authorize, token, callMcp, userInfo } = await harness();
       const { clientId, code } = await authorize(resource);
 
       const codeForm = new URLSearchParams({
@@ -343,7 +357,7 @@ for (const resource of OPENAI_REVIEW_OAUTH_RESOURCES) {
       assert.equal(first.settlement.response.status, 200, JSON.stringify(first.body));
       assert.equal(first.settlement.revokeGrant, false);
       assert.equal(first.body.resource, resource);
-      assert.equal(first.body.scope, FRIHET_CONNECTOR_SCOPE);
+      assert.equal(first.body.scope, OPENAI_REVIEW_OAUTH_SCOPES.join(" "));
 
       const refreshForm = new URLSearchParams({
         grant_type: "refresh_token",
@@ -359,6 +373,11 @@ for (const resource of OPENAI_REVIEW_OAUTH_RESOURCES) {
       const api = await callMcp(String(refreshed.body.access_token));
       assert.equal(api.status, 200);
       assert.equal(await api.text(), "reviewed-mcp");
+      assert.deepEqual(await userInfo(String(refreshed.body.access_token)), {
+        sub: USER_ID,
+        email: "reviewer@example.com",
+        email_verified: true,
+      });
 
       const crossHost = await callMcp(String(refreshed.body.access_token), "https://mcp.frihet.io");
       assert.equal(crossHost.status, 401, "a reviewed-host token must not authorize the full host");

@@ -185,10 +185,15 @@ export function handleToolError(error: unknown, toolName?: string): {
         },
       ],
       isError: true,
-      ...(operationOutcomeUnknown
+      ...(error.statusCode === 401 || operationOutcomeUnknown
         ? {
             _meta: {
-              "io.frihet/operationOutcomeUnknown": true,
+              ...(error.statusCode === 401
+                ? { "io.frihet/authenticationRequired": true }
+                : {}),
+              ...(operationOutcomeUnknown
+                ? { "io.frihet/operationOutcomeUnknown": true }
+                : {}),
               ...(transportOutcomeUnknown
                 ? { "io.frihet/transportOutcomeUnknown": true }
                 : {}),

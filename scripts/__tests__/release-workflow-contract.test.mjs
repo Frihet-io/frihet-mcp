@@ -2532,9 +2532,10 @@ test("OpenAI release workflow — portal hard stops remain explicit", () => {
     assert.match(guide, new RegExp(forbiddenDependency));
   }
   assert.match(guide, /STOP before\s+the portal/);
-  assert.match(guide, /does not declare a workspace-domain restriction/);
-  assert.match(guide, /sole\s+OAuth scope remains `frihet:workspace\.manage`/);
-  assert.match(guide, /do not add or imply UserInfo,\s+`openid`, or `email` support/);
+  assert.match(guide, /requires exactly `openid email\s+frihet:workspace\.manage`/);
+  assert.match(guide, /UserInfo must emit\s+only `sub`, `email`, and literal `email_verified: true`/);
+  assert.match(guide, /unverified or\s+missing Firebase email must fail closed/);
+  assert.match(guide, /deliberately omits\s+`authorization_response_iss_parameter_supported`/);
   assert.match(guide, /Verify domain ownership inside the current portal draft/);
   assert.match(guide, /historical challenge token/);
   assert.match(guide, /STOP before Scan Tools/);

@@ -52,7 +52,9 @@ document names `resource` as the exact connector URL
 `https://openai-mcp.frihet.io/mcp`, as
 [Claude's connector authentication guide](https://claude.com/docs/connectors/building/authentication)
 requires. The authorization server offers Dynamic Client Registration, S256
-PKCE and the single scope `frihet:workspace.manage`. The root metadata
+PKCE and the exact scopes `openid email frihet:workspace.manage`. The OIDC
+identity scopes support the same reviewed host's protected UserInfo contract;
+they do not widen the 33-tool business surface. The root metadata
 document keeps the origin as `resource`. The authorization boundary and the
 `/token` rotation guard accept either value for this host only, and the
 authorize → token → refresh flow for both values is covered by

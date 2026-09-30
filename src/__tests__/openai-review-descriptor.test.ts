@@ -12,6 +12,7 @@ import {
   type OpenAIReviewTool,
 } from "../openai-review-contract.js";
 import { OPENAI_REVIEW_CONFIRM_REQUIRED_TOOLS } from "../openai-profile.js";
+import { OPENAI_REVIEW_OAUTH_SCOPES } from "../openai-review-oauth.js";
 
 const SNAPSHOT_PATH = fileURLToPath(
   new URL(
@@ -66,7 +67,7 @@ test("package-local tools/list remains semantically identical to the reviewed de
   for (const tool of surface.tools) {
     assert.deepEqual(
       tool.securitySchemes,
-      [{ type: "oauth2", scopes: ["frihet:workspace.manage"] }],
+      [{ type: "oauth2", scopes: [...OPENAI_REVIEW_OAUTH_SCOPES] }],
       `${tool.name} must expose standard top-level OAuth securitySchemes on the Worker wire`,
     );
   }
@@ -137,7 +138,7 @@ test("semantic gate: legacy OAuth mirror cannot drift from the reviewed scope", 
   metadata.securitySchemes = [{ type: "oauth2", scopes: ["broader:scope"] }];
   assert.throws(
     () => assertOpenAIReviewContract(actual, EXPECTED),
-    /list_invoices\._meta\.securitySchemes must require only the reviewed connector OAuth scope/,
+    /list_invoices\._meta\.securitySchemes must require exactly the reviewed OpenAI OAuth scopes/,
   );
 });
 

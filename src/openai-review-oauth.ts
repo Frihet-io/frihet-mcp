@@ -6,6 +6,11 @@
 export const OPENAI_REVIEW_ORIGIN = "https://openai-mcp.frihet.io";
 export const FULL_MCP_ORIGIN = "https://mcp.frihet.io";
 export const FRIHET_CONNECTOR_SCOPE = "frihet:workspace.manage";
+export const OPENAI_REVIEW_OAUTH_SCOPES: readonly string[] = Object.freeze([
+  "openid",
+  "email",
+  FRIHET_CONNECTOR_SCOPE,
+]);
 
 /**
  * RFC 8707 resource identifier of the reviewed MCP endpoint. Claude's
@@ -94,14 +99,14 @@ export const OAUTH_PROVIDER_REVIEW_OPTIONS = {
   // This provider does not implement per-tool OAuth authorization. Advertise
   // one honest connector-wide scope instead of implying that `read` prevents
   // writes. Every mutating reviewed tool still requires confirm=true.
-  scopesSupported: [FRIHET_CONNECTOR_SCOPE],
+  scopesSupported: [...OPENAI_REVIEW_OAUTH_SCOPES],
   accessTokenTTL: 3600,
   refreshTokenTTL: 2592000,
   allowPlainPKCE: false,
   resourceMetadata: {
     resource: OPENAI_REVIEW_ORIGIN,
     authorization_servers: [OPENAI_REVIEW_ORIGIN],
-    scopes_supported: [FRIHET_CONNECTOR_SCOPE],
+    scopes_supported: [...OPENAI_REVIEW_OAUTH_SCOPES],
     bearer_methods_supported: ["header"],
     resource_name: "Frihet reviewed connector",
   },
@@ -123,6 +128,15 @@ interface OAuthBoundaryParameters {
   /** Authorization requests must include the advertised scope. Token refresh
    * requests may omit it because the provider reuses the validated grant. */
   requireScope: boolean;
+}
+
+export function hasExactOpenAIReviewScopes(value: unknown): value is string[] {
+  if (!Array.isArray(value) || value.length !== OPENAI_REVIEW_OAUTH_SCOPES.length) {
+    return false;
+  }
+  const scopes = new Set(value);
+  return scopes.size === OPENAI_REVIEW_OAUTH_SCOPES.length
+    && OPENAI_REVIEW_OAUTH_SCOPES.every((scope) => scopes.has(scope));
 }
 
 /**
@@ -155,11 +169,11 @@ export function validateOAuthBoundary(
     : typeof parameters.scope === "string"
       ? parameters.scope.split(/\s+/u).filter(Boolean)
       : [];
-  if (scopes.length !== 1 || scopes[0] !== FRIHET_CONNECTOR_SCOPE) {
+  if (!hasExactOpenAIReviewScopes(scopes)) {
     return {
       ok: false,
       error: "invalid_scope",
-      description: `The only supported OAuth scope is ${FRIHET_CONNECTOR_SCOPE}.`,
+      description: `The required OAuth scopes are ${OPENAI_REVIEW_OAUTH_SCOPES.join(" ")}.`,
     };
   }
   return { ok: true };
@@ -177,7 +191,7 @@ export function buildOpenAIUnauthorizedChallenge(
     OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH,
   );
   return `Bearer realm="OAuth", resource_metadata="${resourceMetadataUrl}", ` +
-    `scope="${FRIHET_CONNECTOR_SCOPE}", error="invalid_token", ` +
+    `scope="${OPENAI_REVIEW_OAUTH_SCOPES.join(" ")}", error="invalid_token", ` +
     'error_description="Missing or invalid access token"';
 }
 
@@ -249,9 +263,119 @@ export function buildOpenAIReviewOAuthContract(origin = OPENAI_REVIEW_ORIGIN) {
       resource_name: OAUTH_PROVIDER_REVIEW_OPTIONS.resourceMetadata.resource_name,
     },
     protectedResourceMcp: buildReviewedMcpProtectedResourceMetadata(normalizedOrigin),
+    openidConfiguration: {
+      issuer: normalizedOrigin,
+      authorization_endpoint: authorizationEndpoint,
+      token_endpoint: tokenEndpoint,
+      userinfo_endpoint: endpoint(normalizedOrigin, "/userinfo"),
+      registration_endpoint: registrationEndpoint,
+      scopes_supported: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      response_types_supported: ["code"],
+      response_modes_supported: ["query"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      subject_types_supported: ["public"],
+      token_endpoint_auth_methods_supported: [
+        "client_secret_basic",
+        "client_secret_post",
+        "none",
+      ],
+      code_challenge_methods_supported: ["S256"],
+    },
     wwwAuthenticate: {
       resourceMetadataUrl,
       missingTokenHeader: buildOpenAIUnauthorizedChallenge(normalizedOrigin),
     },
+  };
+}
+
+interface ReviewedAccessTokenSummary {
+  userId?: unknown;
+  expiresAt?: unknown;
+  audience?: unknown;
+  scope?: unknown;
+  grant?: {
+    scope?: unknown;
+    props?: unknown;
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isVerifiedEmail(email: unknown, verified: unknown): email is string {
+  return verified === true
+    && typeof email === "string"
+    && email.length >= 3
+    && email.length <= 320
+    && email === email.trim()
+    && !/[\u0000-\u001f\u007f]/u.test(email)
+    && /^[^@\s]+@[^@\s]+$/u.test(email);
+}
+
+export function isVerifiedOpenAIIdentity(value: {
+  uid?: unknown;
+  email?: unknown;
+  emailVerified?: unknown;
+}): value is { uid: string; email: string; emailVerified: true } {
+  return typeof value.uid === "string"
+    && value.uid.length > 0
+    && value.uid.length <= 128
+    && isVerifiedEmail(value.email, value.emailVerified);
+}
+
+export type OpenAIUserInfo = {
+  sub: string;
+  email: string;
+  email_verified: true;
+};
+
+/**
+ * Validate the provider's opaque access-token summary before serving OIDC
+ * UserInfo. The provider already verifies the encrypted token and KV expiry;
+ * this second boundary deliberately rechecks every OpenAI-specific binding.
+ */
+export function buildOpenAIUserInfo(
+  token: ReviewedAccessTokenSummary | null,
+  nowEpochSeconds = Math.floor(Date.now() / 1000),
+): OpenAIUserInfo | undefined {
+  const audience = token?.audience;
+  if (
+    !token
+    || !Number.isSafeInteger(token.expiresAt)
+    || (token.expiresAt as number) <= nowEpochSeconds
+    || typeof audience !== "string"
+    || !OPENAI_REVIEW_OAUTH_RESOURCES.includes(audience)
+    || !hasExactOpenAIReviewScopes(token.scope)
+    || !hasExactOpenAIReviewScopes(token.grant?.scope)
+    || !isRecord(token.grant?.props)
+  ) {
+    return undefined;
+  }
+
+  const props = token.grant.props;
+  const identity = {
+    uid: props.userId,
+    email: props.email,
+    emailVerified: props.emailVerified,
+  };
+  if (
+    props.accessProfile !== "openai"
+    || props.authMethod !== "oauth"
+    || props.oauthIssuer !== OPENAI_REVIEW_ORIGIN
+    || props.oauthResource !== OPENAI_REVIEW_ORIGIN
+    || props.oauthAudience !== audience
+    || props.oauthScope !== FRIHET_CONNECTOR_SCOPE
+    || !hasExactOpenAIReviewScopes(props.oauthScopes)
+    || token.userId !== props.userId
+    || !isVerifiedOpenAIIdentity(identity)
+  ) {
+    return undefined;
+  }
+
+  return {
+    sub: identity.uid,
+    email: identity.email,
+    email_verified: true,
   };
 }

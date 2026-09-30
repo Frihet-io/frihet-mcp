@@ -6,7 +6,11 @@ catalogue. The independently versioned reviewed-profile candidate recorded in
 
 - MCP endpoint: `https://openai-mcp.frihet.io/mcp`;
 - OAuth issuer and protected resource: `https://openai-mcp.frihet.io`;
-- sole OAuth scope: `frihet:workspace.manage`;
+- exact OAuth scopes: `openid email frihet:workspace.manage`;
+- OpenID discovery at `/.well-known/openid-configuration` and a protected
+  `/userinfo` endpoint that returns only `sub`, `email`, and
+  `email_verified: true` after the Firebase claim and access-token bindings are
+  independently verified;
 - exactly 33 reviewed business operations with complete descriptions and no
   discovery meta-tools;
 - 0 prompts and 0 resources;
@@ -287,10 +291,16 @@ after the evidence has been reviewed.
   private release evidence. Validate the final link from a signed-out browser.
   The submission JSON cannot populate this portal-only field; **STOP before the
   portal** if the final recording or its anonymous readback is missing.
-- This connector does not declare a workspace-domain restriction. Its sole
-  OAuth scope remains `frihet:workspace.manage`; do not add or imply UserInfo,
-  `openid`, or `email` support. Those identity claims are needed only if a
-  future, separately reviewed draft actually declares domain restriction.
+- The connector advertises and requires exactly `openid email
+  frihet:workspace.manage`. Verify `/.well-known/openid-configuration` and the
+  protected `/userinfo` response in the released candidate: UserInfo must emit
+  only `sub`, `email`, and literal `email_verified: true`, and an unverified or
+  missing Firebase email must fail closed before a grant is issued. This
+  enables OpenAI workspace-domain enforcement but does not prove that any
+  workspace has verified its domain. The metadata deliberately omits
+  `authorization_response_iss_parameter_supported`; do not set it to `true`
+  unless both successful and error authorization redirects are proven to
+  return the exact issuer.
 - Verify domain ownership inside the current portal draft. The live verification
   endpoint may still return a historical challenge token, which is not evidence
   that a new draft or app version accepts it. If the draft already shows the

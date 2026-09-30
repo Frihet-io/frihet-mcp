@@ -32,7 +32,11 @@ import { z } from "zod/v4";
 import { correctToolAnnotations } from "./capability-truth.js";
 import { MCP_RESOURCE_COUNT } from "./resources/register-all.js";
 import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
-import { FRIHET_CONNECTOR_SCOPE } from "./openai-review-oauth.js";
+import {
+  buildOpenAIUnauthorizedChallenge,
+  hasExactOpenAIReviewScopes,
+  OPENAI_REVIEW_OAUTH_SCOPES,
+} from "./openai-review-oauth.js";
 
 /* ------------------------------------------------------------------ */
 /*  Profile definition                                                 */
@@ -359,7 +363,7 @@ const PROFILE: OpenAIProfile = {
 
 /** OAuth requirement advertised on every reviewed business tool. */
 export const OPENAI_OAUTH_SECURITY_SCHEMES = [
-  { type: "oauth2" as const, scopes: [FRIHET_CONNECTOR_SCOPE] },
+  { type: "oauth2" as const, scopes: [...OPENAI_REVIEW_OAUTH_SCOPES] },
 ] as const;
 
 /**
@@ -492,8 +496,7 @@ function installOpenAIToolsListSecurityProjection(server: any): void {
             || !isRecord(schemes[0])
             || schemes[0].type !== "oauth2"
             || !Array.isArray(schemes[0].scopes)
-            || schemes[0].scopes.length !== 1
-            || schemes[0].scopes[0] !== FRIHET_CONNECTOR_SCOPE
+            || !hasExactOpenAIReviewScopes(schemes[0].scopes)
           ) {
             throw new Error(
               `OpenAI tool ${String(tool.name)} is missing the reviewed OAuth scope`,
@@ -502,7 +505,7 @@ function installOpenAIToolsListSecurityProjection(server: any): void {
 
           const securitySchemes = [{
             type: "oauth2",
-            scopes: [FRIHET_CONNECTOR_SCOPE],
+            scopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
           }];
           const descriptionSources = schemaDescriptions.get(tool.name);
           if (!descriptionSources) {
@@ -1608,6 +1611,15 @@ export function applyOpenAIProfile(server: any): void {
         };
       }
       const result = await handler(handlerInput);
+
+      if (
+        result.isError === true
+        && result._meta?.["io.frihet/authenticationRequired"] === true
+      ) {
+        result._meta = {
+          "mcp/www_authenticate": [buildOpenAIUnauthorizedChallenge()],
+        };
+      }
 
       // A transport/body failure, a 5xx, or an idempotency-in-progress response
       // after a write was sent is ambiguous: the backend may have committed it

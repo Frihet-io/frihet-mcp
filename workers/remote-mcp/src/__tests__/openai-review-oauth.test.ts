@@ -6,16 +6,21 @@ import { fileURLToPath } from "node:url";
 import {
   buildOpenAIReviewOAuthContract,
   buildOpenAIUnauthorizedChallenge,
+  buildOpenAIUserInfo,
   FRIHET_CONNECTOR_SCOPE,
+  hasExactOpenAIReviewScopes,
+  isVerifiedOpenAIIdentity,
   isValidPKCECodeVerifier,
   isValidS256CodeChallenge,
   OAUTH_PROVIDER_REVIEW_OPTIONS,
   OPENAI_REVIEW_MCP_RESOURCE,
   OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH,
   OPENAI_REVIEW_OAUTH_RESOURCES,
+  OPENAI_REVIEW_OAUTH_SCOPES,
   OPENAI_REVIEW_ORIGIN,
   validateOAuthBoundary,
 } from "../../../../src/openai-review-oauth.ts";
+import { authHandler } from "../auth-handler.ts";
 
 const snapshot = JSON.parse(
   readFileSync(
@@ -55,21 +60,21 @@ test("real Worker OAuth options remain byte-compatible with the reviewed routes"
     authorizeEndpoint: "/authorize",
     tokenEndpoint: "/token",
     clientRegistrationEndpoint: "/register",
-    scopesSupported: [FRIHET_CONNECTOR_SCOPE],
+    scopesSupported: [...OPENAI_REVIEW_OAUTH_SCOPES],
     accessTokenTTL: 3600,
     refreshTokenTTL: 2592000,
     allowPlainPKCE: false,
     resourceMetadata: {
       resource: OPENAI_REVIEW_ORIGIN,
       authorization_servers: [OPENAI_REVIEW_ORIGIN],
-      scopes_supported: [FRIHET_CONNECTOR_SCOPE],
+      scopes_supported: [...OPENAI_REVIEW_OAUTH_SCOPES],
       bearer_methods_supported: ["header"],
       resource_name: "Frihet reviewed connector",
     },
   });
 });
 
-test("OAuth boundary accepts only this Worker's two resource identifiers and one honest scope", () => {
+test("OAuth boundary accepts only this Worker's resources and exact OIDC connector scopes", () => {
   assert.equal(OPENAI_REVIEW_MCP_RESOURCE, "https://openai-mcp.frihet.io/mcp");
   assert.deepEqual(
     [...OPENAI_REVIEW_OAUTH_RESOURCES],
@@ -83,7 +88,7 @@ test("OAuth boundary accepts only this Worker's two resource identifiers and one
       validateOAuthBoundary(
         {
           resource,
-          scope: [FRIHET_CONNECTOR_SCOPE],
+          scope: [...OPENAI_REVIEW_OAUTH_SCOPES],
           requireResource: true,
           requireScope: true,
         },
@@ -93,6 +98,15 @@ test("OAuth boundary accepts only this Worker's two resource identifiers and one
       resource,
     );
   }
+  assert.equal(
+    hasExactOpenAIReviewScopes([
+      FRIHET_CONNECTOR_SCOPE,
+      "email",
+      "openid",
+    ]),
+    true,
+    "scope order is not authorization semantics",
+  );
 
   for (const resource of [
     undefined,
@@ -116,7 +130,7 @@ test("OAuth boundary accepts only this Worker's two resource identifiers and one
     const result = validateOAuthBoundary(
       {
         resource,
-        scope: FRIHET_CONNECTOR_SCOPE,
+        scope: OPENAI_REVIEW_OAUTH_SCOPES.join(" "),
         requireResource: true,
         requireScope: true,
       },
@@ -130,7 +144,7 @@ test("OAuth boundary accepts only this Worker's two resource identifiers and one
     validateOAuthBoundary(
       {
         resource: OPENAI_REVIEW_MCP_RESOURCE,
-        scope: FRIHET_CONNECTOR_SCOPE,
+        scope: OPENAI_REVIEW_OAUTH_SCOPES.join(" "),
         requireResource: true,
         requireScope: true,
       },
@@ -140,7 +154,15 @@ test("OAuth boundary accepts only this Worker's two resource identifiers and one
     "an empty accepted set fails closed",
   );
 
-  for (const scope of [undefined, "", "read", "write", "offline_access", [FRIHET_CONNECTOR_SCOPE, "read"]]) {
+  for (const scope of [
+    undefined,
+    "",
+    FRIHET_CONNECTOR_SCOPE,
+    "openid email",
+    "openid email offline_access",
+    [...OPENAI_REVIEW_OAUTH_SCOPES, "read"],
+    ["openid", "email", "email", FRIHET_CONNECTOR_SCOPE],
+  ]) {
     const result = validateOAuthBoundary(
       {
         resource: OPENAI_REVIEW_MCP_RESOURCE,
@@ -205,6 +227,143 @@ test("the 401 challenge points at RFC 9728 path-inserted metadata naming the exa
   assert.equal(mcpResource, OPENAI_REVIEW_MCP_RESOURCE);
   assert.deepEqual(mcpRest, legacyRest);
   assert.deepEqual(mcpRest.authorization_servers, [contract.authorizationServer.issuer]);
+});
+
+test("OpenID discovery advertises verified-email UserInfo without claiming RFC 9207 iss support", () => {
+  const discovery = buildOpenAIReviewOAuthContract().openidConfiguration;
+  assert.equal(discovery.issuer, OPENAI_REVIEW_ORIGIN);
+  assert.equal(discovery.userinfo_endpoint, `${OPENAI_REVIEW_ORIGIN}/userinfo`);
+  assert.deepEqual(discovery.scopes_supported, [...OPENAI_REVIEW_OAUTH_SCOPES]);
+  assert.deepEqual(discovery.code_challenge_methods_supported, ["S256"]);
+  assert.equal(
+    "authorization_response_iss_parameter_supported" in discovery,
+    false,
+    "the pinned provider does not emit iss on every success and error redirect",
+  );
+});
+
+test("UserInfo fails closed across expiry, audience, issuer, scopes and verified email", () => {
+  const now = 2_000_000_000;
+  const valid = {
+    userId: "firebase-reviewer",
+    expiresAt: now + 60,
+    audience: OPENAI_REVIEW_MCP_RESOURCE,
+    scope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+    grant: {
+      scope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      props: {
+        userId: "firebase-reviewer",
+        email: "reviewer@example.com",
+        emailVerified: true,
+        accessProfile: "openai",
+        authMethod: "oauth",
+        oauthIssuer: OPENAI_REVIEW_ORIGIN,
+        oauthAudience: OPENAI_REVIEW_MCP_RESOURCE,
+        oauthResource: OPENAI_REVIEW_ORIGIN,
+        oauthScope: FRIHET_CONNECTOR_SCOPE,
+        oauthScopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      },
+    },
+  };
+  assert.deepEqual(buildOpenAIUserInfo(valid, now), {
+    sub: "firebase-reviewer",
+    email: "reviewer@example.com",
+    email_verified: true,
+  });
+  assert.deepEqual(Object.keys(buildOpenAIUserInfo(valid, now)!).sort(), [
+    "email",
+    "email_verified",
+    "sub",
+  ]);
+
+  const hostile: Array<[string, (candidate: typeof valid) => void]> = [
+    ["expired", (candidate) => { candidate.expiresAt = now; }],
+    ["wrong audience", (candidate) => { candidate.audience = "https://mcp.frihet.io/mcp"; }],
+    ["wrong issuer", (candidate) => { candidate.grant.props.oauthIssuer = "https://issuer.invalid"; }],
+    ["resource mismatch", (candidate) => { candidate.grant.props.oauthAudience = OPENAI_REVIEW_ORIGIN; }],
+    ["missing openid", (candidate) => { candidate.scope = ["email", FRIHET_CONNECTOR_SCOPE]; }],
+    ["grant scope inflation", (candidate) => { candidate.grant.scope.push("offline_access"); }],
+    ["props scope drift", (candidate) => { candidate.grant.props.oauthScopes = [FRIHET_CONNECTOR_SCOPE]; }],
+    ["unverified email", (candidate) => { candidate.grant.props.emailVerified = false; }],
+    ["missing email", (candidate) => { candidate.grant.props.email = ""; }],
+    ["cross tenant", (candidate) => { candidate.grant.props.userId = "another-user"; }],
+  ];
+  for (const [name, mutate] of hostile) {
+    const candidate = structuredClone(valid);
+    mutate(candidate);
+    assert.equal(buildOpenAIUserInfo(candidate, now), undefined, name);
+  }
+  assert.equal(
+    isVerifiedOpenAIIdentity({
+      uid: "firebase-reviewer",
+      email: "reviewer@example.com",
+      emailVerified: false,
+    }),
+    false,
+  );
+});
+
+test("UserInfo HTTP surface is protected and emits only the reviewed claims", async () => {
+  const tokenSummary = {
+    userId: "firebase-reviewer",
+    expiresAt: Math.floor(Date.now() / 1000) + 60,
+    audience: OPENAI_REVIEW_MCP_RESOURCE,
+    scope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+    grant: {
+      scope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      props: {
+        userId: "firebase-reviewer",
+        email: "reviewer@example.com",
+        emailVerified: true,
+        accessProfile: "openai",
+        authMethod: "oauth",
+        oauthIssuer: OPENAI_REVIEW_ORIGIN,
+        oauthAudience: OPENAI_REVIEW_MCP_RESOURCE,
+        oauthResource: OPENAI_REVIEW_ORIGIN,
+        oauthScope: FRIHET_CONNECTOR_SCOPE,
+        oauthScopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      },
+    },
+  };
+  const env = {
+    FRIHET_OPENAI_MODE: "true",
+    OAUTH_PROVIDER: {
+      unwrapToken: async (token: string) => token.endsWith(`:${"s".repeat(32)}`)
+        ? tokenSummary
+        : null,
+    },
+    OAUTH_STATE: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        fetch: async () => new Response(JSON.stringify({ outcome: "active" })),
+      }),
+    },
+  };
+
+  const missing = await authHandler.fetch(
+    new Request(`${OPENAI_REVIEW_ORIGIN}/userinfo`),
+    env as never,
+  );
+  assert.equal(missing.status, 401);
+  assert.equal(missing.headers.get("cache-control"), "no-store");
+  assert.equal(missing.headers.get("www-authenticate"), buildOpenAIUnauthorizedChallenge());
+  assert.deepEqual(await missing.json(), { error: "invalid_token" });
+
+  const valid = await authHandler.fetch(
+    new Request(`${OPENAI_REVIEW_ORIGIN}/userinfo`, {
+      headers: {
+        Authorization: `Bearer firebase-reviewer:${"g".repeat(16)}:${"s".repeat(32)}`,
+      },
+    }),
+    env as never,
+  );
+  assert.equal(valid.status, 200);
+  assert.equal(valid.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await valid.json(), {
+    sub: "firebase-reviewer",
+    email: "reviewer@example.com",
+    email_verified: true,
+  });
 });
 
 test("pinned provider audience matching accepts both resource identifiers only for /mcp", () => {
@@ -297,6 +456,9 @@ test("reviewed provider cannot resolve direct API keys or cross host/scope/auth 
   assert.match(workerSource, /reviewedProps\?\.accessProfile !== "openai"/u);
   assert.match(workerSource, /reviewedProps\.oauthResource !== OPENAI_REVIEW_ORIGIN/u);
   assert.match(workerSource, /reviewedProps\.oauthScope !== FRIHET_CONNECTOR_SCOPE/u);
+  assert.match(workerSource, /!hasExactOpenAIReviewScopes\(reviewedProps\.oauthScopes\)/u);
+  assert.match(workerSource, /reviewedProps\.oauthIssuer !== OPENAI_REVIEW_ORIGIN/u);
+  assert.match(workerSource, /!OPENAI_REVIEW_OAUTH_RESOURCES\.includes\(reviewedProps\.oauthAudience\)/u);
   assert.match(workerSource, /reviewedProps\.authMethod !== "oauth"/u);
   assert.match(workerSource, /reviewedProps\.apiKeyExpiresAt/u);
   assert.match(workerSource, /refreshTokenTTL: credentialTtlSeconds/u);
@@ -317,12 +479,15 @@ test("reviewed authorize/callback source enforces exact state, PKCE, client look
   const verifyIndex = authSource.indexOf("auth.verifyIdToken(body.idToken)");
   assert.ok(lookupIndex >= 0 && lookupIndex < storeIndex);
   assert.ok(consumeIndex >= 0 && consumeIndex < verifyIndex);
+  assert.match(authSource, /!isVerifiedOpenAIIdentity\(verifiedIdentity\)/u);
+  assert.match(authSource, /oauthIssuer: OPENAI_REVIEW_ORIGIN/u);
+  assert.match(authSource, /oauthAudience: oauthReq\.resource/u);
 });
 
 test("OAuth secrets are non-cacheable and Bearer challenge is limited to the MCP route", () => {
   assert.match(
     workerSource,
-    /const OAUTH_SENSITIVE_PATHS = new Set\(\["\/authorize", "\/callback", "\/token", "\/register"\]\)/u,
+    /const OAUTH_SENSITIVE_PATHS = new Set\(\[[\s\S]*?"\/userinfo",[\s\S]*?\]\)/u,
   );
   assert.match(workerSource, /headers\.set\("Cache-Control", "no-store"\)/u);
   assert.match(workerSource, /headers\.set\("Pragma", "no-cache"\)/u);
@@ -339,6 +504,19 @@ test("OAuth secrets are non-cacheable and Bearer challenge is limited to the MCP
     1,
   );
   assert.doesNotMatch(workerSource, /if\s*\(\s*response\.status === 401\s*\)/u);
+});
+
+test("reviewed Worker serves OIDC discovery and protects UserInfo", () => {
+  const discoveryIndex = workerSource.indexOf('url.pathname === "/.well-known/openid-configuration"');
+  const headIndex = workerSource.indexOf('if (request.method === "HEAD"');
+  const providerIndex = workerSource.indexOf("selectedProvider.fetch(providerRequest, env, ctx)");
+  assert.ok(discoveryIndex > 0 && discoveryIndex < headIndex && headIndex < providerIndex);
+  assert.match(workerSource, /buildOpenAIReviewOAuthContract\(\)\.openidConfiguration/u);
+  assert.match(authSource, /app\.get\("\/userinfo"/u);
+  assert.match(authSource, /OAUTH_PROVIDER\.unwrapToken\(token\)/u);
+  assert.match(authSource, /buildOpenAIUserInfo/u);
+  assert.match(authSource, /"WWW-Authenticate": buildOpenAIUnauthorizedChallenge\(\)/u);
+  assert.doesNotMatch(authSource, /authorization_response_iss_parameter_supported/u);
 });
 
 test("OAuth state Durable Object is bound in both environments and migrated once", () => {
@@ -412,10 +590,12 @@ test("every runtime line that reads a resource or audience field is inventoried"
     }
   }
   assert.deepEqual(found.sort(), [
+    "auth-handler.ts: oauthAudience: oauthReq.resource,",
     "auth-handler.ts: resource: oauthReq.resource,",
     "auth-handler.ts: resource: oauthReq.resource,",
     "oauth-token-family.ts: this.grantResource = grant?.resource;",
     "oauth-token-family.ts: || parsed.resource !== this.grantResource",
+    "openai-review-oauth.ts: const audience = token?.audience;",
     "openai-review-oauth.ts: if (parameters.resource === undefined && !parameters.requireResource) {",
     "openai-review-oauth.ts: typeof parameters.resource !== \"string\"",
     "openai-review-oauth.ts: || !acceptedResources.includes(parameters.resource)",
@@ -444,7 +624,9 @@ test("reviewed Worker serves the path-inserted protected-resource metadata befor
   assert.match(route, /withSecurityHeaders\(/u);
   const routeIndex = workerSource.indexOf(route);
   const providerIndex = workerSource.indexOf("selectedProvider.fetch(providerRequest, env, ctx)");
-  const genericHeadIndex = workerSource.indexOf('if (request.method === "HEAD") {');
+  const genericHeadIndex = workerSource.indexOf(
+    'if (request.method === "HEAD" && !(openai && url.pathname === "/userinfo")) {',
+  );
   assert.ok(routeIndex > 0 && routeIndex < providerIndex);
   assert.ok(
     genericHeadIndex > 0 && routeIndex < genericHeadIndex,

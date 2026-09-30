@@ -53,10 +53,14 @@ import {
   FULL_MCP_ORIGIN,
   OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH,
   OPENAI_REVIEW_OAUTH_RESOURCES,
+  OPENAI_REVIEW_OAUTH_SCOPES,
   OPENAI_REVIEW_ORIGIN,
   OAUTH_PROVIDER_REVIEW_OPTIONS,
+  buildOpenAIReviewOAuthContract,
   buildOpenAIUnauthorizedChallenge,
   buildReviewedMcpProtectedResourceMetadata,
+  hasExactOpenAIReviewScopes,
+  isVerifiedOpenAIIdentity,
   isValidPKCECodeVerifier,
   resolveFrihetAccessProfile,
   validateOAuthBoundary,
@@ -108,7 +112,11 @@ export type AuthProps = {
   name?: string;
   accessProfile?: "openai" | "full";
   oauthScope?: typeof FRIHET_CONNECTOR_SCOPE;
+  oauthScopes?: string[];
+  oauthIssuer?: typeof OPENAI_REVIEW_ORIGIN;
+  oauthAudience?: string;
   oauthResource?: typeof OPENAI_REVIEW_ORIGIN;
+  emailVerified?: true;
   authMethod?: "oauth" | "api-key";
 };
 
@@ -135,8 +143,17 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
       && (
         this.props?.accessProfile !== "openai"
         || this.props?.oauthScope !== FRIHET_CONNECTOR_SCOPE
+        || !hasExactOpenAIReviewScopes(this.props?.oauthScopes)
+        || this.props?.oauthIssuer !== OPENAI_REVIEW_ORIGIN
+        || typeof this.props?.oauthAudience !== "string"
+        || !OPENAI_REVIEW_OAUTH_RESOURCES.includes(this.props.oauthAudience)
         || this.props?.oauthResource !== OPENAI_REVIEW_ORIGIN
         || this.props?.authMethod !== "oauth"
+        || !isVerifiedOpenAIIdentity({
+          uid: this.props?.userId,
+          email: this.props?.email,
+          emailVerified: this.props?.emailVerified,
+        })
       )
     ) {
       throw new Error("OAuth access context does not match the reviewed Frihet server");
@@ -975,16 +992,23 @@ function validateReviewedTokenExchange({
     credentialTtlSeconds: number;
   } {
   const reviewedProps = props as AuthProps | undefined;
-  const exactScope = (value: string[]) =>
-    value.length === 1 && value[0] === FRIHET_CONNECTOR_SCOPE;
   if (
-    !exactScope(scope)
-    || !exactScope(requestedScope)
+    !hasExactOpenAIReviewScopes(scope)
+    || !hasExactOpenAIReviewScopes(requestedScope)
     || reviewedProps?.accessProfile !== "openai"
     || reviewedProps.oauthResource !== OPENAI_REVIEW_ORIGIN
     || reviewedProps.oauthScope !== FRIHET_CONNECTOR_SCOPE
+    || !hasExactOpenAIReviewScopes(reviewedProps.oauthScopes)
+    || reviewedProps.oauthIssuer !== OPENAI_REVIEW_ORIGIN
+    || typeof reviewedProps.oauthAudience !== "string"
+    || !OPENAI_REVIEW_OAUTH_RESOURCES.includes(reviewedProps.oauthAudience)
     || reviewedProps.authMethod !== "oauth"
     || reviewedProps.userId !== userId
+    || !isVerifiedOpenAIIdentity({
+      uid: reviewedProps.userId,
+      email: reviewedProps.email,
+      emailVerified: reviewedProps.emailVerified,
+    })
     || typeof reviewedProps.keyId !== "string"
     || !/^[A-Za-z0-9]{20}$/u.test(reviewedProps.keyId)
     || typeof reviewedProps.apiKey !== "string"
@@ -1026,7 +1050,7 @@ function buildReviewedTokenExchangeResult(
   return {
     accessTokenProps: reviewedProps,
     newProps: reviewedProps,
-    accessTokenScope: [FRIHET_CONNECTOR_SCOPE],
+    accessTokenScope: [...OPENAI_REVIEW_OAUTH_SCOPES],
     accessTokenTTL: Math.min(3600, credentialTtlSeconds),
     ...(options.grantType === GrantType.AUTHORIZATION_CODE
       ? { refreshTokenTTL: credentialTtlSeconds }
@@ -1101,7 +1125,13 @@ function withSecurityHeaders(response: Response, env: Env): Response {
   });
 }
 
-const OAUTH_SENSITIVE_PATHS = new Set(["/authorize", "/callback", "/token", "/register"]);
+const OAUTH_SENSITIVE_PATHS = new Set([
+  "/authorize",
+  "/callback",
+  "/token",
+  "/register",
+  "/userinfo",
+]);
 
 function withOAuthNoStore(response: Response, pathname: string): Response {
   if (!OAUTH_SENSITIVE_PATHS.has(pathname)) return response;
@@ -1212,11 +1242,30 @@ export default {
       );
     }
 
+    if (
+      openai
+      && url.pathname === "/.well-known/openid-configuration"
+      && (request.method === "GET" || request.method === "HEAD")
+    ) {
+      return withSecurityHeaders(new Response(
+        request.method === "HEAD"
+          ? null
+          : JSON.stringify(buildOpenAIReviewOAuthContract().openidConfiguration),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+          },
+        },
+      ), env);
+    }
+
     // The reviewed host exposes no parallel REST/OpenAPI contract under any
     // method. Keep HEAD aligned with the GET containment response so a scanner
     // cannot infer an undocumented OpenAPI surface from a generic health 200.
     // Other HEAD requests -> 200 (required by Anthropic)
-    if (request.method === "HEAD") {
+    if (request.method === "HEAD" && !(openai && url.pathname === "/userinfo")) {
       return withSecurityHeaders(new Response(null, {
         status: 200,
         headers: { "Content-Type": "application/json" },
