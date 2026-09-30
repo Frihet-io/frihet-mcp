@@ -52,13 +52,15 @@ export interface Invoice {
   status?: string;
   notes?: string;
   taxRate?: number;
+  operationType?: "service" | "goods";
+  fiscalTreatment?: "not_subject_location" | "export_exempt";
   total?: number;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export type CreateInvoiceInput = Pick<Invoice, "clientName" | "items"> &
-  Partial<Pick<Invoice, "issueDate" | "dueDate" | "status" | "notes" | "taxRate">>;
+  Partial<Pick<Invoice, "issueDate" | "dueDate" | "status" | "notes" | "taxRate" | "operationType" | "fiscalTreatment">>;
 
 export type UpdateInvoiceInput = Partial<CreateInvoiceInput>;
 
