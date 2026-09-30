@@ -18,6 +18,7 @@ import {
 import { resolveOAuthApiKeyUrl } from "./api-url.js";
 import { getLoginPage } from "./login-page.js";
 import { consumeOAuthState, storeOAuthState } from "./oauth-state-store.js";
+import { isOAuthAccessTokenFamilyActive } from "./oauth-token-family.js";
 import {
   BoundedRequestBodyError,
   readBoundedTextRequest,
@@ -33,9 +34,13 @@ import {
 } from "./server-meta.js";
 import { GROUPED_META_TOOL_COUNT } from "../../../src/tool-exposure.js";
 import {
+  buildOpenAIUnauthorizedChallenge,
+  buildOpenAIUserInfo,
   FRIHET_CONNECTOR_SCOPE,
   FULL_MCP_ORIGIN,
+  isVerifiedOpenAIIdentity,
   isValidS256CodeChallenge,
+  OPENAI_REVIEW_OAUTH_SCOPES,
   OPENAI_REVIEW_OAUTH_RESOURCES,
   OPENAI_REVIEW_ORIGIN,
   resolveFrihetAccessProfile,
@@ -118,6 +123,49 @@ app.get("/", (c) => {
 app.get("/health", (c) =>
   c.json({ status: "ok", timestamp: new Date().toISOString() }),
 );
+
+app.get("/userinfo", async (c) => {
+  if (resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE) !== "openai") {
+    return c.json({ error: "Not found" }, 404);
+  }
+  const authorization = c.req.header("authorization");
+  const token = authorization?.startsWith("Bearer ")
+    ? authorization.slice(7)
+    : undefined;
+  let userInfo;
+  try {
+    userInfo = token
+      ? buildOpenAIUserInfo(await c.env.OAUTH_PROVIDER.unwrapToken(token))
+      : undefined;
+    if (
+      userInfo
+      && !await isOAuthAccessTokenFamilyActive(
+        c.env.OAUTH_STATE,
+        c.req.raw,
+        userInfo.sub,
+      )
+    ) {
+      userInfo = undefined;
+    }
+  } catch {
+    userInfo = undefined;
+  }
+  if (!userInfo) {
+    return c.json(
+      { error: "invalid_token" },
+      401,
+      {
+        "WWW-Authenticate": buildOpenAIUnauthorizedChallenge(),
+        "Cache-Control": "no-store",
+        Pragma: "no-cache",
+      },
+    );
+  }
+  return c.json(userInfo, 200, {
+    "Cache-Control": "no-store",
+    Pragma: "no-cache",
+  });
+});
 
 
 // ---------------------------------------------------------------------------
@@ -312,7 +360,12 @@ app.post("/callback", async (c) => {
   );
   const auth = Auth.getOrInitialize(c.env.FIREBASE_PROJECT_ID, keyStore);
 
-  let decoded: { uid: string; email?: string; name?: string };
+  let decoded: {
+    uid: string;
+    email?: string;
+    email_verified?: boolean;
+    name?: string;
+  };
   try {
     decoded = await auth.verifyIdToken(body.idToken);
   } catch (err) {
@@ -323,6 +376,23 @@ app.post("/callback", async (c) => {
       error: { message: err instanceof Error ? err.message : String(err) },
     });
     return c.json({ error: "Invalid Firebase token" }, 401);
+  }
+
+  const verifiedIdentity = {
+    uid: decoded.uid,
+    email: decoded.email,
+    emailVerified: decoded.email_verified,
+  };
+  if (
+    accessProfile === "openai"
+    && !isVerifiedOpenAIIdentity(verifiedIdentity)
+  ) {
+    log({
+      level: "warn",
+      message: "OAuth callback: verified email claim is unavailable",
+      operation: "oauth_callback",
+    });
+    return c.json({ error: "A verified email address is required" }, 403);
   }
 
   const oauthServiceSecret = c.env.FRIHET_OAUTH_API_KEY;
@@ -447,8 +517,13 @@ app.post("/callback", async (c) => {
             keyId: provisioned.keyId,
             apiKeyExpiresAt: provisioned.expiresAt,
             userId: decoded.uid,
+            email: verifiedIdentity.email,
+            emailVerified: true,
             accessProfile,
             oauthScope: FRIHET_CONNECTOR_SCOPE,
+            oauthScopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
+            oauthIssuer: OPENAI_REVIEW_ORIGIN,
+            oauthAudience: oauthReq.resource,
             oauthResource: OPENAI_REVIEW_ORIGIN,
             authMethod: "oauth",
           }

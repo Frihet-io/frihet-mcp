@@ -9,6 +9,7 @@ import {
   assertOpenAIReviewContract,
   buildOpenAIReviewContract,
 } from "../../dist/openai-review-contract.js";
+import { OPENAI_REVIEW_OAUTH_SCOPES } from "../../dist/openai-review-oauth.js";
 import {
   captureOpenAIReviewMcpSurfaceFromWorker,
   WorkerListToolsRequestSchema,
@@ -20,7 +21,7 @@ const SNAPSHOT_PATH = fileURLToPath(
 const EXPECTED = JSON.parse(readFileSync(SNAPSHOT_PATH, "utf8"));
 const REVIEWED_OAUTH_SCHEME = {
   type: "oauth2",
-  scopes: ["frihet:workspace.manage"],
+  scopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
 };
 
 function countDescriptions(value) {

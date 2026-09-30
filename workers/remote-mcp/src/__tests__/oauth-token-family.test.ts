@@ -10,8 +10,10 @@ import {
 } from "../oauth-token-family.ts";
 import { OAuthStateStore } from "../oauth-state-store.ts";
 import {
+  FRIHET_CONNECTOR_SCOPE,
   OPENAI_REVIEW_MCP_RESOURCE,
   OPENAI_REVIEW_OAUTH_RESOURCES,
+  OPENAI_REVIEW_OAUTH_SCOPES,
   OPENAI_REVIEW_ORIGIN,
 } from "../../../../src/openai-review-oauth.ts";
 
@@ -128,15 +130,20 @@ function callbackOptions(grantType: "authorization_code" | "refresh_token") {
     grantType,
     clientId: CLIENT_ID,
     userId: USER_ID,
-    scope: ["frihet:workspace.manage"],
-    requestedScope: ["frihet:workspace.manage"],
+    scope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+    requestedScope: [...OPENAI_REVIEW_OAUTH_SCOPES],
     props: {
       apiKey: `fri_${"A".repeat(43)}`,
       keyId: BINDING.keyId,
       apiKeyExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       userId: USER_ID,
+      email: "reviewer@example.com",
+      emailVerified: true,
       accessProfile: "openai",
-      oauthScope: "frihet:workspace.manage",
+      oauthScope: FRIHET_CONNECTOR_SCOPE,
+      oauthScopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      oauthIssuer: OPENAI_REVIEW_ORIGIN,
+      oauthAudience: OPENAI_REVIEW_ORIGIN,
       oauthResource: BINDING.oauthResource,
       authMethod: "oauth",
     },
@@ -152,7 +159,7 @@ function tokenResponse(
     refresh_token: refreshToken,
     token_type: "bearer",
     expires_in: 3600,
-    scope: "frihet:workspace.manage",
+    scope: OPENAI_REVIEW_OAUTH_SCOPES.join(" "),
     resource: "https://openai-mcp.frihet.io",
     ...overrides,
   }), {

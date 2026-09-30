@@ -137,6 +137,12 @@ describe("403 remediation rendering", () => {
       rendered(new FrihetApiError(413, "payload_too_large", "Document response exceeds 5242880 bytes")),
       "Error: Document response too large: Document response exceeds 5242880 bytes / Respuesta de documento demasiado grande.",
     );
+    const unauthorized = handleToolError(
+      new FrihetApiError(401, "unauthorized", "provider body"),
+    );
+    assert.deepEqual(unauthorized._meta, {
+      "io.frihet/authenticationRequired": true,
+    });
   });
 });
 

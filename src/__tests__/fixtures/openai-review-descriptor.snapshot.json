@@ -1,5 +1,5 @@
 {
-  "contractVersion": 6,
+  "contractVersion": 7,
   "oauth": {
     "authorizationServer": {
       "authorization_endpoint": "https://openai-mcp.frihet.io/authorize",
@@ -21,6 +21,8 @@
       ],
       "revocation_endpoint": "https://openai-mcp.frihet.io/token",
       "scopes_supported": [
+        "openid",
+        "email",
         "frihet:workspace.manage"
       ],
       "token_endpoint": "https://openai-mcp.frihet.io/token",
@@ -29,6 +31,39 @@
         "client_secret_post",
         "none"
       ]
+    },
+    "openidConfiguration": {
+      "authorization_endpoint": "https://openai-mcp.frihet.io/authorize",
+      "code_challenge_methods_supported": [
+        "S256"
+      ],
+      "grant_types_supported": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "issuer": "https://openai-mcp.frihet.io",
+      "registration_endpoint": "https://openai-mcp.frihet.io/register",
+      "response_modes_supported": [
+        "query"
+      ],
+      "response_types_supported": [
+        "code"
+      ],
+      "scopes_supported": [
+        "openid",
+        "email",
+        "frihet:workspace.manage"
+      ],
+      "subject_types_supported": [
+        "public"
+      ],
+      "token_endpoint": "https://openai-mcp.frihet.io/token",
+      "token_endpoint_auth_methods_supported": [
+        "client_secret_basic",
+        "client_secret_post",
+        "none"
+      ],
+      "userinfo_endpoint": "https://openai-mcp.frihet.io/userinfo"
     },
     "protectedResource": {
       "authorization_servers": [
@@ -40,6 +75,8 @@
       "resource": "https://openai-mcp.frihet.io",
       "resource_name": "Frihet reviewed connector",
       "scopes_supported": [
+        "openid",
+        "email",
         "frihet:workspace.manage"
       ]
     },
@@ -53,12 +90,14 @@
       "resource": "https://openai-mcp.frihet.io/mcp",
       "resource_name": "Frihet reviewed connector",
       "scopes_supported": [
+        "openid",
+        "email",
         "frihet:workspace.manage"
       ]
     },
     "providerPackageVersion": "0.3.0",
     "wwwAuthenticate": {
-      "missingTokenHeader": "Bearer realm=\"OAuth\", resource_metadata=\"https://openai-mcp.frihet.io/.well-known/oauth-protected-resource/mcp\", scope=\"frihet:workspace.manage\", error=\"invalid_token\", error_description=\"Missing or invalid access token\"",
+      "missingTokenHeader": "Bearer realm=\"OAuth\", resource_metadata=\"https://openai-mcp.frihet.io/.well-known/oauth-protected-resource/mcp\", scope=\"openid email frihet:workspace.manage\", error=\"invalid_token\", error_description=\"Missing or invalid access token\"",
       "resourceMetadataUrl": "https://openai-mcp.frihet.io/.well-known/oauth-protected-resource/mcp"
     }
   },
@@ -70,6 +109,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -155,6 +196,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -167,6 +210,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -268,6 +313,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -280,6 +327,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -346,6 +395,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -358,6 +409,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -475,6 +528,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -487,6 +542,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -686,6 +743,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -698,6 +757,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -792,6 +853,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -804,6 +867,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1005,6 +1070,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1017,6 +1084,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1095,6 +1164,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1107,6 +1178,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1173,6 +1246,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1185,6 +1260,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1251,6 +1328,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1263,6 +1342,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1374,6 +1455,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1386,6 +1469,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1679,6 +1764,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1691,6 +1778,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1751,6 +1840,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1763,6 +1854,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1836,6 +1929,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1848,6 +1943,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1962,6 +2059,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1974,6 +2073,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2038,6 +2139,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2050,6 +2153,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2167,6 +2272,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2179,6 +2286,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2236,6 +2345,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2248,6 +2359,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2348,6 +2461,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2360,6 +2475,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2463,6 +2580,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2475,6 +2594,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2566,6 +2687,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2578,6 +2701,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2681,6 +2806,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2693,6 +2820,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2816,6 +2945,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2828,6 +2959,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2964,6 +3097,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2976,6 +3111,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3082,6 +3219,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3094,6 +3233,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3233,6 +3374,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3245,6 +3388,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3333,6 +3478,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3345,6 +3492,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3440,6 +3589,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3452,6 +3603,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3584,6 +3737,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3596,6 +3751,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3690,6 +3847,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3702,6 +3861,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3810,6 +3971,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3822,6 +3985,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3922,6 +4087,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3934,6 +4101,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -4018,6 +4187,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"

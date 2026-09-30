@@ -43,7 +43,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
   "package.json": "6cde05b39f4480d773d0e1f2aabcc216478fdc60e3b925c940c4ae69dcc96a13", // openai-release-lane: npm test runs scripts/__tests__/openai-wrangler-resolution.test.mjs (test list only)
-  "workers/remote-mcp/package.json": "c7025291c46b023fac162d1a0e0a010d1173bf7bc5d218c6faaab515aba97c6b",
+  "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
   "workers/api-proxy/wrangler.toml": "worker.js",
@@ -252,17 +252,17 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "d2358dd69504f7cac054ac980852522d94d00397c168c7fa573848fe7a8c877c", // fix/fiscal-period-wiring: fiscal modelo query param mapping + requestId read from the existing error response (same single fetch sink, no new destination); review F5 = doc-comment-only rewording of FrihetApiError.requestId
   "src/observability.ts": "d0bd50c57843f59d0ab61b18b59c1e2ccfcc9dcb83ab76a00a34882d6d1d7cd6",
-  "src/openai-review-oauth.ts": "a9bcb39ea92d9df260e125a4dbd6ac584e9920ed0b1beb0baf2c369c30fd687f", // directory-readiness: shared RFC 8707 resource set, path-inserted PRM builder and challenge pointer (pure metadata, no sink)
+  "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
   "workers/api-proxy/worker.js": "640d3aa873f1a20b705f9e73cdafe368bcb0bbe43f187afe5c9583336373accb",
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
-  "workers/remote-mcp/src/auth-handler.ts": "c012d2ea005c856a891e834485db3aad3a4b4722fbf8835422b28f5e32d1ecca", // directory-readiness: authorize/callback boundary take OPENAI_REVIEW_OAUTH_RESOURCES (same sinks, no new destination)
+  "workers/remote-mcp/src/auth-handler.ts": "e77bc3282705658f91e4c20fe623c6a758b96cb0f8b7b043e0dd2ebf35ce78d2", // OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
-  "workers/remote-mcp/src/index.ts": "8c2c206194dd1d27651b6d8c11f00b736197ea2cb521d5232f7ca93dc0e9ad8d", // directory-readiness: reviewed-host PRM /mcp route, shared resource set at /token and in the token-family guard, neutral legal copy (no new sink)
+  "workers/remote-mcp/src/index.ts": "46bb7edbc59b4f285b942731456563a1b611267ae80656b26864222ed48c5be4", // OAuth/OIDC review: OIDC discovery, protected UserInfo and scoped bearer challenge; no new destination
   "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "2e129bb4b62a57eb6082f39f2004fae1a3bc26609bb43343928fb47bf73327d3",
   "workers/remote-mcp/src/oauth-state-store.ts": "9785c628b2a01d80c06267a0c39beb93f9d9b7a11b26369d48aa2cc705bf7906",
-  "workers/remote-mcp/src/oauth-token-family.ts": "4d95e867e2af6e9875860da99aa854e7d4cb614ad38cecbc07e09837479b50ce", // directory-readiness: settle() requires the stored grant resource from the injected reviewed set (same internal sink)
+  "workers/remote-mcp/src/oauth-token-family.ts": "1facce53ff0b684d4f51c14390e775fe07732ac215a4747a428d90e0428693fb", // OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
   "package-lock.json": "11418deebf57631c1e39a2a6fea11eedd7de0dc23c26b5768ae91d5a29dfcb7b",
@@ -286,7 +286,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   ".github/workflows/ci.yml": "f39fc984aa328aa3cebae66d239d15d92eb05b3896e5365c69dd40bea09afce2",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
-  "scripts/__tests__/openai-worker-review-wire.test.mjs": "6799c971a773f04cd39d8e134c042474d23bfb1e949348df2e382b6fceb10023",
+  "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",
   "scripts/__tests__/published-artifact-drift.test.mjs": "3bc8e9f51d4e71b274217a7afa56a7df1f9f76af65f240a01ec3b56e321a6b9f",
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
@@ -319,13 +319,13 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/tsconfig.json": "03d5bac68efb117ed224ec2091bb0918370cb4453ae2fa04bd5fd1d7aff26f54",
 });
 export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
-  "marketplace/openai/SUBMISSION.md": "c2bbc16f4c9be5e8287779114e16895a076f1560d97292581ac9ec99c87f7fa0",
+  "marketplace/openai/SUBMISSION.md": "6344ec3aa844a3fd3ad6a9ad8d957aa4be81f98f53e9be79d9fe022c302dc19f",
   "marketplace/openai/chatgpt-app-submission.json": "3b80cf9422bb7e2779497cb81b1638fae253f0af32d5445aeddd2e0e27d9f1cf",
   "marketplace/openai/chatgpt-app-submission.v1.schema.json": "aa7d1bd554e6c615d411c03e5b73bb464816be603461eb5813bb589645550304",
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
-  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "ecaa1cd4e744ac799574fa99014574c5eb743e21d3cf1fb257568d1e8325f440", // directory-readiness: OAuth-only diff (resource_name, protectedResourceMcp, challenge pointer); 33 tools unchanged
+  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "3cd0e234340ce88acb57b1adfe9e49b2a20401b57e1d286f88b2513d6bb3fd14", // OAuth/OIDC review: exact scopes, OIDC discovery/UserInfo contract and 33-tool security schemes
   "src/__tests__/fixtures/public-capability-contract.json": "8248f321a13b5a729e3dc2ec205328f163bfef27b5715542cab1557d37c8d05d",
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
