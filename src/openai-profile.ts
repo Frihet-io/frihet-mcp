@@ -293,6 +293,7 @@ const PROFILE: OpenAIProfile = {
       "documentNumber",
       "poNumber",
       "operationType",
+      "fiscalTreatment",
     ],
     create_quote: [
       "clientId",

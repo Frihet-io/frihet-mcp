@@ -249,14 +249,14 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
     },
     async ({ id, newIssueDate, newDueDate }) => withToolLogging("duplicate_invoice", async () => {
       // 1. Fetch the original invoice (returns the FULL raw stored document —
-      //    payments, verifactu, eInvoice, operationType, createdBy, etc.)
+      //    payments, verifactu, eInvoice, createdBy, etc.)
       const original = await client.getInvoice(id);
 
       // 2. Allowlist-PICK only the fields the create endpoint actually accepts.
       //    The create POST validates against a Zod `.strict()` schema that
       //    REJECTS unknown keys (HTTP 400). Spreading the raw GET doc and only
       //    blacklisting a handful of fields left stored-only fields (payments,
-      //    amountPaid, verifactu, eInvoice, operationType, poNumber, createdBy,
+      //    amountPaid, verifactu, eInvoice, createdBy,
       //    sentTo/sentAt, cancelled*, attachments, …) in the body, so any paid /
       //    sent / cancelled / e-invoiced invoice failed to duplicate. Picking
       //    the writable subset mirrors the create schema and never 400s.
@@ -275,6 +275,8 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
         "irpfRate",
         "equivalenceSurchargeRate",
         "clientLocation",
+        "operationType",
+        "fiscalTreatment",
         "prepayment",
         "seriesId",
       ] as const;

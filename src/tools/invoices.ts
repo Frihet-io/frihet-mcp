@@ -93,6 +93,10 @@ const invoiceFiscalFields = {
     .enum(["service", "goods"])
     .optional()
     .describe("Operation type (service or goods) / Tipo de operacion"),
+  fiscalTreatment: z
+    .enum(["not_subject_location", "export_exempt"])
+    .optional()
+    .describe("Explicit fiscal treatment declared by the user; never inferred / Tratamiento fiscal declarado expresamente por el usuario; nunca inferido"),
 };
 
 export function registerInvoiceTools(server: McpServer, client: IFrihetClient): void {
