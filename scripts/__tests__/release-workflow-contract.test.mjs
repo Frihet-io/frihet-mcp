@@ -2584,18 +2584,16 @@ test("OpenAI release workflow — portal hard stops remain explicit", () => {
   assert.match(guide, /historical challenge token/);
   assert.match(guide, /STOP before Scan Tools/);
   assert.match(guide, /Never publish or retain multiple verification tokens/);
-  for (const starterPrompt of [
-    "Give me an overview of my current Frihet business context.",
-    "Show me my draft invoices.",
-    "Show me my active products and services.",
-  ]) {
+  // The ZIP owns listing copy; keep the guide aligned with its generated manifest.
+  const plugin = JSON.parse(readFileSync("marketplace/openai/plugin.json", "utf8"));
+  const openai = plugin.extensions["com.openai"];
+  for (const starterPrompt of openai.interface.defaultPrompt) {
     assert.match(guide, new RegExp(starterPrompt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
-  assert.match(
-    guide,
-    /Fourth resubmission: Frihet now exposes only 33 reviewed business tools[^\n]+five positive plus three negative review cases\./,
-  );
-  assert.match(guide, /Select `Spain` only\./);
+  assert.match(guide, /The source of truth is the generated manifest\./);
+  assert.match(guide, /separate package changes from the hosted server/);
+  assert.deepEqual(openai.publication.countries, ["ES"]);
+  assert.match(guide, /`publication\.countries: \["ES"\]`/);
   assert.match(guide, /Do not select another jurisdiction until its commercial,/);
   assert.doesNotMatch(
     guide,

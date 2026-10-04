@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "6cde05b39f4480d773d0e1f2aabcc216478fdc60e3b925c940c4ae69dcc96a13", // openai-release-lane: npm test runs scripts/__tests__/openai-wrangler-resolution.test.mjs (test list only)
+  "package.json": "757a7500efbc63d6360a4a9e592cbb7b8cf826c25a3c3b0963009148ac368c3e", // openai-plugin-package: reviewed portable ZIP validation and Python standard-library packaging
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -305,7 +305,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/conformance/run-phase0.mjs": "8298c4dc4c586622b79caa6a7f86d6376b3970d52c2b8a8af1dcb74585b112f7",
   "scripts/conformance/validate-baseline.mjs": "8acd56c5364c488280280af7b39e6f94091e3544103fb6bd56b1cc954af555e7",
   "scripts/generate-agent-onboarding.mjs": "64c195c341c9c822f17026617db56326b34282a90f5c16a10ddf5bb195360e06",
-  "scripts/generate-openai-submission.mjs": "fd5fe26e6b5d19cbdeed80326d2abadb695c7c966a68e2796649d43938c23aff",
+  "scripts/generate-openai-submission.mjs": "886a6fea81a2b3dfcc6e0653ea1bf561724fc01b19016262243e859cdc094bcc",
   "scripts/generate-public-capability-contract.mjs": "7c6f08e3a28c9bc2cd50a9e791571eaf4987b2c618f4c614ae55c9ed811cf1f2",
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
   "scripts/no-public-leak.sh": "b1f545a1bce2fc8f3e227f9bff41e737ea398ef5f15001403e4b8c7bfc684855",
@@ -319,8 +319,8 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/tsconfig.json": "03d5bac68efb117ed224ec2091bb0918370cb4453ae2fa04bd5fd1d7aff26f54",
 });
 export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
-  "marketplace/openai/SUBMISSION.md": "300fd3e65c6dabac5532f911a49697039685f875d6a0c2e6a12ff7b67f3aed9e",
-  "marketplace/openai/chatgpt-app-submission.json": "3b80cf9422bb7e2779497cb81b1638fae253f0af32d5445aeddd2e0e27d9f1cf",
+  "marketplace/openai/SUBMISSION.md": "2e875c64aeef82ffac845816ae6828216559b30411fbb43f44c95f919af3de59",
+  "marketplace/openai/chatgpt-app-submission.json": "09221aa2c716f7b89223e307c7eb83788bf69842d08776ed4556d31fb74ba97c",
   "marketplace/openai/chatgpt-app-submission.v1.schema.json": "aa7d1bd554e6c615d411c03e5b73bb464816be603461eb5813bb589645550304",
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",

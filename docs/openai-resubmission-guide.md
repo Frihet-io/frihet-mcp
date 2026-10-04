@@ -324,6 +324,15 @@ screenshots, skills or full-profile MCP connection. Packaging does not deploy
 or validate the live server. All five positive and three negative cases still
 require execution in ChatGPT web and mobile against the actual candidate.
 
+Legacy apps can reject ZIP migration with `Publish the existing MCP app before
+updating its plugin ZIP.` Keep the existing plugin identity and MCP connection.
+Publish that existing app only after its review and release requirements are
+satisfied; if no eligible path is available, ask OpenAI support to resolve the
+migration state. Do not create a replacement identity, change the MCP URL or add
+an `.app.json` reference to bypass this portal guard. Such references are for
+local/workspace packages and are not accepted for public submission. Keep the
+support request and portal evidence outside this public repository.
+
 The portable manifest imports the following values through
 `extensions.com.openai.interface`, `review` and `publication`; the legacy
 submission JSON does not carry them. Confirm the imported settings in the draft.
