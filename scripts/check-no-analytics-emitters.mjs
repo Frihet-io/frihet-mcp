@@ -257,7 +257,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
   "workers/remote-mcp/src/auth-handler.ts": "e77bc3282705658f91e4c20fe623c6a758b96cb0f8b7b043e0dd2ebf35ce78d2", // OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
-  "workers/remote-mcp/src/index.ts": "46bb7edbc59b4f285b942731456563a1b611267ae80656b26864222ed48c5be4", // OAuth/OIDC review: OIDC discovery, protected UserInfo and scoped bearer challenge; no new destination
+  "workers/remote-mcp/src/index.ts": "cf3ec37cf1751edfe9ec8cfd9620fd207669c4dff6575e2e380716166f7eb161", // OpenAI candidate: privacy notice date October 4, 2026; no runtime logic or destination changes
   "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "2e129bb4b62a57eb6082f39f2004fae1a3bc26609bb43343928fb47bf73327d3",

@@ -8897,8 +8897,24 @@
               "eu",
               "world"
             ],
-            "description": "Fiscal zone — drives tax label rendering on PDF + tax math\n(IVA/IGIC/IPSI/Reverse charge/Exempt). Snapshot field, frozen\nat create. Auto-populated from clientId reference if absent.\n",
+            "description": "Customer fiscal zone. This does not establish an exemption or\nplace-of-supply treatment. Auto-populated from clientId if absent.\n",
             "example": "canarias"
+          },
+          "operationType": {
+            "type": "string",
+            "enum": [
+              "service",
+              "goods"
+            ],
+            "description": "Nature of the operation; does not itself establish its tax treatment."
+          },
+          "fiscalTreatment": {
+            "type": "string",
+            "enum": [
+              "not_subject_location",
+              "export_exempt"
+            ],
+            "description": "Explicitly reviewed treatment, optional on drafts. Before issuing a\nzero-rate world invoice, declare an issuer in mainland Spain/Balearics\nand either service + not_subject_location or goods + export_exempt.\nOther ambiguous international cases require review and return 422.\nOn PATCH, changing recipient or operation facts invalidates an old\ntreatment unless explicitly confirmed again. Once hashed, fiscal\nfacts are immutable; a correction requires a separate fiscal operation.\n"
           },
           "clientEmail": {
             "type": "string",
