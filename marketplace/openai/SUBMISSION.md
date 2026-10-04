@@ -56,14 +56,33 @@ if the subsequent expense write fails. Expense updates cannot change
 the amount or linked supplier identity.
 
 The exact `tools/list` descriptor is pinned in
-`src/__tests__/fixtures/openai-review-descriptor.snapshot.json`. The uploadable
-provider form is generated, never hand-maintained:
+`src/__tests__/fixtures/openai-review-descriptor.snapshot.json`. The legacy
+provider form and portable plugin manifests are generated, never hand-maintained:
 
 ```bash
 npm run generate:openai-submission
 npm run gate:openai-review-descriptor
 npm run gate:openai-submission
+npm run package:openai-plugin
 ```
+
+The last command requires Python 3 (standard library only) and creates
+`dist/app-69b6147ce32c81918680c89bfa7c9b36-1.0.1.zip`, with an unpacked copy in
+`dist/openai-plugin/`. The ZIP contains root `plugin.json`, root `mcp.json` and
+the three existing PNG assets only. Its file order, timestamps and permissions
+are fixed. It preserves the existing plugin identity and advances the package
+version from `1.0.0` to `1.0.1`, independently of the hosted MCP release.
+
+The package supplies the English listing, Spanish translation, three read-only
+starter prompts, five positive and three negative review cases, release notes,
+Spain-only availability and the exact reviewed MCP endpoint. It omits
+`demo_recording_url` until a real recording exists. Credentials and reviewer
+sign-in instructions belong only in the secure dashboard form. These local
+checks validate packaging; all eight cases still require actual execution in
+ChatGPT web and mobile against the deployed review candidate before submission.
+
+Format and limits: [OpenAI plugin submission](https://developers.openai.com/plugins/deploy/submission#automatically-provide-submission-and-review-information)
+and [plugin guidelines](https://developers.openai.com/plugins/plugin-guidelines).
 
 Do not infer this capability set from the full MCP catalogue. Operational
 submission steps, reviewer credentials, CAPTCHA handling, provider
@@ -76,7 +95,7 @@ that portal option does not exist in the verified 2026-09-04 draft. A different
 Identity/author, an Individual identity, or a draft whose public owner
 evidence is not yet live is not eligible for submission.
 
-Enter the manual portal fields exactly as follows after those URLs are live:
+Confirm the selected identity and package-imported fields after those URLs are live:
 
 - Identity: `Business — Frihet`;
 - Plugin Author: `Frihet`;
@@ -92,9 +111,11 @@ Enter the manual portal fields exactly as follows after those URLs are live:
   keep customer data, credentials, tokens, and private release evidence out of
   the recording.
 
-The upload schema cannot populate these ownership, URL, contact, or recording
-fields, so schema validation of `chatgpt-app-submission.json` is not evidence
-that the portal values are complete.
+The portable ZIP populates ownership text, public URLs and contact metadata;
+the legacy `chatgpt-app-submission.json` schema does not. A real recording URL
+can be supplied through `extensions.com.openai.review.demo_recording_url` or
+the dashboard when the package omits it. Neither package validation nor upload
+proves that reviewer access, live behavior or required review materials are complete.
 
 Use the checked-in 512 px PNG assets for the portal previews; do not export or
 resize them during submission:

@@ -19,6 +19,8 @@ const DESCRIPTOR_PATH = fileURLToPath(
 const SUBMISSION_PATH = fileURLToPath(
   new URL("../marketplace/openai/chatgpt-app-submission.json", import.meta.url),
 );
+const PLUGIN_PATH = fileURLToPath(new URL("../marketplace/openai/plugin.json", import.meta.url));
+const MCP_PATH = fileURLToPath(new URL("../marketplace/openai/mcp.json", import.meta.url));
 const WORKER_LOCK_PATH = fileURLToPath(
   new URL("../workers/remote-mcp/package-lock.json", import.meta.url),
 );
@@ -318,14 +320,79 @@ function buildSubmission(contract) {
     schema_version: 1,
     app_info: {
       display_name: "Frihet",
-      subtitle: "Manage business operations",
+      subtitle: "Invoices, expenses and clients",
       description:
-        "Frihet is the trade name owned and operated in Spain by VICTOR BERTHELIUS PATO. Frihet connects ChatGPT to a Frihet business workspace. Find invoices, quotes, expenses, clients, CRM records, products, and vendors; prepare numbered invoice and quote drafts; and record or update selected business data. Every write requires explicit confirmation; confirmations for operations with lasting or external effects disclose those effects. Some confirmed writes may trigger webhooks previously configured in Frihet or notify workspace members. This reviewed OAuth connector deliberately excludes payment initiation, processing, or execution; invoice issuance or email delivery; tax filings; banking; payroll or HR; raw documents; webhook administration; and regulated exports. It may read stored payment-status fields and business payment dates. No API key is required.",
+        "Manage everyday business records from ChatGPT with your Frihet workspace. Built for freelancers and small businesses, Frihet helps you find invoices, quotes, expenses, clients, products and vendors; prepare numbered invoice and quote drafts; and keep selected business records and client contacts, notes and activities up to date.\n\nConnect your existing Frihet account securely through OAuth; no API key is required. Every change requires explicit confirmation, including disclosure of lasting or external effects. Creating a draft reserves a document number and advances the numbering counter; invoice drafts also consume monthly invoice usage. Confirmed changes may create or link clients or vendors, deliver owner-configured webhooks, notify workspace members, award referral credits or send minimized invoice-creation analytics.\n\nThis connector does not initiate or process payments, issue or email invoices, file taxes, access banking or payroll/HR, retrieve raw documents, administer webhooks or produce regulated exports. It may read stored payment-status fields and business payment dates.\n\nFrihet is the trade name owned and operated in Spain by VICTOR BERTHELIUS PATO.",
       category: "BUSINESS",
     },
     tools,
     test_cases: positive,
     negative_test_cases: negative,
+  };
+}
+
+function buildPlugin(submission) {
+  const reviewCase = ({ description, user_prompt, tools_triggered, expected_output }) => ({
+    description,
+    prompt: user_prompt,
+    ...(tools_triggered ? { tools_triggered } : {}),
+    expected_behavior: expected_output,
+  });
+  return {
+    $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    name: "app-69b6147ce32c81918680c89bfa7c9b36",
+    version: "1.0.1",
+    description: "Find business records and prepare invoice drafts in your connected Frihet workspace.",
+    author: {
+      name: "Frihet",
+      email: "ayuda@frihet.io",
+      url: "https://www.frihet.io",
+    },
+    homepage: "https://www.frihet.io",
+    repository: "https://github.com/Frihet-io/frihet-mcp",
+    license: "MIT",
+    keywords: ["invoices", "expenses", "clients", "small-business", "frihet"],
+    extensions: {
+      "com.openai": {
+        interface: {
+          displayName: submission.app_info.display_name,
+          shortDescription: submission.app_info.subtitle,
+          longDescription: submission.app_info.description,
+          developerName: "Frihet",
+          category: "Business & Operations",
+          capabilities: ["Find business records", "Prepare invoice and quote drafts", "Manage expenses and client records"],
+          websiteURL: "https://www.frihet.io",
+          supportURL: "https://openai-mcp.frihet.io/support",
+          privacyPolicyURL: "https://openai-mcp.frihet.io/privacy",
+          termsOfServiceURL: "https://www.frihet.io/es/terms",
+          defaultPrompt: [
+            "Give me an overview of my business this month.",
+            "Show me my draft invoices.",
+            "Show me my active products and services.",
+          ],
+          composerIcon: "./assets/frihet-composer.png",
+          composerIconDark: "./assets/frihet-composer-dark.png",
+          logo: "./assets/frihet-composer.png",
+          logoDark: "./assets/frihet-directory-dark.png",
+        },
+        review: {
+          test_cases: {
+            positive: submission.test_cases.map(reviewCase),
+            negative: submission.negative_test_cases.map(reviewCase),
+          },
+        },
+        publication: {
+          countries: ["ES"],
+          release_notes: "Package 1.0.1 adds the reviewed Frihet MCP connection and existing light and dark icons, corrects the listing to the 33-tool reviewed scope, and includes three read-only starter prompts, Spanish listing text, and five positive plus three negative review cases. This package does not change the hosted server. Live ChatGPT web/mobile verification and a reviewer-accessible video are required before submission.",
+          translations: {
+            "es-ES": {
+              subtitle: "Facturas, gastos y clientes",
+              description: "Gestiona los registros de tu negocio desde ChatGPT con tu espacio de trabajo de Frihet. Pensado para autónomos y pequeñas empresas, Frihet te ayuda a encontrar facturas, presupuestos, gastos, clientes, productos y proveedores; preparar borradores numerados de facturas y presupuestos; y mantener al día determinados registros del negocio y los contactos, notas y actividades de clientes.\n\nConecta tu cuenta de Frihet mediante OAuth; no necesitas una clave de API. Cada cambio requiere confirmación explícita, con información sobre sus efectos duraderos o externos. Crear un borrador reserva un número de documento y avanza el contador; los borradores de factura también consumen uso mensual de facturas. Los cambios confirmados pueden crear o vincular clientes o proveedores, enviar webhooks configurados por el propietario, notificar a miembros del espacio, conceder créditos por recomendación o enviar analítica mínima de creación de facturas.\n\nEste conector no permite iniciar o procesar pagos, emitir o enviar facturas por correo, presentar impuestos, acceder a banca o nóminas/RR. HH., recuperar documentos originales, administrar webhooks ni generar exportaciones reguladas. Puede consultar estados de pago y fechas de pago comerciales ya almacenados.\n\nFrihet es el nombre comercial propiedad de VICTOR BERTHELIUS PATO, quien lo opera en España.",
+            },
+          },
+        },
+      },
+    },
   };
 }
 
@@ -339,22 +406,32 @@ async function main() {
   const actual = await captureCurrentContract();
   assertOpenAIReviewContract(actual, actual);
   const descriptorText = serializeOpenAIReviewContract(actual);
-  const submissionText = `${JSON.stringify(buildSubmission(actual), null, 2)}\n`;
+  const submission = buildSubmission(actual);
+  const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
+  const outputs = new Map([
+    [DESCRIPTOR_PATH, descriptorText],
+    [SUBMISSION_PATH, json(submission)],
+    [PLUGIN_PATH, json(buildPlugin(submission))],
+    [MCP_PATH, json({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+      mcpServers: {
+        frihet: { type: "streamable-http", url: actual.oauth.protectedResourceMcp.resource },
+      },
+    })],
+  ]);
 
   if (write) {
-    await writeFile(DESCRIPTOR_PATH, descriptorText);
-    await writeFile(SUBMISSION_PATH, submissionText);
-    console.log(`Wrote reviewed descriptor and ${actual.tools.length}-tool submission JSON`);
+    for (const [path, contents] of outputs) await writeFile(path, contents);
+    console.log(`Wrote reviewed descriptor, ${actual.tools.length}-tool submission and portable plugin manifests`);
     return;
   }
 
   const expected = JSON.parse(await readFile(DESCRIPTOR_PATH, "utf8"));
   assertOpenAIReviewContract(actual, expected);
-  if (await readFile(DESCRIPTOR_PATH, "utf8") !== descriptorText) {
-    throw new Error("Reviewed descriptor serialization drifted; run generate:openai-submission");
-  }
-  if (await readFile(SUBMISSION_PATH, "utf8") !== submissionText) {
-    throw new Error("Submission JSON drifted; run generate:openai-submission");
+  for (const [path, contents] of outputs) {
+    if (await readFile(path, "utf8") !== contents) {
+      throw new Error(`${path} drifted; run generate:openai-submission`);
+    }
   }
   console.log(`OpenAI submission matches the reviewed ${actual.tools.length}-tool contract`);
 }
