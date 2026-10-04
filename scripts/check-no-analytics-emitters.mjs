@@ -319,7 +319,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/tsconfig.json": "03d5bac68efb117ed224ec2091bb0918370cb4453ae2fa04bd5fd1d7aff26f54",
 });
 export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
-  "marketplace/openai/SUBMISSION.md": "2e875c64aeef82ffac845816ae6828216559b30411fbb43f44c95f919af3de59",
+  "marketplace/openai/SUBMISSION.md": "16e6be24cdafd4e1bf58f0c722b1e6af4d66a786b0d9cc291cab13da5f17a9cf",
   "marketplace/openai/chatgpt-app-submission.json": "09221aa2c716f7b89223e307c7eb83788bf69842d08776ed4556d31fb74ba97c",
   "marketplace/openai/chatgpt-app-submission.v1.schema.json": "aa7d1bd554e6c615d411c03e5b73bb464816be603461eb5813bb589645550304",
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",

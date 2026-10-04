@@ -316,7 +316,7 @@ after the evidence has been reviewed.
 
 Run `npm run generate:openai-submission` after editing the generator, then
 `npm run package:openai-plugin` (Python 3 required, no Python dependencies).
-Upload `dist/app-69b6147ce32c81918680c89bfa7c9b36-1.0.1.zip` to the existing
+Upload `marketplace/openai/dist/app-69b6147ce32c81918680c89bfa7c9b36-1.0.1.zip` to the existing
 plugin. The ZIP includes root `plugin.json`, root `mcp.json` and three existing
 512 px PNG assets; its reviewed endpoint is `https://openai-mcp.frihet.io/mcp`.
 It contains no credentials, reviewer instructions, placeholder video,

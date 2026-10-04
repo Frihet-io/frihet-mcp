@@ -74,9 +74,11 @@ test("portable listing preserves identity, reviewed scope and public submission 
   assert.doesNotMatch(JSON.stringify({ plugin, mcp }), /"(?:test_credentials|reviewer_instructions|headers|env|apps|hooks)"/);
 });
 
-test("ZIP is reproducible and contains exactly the manifests and reviewed 512 px assets", () => {
+test("ZIP is reproducible, contains only reviewed files and leaves npm built artifacts clean", () => {
   const archive = () => execFileSync("python3", ["scripts/package-openai-plugin.py"], { cwd: root, encoding: "utf8" }).trim();
-  const first = readFileSync(archive());
+  const archivePath = archive();
+  assert.equal(archivePath, fileURLToPath(new URL(`marketplace/openai/dist/${plugin.name}-${plugin.version}.zip`, rootUrl)));
+  const first = readFileSync(archivePath);
   assert.deepEqual(readFileSync(archive()), first);
   execFileSync("python3", ["-c", `
 import json, pathlib, sys, zipfile
@@ -98,5 +100,6 @@ with zipfile.ZipFile(sys.argv[2]) as bundle:
     manifest = json.loads(bundle.read('plugin.json'))['extensions']['com.openai']['interface']
     for key in ('logo', 'logoDark', 'composerIcon', 'composerIconDark'):
         assert manifest[key].removeprefix('./') in expected
-`, root, archive()], { cwd: root, stdio: "pipe" });
+`, root, archivePath], { cwd: root, stdio: "pipe" });
+  execFileSync(process.execPath, ["scripts/check-no-analytics-emitters.mjs", "--built"], { cwd: root, stdio: "pipe" });
 });

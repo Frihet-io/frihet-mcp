@@ -8,8 +8,8 @@ import zipfile
 root = Path(__file__).resolve().parent.parent
 source = root / "marketplace/openai"
 plugin = json.loads((source / "plugin.json").read_text())
-bundle = root / "dist/openai-plugin"
-archive = root / "dist" / f"{plugin['name']}-{plugin['version']}.zip"
+bundle = source / "dist/openai-plugin"
+archive = source / "dist" / f"{plugin['name']}-{plugin['version']}.zip"
 
 # Explicit allowlist: reviewer credentials and unrelated files cannot enter the ZIP.
 files = {
