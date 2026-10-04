@@ -12,7 +12,7 @@
  * is never sent on the wire. See src/__tests__/pagination-cursor-param.test.ts.
  */
 
-import { fetchWithoutRedirect } from "./fetch-no-redirect.js";
+import { rejectRedirectResponse } from "./fetch-no-redirect.js";
 import type {
   ApiError,
   CreateWebhookInput,
@@ -490,12 +490,13 @@ export class FrihetClient {
     const startTime = Date.now();
     let response: Response;
     try {
-      response = await fetchWithoutRedirect(url.toString(), {
+      response = await fetch(url.toString(), {
         method,
+        redirect: "manual",
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
-      });
+      }).then(rejectRedirectResponse);
     } catch (error) {
       clearTimeout(timeoutId);
       const durationMs = Math.round(Date.now() - startTime);
@@ -648,12 +649,13 @@ export class FrihetClient {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
     }
 
-    return fetchWithoutRedirect(url.toString(), {
+    return fetch(url.toString(), {
       method,
+      redirect: "manual",
       headers,
       body: body ? JSON.stringify(body) : undefined,
       signal,
-    });
+    }).then(rejectRedirectResponse);
   }
 
   /** Consume one response body without ever retaining more than `maxBytes`. */

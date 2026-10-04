@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { fetchWithoutRedirect } from "../../../../src/fetch-no-redirect.js";
+import { rejectRedirectResponse } from "../../../../src/fetch-no-redirect.js";
 import { FrihetClient } from "../../../../src/client.js";
 import { initLangfuse, traceMCPTool } from "../../../../src/observability.js";
 import {
@@ -144,7 +144,7 @@ test("five credential sinks reject every redirect with zero requests or credenti
   }
 });
 
-test("no-redirect helper cancels rejected bodies, preserves success and caller signal, and overrides follow", async () => {
+test("no-redirect helper cancels rejected bodies and preserves successful responses", async () => {
   for (const status of statuses) {
     let cancelled = 0;
     const stream = new ReadableStream({
@@ -154,42 +154,21 @@ test("no-redirect helper cancels rejected bodies, preserves success and caller s
     });
     await assert.rejects(
       () =>
-        fetchWithoutRedirect(
-          "https://synthetic.invalid",
-          { redirect: "follow" },
-          async (_input, init) => {
-            assert.equal(init?.redirect, "manual");
-            return new Response(stream, {
-              status,
-              headers: { location: "https://other.invalid" },
-            });
-          },
+        rejectRedirectResponse(
+          new Response(stream, {
+            status,
+            headers: { location: "https://other.invalid" },
+          }),
         ),
       /Redirect responses are not allowed/,
     );
     assert.equal(cancelled, 1);
   }
-  const signal = new AbortController().signal;
   const response = Response.json({ ok: true });
-  const result = await fetchWithoutRedirect(
-    "https://synthetic.invalid",
-    { signal },
-    async (_input, init) => {
-      assert.equal(init?.signal, signal);
-      assert.equal(init?.redirect, "manual");
-      return response;
-    },
-  );
+  const result = await rejectRedirectResponse(response);
   assert.equal(result, response);
   assert.equal(result.bodyUsed, false);
   assert.deepEqual(await result.json(), { ok: true });
   const unchanged = new Response(null, { status: 304 });
-  assert.equal(
-    await fetchWithoutRedirect(
-      "https://synthetic.invalid",
-      {},
-      async () => unchanged,
-    ),
-    unchanged,
-  );
+  assert.equal(await rejectRedirectResponse(unchanged), unchanged);
 });
