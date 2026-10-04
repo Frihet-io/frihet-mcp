@@ -1,3 +1,5 @@
+import { rejectRedirectResponse } from "../../../src/fetch-no-redirect.js";
+
 type FetchImplementation = (
   input: string | URL | Request,
   init?: RequestInit,
@@ -171,7 +173,7 @@ export function provisionOAuthApiKey(
   }
   return fetchImpl(provisioningUrl, {
     method: "POST",
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(OAUTH_LIFECYCLE_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
@@ -179,7 +181,7 @@ export function provisionOAuthApiKey(
       "x-frihet-oauth-key": serviceSecret,
     },
     body: JSON.stringify({ uid: binding.uid, correlationId }),
-  });
+  }).then(rejectRedirectResponse);
 }
 
 /** Revoke one exact bound key without ever retransmitting its raw credential. */
@@ -203,12 +205,12 @@ export function revokeOAuthApiKey(
   }
   return fetchImpl(provisioningUrl, {
     method: "DELETE",
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(OAUTH_LIFECYCLE_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       "x-frihet-oauth-key": serviceSecret,
     },
     body: JSON.stringify({ uid: binding.uid, keyId: binding.keyId }),
-  });
+  }).then(rejectRedirectResponse);
 }

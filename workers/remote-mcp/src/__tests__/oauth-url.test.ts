@@ -285,7 +285,7 @@ test("OAuth provision and revoke requests send the narrow server-derived bodies"
   );
 
   assert.equal(calls[0]?.init?.method, "POST");
-  assert.equal(calls[0]?.init?.redirect, "error");
+  assert.equal(calls[0]?.init?.redirect, "manual");
   assert.equal(calls[0]?.init?.body, JSON.stringify({
     uid: OPENAI_BINDING.uid,
     correlationId: CORRELATION_ID,
@@ -295,7 +295,7 @@ test("OAuth provision and revoke requests send the narrow server-derived bodies"
     SERVICE_SECRET,
   );
   assert.equal(calls[1]?.init?.method, "DELETE");
-  assert.equal(calls[1]?.init?.redirect, "error");
+  assert.equal(calls[1]?.init?.redirect, "manual");
   assert.equal(calls[1]?.init?.body, JSON.stringify({
     uid: OPENAI_BINDING.uid,
     keyId: "AbCdEfGhIjKlMnOpQrSt",

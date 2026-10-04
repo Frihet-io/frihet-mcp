@@ -12,6 +12,7 @@
  * is never sent on the wire. See src/__tests__/pagination-cursor-param.test.ts.
  */
 
+import { rejectRedirectResponse } from "./fetch-no-redirect.js";
 import type {
   ApiError,
   CreateWebhookInput,
@@ -491,11 +492,11 @@ export class FrihetClient {
     try {
       response = await fetch(url.toString(), {
         method,
+        redirect: "manual",
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
-        redirect: "error",
-      });
+      }).then(rejectRedirectResponse);
     } catch (error) {
       clearTimeout(timeoutId);
       const durationMs = Math.round(Date.now() - startTime);
@@ -650,11 +651,11 @@ export class FrihetClient {
 
     return fetch(url.toString(), {
       method,
+      redirect: "manual",
       headers,
       body: body ? JSON.stringify(body) : undefined,
       signal,
-      redirect: "error",
-    });
+    }).then(rejectRedirectResponse);
   }
 
   /** Consume one response body without ever retaining more than `maxBytes`. */
