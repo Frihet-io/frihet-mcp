@@ -198,7 +198,7 @@ function validateFullOAuthReleaseHold(yaml, contract) {
   const holdBody = guardOffset >= 0 && protectedEnvironmentOffset > guardOffset
     ? body.slice(guardOffset, protectedEnvironmentOffset)
     : "";
-  if (!holdBody.includes("if: inputs.dry_run != true")) errors.push("full-hold-breaks-dry-run-or-is-unconditional");
+  if (!holdBody.includes("if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'")) errors.push("full-hold-breaks-dry-run-or-is-unconditional");
   if (/continue-on-error:|\|\|\s*true/.test(holdBody)) errors.push("full-hold-error-can-be-ignored");
   if (!holdBody.includes(`CONTRACT=${FULL_OAUTH_RELEASE_CONTRACT}`)) errors.push("full-hold-contract-not-source-derived");
   if (!holdBody.includes('.status == "ready"') || contract.status !== "hold") {
@@ -1196,6 +1196,42 @@ test("OpenAI release workflow — current source and frozen OpenAI profile are i
   assert.doesNotMatch(preflight.body, /https:\/\/mcp\.frihet\.io\/health/);
 });
 
+test("npm-only release cannot reach Worker or downstream publication", () => {
+  const workflow = loadWorkflow();
+  const stages = parseWorkflowStages(workflow);
+  const preflight = findStage(stages, "preflight");
+  assert.match(workflow, /release_target:\n[\s\S]*?default: npm-only\n[\s\S]*?options:\n          - npm-only\n          - npm-and-worker/);
+  assert.match(preflight.body, /RELEASE_TARGET: \$\{\{ inputs\.release_target \}\}/);
+  const targetStep = preflight.body.split("      - name: Validate release target\n")[1]?.split("      - name:")[0];
+  assert.ok(targetStep, "target allowlist must run in preflight");
+  const shell = targetStep.split("        run: |\n")[1].replace(/^          /gm, "");
+  for (const target of ["npm-only", "npm-and-worker", "", "full", "npm-only; echo unsafe"]) {
+    const result = spawnSync("bash", ["-c", shell], { env: { ...process.env, RELEASE_TARGET: target } });
+    assert.equal(result.status === 0, ["npm-only", "npm-and-worker"].includes(target), `target ${target}`);
+  }
+  const authorization = findStage(stages, "authorize-release");
+  const steps = authorization.body.split(/^      - /m).slice(1);
+  const npmGuard = steps.find((step) => step.startsWith("name: Assert release environment guard\n"));
+  assert.ok(npmGuard, "npm publication retains its protected environment sentinel");
+  assert.doesNotMatch(npmGuard, /^        if:/m);
+  assert.match(npmGuard, /NPM_RELEASE_ENV_GUARD/);
+  for (const step of steps.filter((step) => step !== npmGuard)) {
+    assert.match(step, /^        if: inputs\.release_target == 'npm-and-worker'$/m,
+      "npm-only authorization must not read Worker/registry credentials or run Wrangler");
+  }
+  for (const id of ["deploy-worker", "release-github", "cascade"]) {
+    assert.match(findStage(stages, id).body,
+      /^    if: inputs\.dry_run != true && inputs\.release_target == 'npm-and-worker'(?: && success\(\))?$/m,
+      `${id} must never run for npm-only`);
+  }
+  for (const id of ["publish-npm", "verify-npm"]) {
+    assert.doesNotMatch(findStage(stages, id).body, /inputs\.release_target == 'npm-and-worker'/);
+  }
+  assert.match(findStage(stages, "build-pack").body,
+    /include-hidden-files: true\n          if-no-files-found: error\n          path: \.release-evidence\//,
+    "registry verification must actually receive the hidden packed artifact");
+});
+
 test("Full release workflow — current OpenAI-only lifecycle source remains on explicit HOLD", () => {
   const workflow = loadWorkflow();
   const stages = parseWorkflowStages(workflow);
@@ -1232,7 +1268,7 @@ test("Full release workflow — current OpenAI-only lifecycle source remains on 
     "reusing the OpenAI lifecycle credential for Full must fail",
   );
   const unconditional = workflow.replace(
-    "      - name: Fail closed while Full OAuth lacks a separate reviewed authority\n        if: inputs.dry_run != true",
+    "      - name: Fail closed while Full OAuth lacks a separate reviewed authority\n        if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'",
     "      - name: Fail closed while Full OAuth lacks a separate reviewed authority",
   );
   assert.ok(

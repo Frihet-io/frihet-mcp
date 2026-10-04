@@ -1,14 +1,16 @@
 name: Release @frihet/mcp-server
 
 # Canonical MCP release workflow. Single end-to-end pipeline from a verified
-# origin/main HEAD to a verified npm registry byte + verified full-profile
-# Worker provenance + a GitHub Release whose tag points at the source commit.
+# origin/main HEAD to verified npm registry bytes. The npm-only target ends
+# at registry verification; the npm-and-worker target additionally proves
+# full-profile Worker provenance before the GitHub Release and cascade.
 # It deploys only the default Wrangler environment at mcp.frihet.io. It does
 # NOT deploy `wrangler --env openai` or verify openai-mcp.frihet.io; that
 # dedicated review surface requires a separately reviewed release path.
 # The checked-in Full OAuth release contract currently has status `hold`, so
-# every non-dry-run stops in preflight and the existing Full Worker stays
-# untouched until a separate Full lifecycle authority is reviewed.
+# npm-and-worker stops in preflight and the existing Full Worker stays
+# untouched. npm-only ships the local stdio/API-key client independently;
+# it creates no GitHub Release (which would trigger registry publication).
 #
 # ── Why this exists ─────────────────────────────────────────────────────────
 # Before this workflow, the release path was:
@@ -37,6 +39,14 @@ on:
           MUST be a strict semver bump over the latest published tag.
         required: true
         type: string
+      release_target:
+        description: npm-only verifies the local stdio/API-key package; npm-and-worker also deploys Full and remains subject to its OAuth HOLD.
+        required: true
+        type: choice
+        default: npm-only
+        options:
+          - npm-only
+          - npm-and-worker
       dry_run:
         description: >-
           If true, run every gate EXCEPT the npm publish, wrangler deploy,
@@ -98,6 +108,16 @@ jobs:
           # and so `git ls-remote origin refs/heads/main` resolves the anchor.
           fetch-depth: 0
 
+      - name: Validate release target
+        env:
+          RELEASE_TARGET: ${{ inputs.release_target }}
+        run: |
+          set -euo pipefail
+          case "$RELEASE_TARGET" in
+            npm-only|npm-and-worker) ;;
+            *) echo "::error::unsupported release target"; exit 1 ;;
+          esac
+
       - name: Resolve release version + identity
         id: id
         env:
@@ -149,7 +169,7 @@ jobs:
           echo "worktree_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Fail closed while Full OAuth lacks a separate reviewed authority
-        if: inputs.dry_run != true
+        if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'
         run: |
           set -euo pipefail
           CONTRACT=workers/remote-mcp/full-oauth-release-contract.json
@@ -387,6 +407,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mcp-release-evidence-${{ inputs.version }}
+          include-hidden-files: true
+          if-no-files-found: error
           path: .release-evidence/
           retention-days: 30
 
@@ -404,9 +426,22 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm-release
     steps:
-      - name: Assert release guard and downstream credentials
+      - name: Assert release environment guard
         env:
           NPM_RELEASE_ENV_GUARD: ${{ secrets.NPM_RELEASE_ENV_GUARD }}
+        run: |
+          set -euo pipefail
+          MISSING=()
+          [ -n "$NPM_RELEASE_ENV_GUARD" ] || MISSING+=("NPM_RELEASE_ENV_GUARD")
+          if [ "${#MISSING[@]}" -ne 0 ]; then
+            printf '::error::required release credential is absent: %s\n' "${MISSING[@]}"
+            exit 1
+          fi
+          echo "OK — release environment guard is present"
+
+      - name: Assert full-profile downstream credentials
+        if: inputs.release_target == 'npm-and-worker'
+        env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           SMITHERY_API_TOKEN: ${{ secrets.SMITHERY_API_TOKEN }}
@@ -414,7 +449,6 @@ jobs:
         run: |
           set -euo pipefail
           MISSING=()
-          [ -n "$NPM_RELEASE_ENV_GUARD" ] || MISSING+=("NPM_RELEASE_ENV_GUARD")
           [ -n "$CLOUDFLARE_API_TOKEN" ] || MISSING+=("CLOUDFLARE_API_TOKEN")
           [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || MISSING+=("CLOUDFLARE_ACCOUNT_ID")
           [ -n "$SMITHERY_API_TOKEN" ] || MISSING+=("SMITHERY_API_TOKEN")
@@ -424,12 +458,14 @@ jobs:
             echo "Verify environment protection and configure every named credential before dispatching."
             exit 1
           fi
-          echo "OK — release guard and all downstream credentials are present"
+          echo "OK — all full-profile downstream credentials are present"
 
       - name: Checkout exact release source
+        if: inputs.release_target == 'npm-and-worker'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node for pinned Wrangler
+        if: inputs.release_target == 'npm-and-worker'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
@@ -437,6 +473,7 @@ jobs:
           cache-dependency-path: workers/remote-mcp/package-lock.json
 
       - name: Verify Worker lockfile before install
+        if: inputs.release_target == 'npm-and-worker'
         env:
           EXPECTED_WORKER_LOCK_SHA: ${{ needs.preflight.outputs.workerLockSha256 }}
         run: |
@@ -445,9 +482,11 @@ jobs:
             | sha256sum --check --strict -
 
       - name: Install pinned Worker release tooling
+        if: inputs.release_target == 'npm-and-worker'
         run: npm ci --prefix workers/remote-mcp --ignore-scripts
 
       - name: Assert full-profile Worker runtime secret names
+        if: inputs.release_target == 'npm-and-worker'
         # Wrangler returns names only; Cloudflare never exposes secret values.
         # The Langfuse trio is optional in Env and is therefore not an
         # availability prerequisite. OAuth and session secrets are mandatory.
@@ -664,7 +703,7 @@ jobs:
   deploy-worker:
     name: Deploy full-profile Worker (with source-SHA var)
     needs: [preflight, authorize-release, verify-npm]
-    if: inputs.dry_run != true
+    if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'
     runs-on: ubuntu-latest
     environment: npm-release
     steps:
@@ -794,7 +833,7 @@ jobs:
   release-github:
     name: GitHub Release (tag → source commit)
     needs: [preflight, authorize-release, verify-npm, verify-worker]
-    if: inputs.dry_run != true
+    if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'
     runs-on: ubuntu-latest
     environment: npm-release
     permissions:
@@ -868,7 +907,7 @@ jobs:
   cascade:
     name: Downstream registry cascade
     needs: [authorize-release, release-github]
-    if: inputs.dry_run != true && success()
+    if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker' && success()
     runs-on: ubuntu-latest
     environment: npm-release
     permissions:
