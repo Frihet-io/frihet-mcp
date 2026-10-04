@@ -1,7 +1,4 @@
-type FetchImplementation = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
+import { fetchWithoutRedirect, type FetchImplementation } from "../../../src/fetch-no-redirect.js";
 
 const OAUTH_LIFECYCLE_TIMEOUT_MS = 10_000;
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -169,9 +166,8 @@ export function provisionOAuthApiKey(
   if (!isExactOpenAiBinding(binding)) {
     throw new Error("OAuth API-key provisioning is restricted to the OpenAI profile");
   }
-  return fetchImpl(provisioningUrl, {
+  return fetchWithoutRedirect(provisioningUrl, {
     method: "POST",
-    redirect: "error",
     signal: AbortSignal.timeout(OAUTH_LIFECYCLE_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
@@ -179,7 +175,7 @@ export function provisionOAuthApiKey(
       "x-frihet-oauth-key": serviceSecret,
     },
     body: JSON.stringify({ uid: binding.uid, correlationId }),
-  });
+  }, fetchImpl);
 }
 
 /** Revoke one exact bound key without ever retransmitting its raw credential. */
@@ -201,14 +197,13 @@ export function revokeOAuthApiKey(
   if (!new RegExp(OAUTH_PROVISIONING_CONTRACT.keyIdPattern, "u").test(binding.keyId)) {
     throw new Error("OAuth API-key identifier is invalid");
   }
-  return fetchImpl(provisioningUrl, {
+  return fetchWithoutRedirect(provisioningUrl, {
     method: "DELETE",
-    redirect: "error",
     signal: AbortSignal.timeout(OAUTH_LIFECYCLE_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       "x-frihet-oauth-key": serviceSecret,
     },
     body: JSON.stringify({ uid: binding.uid, keyId: binding.keyId }),
-  });
+  }, fetchImpl);
 }

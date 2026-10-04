@@ -12,6 +12,7 @@
  * is never sent on the wire. See src/__tests__/pagination-cursor-param.test.ts.
  */
 
+import { fetchWithoutRedirect } from "./fetch-no-redirect.js";
 import type {
   ApiError,
   CreateWebhookInput,
@@ -489,12 +490,11 @@ export class FrihetClient {
     const startTime = Date.now();
     let response: Response;
     try {
-      response = await fetch(url.toString(), {
+      response = await fetchWithoutRedirect(url.toString(), {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
-        redirect: "error",
       });
     } catch (error) {
       clearTimeout(timeoutId);
@@ -648,12 +648,11 @@ export class FrihetClient {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
     }
 
-    return fetch(url.toString(), {
+    return fetchWithoutRedirect(url.toString(), {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
       signal,
-      redirect: "error",
     });
   }
 

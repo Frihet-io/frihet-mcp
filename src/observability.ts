@@ -21,6 +21,7 @@
  */
 
 import { log } from "./logger.js";
+import { fetchWithoutRedirect } from "./fetch-no-redirect.js";
 
 // Declared to avoid TS errors in Workers environment where `process` is not typed
 declare const process: { env?: Record<string, string | undefined> } | undefined;
@@ -201,9 +202,8 @@ export function inspectStubMarker(output: unknown): StubMarker | null {
 async function sendBatch(config: LangfuseConfig, batch: IngestionBatch): Promise<void> {
   const credentials = btoa(`${config.publicKey}:${config.secretKey}`);
 
-  const resp = await fetch(`${config.baseUrl}/api/public/ingestion`, {
+  const resp = await fetchWithoutRedirect(`${config.baseUrl}/api/public/ingestion`, {
     method: "POST",
-    redirect: "error",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Basic ${credentials}`,
