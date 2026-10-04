@@ -2,9 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { rejectRedirectResponse } from "../../../../src/fetch-no-redirect.js";
-import { FrihetClient } from "../../../../src/client.js";
-import { initLangfuse, traceMCPTool } from "../../../../src/observability.js";
+// CI builds the root package before this strip-only Worker runner. Exercise its
+// compiled output: the root client uses syntax requiring TypeScript transforms.
+import { rejectRedirectResponse } from "../../../../dist/fetch-no-redirect.js";
+import { FrihetClient } from "../../../../dist/client.js";
+import { initLangfuse, traceMCPTool } from "../../../../dist/observability.js";
 import {
   provisionOAuthApiKey,
   revokeOAuthApiKey,
