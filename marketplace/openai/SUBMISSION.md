@@ -67,12 +67,19 @@ npm run package:openai-plugin
 ```
 
 The last command requires Python 3 (standard library only) and creates
-`marketplace/openai/dist/app-69b6147ce32c81918680c89bfa7c9b36-1.0.1.zip`, with an unpacked copy in
+`marketplace/openai/dist/frihet-1.0.1.zip`, with an unpacked copy in
 `marketplace/openai/dist/openai-plugin/`. These outputs stay outside npm's root
 `dist/` publish surface. The ZIP contains root `plugin.json`, root `mcp.json` and
 the three existing PNG assets only. Its file order, timestamps and permissions
-are fixed. It preserves the existing plugin identity and advances the package
-version from `1.0.0` to `1.0.1`, independently of the hosted MCP release.
+are fixed. Its version `1.0.1` is independent of the hosted MCP release.
+
+Submit it as a new plugin named `frihet`: **Upload new or existing plugin**,
+verified identity **Business — Frihet**. The legacy record
+`plugin_asdk_app_69b6147ce32c81918680c89bfa7c9b36` stays unpublished and is not
+updated: its exported package has no MCP server, and adding an MCP server to an
+existing plugin without one is not supported
+(https://developers.openai.com/plugins/deploy/submission). Later updates must
+keep the package name `frihet`.
 
 The package supplies the English listing, Spanish translation, three read-only
 starter prompts, five positive and three negative review cases, release notes,

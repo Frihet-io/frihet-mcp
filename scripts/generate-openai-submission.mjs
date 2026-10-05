@@ -340,7 +340,7 @@ function buildPlugin(submission) {
   });
   return {
     $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-    name: "app-69b6147ce32c81918680c89bfa7c9b36",
+    name: "frihet",
     version: "1.0.1",
     description: "Find business records and prepare invoice drafts in your connected Frihet workspace.",
     author: {
