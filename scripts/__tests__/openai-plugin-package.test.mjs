@@ -21,7 +21,7 @@ function textWithin(value, limit) {
 
 test("portable listing preserves identity, reviewed scope and public submission limits", () => {
   assert.equal(plugin.$schema, "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json");
-  assert.equal(plugin.name, "app-69b6147ce32c81918680c89bfa7c9b36");
+  assert.equal(plugin.name, "frihet");
   assert.equal(plugin.version, "1.0.1");
   assert.equal(plugin.author.name, "Frihet");
   assert.deepEqual(Object.keys(openai).sort(), ["interface", "publication", "review"]);
