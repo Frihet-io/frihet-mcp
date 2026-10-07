@@ -468,17 +468,26 @@ test("reviewed provider cannot resolve direct API keys or cross host/scope/auth 
   assert.match(workerSource, /tokenFamilyExchange\.settle\(response\)/u);
 });
 
-test("reviewed authorize/callback source enforces exact state, PKCE, client lookup and atomic consumption", () => {
+test("reviewed authorize/callback source enforces exact state, PKCE, client lookup and a leased state lifecycle", () => {
   assert.match(authSource, /params\.getAll\(key\)\.length !== 1/u);
   assert.match(authSource, /OAuth parameter state must be non-empty/u);
   assert.match(authSource, /code_challenge_method"\) !== "S256"/u);
   assert.match(authSource, /isValidS256CodeChallenge\(challenge\)/u);
   const lookupIndex = authSource.indexOf("lookupClient(oauthReq.clientId)");
   const storeIndex = authSource.indexOf("storeOAuthState(c.env.OAUTH_STATE");
-  const consumeIndex = authSource.indexOf("consumeOAuthState<AuthRequest>");
+  const reserveIndex = authSource.indexOf("reserveOAuthState<AuthRequest>");
   const verifyIndex = authSource.indexOf("auth.verifyIdToken(body.idToken)");
+  const armIndex = authSource.indexOf("armOAuthStateAttempt(");
+  const provisionIndex = authSource.indexOf("provisionOAuthApiKey(\n");
+  const completeIndex = authSource.indexOf("OAUTH_PROVIDER.completeAuthorization(");
+  const commitIndex = authSource.indexOf("commitOAuthState(c.env.OAUTH_STATE");
   assert.ok(lookupIndex >= 0 && lookupIndex < storeIndex);
-  assert.ok(consumeIndex >= 0 && consumeIndex < verifyIndex);
+  // Lease before any I/O, arm right before the credential request, and commit
+  // only after the authorization code exists (never consume-before-I/O).
+  assert.ok(reserveIndex >= 0 && reserveIndex < verifyIndex);
+  assert.ok(verifyIndex < armIndex && armIndex < provisionIndex);
+  assert.ok(provisionIndex < completeIndex && completeIndex < commitIndex);
+  assert.doesNotMatch(authSource, /consumeOAuthState/u);
   assert.match(authSource, /!isVerifiedOpenAIIdentity\(verifiedIdentity\)/u);
   assert.match(authSource, /oauthIssuer: OPENAI_REVIEW_ORIGIN/u);
   assert.match(authSource, /oauthAudience: oauthReq\.resource/u);

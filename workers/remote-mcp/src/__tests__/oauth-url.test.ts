@@ -12,9 +12,12 @@ import type { AddressInfo } from "node:net";
 import { resolveApiBaseUrl, resolveOAuthApiKeyUrl } from "../api-url.ts";
 import {
   OAUTH_PROVISIONING_CONTRACT,
+  isOAuthCorrelationRevocationProof,
   isTrustedOAuthApiKeyUrl,
+  oauthProvisioningPreflightError,
   parseProvisionedOAuthApiKey,
   provisionOAuthApiKey,
+  reconcileOAuthApiKeyCorrelation,
   revokeOAuthApiKey,
 } from "../oauth-provisioning.ts";
 
@@ -397,4 +400,57 @@ test("OAuth lifecycle leaf rejects attacker-controlled URLs before fetch sees ei
     );
   }
   assert.equal(fetchCalls, 0);
+});
+
+test("only the authority's exact readback proves a correlation revoked", () => {
+  const proof = { revoked: true, alreadyRevoked: false, correlationTombstoned: true, activeKeys: 0 };
+  assert.equal(isOAuthCorrelationRevocationProof(proof), true);
+  assert.equal(isOAuthCorrelationRevocationProof({ ...proof, alreadyRevoked: true }), true);
+  for (const candidate of [
+    { revoked: true },
+    { ...proof, revoked: false },
+    { ...proof, alreadyRevoked: "false" },
+    { ...proof, correlationTombstoned: false },
+    { ...proof, activeKeys: 1 },
+    { ...proof, activeKeys: "0" },
+    { ...proof, keyId: "AbCdEfGhIjKlMnOpQrSt" },
+    [proof],
+    null,
+    "revoked",
+  ]) {
+    assert.equal(isOAuthCorrelationRevocationProof(candidate), false, JSON.stringify(candidate));
+  }
+});
+
+test("reconciling a correlation resolves true only on a 200 carrying the proof", async (t) => {
+  const proof = { revoked: true, alreadyRevoked: true, correlationTombstoned: true, activeKeys: 0 };
+  const reply = (answer: () => Response) => {
+    t.mock.method(globalThis, "fetch", async () => answer());
+    return reconcileOAuthApiKeyCorrelation(EXPECTED, SERVICE_SECRET, {
+      ...OPENAI_BINDING,
+      correlationId: CORRELATION_ID,
+    });
+  };
+  assert.equal(await reply(() => Response.json(proof)), true);
+  assert.equal(await reply(() => Response.json({ revoked: true })), false);
+  assert.equal(await reply(() => new Response("not json", { status: 200 })), false);
+  assert.equal(await reply(() => Response.json(proof, { status: 500 })), false);
+  assert.equal(await reply(() => { throw new TypeError("network"); }), false);
+});
+
+test("provisioning preflight refuses, without sending, every request the leaf would refuse", () => {
+  assert.equal(
+    oauthProvisioningPreflightError(EXPECTED, SERVICE_SECRET, OPENAI_BINDING, CORRELATION_ID),
+    undefined,
+  );
+  for (const [url, secret, binding, correlationId, expected] of [
+    ["https://evil.example/oauth/api-key", SERVICE_SECRET, OPENAI_BINDING, CORRELATION_ID, /not trusted/u],
+    [EXPECTED, "short", OPENAI_BINDING, CORRELATION_ID, /not configured/u],
+    [EXPECTED, SERVICE_SECRET, OPENAI_BINDING, "not-a-uuid", /correlation is invalid/u],
+    [EXPECTED, SERVICE_SECRET, FULL_BINDING, CORRELATION_ID, /restricted to the OpenAI profile/u],
+    [EXPECTED, SERVICE_SECRET, WRONG_RESOURCE_BINDING, CORRELATION_ID, /restricted to the OpenAI profile/u],
+    [EXPECTED, SERVICE_SECRET, WRONG_PROFILE_BINDING, CORRELATION_ID, /restricted to the OpenAI profile/u],
+  ] as const) {
+    assert.match(oauthProvisioningPreflightError(url, secret, binding, correlationId) ?? "", expected);
+  }
 });
