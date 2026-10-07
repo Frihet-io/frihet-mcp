@@ -225,6 +225,12 @@ jobs:
           fi
           echo "OK — npm-release exists with independent reviewer protection"
 
+      - name: Full Worker topology baseline must be established (preflight)
+        # Same check as the deploy-worker job, run before anything is published
+        # so a pending baseline cannot burn an npm version and then stop.
+        if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'
+        run: node scripts/check-full-worker-topology.mjs --require-established
+
       - name: Freeze exact-source lockfile digests
         id: locks
         run: |
@@ -746,6 +752,36 @@ jobs:
           npm run gate:analytics
           npm run gate:openapi-fresh
 
+      - name: Full Worker topology baseline must be established
+        # Offline check, no Cloudflare call. It stops the job before the deploy
+        # step: the first deploy of a build that adds a Durable Object migration
+        # is irreversible, so a pending-bootstrap baseline blocks here. Preflight
+        # runs the same check so no npm version is published first. See
+        # docs/full-topology-bootstrap.md.
+        run: node scripts/check-full-worker-topology.mjs --require-established
+
+      - name: Full Worker live topology must match the established baseline
+        env:
+          NO_COLOR: "1"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: workers/remote-mcp
+        run: |
+          set -euo pipefail
+          STATE_DIR="$(mktemp -d)"
+          trap 'rm -rf "$STATE_DIR"' EXIT
+          WORKER_NAME="$(jq -er '.workerName' full-topology-baseline.json)"
+          test "$WORKER_NAME" = "frihet-remote-mcp"
+          ./node_modules/.bin/wrangler deployments status --config wrangler.toml \
+            --name "$WORKER_NAME" --json > "$STATE_DIR/deployment.json"
+          LIVE_VERSION_ID="$(jq -er '.versions[0].version_id' "$STATE_DIR/deployment.json")"
+          ./node_modules/.bin/wrangler versions view "$LIVE_VERSION_ID" --config wrangler.toml \
+            --name "$WORKER_NAME" --json > "$STATE_DIR/version.json"
+          node ../../scripts/check-full-worker-topology.mjs \
+            --require-established --require-live-match \
+            --active-deployment "$STATE_DIR/deployment.json" \
+            --live-version "$STATE_DIR/version.json"
+
       - name: Deploy full-profile Worker with source-SHA + version vars
         # The source SHA + version vars are the second half of the
         # end-to-end provenance chain. After deploy, verify-worker
@@ -760,6 +796,7 @@ jobs:
           set -euo pipefail
           npx wrangler deploy \
             --env "" \
+            --config wrangler.toml \
             --var "RELEASE_SOURCE_SHA:${SOURCE_COMMIT}" \
             --var "RELEASE_VERSION:${VERSION}"
           echo "OK — full-profile Worker deployed with RELEASE_SOURCE_SHA=${SOURCE_COMMIT}"

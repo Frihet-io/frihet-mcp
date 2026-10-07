@@ -36,6 +36,7 @@ import {
   chmodSync,
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -2632,4 +2633,313 @@ test("OpenAI evidence uploads explicitly include only sanitized hidden artifacts
       assert.match(upload, /if-no-files-found: error/, `${id} cannot succeed without evidence`);
     }
   }
+});
+
+// ── Full-profile Worker topology guard ──────────────────────────────────────
+const FULL_TOPOLOGY_CHECKER = "scripts/check-full-worker-topology.mjs";
+const FULL_TOPOLOGY_BASELINE = "workers/remote-mcp/full-topology-baseline.json";
+const FULL_GUARD_STEPS = [
+  "Full Worker topology baseline must be established",
+  "Full Worker live topology must match the established baseline",
+];
+const FULL_DEPLOY_STEP = "Deploy full-profile Worker with source-SHA + version vars";
+
+const SKIPPABLE_STEP = /^        (?:if|continue-on-error):|\|\||\bset \+[a-z]*e\b/m;
+const FULL_PREFLIGHT_STEP = "Full Worker topology baseline must be established (preflight)";
+const FULL_RELEASE_IF = "if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'";
+
+function validateFullDeployTopologyGuard(yaml) {
+  const stages = parseWorkflowStages(yaml);
+  const stage = findStage(stages, "deploy-worker");
+  if (!stage) return ["missing-deploy-worker"];
+  const body = executableStageBody(stage);
+  const steps = body.split(/^      - name: /m).slice(1);
+  const errors = [];
+  const deployIndex = steps.findIndex((step) => step.startsWith(FULL_DEPLOY_STEP));
+  if (deployIndex < 0) errors.push("missing-deploy-step");
+  else if (SKIPPABLE_STEP.test(steps[deployIndex])) errors.push("deploy-step-conditional-or-ignorable");
+  if (/^    continue-on-error:/m.test(stage.body)) errors.push("deploy-job-continue-on-error");
+  FULL_GUARD_STEPS.forEach((name) => {
+    const index = steps.findIndex((step) => step.startsWith(name));
+    if (index < 0) errors.push(`missing-guard:${name}`);
+    else {
+      if (deployIndex >= 0 && index > deployIndex) errors.push(`guard-after-deploy:${name}`);
+      if (SKIPPABLE_STEP.test(steps[index])) errors.push(`guard-skippable:${name}`);
+    }
+  });
+  const flags = steps.join("\n");
+  if (!/check-full-worker-topology\.mjs --require-established\s*$/m.test(flags)) errors.push("missing-require-established");
+  if (!flags.includes("--require-established --require-live-match")) errors.push("missing-require-live-match");
+  if (!new RegExp(`^    ${FULL_RELEASE_IF.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m").test(stage.body)) {
+    errors.push("deploy-job-condition-changed");
+  }
+  // Wrangler must read the file this checker reads, not wrangler.json/.jsonc or a redirect.
+  for (const invocation of body.replace(/\\\n\s*/g, " ").matchAll(/\bwrangler (?:deploy|deployments|versions)\b[^\n]*/g)) {
+    if (!/\s--config wrangler\.toml(?:\s|$)/.test(invocation[0])) errors.push(`wrangler-config-not-explicit:${invocation[0]}`);
+  }
+  // The checker must also run in preflight, before anything is published.
+  const preflight = findStage(stages, "preflight");
+  const pre = preflight && executableStageBody(preflight).split(/^      - name: /m).slice(1)
+    .find((step) => step.startsWith(FULL_PREFLIGHT_STEP));
+  if (!pre) errors.push("missing-preflight-guard");
+  else {
+    if (!pre.includes(`        ${FULL_RELEASE_IF}\n`)) errors.push("preflight-guard-condition-changed");
+    if (SKIPPABLE_STEP.test(pre.replace(`        ${FULL_RELEASE_IF}\n`, ""))) errors.push("preflight-guard-skippable");
+    if (!/check-full-worker-topology\.mjs --require-established\s*$/m.test(pre)) errors.push("preflight-guard-missing-flag");
+  }
+  return errors;
+}
+
+/** Inserts `line` right after the `    environment: npm-release` of `job`. */
+function insertJobLine(yaml, job, line) {
+  const start = yaml.indexOf(`\n  ${job}:\n`);
+  const anchor = "    environment: npm-release\n";
+  const at = yaml.indexOf(anchor, start) + anchor.length;
+  return `${yaml.slice(0, at)}${line}\n${yaml.slice(at)}`;
+}
+
+function runFullTopology(args, { contract, toml, files = {} } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), "full-topology-"));
+  try {
+    const argv = [FULL_TOPOLOGY_CHECKER, ...args];
+    const put = (name, value) => {
+      const path = join(dir, name);
+      writeFileSync(path, typeof value === "string" ? value : JSON.stringify(value));
+      return path;
+    };
+    if (contract !== undefined) argv.push("--contract", put("contract.json", contract));
+    if (toml !== undefined) argv.push("--config", put("wrangler.toml", toml));
+    for (const [flag, value] of Object.entries(files)) argv.push(flag, put(`${flag.slice(2)}.json`, value));
+    return spawnSync(process.execPath, argv, { encoding: "utf8" });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
+const FULL_TOML = () => readFileSync("workers/remote-mcp/wrangler.toml", "utf8");
+
+function fullLiveView(overrides = {}) {
+  return {
+    id: "11111111-1111-4111-8111-111111111111",
+    resources: {
+      script: { handlers: ["fetch"], etag: "e" },
+      script_runtime: {
+        compatibility_date: "2025-12-01",
+        compatibility_flags: ["nodejs_compat"],
+        migration_tag: "v2",
+        ...overrides.script_runtime,
+      },
+      bindings: [
+        { type: "durable_object_namespace", name: "MCP_OBJECT", class_name: "FrihetMCP", namespace_id: "a" },
+        { type: "durable_object_namespace", name: "OAUTH_STATE", class_name: "OAuthStateStore", namespace_id: "b" },
+        { type: "kv_namespace", name: "OAUTH_KV", namespace_id: "9207b98598f849109139ad11f3b0ac51" },
+      ],
+    },
+  };
+}
+
+function fullEstablished(view = fullLiveView()) {
+  const topology = cloudflareTopology(view);
+  return {
+    ...readJson(FULL_TOPOLOGY_BASELINE),
+    status: "established",
+    baseline: { topology, topologySha256: topologyFingerprint(topology) },
+  };
+}
+
+const fullDeployment = (versionId, versions) => ({
+  id: "d", versions: versions ?? [{ version_id: versionId, percentage: 100 }],
+});
+
+test("Full Worker topology guard — hostile case: deploy job cannot skip, reorder or ignore the guard", () => {
+  const workflow = loadWorkflow();
+  assert.deepEqual(validateFullDeployTopologyGuard(workflow), []);
+  const [first] = FULL_GUARD_STEPS;
+  const deployMarker = `      - name: ${FULL_DEPLOY_STEP}\n`;
+  const guard2 = `      - name: ${FULL_GUARD_STEPS[1]}\n`;
+  const live2 = '            --live-version "$STATE_DIR/version.json"\n';
+  const preflightRun = `        ${FULL_RELEASE_IF}\n        run: node scripts/check-full-worker-topology.mjs --require-established`;
+  const mutants = {
+    "removed guard": workflow.replace(`      - name: ${first}\n`, "      - name: Renamed\n"),
+    "continue-on-error": workflow.replace(`      - name: ${first}\n`, `      - name: ${first}\n        continue-on-error: true\n`),
+    "if condition": workflow.replace(`      - name: ${first}\n`, `      - name: ${first}\n        if: always()\n`),
+    "or true": workflow.replace("node scripts/check-full-worker-topology.mjs --require-established\n\n      - name: Full Worker live", "node scripts/check-full-worker-topology.mjs --require-established || true\n\n      - name: Full Worker live"),
+    "dropped live match": workflow.replace(" --require-live-match", ""),
+    "pending allowed": workflow.replace("check-full-worker-topology.mjs --require-established\n\n      - name: Full Worker live", "check-full-worker-topology.mjs\n\n      - name: Full Worker live"),
+    "M2 deploy if always()": workflow.replace(deployMarker, `${deployMarker}        if: always()\n`),
+    "M2b deploy if !cancelled()": workflow.replace(deployMarker, `${deployMarker}        if: \${{ !cancelled() }}\n`),
+    "deploy step continue-on-error": workflow.replace(deployMarker, `${deployMarker}        continue-on-error: true\n`),
+    "M3 guard 2 or true": workflow.replace(live2, `${live2.trimEnd()} || true\n`),
+    "M7 guard 2 set +e": workflow.replace("          set -euo pipefail\n          STATE_DIR=", "          set -euo pipefail\n          set +e\n          STATE_DIR="),
+    "guard 2 if": workflow.replace(guard2, `${guard2}        if: always()\n`),
+    "deploy job continue-on-error": insertJobLine(workflow, "deploy-worker", "    continue-on-error: true"),
+    "wrangler config not explicit (deploy)": workflow.replace("            --env \"\" \\\n            --config wrangler.toml \\\n", "            --env \"\" \\\n"),
+    "wrangler config not explicit (status)": workflow.replace("deployments status --config wrangler.toml", "deployments status"),
+    "wrangler config not explicit (view)": workflow.replace('versions view "$LIVE_VERSION_ID" --config wrangler.toml', 'versions view "$LIVE_VERSION_ID"'),
+    "preflight guard removed": workflow.replace(FULL_PREFLIGHT_STEP, "Renamed preflight"),
+    "preflight guard ignorable": workflow.replace(preflightRun, `        ${FULL_RELEASE_IF}\n        continue-on-error: true\n        run: node scripts/check-full-worker-topology.mjs --require-established`),
+    "preflight guard condition widened": workflow.replace(preflightRun, "        if: inputs.dry_run == true\n        run: node scripts/check-full-worker-topology.mjs --require-established"),
+    "preflight guard drops flag": workflow.replace(preflightRun, `        ${FULL_RELEASE_IF}\n        run: node scripts/check-full-worker-topology.mjs`),
+  };
+  for (const [label, mutant] of Object.entries(mutants)) {
+    assert.notDeepEqual(mutant, workflow, `${label}: mutation must change the workflow`);
+    assert.notDeepEqual(validateFullDeployTopologyGuard(mutant), [], `${label} must be detected`);
+  }
+});
+
+test("Full Worker topology guard — pending baseline blocks, target drift blocks", () => {
+  const baseline = readJson(FULL_TOPOLOGY_BASELINE);
+  assert.equal(baseline.status, "pending-bootstrap");
+  assert.equal(baseline.baseline, null);
+  const target = runFullTopology([]);
+  assert.equal(target.status, 0, target.stderr);
+  const pending = runFullTopology(["--require-established"]);
+  assert.equal(pending.status, 1);
+  assert.match(pending.stderr, /BASELINE_PENDING_BOOTSTRAP/);
+  const noV2 = FULL_TOML().replace(/\[\[migrations\]\]\nnew_sqlite_classes = \["OAuthStateStore"\]\ntag = "v2"\n/, "");
+  assert.notEqual(noV2, FULL_TOML());
+  assert.equal(runFullTopology([], { toml: noV2 }).status, 1);
+  const unreadable = runFullTopology([], { contract: "not json" });
+  assert.equal(unreadable.status, 1);
+  assert.match(unreadable.stderr, /CONTRACT_OR_CONFIG_UNREADABLE/);
+  assert.equal(runFullTopology([], { contract: {} }).status, 1);
+  const lying = { ...baseline, status: "pending-bootstrap", baseline: { topology: {} } };
+  assert.equal(runFullTopology([], { contract: lying }).status, 1);
+});
+
+test("Full Worker topology guard — established baseline requires an exact, fresh live match", () => {
+  const view = fullLiveView();
+  const contract = fullEstablished(view);
+  const live = ["--require-established", "--require-live-match"];
+  const inputs = (v = view, d = fullDeployment(v.id)) => ({ "--active-deployment": d, "--live-version": v });
+  const ok = runFullTopology(live, { contract, files: inputs() });
+  assert.equal(ok.status, 0, ok.stderr);
+
+  const block = (label, args, options, expected) => {
+    const result = runFullTopology(args, options);
+    assert.equal(result.status, 1, `${label} must block: ${result.stdout}`);
+    if (expected) assert.match(result.stderr, expected, label);
+  };
+  // Live Worker predates v2 (the real pre-bootstrap state) even if a baseline claims established.
+  const old = fullLiveView({ script_runtime: { migration_tag: "v1" } });
+  block("live migration v1", live, { contract, files: inputs(old) }, /LIVE_MIGRATION_TAG_MISMATCH/);
+  const extraDo = fullLiveView();
+  extraDo.resources.bindings.push({ type: "durable_object_namespace", name: "X", class_name: "X", namespace_id: "c" });
+  block("extra DO binding", live, { contract, files: inputs(extraDo) }, /LIVE_TOPOLOGY_ANCHOR_MISMATCH/);
+  const otherKv = fullLiveView();
+  otherKv.resources.bindings[2].namespace_id = "0".repeat(32);
+  block("other KV namespace", live, { contract, files: inputs(otherKv) }, /LIVE_TOPOLOGY_ANCHOR_MISMATCH/);
+  block("split deployment", live, {
+    contract, files: inputs(view, fullDeployment(view.id, [{ version_id: view.id, percentage: 50 }, { version_id: "z", percentage: 50 }])),
+  }, /LIVE_DEPLOYMENT_NOT_SINGLE_ACTIVE_VERSION/);
+  block("deployment points elsewhere", live, { contract, files: inputs(view, fullDeployment("other")) },
+    /LIVE_DEPLOYMENT_NOT_SINGLE_ACTIVE_VERSION/);
+  const forged = fullEstablished(view);
+  forged.baseline.topologySha256 = "f".repeat(64);
+  block("forged fingerprint", live, { contract: forged, files: inputs() }, /BASELINE_FINGERPRINT_INVALID/);
+  const missing = { ...contract, baseline: null };
+  block("established without baseline", live, { contract: missing, files: inputs() }, /BASELINE_MISSING/);
+
+  // Missing, empty or malformed live inputs never pass.
+  block("no live inputs", live, { contract }, /INPUT_INVALID/);
+  block("empty JSON object", live, { contract, files: { "--active-deployment": {}, "--live-version": {} } }, /INPUT_INVALID/);
+  block("malformed JSON", live, { contract, files: { "--active-deployment": "{", "--live-version": "null" } }, /INPUT_INVALID/);
+  // --require-live-match alone must still refuse a pending baseline.
+  block("live match on pending", ["--require-live-match"], { files: inputs() }, /BASELINE_PENDING_BOOTSTRAP/);
+});
+
+const FULL_PROBE_BASE = () => FULL_TOML();
+const replaceOnce = (text, from, to) => {
+  assert.ok(text.includes(from), `fixture drift: ${from}`);
+  return text.replace(from, to);
+};
+
+test("Full Worker topology guard — config shape is closed (deleted classes, extra bindings, extra tables)", () => {
+  const base = FULL_PROBE_BASE();
+  const probes = {
+    "deleted_classes in v2": replaceOnce(base, 'new_sqlite_classes = ["OAuthStateStore"]\n', 'new_sqlite_classes = ["OAuthStateStore"]\ndeleted_classes = ["FrihetMCP"]\n'),
+    "renamed_classes in v2": replaceOnce(base, 'new_sqlite_classes = ["OAuthStateStore"]\n', 'new_sqlite_classes = ["OAuthStateStore"]\nrenamed_classes = [{ from = "A", to = "B" }]\n'),
+    "unexpected top-level table (r2)": `${base}\n[[r2_buckets]]\nbinding = "B"\nbucket_name = "b"\n`,
+    "unexpected top-level table (services)": `${base}\n[[services]]\nbinding = "S"\nservice = "s"\n`,
+    "unexpected other env": `${base}\n[env.staging]\nname = "x"\n`,
+    "unexpected root key (inline r2)": replaceOnce(base, 'main = "src/index.ts"\n', 'main = "src/index.ts"\nr2_buckets = [{ binding = "B", bucket_name = "b" }]\n'),
+    "unexpected root key (quoted)": replaceOnce(base, 'main = "src/index.ts"\n', 'main = "src/index.ts"\n"d1_databases" = []\n'),
+    "extra var": replaceOnce(base, 'FRIHET_OPENAI_MODE = "false"\n', 'FRIHET_OPENAI_MODE = "false"\nEXTRA = "1"\n'),
+    "changed var": replaceOnce(base, 'FRIHET_TOOL_MODE = "grouped"', 'FRIHET_TOOL_MODE = "full"'),
+    "changed assets directory": replaceOnce(base, 'directory = "./public"', 'directory = "./other"'),
+    "extra key in kv namespace": replaceOnce(base, 'id = "9207b98598f849109139ad11f3b0ac51"\n', 'id = "9207b98598f849109139ad11f3b0ac51"\npreview_id = "x"\n'),
+    "extra key in route": replaceOnce(base, 'routes = [{ pattern = "mcp.frihet.io/*", zone_name = "frihet.io" }]', 'routes = [{ pattern = "mcp.frihet.io/*", zone_name = "frihet.io", custom_domain = true }]'),
+    "extra key in DO binding": replaceOnce(base, '{ name = "MCP_OBJECT", class_name = "FrihetMCP" }', '{ name = "MCP_OBJECT", class_name = "FrihetMCP", script_name = "other" }'),
+  };
+  assert.equal(runFullTopology([], { toml: base }).status, 0);
+  for (const [label, toml] of Object.entries(probes)) {
+    const result = runFullTopology([], { toml });
+    assert.equal(result.status, 1, `${label} must block`);
+    assert.match(result.stderr, /BLOCK/, label);
+  }
+});
+
+test("Full Worker topology guard — Wrangler cannot resolve a different config than the checker reads", () => {
+  for (const redirect of [
+    "workers/remote-mcp/wrangler.json",
+    "workers/remote-mcp/wrangler.jsonc",
+    "workers/remote-mcp/.wrangler/deploy/config.json",
+    "wrangler.toml",
+    "wrangler.json",
+    "wrangler.jsonc",
+    ".wrangler/deploy/config.json",
+  ]) assert.equal(existsSync(redirect), false, `${redirect} would let Wrangler read a config the topology gate does not`);
+  assert.match(readFileSync("scripts/check-full-worker-topology.mjs", "utf8"), /workers\/remote-mcp\/wrangler\.toml/);
+});
+
+function fullDeployMutationViolations(files) {
+  const found = [];
+  for (const [file, yaml] of Object.entries(files)) {
+    for (const stage of parseWorkflowStages(yaml)) {
+      for (const step of executableStageBody(stage).split(/^      - name: /m).slice(1)) {
+        const title = step.split("\n")[0];
+        const text = step.replace(/\\\n\s*/g, " ");
+        const mutations = [
+          ...text.matchAll(/\bwrangler\s+(?:deploy|versions\s+(?:deploy|upload)|rollback|delete|pages\s+deploy)\b[^\n]*/g),
+          ...text.matchAll(/\bnpm (?:run )?deploy\b[^\n]*/g),
+          ...text.matchAll(/cloudflare\/wrangler-action[^\n]*/g),
+        ].map((match) => match[0]);
+        for (const mutation of mutations) {
+          if (/--dry-run\b/.test(mutation) || /--env openai\b/.test(mutation)) continue;
+          found.push({ id: `${file}:${stage.id}:${title}`, step });
+        }
+      }
+    }
+  }
+  return found;
+}
+
+// Covers direct `wrangler`/`npx`/`bunx` invocations and known actions in workflow steps. It does
+// not see script files, `wrangler@<ver>`, flags before the subcommand, or `npm --prefix … run deploy`.
+test("Full Worker topology guard — direct wrangler/npx/bunx and known-action Cloudflare mutations in workflow steps are only the step after both guards", () => {
+  const files = Object.fromEntries(readdirSync(".github/workflows")
+    .filter((name) => /\.ya?ml$/.test(name))
+    .map((name) => [name, readFileSync(`.github/workflows/${name}`, "utf8")]));
+  const violations = (current) => fullDeployMutationViolations(current).map((entry) => entry.id);
+  assert.deepEqual(violations(files), [`release-mcp-npm.yml:deploy-worker:${FULL_DEPLOY_STEP}`]);
+  assert.deepEqual(validateFullDeployTopologyGuard(files["release-mcp-npm.yml"]), []);
+
+  const release = files["release-mcp-npm.yml"];
+  const extraStep = (command) => ({
+    ...files,
+    "release-mcp-npm.yml": replaceOnce(release, "      - name: Typecheck Worker\n",
+      `      - name: Sneaky\n        run: ${command}\n\n      - name: Typecheck Worker\n`),
+  });
+  for (const command of [
+    "npx wrangler versions deploy abc@100% --yes",
+    "npx wrangler rollback abc",
+    "npm run deploy --prefix workers/remote-mcp",
+    "npx wrangler deploy --env \"\"",
+  ]) assert.equal(violations(extraStep(command)).length, 2, `${command} must be reported as a second mutation`);
+  const action = { ...files, "ci.yml": `${files["ci.yml"]}\n` };
+  action["ci.yml"] = replaceOnce(action["ci.yml"], "      - name: Checkout\n", "      - name: Action deploy\n        uses: cloudflare/wrangler-action@v3\n\n      - name: Checkout\n");
+  assert.equal(violations(action).length, 2, "wrangler-action must be reported");
+  const another = { ...files, "other.yml": "name: x\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - name: S\n        run: npx wrangler deploy\n" };
+  assert.equal(violations(another).length, 2, "a new workflow that deploys must be reported");
 });
