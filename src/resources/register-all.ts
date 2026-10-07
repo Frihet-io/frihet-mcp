@@ -237,12 +237,24 @@ const INVOICE_STATUSES = `Frihet Invoice Status Flow
 Statuses and transitions:
 
   DRAFT ──────► SENT ──────► PAID
-    │             │
-    │             └──────► OVERDUE ────► PAID
-    │                         │
-    │                         └────────► CANCELLED
-    │
+    │             │            ▲
+    │             ├──────► PARTIAL ────┤
+    │             │            │       │
+    │             └──────► OVERDUE ────┤
+    │                         │        │
+    │                         └────────┼───► CANCELLED
+    │                                  │
+    │                                  ▼
+    │                            REFUND / RECTIFICATIVE
     └─────────────────────────────────► CANCELLED
+
+Legal transition paths:
+  draft     -> sent | cancelled
+  sent      -> paid | partial | overdue | cancelled
+  partial   -> paid | overdue | cancelled
+  overdue   -> paid | partial | cancelled
+  paid      -> refund (via credit note / rectificative invoice)
+  partial   -> refund (via credit note / rectificative invoice)
 
 Status definitions:
 
@@ -254,32 +266,41 @@ Status definitions:
               Payment is expected. The invoice number and date become
               fiscally relevant — avoid modifications after this point.
 
-  paid      — Payment received in full. Terminal state.
+  partial   — Invoice partially paid. A partial payment has been recorded,
+              with a remaining positive balance due. Can transition to
+              paid upon full payment, overdue if dueDate passes with
+              remaining balance, or cancelled/credit note.
+
+  paid      — Payment received in full. Terminal state for settlement.
               Records the payment date. Invoice is complete.
 
-  overdue   — Payment deadline (dueDate) has passed without payment.
-              Triggers follow-up workflows. Can transition to paid
-              (late payment) or cancelled (write-off / bad debt).
+  overdue   — Payment deadline (dueDate) has passed without full payment.
+              Applies to sent or partial invoices. Triggers follow-up
+              workflows. Can transition to paid (late payment), partial,
+              or cancelled (write-off / bad debt).
 
   cancelled — Invoice voided. Requires a corrective invoice or
               credit note for fiscal compliance if previously sent.
               Terminal state. Cannot transition to other statuses.
 
 Automation rules (when configured):
-  - Auto-transition sent → overdue when dueDate passes (daily check)
-  - Webhook events: invoice.created, invoice.sent, invoice.paid,
-    invoice.overdue, invoice.cancelled
+  - Auto-transition sent/partial → overdue when dueDate passes (daily check)
+  - Webhook events: invoice.created, invoice.updated, invoice.generated,
+    invoice.one_off_created, invoice.paid, invoice.overdue, invoice.voided,
+    invoice.payment_status_updated, invoice.payment_failure
+  - A partial payment is reported via invoice.payment_status_updated;
+    cancellation is reported via invoice.voided
   - Overdue reminders can be configured per-client
 
 Best practices:
   - Always set a dueDate when creating invoices (default: 30 days)
   - Use draft status while iterating with the client
   - Once sent, create a new corrective invoice rather than editing
-  - For partial payments, keep status as sent until full payment
+  - For partial payments, invoice transitions to partial with remaining balance tracked
   - cancelled requires a reason (notes field) for audit trail`;
 
 const CURRENCIES = JSON.stringify({
-  EUR: { name: "Euro", symbol: "\u20ac", decimals: 2, format: "1.234,56 \u20ac", countries: ["ES","DE","FR","IT","NL","PT","BE","AT","IE","FI","GR","LU","SK","SI","EE","LV","LT","CY","MT"] },
+  EUR: { name: "Euro", symbol: "\u20ac", decimals: 2, format: "1.234,56 \u20ac", countries: ["ES","DE","FR","IT","NL","PT","BE","AT","IE","FI","GR","LU","SK","SI","EE","LV","LT","CY","MT","BG","HR"] },
   USD: { name: "US Dollar", symbol: "$", decimals: 2, format: "$1,234.56", countries: ["US"] },
   GBP: { name: "British Pound", symbol: "\u00a3", decimals: 2, format: "\u00a31,234.56", countries: ["GB"] },
   CHF: { name: "Swiss Franc", symbol: "CHF", decimals: 2, format: "CHF 1'234.56", countries: ["CH"] },
@@ -295,8 +316,8 @@ const CURRENCIES = JSON.stringify({
   CZK: { name: "Czech Koruna", symbol: "K\u010d", decimals: 2, format: "1 234,56 K\u010d", countries: ["CZ"] },
   HUF: { name: "Hungarian Forint", symbol: "Ft", decimals: 0, format: "1 234 Ft", countries: ["HU"] },
   RON: { name: "Romanian Leu", symbol: "lei", decimals: 2, format: "1.234,56 lei", countries: ["RO"] },
-  BGN: { name: "Bulgarian Lev", symbol: "\u043b\u0432", decimals: 2, format: "1 234,56 \u043b\u0432", countries: ["BG"] },
-  HRK: { name: "Croatian Kuna", symbol: "kn", decimals: 2, format: "1.234,56 kn", countries: ["HR"] },
+  BGN: { name: "Bulgarian Lev", symbol: "\u043b\u0432", decimals: 2, format: "1 234,56 \u043b\u0432", countries: [] },
+  HRK: { name: "Croatian Kuna", symbol: "kn", decimals: 2, format: "1.234,56 kn", countries: [] },
   ISK: { name: "Icelandic Kr\u00f3na", symbol: "kr", decimals: 0, format: "1.234 kr", countries: ["IS"] },
   TRY: { name: "Turkish Lira", symbol: "\u20ba", decimals: 2, format: "\u20ba1.234,56", countries: ["TR"] },
   ILS: { name: "Israeli Shekel", symbol: "\u20aa", decimals: 2, format: "\u20aa1,234.56", countries: ["IL"] },
@@ -334,12 +355,12 @@ const COUNTRIES = JSON.stringify([
   { name: "Portugal", code: "PT", fiscalZone: "eu", defaultTaxRate: 23, taxName: "IVA", currency: "EUR", invoicePrefix: "FT" },
   { name: "Austria", code: "AT", fiscalZone: "eu", defaultTaxRate: 20, taxName: "USt", currency: "EUR", invoicePrefix: "RE" },
   { name: "Ireland", code: "IE", fiscalZone: "eu", defaultTaxRate: 23, taxName: "VAT", currency: "EUR", invoicePrefix: "INV" },
-  { name: "Finland", code: "FI", fiscalZone: "eu", defaultTaxRate: 24, taxName: "ALV", currency: "EUR", invoicePrefix: "INV" },
+  { name: "Finland", code: "FI", fiscalZone: "eu", defaultTaxRate: 25.5, taxName: "ALV", currency: "EUR", invoicePrefix: "INV" },
   { name: "Greece", code: "GR", fiscalZone: "eu", defaultTaxRate: 24, taxName: "FPA", currency: "EUR", invoicePrefix: "TIM" },
   { name: "Luxembourg", code: "LU", fiscalZone: "eu", defaultTaxRate: 17, taxName: "TVA", currency: "EUR", invoicePrefix: "F" },
-  { name: "Slovakia", code: "SK", fiscalZone: "eu", defaultTaxRate: 20, taxName: "DPH", currency: "EUR", invoicePrefix: "F" },
+  { name: "Slovakia", code: "SK", fiscalZone: "eu", defaultTaxRate: 23, taxName: "DPH", currency: "EUR", invoicePrefix: "F" },
   { name: "Slovenia", code: "SI", fiscalZone: "eu", defaultTaxRate: 22, taxName: "DDV", currency: "EUR", invoicePrefix: "F" },
-  { name: "Estonia", code: "EE", fiscalZone: "eu", defaultTaxRate: 22, taxName: "KM", currency: "EUR", invoicePrefix: "INV" },
+  { name: "Estonia", code: "EE", fiscalZone: "eu", defaultTaxRate: 24, taxName: "KM", currency: "EUR", invoicePrefix: "INV" },
   { name: "Latvia", code: "LV", fiscalZone: "eu", defaultTaxRate: 21, taxName: "PVN", currency: "EUR", invoicePrefix: "INV" },
   { name: "Lithuania", code: "LT", fiscalZone: "eu", defaultTaxRate: 21, taxName: "PVM", currency: "EUR", invoicePrefix: "SF" },
   { name: "Cyprus", code: "CY", fiscalZone: "eu", defaultTaxRate: 19, taxName: "VAT", currency: "EUR", invoicePrefix: "INV" },
@@ -349,8 +370,8 @@ const COUNTRIES = JSON.stringify([
   { name: "Poland", code: "PL", fiscalZone: "eu", defaultTaxRate: 23, taxName: "VAT", currency: "PLN", invoicePrefix: "FV" },
   { name: "Czech Republic", code: "CZ", fiscalZone: "eu", defaultTaxRate: 21, taxName: "DPH", currency: "CZK", invoicePrefix: "F" },
   { name: "Hungary", code: "HU", fiscalZone: "eu", defaultTaxRate: 27, taxName: "\u00c1FA", currency: "HUF", invoicePrefix: "SZ" },
-  { name: "Romania", code: "RO", fiscalZone: "eu", defaultTaxRate: 19, taxName: "TVA", currency: "RON", invoicePrefix: "F" },
-  { name: "Bulgaria", code: "BG", fiscalZone: "eu", defaultTaxRate: 20, taxName: "DDS", currency: "BGN", invoicePrefix: "F" },
+  { name: "Romania", code: "RO", fiscalZone: "eu", defaultTaxRate: 21, taxName: "TVA", currency: "RON", invoicePrefix: "F" },
+  { name: "Bulgaria", code: "BG", fiscalZone: "eu", defaultTaxRate: 20, taxName: "DDS", currency: "EUR", invoicePrefix: "F" },
   { name: "Croatia", code: "HR", fiscalZone: "eu", defaultTaxRate: 25, taxName: "PDV", currency: "EUR", invoicePrefix: "R" },
   { name: "United Kingdom", code: "GB", fiscalZone: "international", defaultTaxRate: 20, taxName: "VAT", currency: "GBP", invoicePrefix: "INV" },
   { name: "United States", code: "US", fiscalZone: "international", defaultTaxRate: 0, taxName: "Sales Tax", currency: "USD", invoicePrefix: "INV" },
@@ -593,19 +614,35 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
       "frihet://overdue-invoices",
       {
         description:
-          "Live list of all overdue invoices — invoices past their due date that haven't been paid. " +
+          "Live list of overdue invoices (first page up to 100 items by due date) — invoices past their due date that haven't been paid. " +
           "Includes client names, amounts, due dates, and days overdue. Critical for cash flow management. " +
-          "/ Lista en vivo de facturas vencidas — facturas cuya fecha de vencimiento ha pasado sin cobrar.",
+          "/ Lista en vivo de facturas vencidas (primera página hasta 100 registros por fecha de vencimiento) — facturas cuya fecha de vencimiento ha pasado sin cobrar.",
         mimeType: "application/json",
       },
       async () => {
-        const data = await client.listInvoices({ status: "overdue", limit: 100 });
+        const response = await client.listInvoices({ status: "overdue", limit: 100 });
+        const list = Array.isArray(response)
+          ? response
+          : Array.isArray((response as { data?: unknown[] }).data)
+            ? ((response as { data: Record<string, unknown>[] }).data)
+            : [];
+        const total = typeof (response as { total?: unknown }).total === "number"
+          ? ((response as { total: number }).total)
+          : list.length;
+        const result = {
+          data: list,
+          total,
+          limit: 100,
+          offset: 0,
+          hasMore: total > 100 || list.length === 100,
+          note: "First 100 overdue invoices by due date",
+        };
         return {
           contents: [
             {
               uri: "frihet://overdue-invoices",
               mimeType: "application/json",
-              text: JSON.stringify(data, null, 2),
+              text: JSON.stringify(result, null, 2),
             },
           ],
         };

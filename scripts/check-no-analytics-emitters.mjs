@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "9fcb82658faa850074663d52db88c7d0137c557e3f040f55e81198f036688732", // retry-after: test-script registration only, no new deps or emitters
+  "package.json": "7d7d7969370b965a236e989126e094f626b35e91b42e18a2b464ef953e4f472c", // retry-after: test-script registration only, no new deps or emitters
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
