@@ -260,7 +260,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
   "workers/remote-mcp/src/auth-handler.ts": "b1da0f18536ace42052793a59d68dad5dcbdcdae0ecb0eafb149b5383c33ce87", // callback reserve/commit: state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
-  "workers/remote-mcp/src/index.ts": "3f1d14a396cc4b7934b02acc3c2e5fbc167aa8f08dcbd7c5a545a32868b090da", // privacy notice date is a single constant; sinks unchanged
+  "workers/remote-mcp/src/index.ts": "5230e248f5bfd98f7fb9a8c2b13cb7aeb26241ecc375392ced754c05f9286c74", // privacy notice date is a single constant; sinks unchanged
   "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "dd79003720debeaba12b6ae943569be6e9d286c6f9b83b24c6117639805ac938", // callback reserve/commit: revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
