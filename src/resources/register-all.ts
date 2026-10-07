@@ -279,7 +279,7 @@ Best practices:
   - cancelled requires a reason (notes field) for audit trail`;
 
 const CURRENCIES = JSON.stringify({
-  EUR: { name: "Euro", symbol: "\u20ac", decimals: 2, format: "1.234,56 \u20ac", countries: ["ES","DE","FR","IT","NL","PT","BE","AT","IE","FI","GR","LU","SK","SI","EE","LV","LT","CY","MT","BG"] },
+  EUR: { name: "Euro", symbol: "\u20ac", decimals: 2, format: "1.234,56 \u20ac", countries: ["ES","DE","FR","IT","NL","PT","BE","AT","IE","FI","GR","LU","SK","SI","EE","LV","LT","CY","MT","BG","HR"] },
   USD: { name: "US Dollar", symbol: "$", decimals: 2, format: "$1,234.56", countries: ["US"] },
   GBP: { name: "British Pound", symbol: "\u00a3", decimals: 2, format: "\u00a31,234.56", countries: ["GB"] },
   CHF: { name: "Swiss Franc", symbol: "CHF", decimals: 2, format: "CHF 1'234.56", countries: ["CH"] },
@@ -296,7 +296,7 @@ const CURRENCIES = JSON.stringify({
   HUF: { name: "Hungarian Forint", symbol: "Ft", decimals: 0, format: "1 234 Ft", countries: ["HU"] },
   RON: { name: "Romanian Leu", symbol: "lei", decimals: 2, format: "1.234,56 lei", countries: ["RO"] },
   BGN: { name: "Bulgarian Lev", symbol: "\u043b\u0432", decimals: 2, format: "1 234,56 \u043b\u0432", countries: [] },
-  HRK: { name: "Croatian Kuna", symbol: "kn", decimals: 2, format: "1.234,56 kn", countries: ["HR"] },
+  HRK: { name: "Croatian Kuna", symbol: "kn", decimals: 2, format: "1.234,56 kn", countries: [] },
   ISK: { name: "Icelandic Kr\u00f3na", symbol: "kr", decimals: 0, format: "1.234 kr", countries: ["IS"] },
   TRY: { name: "Turkish Lira", symbol: "\u20ba", decimals: 2, format: "\u20ba1.234,56", countries: ["TR"] },
   ILS: { name: "Israeli Shekel", symbol: "\u20aa", decimals: 2, format: "\u20aa1,234.56", countries: ["IL"] },

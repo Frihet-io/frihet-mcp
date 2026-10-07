@@ -53,4 +53,14 @@ describe("EU catalog pinning (verified 2026-10-07)", () => {
     assert.ok(currencies.BGN, "BGN entry must be kept for historical documents");
     assert.deepEqual(currencies.BGN.countries, []);
   });
+
+  test("Croatia uses EUR since 2023-01-01; HRK stays for historical documents with no active country", async () => {
+    const countries = await readJson<Country[]>("frihet://config/countries");
+    const currencies = await readJson<Record<string, Currency>>("frihet://config/currencies");
+
+    assert.equal(countries.find((c) => c.code === "HR")?.currency, "EUR");
+    assert.ok(currencies.EUR.countries.includes("HR"), "EUR must list HR");
+    assert.ok(currencies.HRK, "HRK entry must be kept for historical documents");
+    assert.deepEqual(currencies.HRK.countries, []);
+  });
 });
