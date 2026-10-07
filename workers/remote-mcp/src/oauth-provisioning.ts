@@ -214,3 +214,79 @@ export function revokeOAuthApiKey(
     body: JSON.stringify({ uid: binding.uid, keyId: binding.keyId }),
   }).then(rejectRedirectResponse);
 }
+
+/**
+ * Revoke every key minted under one provisioning correlation. The authority
+ * also tombstones the correlation, even before any key exists, so a delayed
+ * POST that still carries it can no longer mint a credential.
+ */
+export function revokeOAuthApiKeyCorrelation(
+  provisioningUrl: string,
+  serviceSecret: string,
+  binding: OAuthProvisioningBinding & { correlationId: string },
+  fetchImpl: FetchImplementation = globalThis.fetch,
+): Promise<Response> {
+  if (!isTrustedOAuthApiKeyUrl(provisioningUrl)) {
+    throw new Error("OAuth API-key lifecycle authority is not trusted");
+  }
+  if (!isValidOAuthServiceSecret(serviceSecret)) {
+    throw new Error("OAuth API-key service authentication is not configured");
+  }
+  if (!isExactOpenAiBinding(binding)) {
+    throw new Error("OAuth API-key revocation is restricted to the OpenAI profile");
+  }
+  if (!UUID_V4_PATTERN.test(binding.correlationId)) {
+    throw new Error("OAuth API-key correlation is invalid");
+  }
+  return fetchImpl(provisioningUrl, {
+    method: "DELETE",
+    redirect: "manual",
+    signal: AbortSignal.timeout(OAUTH_LIFECYCLE_TIMEOUT_MS),
+    headers: {
+      "Content-Type": "application/json",
+      "x-frihet-oauth-key": serviceSecret,
+    },
+    body: JSON.stringify({ uid: binding.uid, correlationId: binding.correlationId }),
+  }).then(rejectRedirectResponse);
+}
+
+/**
+ * Accept only the authority's exact strongly-consistent readback: the
+ * correlation is tombstoned and holds zero active keys.
+ */
+export function isOAuthCorrelationRevocationProof(payload: unknown): boolean {
+  if (!isRecord(payload)) return false;
+  const keys = Object.keys(payload).sort();
+  return keys.length === 4
+    && keys[0] === "activeKeys"
+    && keys[1] === "alreadyRevoked"
+    && keys[2] === "correlationTombstoned"
+    && keys[3] === "revoked"
+    && payload.revoked === true
+    && typeof payload.alreadyRevoked === "boolean"
+    && payload.correlationTombstoned === true
+    && payload.activeKeys === 0;
+}
+
+/**
+ * Reconcile one attempt whose provisioning outcome is unknown. Resolves true
+ * only with a revocation proof; every transport, status or shape failure
+ * resolves false and the attempt must stay unreconciled.
+ */
+export async function reconcileOAuthApiKeyCorrelation(
+  provisioningUrl: string,
+  serviceSecret: string,
+  binding: OAuthProvisioningBinding & { correlationId: string },
+): Promise<boolean> {
+  try {
+    const response = await revokeOAuthApiKeyCorrelation(
+      provisioningUrl,
+      serviceSecret,
+      binding,
+    );
+    if (response.status !== 200) return false;
+    return isOAuthCorrelationRevocationProof(await response.json());
+  } catch {
+    return false;
+  }
+}

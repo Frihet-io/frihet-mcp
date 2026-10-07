@@ -1,15 +1,29 @@
 /**
- * Single-use OAuth authorization state backed by a Durable Object.
+ * Retry-safe OAuth authorization state backed by a Durable Object.
  *
  * Cloudflare KV is eventually consistent and cannot atomically get-and-delete
  * a value. A Durable Object serializes access to each state key, so concurrent
  * callbacks cannot both provision credentials or mint authorization codes.
+ *
+ * Callback lifecycle: `pending -> leased -> committed`. A callback reserves a
+ * bounded lease (one live lease per state, each with a fresh provisioning
+ * correlation), arms it with the verified uid immediately before the
+ * credential request, and commits only after the authorization code exists.
+ * A failed attempt releases the lease so the same login can retry. An attempt
+ * whose backend outcome is unknown stays recorded until a revocation by
+ * correlation proves it left no active credential: the next attempt cannot
+ * arm while one is unproven, and an abandoned state is reconciled by its alarm.
  */
 
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
 
 const STATE_STORAGE_KEY = "oauth_request";
 const STATE_TTL_MS = 10 * 60 * 1000;
+const STATE_LEASE_TTL_MS = 60 * 1000;
+const STATE_MAX_ATTEMPTS = 5;
+// Candidate OAuth keys expire after 30 days; past that horizon an unproven
+// attempt can no longer hold an active credential.
+const STATE_RECONCILE_HORIZON_MS = 31 * 24 * 60 * 60 * 1000;
 const TOKEN_FAMILY_STORAGE_KEY = "oauth_token_family";
 const TOKEN_FAMILY_SPENT_PREFIX = "oauth_token_spent:";
 const TOKEN_FAMILY_INFLIGHT_TTL_MS = 60 * 1000;
@@ -27,11 +41,54 @@ export type OAuthApiKeyBinding = {
   oauthResource: "https://openai-mcp.frihet.io";
 };
 
-type OAuthStateEnvelope = {
+/** One provisioning request that may have reached the ERP authority. */
+export type OAuthStateAttempt = {
+  uid: string;
+  correlationId: string;
+};
+
+/** Pre-lease envelope written by earlier Workers; read as a fresh pending state. */
+type LegacyOAuthStateEnvelope = {
   version: 1;
   payload: string;
   expiresAtMs: number;
 };
+
+type OAuthStateLease = {
+  leaseId: string;
+  correlationId: string;
+  expiresAtMs: number;
+  /** Set by `/attempt` before the credential request; absent = never sent. */
+  uid?: string;
+};
+
+type OAuthStateRecord = {
+  version: 2;
+  status: "pending" | "committed";
+  /** Serialized authorization request; present only while pending. */
+  payload?: string;
+  expiresAtMs: number;
+  attempts: number;
+  lease?: OAuthStateLease;
+  unreconciled: OAuthStateAttempt[];
+  committedLeaseId?: string;
+  reconcileAttempt?: number;
+};
+
+export type OAuthStateReservation<T> =
+  | {
+      outcome: "reserved";
+      leaseId: string;
+      correlationId: string;
+      attempt: number;
+      request: T;
+      reconcile: OAuthStateAttempt[];
+    }
+  | { outcome: "missing" | "expired" | "committed" | "busy" | "exhausted" };
+
+export type OAuthStateArmResult = "armed" | "lease_lost" | "unreconciled";
+export type OAuthStateCommitResult = "committed" | "lease_lost";
+export type OAuthStateReleaseOutcome = "clean" | "unknown";
 
 type TokenFamilyRecord = {
   version: 1;
@@ -71,6 +128,11 @@ export type OAuthCleanupAuthorities = {
   revokeBackend(
     env: OAuthStateStoreEnv,
     binding: OAuthApiKeyBinding | undefined,
+  ): Promise<boolean>;
+  /** True only with the authority's tombstone + zero-active-key readback. */
+  revokeBackendCorrelation(
+    env: OAuthStateStoreEnv,
+    attempt: OAuthStateAttempt,
   ): Promise<boolean>;
 };
 
@@ -124,6 +186,22 @@ const DEFAULT_CLEANUP_AUTHORITIES: OAuthCleanupAuthorities = {
     );
     return response.ok || response.status === 404;
   },
+  async revokeBackendCorrelation(env, attempt): Promise<boolean> {
+    const [{ resolveOAuthApiKeyUrl }, { reconcileOAuthApiKeyCorrelation }] = await Promise.all([
+      import("./api-url.js"),
+      import("./oauth-provisioning.js"),
+    ]);
+    return reconcileOAuthApiKeyCorrelation(
+      resolveOAuthApiKeyUrl(env.FRIHET_API_BASE),
+      env.FRIHET_OAUTH_API_KEY,
+      {
+        uid: attempt.uid,
+        accessProfile: "openai",
+        oauthResource: "https://openai-mcp.frihet.io",
+        correlationId: attempt.correlationId,
+      },
+    );
+  },
 };
 
 function noStoreJson(value: unknown, status = 200): Response {
@@ -141,8 +219,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function parseStateEnvelope(value: unknown): OAuthStateEnvelope | undefined {
-  if (!isRecord(value) || !hasOnlyKeys(value, new Set(["version", "payload", "expiresAtMs"]))) {
+function parseLegacyStateEnvelope(value: Record<string, unknown>): LegacyOAuthStateEnvelope | undefined {
+  if (!hasOnlyKeys(value, new Set(["version", "payload", "expiresAtMs"]))) {
     return undefined;
   }
   const { version, payload, expiresAtMs } = value;
@@ -156,6 +234,141 @@ function parseStateEnvelope(value: unknown): OAuthStateEnvelope | undefined {
     return undefined;
   }
   return { version, payload, expiresAtMs };
+}
+
+function parseStateAttempt(value: unknown): OAuthStateAttempt | undefined {
+  if (
+    !isRecord(value)
+    || !hasOnlyKeys(value, new Set(["uid", "correlationId"]))
+    || !isSafeUid(value.uid)
+    || !isUuidV4(value.correlationId)
+  ) {
+    return undefined;
+  }
+  return { uid: value.uid, correlationId: value.correlationId };
+}
+
+function parseStateLease(value: unknown): OAuthStateLease | undefined {
+  if (
+    !isRecord(value)
+    || !hasOnlyKeys(value, new Set(["leaseId", "correlationId", "expiresAtMs", "uid"]))
+    || !isUuidV4(value.leaseId)
+    || !isUuidV4(value.correlationId)
+    || typeof value.expiresAtMs !== "number"
+    || !Number.isSafeInteger(value.expiresAtMs)
+    || (value.uid !== undefined && !isSafeUid(value.uid))
+  ) {
+    return undefined;
+  }
+  return {
+    leaseId: value.leaseId,
+    correlationId: value.correlationId,
+    expiresAtMs: value.expiresAtMs,
+    ...(value.uid === undefined ? {} : { uid: value.uid as string }),
+  };
+}
+
+/** Strictly parse the stored state; anything unexpected reads as missing. */
+function parseStateRecord(value: unknown): OAuthStateRecord | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.version === 1) {
+    const legacy = parseLegacyStateEnvelope(value);
+    return legacy
+      ? {
+          version: 2,
+          status: "pending",
+          payload: legacy.payload,
+          expiresAtMs: legacy.expiresAtMs,
+          attempts: 0,
+          unreconciled: [],
+        }
+      : undefined;
+  }
+  if (
+    !hasOnlyKeys(
+      value,
+      new Set([
+        "version",
+        "status",
+        "payload",
+        "expiresAtMs",
+        "attempts",
+        "lease",
+        "unreconciled",
+        "committedLeaseId",
+        "reconcileAttempt",
+      ]),
+    )
+    || value.version !== 2
+    || (value.status !== "pending" && value.status !== "committed")
+    || typeof value.expiresAtMs !== "number"
+    || !Number.isSafeInteger(value.expiresAtMs)
+    || typeof value.attempts !== "number"
+    || !Number.isSafeInteger(value.attempts)
+    || value.attempts < 0
+    || value.attempts > STATE_MAX_ATTEMPTS
+    || !Array.isArray(value.unreconciled)
+    || value.unreconciled.length > STATE_MAX_ATTEMPTS
+    || (
+      value.reconcileAttempt !== undefined
+      && (
+        typeof value.reconcileAttempt !== "number"
+        || !Number.isSafeInteger(value.reconcileAttempt)
+        || value.reconcileAttempt < 0
+      )
+    )
+  ) {
+    return undefined;
+  }
+  const unreconciled = value.unreconciled.map(parseStateAttempt);
+  if (unreconciled.some((attempt) => attempt === undefined)) return undefined;
+  const lease = value.lease === undefined ? undefined : parseStateLease(value.lease);
+  if (value.lease !== undefined && !lease) return undefined;
+  const record: OAuthStateRecord = {
+    version: 2,
+    status: value.status,
+    expiresAtMs: value.expiresAtMs,
+    attempts: value.attempts,
+    unreconciled: unreconciled as OAuthStateAttempt[],
+    ...(lease ? { lease } : {}),
+    ...(value.reconcileAttempt === undefined
+      ? {}
+      : { reconcileAttempt: value.reconcileAttempt as number }),
+  };
+  if (value.status === "pending") {
+    if (
+      typeof value.payload !== "string"
+      || value.payload.length === 0
+      || value.committedLeaseId !== undefined
+      // Every lease and every unproven attempt consumed one reservation.
+      || record.unreconciled.length + (lease ? 1 : 0) > record.attempts
+    ) {
+      return undefined;
+    }
+    record.payload = value.payload;
+    return record;
+  }
+  if (
+    value.payload !== undefined
+    || lease
+    || record.unreconciled.length > 0
+    || !isUuidV4(value.committedLeaseId)
+  ) {
+    return undefined;
+  }
+  record.committedLeaseId = value.committedLeaseId;
+  return record;
+}
+
+/** Attempts that may still hold an active backend credential. */
+function stateAttemptsToReconcile(record: OAuthStateRecord): OAuthStateAttempt[] {
+  if (record.status !== "pending") return [];
+  return record.lease?.uid === undefined
+    ? [...record.unreconciled]
+    : [
+        ...record.unreconciled,
+        { uid: record.lease.uid, correlationId: record.lease.correlationId },
+      ];
 }
 
 function hasOnlyKeys(
@@ -177,9 +390,13 @@ function isGrantId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{16}$/u.test(value);
 }
 
-function isLeaseId(value: unknown): value is string {
+function isUuidV4(value: unknown): value is string {
   return typeof value === "string"
     && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
+}
+
+function isLeaseId(value: unknown): value is string {
+  return isUuidV4(value);
 }
 
 function isSafeUid(value: unknown): value is string {
@@ -212,9 +429,9 @@ function parseApiKeyBinding(value: unknown): OAuthApiKeyBinding | undefined {
   };
 }
 
-async function readJsonBody(request: Request): Promise<Record<string, unknown> | undefined> {
+async function readJsonBody(message: Request | Response): Promise<Record<string, unknown> | undefined> {
   try {
-    const value = await request.json<unknown>();
+    const value = await message.json<unknown>();
     return isRecord(value) ? value : undefined;
   } catch {
     return undefined;
@@ -366,6 +583,48 @@ export class OAuthStateStore {
     });
   }
 
+  /**
+   * Revoke, by correlation, every attempt of an expired state whose backend
+   * outcome was never proven. Same outbox discipline as token-family cleanup:
+   * the next alarm is armed before any external I/O.
+   */
+  private async processStateReconcile(record: OAuthStateRecord): Promise<void> {
+    const pending = stateAttemptsToReconcile(record);
+    const now = Date.now();
+    if (pending.length === 0 || now >= record.expiresAtMs + STATE_RECONCILE_HORIZON_MS) {
+      await this.state.storage.deleteAll();
+      return;
+    }
+    if (!this.env) {
+      throw new Error("OAuth state reconciliation environment is unavailable");
+    }
+    const reconcileAttempt = Math.min((record.reconcileAttempt ?? 0) + 1, Number.MAX_SAFE_INTEGER);
+    const armed: OAuthStateRecord = { ...record, unreconciled: pending, reconcileAttempt };
+    delete armed.lease;
+    await this.state.storage.transaction(async (transaction) => {
+      await transaction.put(STATE_STORAGE_KEY, armed);
+      await transaction.setAlarm(now + cleanupBackoffMs(reconcileAttempt));
+    });
+
+    const env = this.env;
+    const results = await Promise.allSettled(
+      pending.map((attempt) => this.cleanupAuthorities.revokeBackendCorrelation(env, attempt)),
+    );
+    const remaining = pending.filter((_, index) => {
+      const result = results[index];
+      return result?.status !== "fulfilled" || result.value !== true;
+    });
+    if (remaining.length === 0) {
+      await this.state.storage.deleteAll();
+      return;
+    }
+    await this.state.storage.put(STATE_STORAGE_KEY, { ...armed, unreconciled: remaining });
+  }
+
+  private async readStateRecord(): Promise<OAuthStateRecord | undefined> {
+    return parseStateRecord(await this.state.storage.get<unknown>(STATE_STORAGE_KEY));
+  }
+
   async fetch(request: Request): Promise<Response> {
     const pathname = new URL(request.url).pathname;
     return this.state.blockConcurrencyWhile(async () => {
@@ -376,33 +635,180 @@ export class OAuthStateStore {
         const payload = await request.text();
         if (!payload) return new Response(null, { status: 400 });
         const now = Date.now();
-        const envelope: OAuthStateEnvelope = {
-          version: 1,
+        const record: OAuthStateRecord = {
+          version: 2,
+          status: "pending",
           payload,
           expiresAtMs: now + STATE_TTL_MS,
+          attempts: 0,
+          unreconciled: [],
         };
-        await this.state.storage.put(STATE_STORAGE_KEY, envelope);
-        await this.state.storage.setAlarm(envelope.expiresAtMs);
+        await this.state.storage.put(STATE_STORAGE_KEY, record);
+        await this.state.storage.setAlarm(record.expiresAtMs);
         return new Response(null, { status: 204 });
       }
 
-      if (request.method === "POST" && pathname === "/consume") {
-        const envelope = parseStateEnvelope(
-          await this.state.storage.get<unknown>(STATE_STORAGE_KEY),
-        );
-        if (!envelope || Date.now() >= envelope.expiresAtMs) {
-          await this.state.storage.deleteAll();
-          return new Response(null, { status: 404 });
+      if (request.method === "POST" && pathname === "/reserve") {
+        const stored = await this.state.storage.get<unknown>(STATE_STORAGE_KEY);
+        const record = parseStateRecord(stored);
+        if (!record) {
+          // Never leave an unparseable record for a later reader to trust.
+          if (stored !== undefined) await this.state.storage.deleteAll();
+          return noStoreJson({ outcome: "missing" });
         }
-        await this.state.storage.deleteAll();
-        return new Response(envelope.payload, {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-store",
-            "Pragma": "no-cache",
-          },
+        if (record.status === "committed") return noStoreJson({ outcome: "committed" });
+        const now = Date.now();
+        if (now >= record.expiresAtMs) {
+          // Unproven attempts stay for the alarm; nothing else survives expiry.
+          if (stateAttemptsToReconcile(record).length === 0) {
+            await this.state.storage.deleteAll();
+          }
+          return noStoreJson({ outcome: "expired" });
+        }
+        if (record.lease && now < record.lease.expiresAtMs) {
+          return noStoreJson({ outcome: "busy" });
+        }
+        if (record.lease) {
+          // The previous holder lost its lease without settling it. If it had
+          // armed, its credential request may have landed: keep it unproven.
+          if (record.lease.uid !== undefined) {
+            record.unreconciled.push({
+              uid: record.lease.uid,
+              correlationId: record.lease.correlationId,
+            });
+          }
+          delete record.lease;
+        }
+        if (record.attempts >= STATE_MAX_ATTEMPTS) {
+          await this.state.storage.put(STATE_STORAGE_KEY, record);
+          return noStoreJson({ outcome: "exhausted" });
+        }
+        const lease: OAuthStateLease = {
+          leaseId: crypto.randomUUID(),
+          correlationId: crypto.randomUUID(),
+          expiresAtMs: now + STATE_LEASE_TTL_MS,
+        };
+        record.lease = lease;
+        record.attempts += 1;
+        await this.state.storage.put(STATE_STORAGE_KEY, record);
+        return noStoreJson({
+          outcome: "reserved",
+          leaseId: lease.leaseId,
+          correlationId: lease.correlationId,
+          attempt: record.attempts,
+          payload: record.payload,
+          reconcile: record.unreconciled,
         });
+      }
+
+      if (request.method === "POST" && pathname === "/attempt") {
+        const body = await readJsonBody(request);
+        const leaseId = body?.leaseId;
+        const uid = body?.uid;
+        const reconciled = body?.reconciled;
+        if (
+          !body
+          || !hasOnlyKeys(body, new Set(["leaseId", "uid", "reconciled"]))
+          || !isLeaseId(leaseId)
+          || !isSafeUid(uid)
+          || !Array.isArray(reconciled)
+          || reconciled.length > STATE_MAX_ATTEMPTS
+          || !reconciled.every(isUuidV4)
+        ) {
+          return noStoreJson({ outcome: "invalid" }, 400);
+        }
+        const record = await this.readStateRecord();
+        const now = Date.now();
+        if (
+          !record
+          || record.status !== "pending"
+          || now >= record.expiresAtMs
+          || !record.lease
+          || record.lease.leaseId !== leaseId
+          // Arming is the last step before the credential request, so it
+          // must happen inside the lease; a late holder cannot start sending.
+          || now >= record.lease.expiresAtMs
+          || (record.lease.uid !== undefined && record.lease.uid !== uid)
+        ) {
+          return noStoreJson({ outcome: "lease_lost" });
+        }
+        const proven = new Set<string>(reconciled);
+        record.unreconciled = record.unreconciled.filter(
+          (attempt) => !proven.has(attempt.correlationId),
+        );
+        if (record.unreconciled.length > 0) {
+          await this.state.storage.put(STATE_STORAGE_KEY, record);
+          return noStoreJson({ outcome: "unreconciled" });
+        }
+        record.lease.uid = uid;
+        // Renew on arming: everything after it is bounded by the 10 s
+        // lifecycle timeouts (POST, then at most one correlation DELETE), so
+        // no takeover can start while the holder may still complete a grant.
+        record.lease.expiresAtMs = now + STATE_LEASE_TTL_MS;
+        await this.state.storage.put(STATE_STORAGE_KEY, record);
+        return noStoreJson({ outcome: "armed" });
+      }
+
+      if (request.method === "POST" && pathname === "/commit") {
+        const body = await readJsonBody(request);
+        const leaseId = body?.leaseId;
+        if (!body || !hasOnlyKeys(body, new Set(["leaseId"])) || !isLeaseId(leaseId)) {
+          return noStoreJson({ outcome: "invalid" }, 400);
+        }
+        const record = await this.readStateRecord();
+        if (record?.status === "committed" && record.committedLeaseId === leaseId) {
+          // Idempotent: a retried commit whose first response was lost.
+          return noStoreJson({ outcome: "committed" });
+        }
+        if (
+          !record
+          || record.status !== "pending"
+          || Date.now() >= record.expiresAtMs
+          || !record.lease
+          || record.lease.leaseId !== leaseId
+          || record.lease.uid === undefined
+          || record.unreconciled.length > 0
+        ) {
+          // A lease past its TTL still commits while nobody took it over:
+          // takeover is the only path that reconciles the holder's correlation.
+          return noStoreJson({ outcome: "lease_lost" });
+        }
+        const committed: OAuthStateRecord = {
+          version: 2,
+          status: "committed",
+          expiresAtMs: record.expiresAtMs,
+          attempts: record.attempts,
+          unreconciled: [],
+          committedLeaseId: leaseId,
+        };
+        await this.state.storage.put(STATE_STORAGE_KEY, committed);
+        return noStoreJson({ outcome: "committed" });
+      }
+
+      if (request.method === "POST" && pathname === "/release") {
+        const body = await readJsonBody(request);
+        const leaseId = body?.leaseId;
+        const outcome = body?.outcome;
+        if (
+          !body
+          || !hasOnlyKeys(body, new Set(["leaseId", "outcome"]))
+          || !isLeaseId(leaseId)
+          || (outcome !== "clean" && outcome !== "unknown")
+        ) {
+          return new Response(null, { status: 400 });
+        }
+        const record = await this.readStateRecord();
+        if (record?.status === "pending" && record.lease?.leaseId === leaseId) {
+          if (outcome === "unknown" && record.lease.uid !== undefined) {
+            record.unreconciled.push({
+              uid: record.lease.uid,
+              correlationId: record.lease.correlationId,
+            });
+          }
+          delete record.lease;
+          await this.state.storage.put(STATE_STORAGE_KEY, record);
+        }
+        return new Response(null, { status: 204 });
       }
 
       if (request.method === "PUT" && pathname === "/token-family") {
@@ -678,11 +1084,13 @@ export class OAuthStateStore {
 
       const storedState = await this.state.storage.get<unknown>(STATE_STORAGE_KEY);
       if (storedState !== undefined) {
-        const envelope = parseStateEnvelope(storedState);
-        if (envelope && envelope.expiresAtMs > Date.now()) {
-          await this.state.storage.setAlarm(envelope.expiresAtMs);
-        } else {
+        const record = parseStateRecord(storedState);
+        if (!record) {
           await this.state.storage.deleteAll();
+        } else if (record.expiresAtMs > Date.now()) {
+          await this.state.storage.setAlarm(record.expiresAtMs);
+        } else {
+          await this.processStateReconcile(record);
         }
         return;
       }
@@ -718,16 +1126,129 @@ export async function storeOAuthState(
   }
 }
 
-export async function consumeOAuthState<T>(
+async function readStateOutcome(response: Response, operation: string): Promise<Record<string, unknown>> {
+  if (!response.ok) {
+    throw new Error(`OAuth state store failed to ${operation} (${response.status})`);
+  }
+  const body = await readJsonBody(response);
+  if (!body || typeof body.outcome !== "string") {
+    throw new Error(`OAuth state store returned an invalid ${operation} outcome`);
+  }
+  return body;
+}
+
+/**
+ * Lease the stored authorization request for one callback attempt. Every
+ * `reserved` result must be settled by `commitOAuthState` or
+ * `releaseOAuthState`; an unsettled lease expires and is reconciled later.
+ */
+export async function reserveOAuthState<T>(
   namespace: DurableObjectNamespace,
   stateKey: string,
-): Promise<T | undefined> {
-  const response = await stateStub(namespace, stateKey).fetch(`${INTERNAL_ORIGIN}/consume`, {
-    method: "POST",
-  });
-  if (response.status === 404) return undefined;
-  if (!response.ok) {
-    throw new Error(`OAuth state store failed to consume state (${response.status})`);
+): Promise<OAuthStateReservation<T>> {
+  const body = await readStateOutcome(
+    await stateStub(namespace, stateKey).fetch(`${INTERNAL_ORIGIN}/reserve`, {
+      method: "POST",
+    }),
+    "reserve state",
+  );
+  if (body.outcome !== "reserved") {
+    if (
+      body.outcome === "missing"
+      || body.outcome === "expired"
+      || body.outcome === "committed"
+      || body.outcome === "busy"
+      || body.outcome === "exhausted"
+    ) {
+      return { outcome: body.outcome };
+    }
+    throw new Error("OAuth state store returned an invalid reserve outcome");
   }
-  return response.json<T>();
+  const reconcile = Array.isArray(body.reconcile)
+    ? body.reconcile.map(parseStateAttempt)
+    : undefined;
+  if (
+    !isLeaseId(body.leaseId)
+    || !isUuidV4(body.correlationId)
+    || typeof body.attempt !== "number"
+    || !Number.isSafeInteger(body.attempt)
+    || body.attempt < 1
+    || body.attempt > STATE_MAX_ATTEMPTS
+    || typeof body.payload !== "string"
+    || !reconcile
+    || reconcile.some((attempt) => attempt === undefined)
+  ) {
+    throw new Error("OAuth state store returned an invalid reservation");
+  }
+  return {
+    outcome: "reserved",
+    leaseId: body.leaseId,
+    correlationId: body.correlationId,
+    attempt: body.attempt,
+    request: JSON.parse(body.payload) as T,
+    reconcile: reconcile as OAuthStateAttempt[],
+  };
+}
+
+/**
+ * Bind the lease to the verified uid immediately before the credential
+ * request, after proving every earlier unknown attempt revoked.
+ */
+export async function armOAuthStateAttempt(
+  namespace: DurableObjectNamespace,
+  stateKey: string,
+  leaseId: string,
+  uid: string,
+  reconciledCorrelationIds: readonly string[],
+): Promise<OAuthStateArmResult> {
+  const body = await readStateOutcome(
+    await stateStub(namespace, stateKey).fetch(`${INTERNAL_ORIGIN}/attempt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leaseId, uid, reconciled: reconciledCorrelationIds }),
+    }),
+    "arm attempt",
+  );
+  if (body.outcome === "armed" || body.outcome === "lease_lost" || body.outcome === "unreconciled") {
+    return body.outcome;
+  }
+  throw new Error("OAuth state store returned an invalid attempt outcome");
+}
+
+export async function commitOAuthState(
+  namespace: DurableObjectNamespace,
+  stateKey: string,
+  leaseId: string,
+): Promise<OAuthStateCommitResult> {
+  const body = await readStateOutcome(
+    await stateStub(namespace, stateKey).fetch(`${INTERNAL_ORIGIN}/commit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leaseId }),
+    }),
+    "commit state",
+  );
+  if (body.outcome === "committed" || body.outcome === "lease_lost") return body.outcome;
+  throw new Error("OAuth state store returned an invalid commit outcome");
+}
+
+/**
+ * Return the lease so the same login can retry. `clean` asserts the attempt
+ * left no active credential (never sent, rejected, or revocation proven);
+ * `unknown` keeps it recorded until a revocation proves it.
+ */
+export async function releaseOAuthState(
+  namespace: DurableObjectNamespace,
+  stateKey: string,
+  leaseId: string,
+  outcome: OAuthStateReleaseOutcome,
+): Promise<void> {
+  const response = await stateStub(namespace, stateKey).fetch(`${INTERNAL_ORIGIN}/release`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ leaseId, outcome }),
+  });
+  if (!response.ok) {
+    throw new Error(`OAuth state store failed to release state (${response.status})`);
+  }
 }
