@@ -237,12 +237,24 @@ const INVOICE_STATUSES = `Frihet Invoice Status Flow
 Statuses and transitions:
 
   DRAFT ──────► SENT ──────► PAID
-    │             │
-    │             └──────► OVERDUE ────► PAID
-    │                         │
-    │                         └────────► CANCELLED
-    │
+    │             │            ▲
+    │             ├──────► PARTIAL ────┤
+    │             │            │       │
+    │             └──────► OVERDUE ────┤
+    │                         │        │
+    │                         └────────┼───► CANCELLED
+    │                                  │
+    │                                  ▼
+    │                            REFUND / RECTIFICATIVE
     └─────────────────────────────────► CANCELLED
+
+Legal transition paths:
+  draft     -> sent | cancelled
+  sent      -> paid | partial | overdue | cancelled
+  partial   -> paid | overdue | cancelled
+  overdue   -> paid | partial | cancelled
+  paid      -> refund (via credit note / rectificative invoice)
+  partial   -> refund (via credit note / rectificative invoice)
 
 Status definitions:
 
@@ -254,28 +266,34 @@ Status definitions:
               Payment is expected. The invoice number and date become
               fiscally relevant — avoid modifications after this point.
 
-  paid      — Payment received in full. Terminal state.
+  partial   — Invoice partially paid. A partial payment has been recorded,
+              with a remaining positive balance due. Can transition to
+              paid upon full payment, overdue if dueDate passes with
+              remaining balance, or cancelled/credit note.
+
+  paid      — Payment received in full. Terminal state for settlement.
               Records the payment date. Invoice is complete.
 
-  overdue   — Payment deadline (dueDate) has passed without payment.
-              Triggers follow-up workflows. Can transition to paid
-              (late payment) or cancelled (write-off / bad debt).
+  overdue   — Payment deadline (dueDate) has passed without full payment.
+              Applies to sent or partial invoices. Triggers follow-up
+              workflows. Can transition to paid (late payment), partial,
+              or cancelled (write-off / bad debt).
 
   cancelled — Invoice voided. Requires a corrective invoice or
               credit note for fiscal compliance if previously sent.
               Terminal state. Cannot transition to other statuses.
 
 Automation rules (when configured):
-  - Auto-transition sent → overdue when dueDate passes (daily check)
+  - Auto-transition sent/partial → overdue when dueDate passes (daily check)
   - Webhook events: invoice.created, invoice.sent, invoice.paid,
-    invoice.overdue, invoice.cancelled
+    invoice.partial, invoice.overdue, invoice.cancelled
   - Overdue reminders can be configured per-client
 
 Best practices:
   - Always set a dueDate when creating invoices (default: 30 days)
   - Use draft status while iterating with the client
   - Once sent, create a new corrective invoice rather than editing
-  - For partial payments, keep status as sent until full payment
+  - For partial payments, invoice transitions to partial with remaining balance tracked
   - cancelled requires a reason (notes field) for audit trail`;
 
 const CURRENCIES = JSON.stringify({
@@ -593,19 +611,35 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
       "frihet://overdue-invoices",
       {
         description:
-          "Live list of all overdue invoices — invoices past their due date that haven't been paid. " +
+          "Live list of overdue invoices (first page up to 100 items by due date) — invoices past their due date that haven't been paid. " +
           "Includes client names, amounts, due dates, and days overdue. Critical for cash flow management. " +
-          "/ Lista en vivo de facturas vencidas — facturas cuya fecha de vencimiento ha pasado sin cobrar.",
+          "/ Lista en vivo de facturas vencidas (primera página hasta 100 registros por fecha de vencimiento) — facturas cuya fecha de vencimiento ha pasado sin cobrar.",
         mimeType: "application/json",
       },
       async () => {
-        const data = await client.listInvoices({ status: "overdue", limit: 100 });
+        const response = await client.listInvoices({ status: "overdue", limit: 100 });
+        const list = Array.isArray(response)
+          ? response
+          : Array.isArray((response as { data?: unknown[] }).data)
+            ? ((response as { data: Record<string, unknown>[] }).data)
+            : [];
+        const total = typeof (response as { total?: unknown }).total === "number"
+          ? ((response as { total: number }).total)
+          : list.length;
+        const result = {
+          data: list,
+          total,
+          limit: 100,
+          offset: 0,
+          hasMore: total > 100 || list.length === 100,
+          note: "First 100 overdue invoices by due date",
+        };
         return {
           contents: [
             {
               uri: "frihet://overdue-invoices",
               mimeType: "application/json",
-              text: JSON.stringify(data, null, 2),
+              text: JSON.stringify(result, null, 2),
             },
           ],
         };
