@@ -23,6 +23,7 @@ import type {
 } from "./types.js";
 import { safeRequestId, sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
+import { parseRetryAfter } from "./retry-after.js";
 import { fiscalModeloQuery } from "./fiscal-period.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
@@ -36,6 +37,8 @@ const OAUTH_SERVICE_TRUSTED_BASE_URLS = new Set([
 const MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 const REQUEST_TIMEOUT_MS = 30000;
+/** Total time one logical call may spend sleeping on 429s before it is deferred to the caller. */
+const RETRY_BUDGET_MS = 30000;
 
 /**
  * Hard size caps for document responses. Enforced TWICE: precheck on
@@ -403,6 +406,15 @@ export interface FrihetClientOptions {
    * already-normalized API origin and is never included in logs or errors.
    */
   oauthServiceSecret?: string;
+  /**
+   * Cumulative time one call may sleep across 429 retries. A server-requested
+   * wait that does not fit is never shortened: the call fails with a
+   * `rate_limit_deferred` error carrying the wait to honor. Defaults to 30000.
+   */
+  retryBudgetMs?: number;
+  /** Test seams: timer and wall clock used for 429 waits. */
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
 }
 
 export class FrihetClient {
@@ -410,6 +422,9 @@ export class FrihetClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly oauthServiceSecret?: string;
+  private readonly retryBudgetMs: number;
+  private readonly sleepFn: (ms: number) => Promise<void>;
+  private readonly nowFn: () => number;
 
   constructor(apiKey: string, baseUrl?: string, options?: FrihetClientOptions) {
     if (!apiKey) {
@@ -421,6 +436,9 @@ export class FrihetClient {
     this.apiKey = apiKey;
     this.baseUrl = resolvedBaseUrl;
     this.timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    this.retryBudgetMs = options?.retryBudgetMs ?? RETRY_BUDGET_MS;
+    this.sleepFn = options?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.nowFn = options?.now ?? Date.now;
     if (options?.oauthServiceSecret !== undefined) {
       if (
         new TextEncoder().encode(options.oauthServiceSecret).byteLength < 32
@@ -449,6 +467,7 @@ export class FrihetClient {
     query?: Record<string, string | number | undefined>,
     retryCount = 0,
     idempotencyKey?: string,
+    waitedMs = 0,
   ): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
 
@@ -531,13 +550,17 @@ export class FrihetClient {
         );
       }
 
-      const retryAfter = response.headers.get("Retry-After");
-      const delayMs = retryAfter
-        ? parseInt(retryAfter, 10) * 1000
-        : DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
+      // Release the discarded 429 body before waiting so the socket is freed.
+      await response.body?.cancel().catch(() => undefined);
 
-      logRetry(method, path, retryCount, delayMs);
-      await this.sleep(delayMs);
+      const delayMs = this.rateLimitDelayMs(
+        response.headers.get("Retry-After"),
+        retryCount,
+        waitedMs,
+        method,
+        path,
+      );
+      await this.sleepFn(delayMs);
       return this.request<T>(
         method,
         path,
@@ -545,6 +568,7 @@ export class FrihetClient {
         query,
         retryCount + 1,
         resolvedIdempotencyKey,
+        waitedMs + delayMs,
       );
     }
 
@@ -741,6 +765,7 @@ export class FrihetClient {
     idempotencyKey: string | undefined,
     maxBytesForContentType: (contentType: string) => number,
     retryCount = 0,
+    waitedMs = 0,
   ): Promise<{ contentType: string; bytes: Uint8Array; sizeBytes: number; filename?: string }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -769,14 +794,15 @@ export class FrihetClient {
             "Rate limit exceeded after multiple retries. Please try again later.",
           );
         }
-        const retryAfter = response.headers.get("Retry-After");
-        const parsedRetryAfter = retryAfter ? Number.parseInt(retryAfter, 10) : Number.NaN;
-        const delayMs = Number.isFinite(parsedRetryAfter)
-          ? parsedRetryAfter * 1000
-          : DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
-        logRetry(method, path, retryCount, delayMs);
+        const delayMs = this.rateLimitDelayMs(
+          response.headers.get("Retry-After"),
+          retryCount,
+          waitedMs,
+          method,
+          path,
+        );
         clearTimeout(timeoutId);
-        await this.sleep(delayMs);
+        await this.sleepFn(delayMs);
         return this.requestDocument(
           method,
           path,
@@ -785,6 +811,7 @@ export class FrihetClient {
           idempotencyKey,
           maxBytesForContentType,
           retryCount + 1,
+          waitedMs + delayMs,
         );
       }
 
@@ -840,8 +867,30 @@ export class FrihetClient {
     }
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  /**
+   * Wait before the next 429 retry: the server's `Retry-After` when it parses
+   * (RFC 9110 §10.2.3), otherwise bounded exponential backoff. A server wait
+   * that does not fit the remaining budget is deferred to the caller, never
+   * shortened into an early retry.
+   */
+  private rateLimitDelayMs(
+    retryAfter: string | null,
+    retryCount: number,
+    waitedMs: number,
+    method: string,
+    path: string,
+  ): number {
+    const serverMs = parseRetryAfter(retryAfter, this.nowFn());
+    if (serverMs !== null && waitedMs + serverMs > this.retryBudgetMs) {
+      throw new FrihetApiError(
+        429,
+        "rate_limit_deferred",
+        `Rate limited: the server asks to wait ${Math.ceil(serverMs / 1000)} seconds, which exceeds this operation's retry budget. Retry after that time; nothing was retried early.`,
+      );
+    }
+    const delayMs = serverMs ?? DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
+    logRetry(method, path, retryCount, delayMs, serverMs === null ? "backoff" : "retry_after");
+    return delayMs;
   }
 
   /**
