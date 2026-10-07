@@ -43,6 +43,38 @@ describe("MCP Resources P1 Contract (#2340)", () => {
     assert.match(text, /partial\s+->\s+paid\s+\|\s+overdue\s+\|\s+cancelled/);
   });
 
+  test("invoice-statuses resource only names real invoice webhook events", async () => {
+    const canonicalEvents = new Set([
+      "invoice.created",
+      "invoice.updated",
+      "invoice.generated",
+      "invoice.one_off_created",
+      "invoice.paid",
+      "invoice.overdue",
+      "invoice.voided",
+      "invoice.payment_status_updated",
+      "invoice.payment_failure",
+    ]);
+
+    const server = new StubMcpServer();
+    registerAllResources(server as unknown as McpServer);
+
+    const resource = server.resources.get("frihet://config/invoice-statuses");
+    assert.ok(resource, "frihet://config/invoice-statuses must be registered");
+
+    const result = await resource.handler("frihet://config/invoice-statuses");
+    const text = result.contents[0].text;
+
+    assert.doesNotMatch(text, /invoice\.partial/);
+    assert.doesNotMatch(text, /invoice\.cancelled/);
+
+    const mentioned = text.match(/invoice\.[a-z_]+/g) ?? [];
+    assert.ok(mentioned.length > 0, "resource must still document webhook events");
+    for (const event of mentioned) {
+      assert.ok(canonicalEvents.has(event), `${event} is not a real invoice webhook event`);
+    }
+  });
+
   test("overdue-invoices resource declares pagination bounds and returns truncation metadata", async () => {
     const mockInvoices = Array.from({ length: 100 }, (_, i) => ({
       id: `inv_${i + 1}`,

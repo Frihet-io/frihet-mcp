@@ -285,8 +285,11 @@ Status definitions:
 
 Automation rules (when configured):
   - Auto-transition sent/partial → overdue when dueDate passes (daily check)
-  - Webhook events: invoice.created, invoice.sent, invoice.paid,
-    invoice.partial, invoice.overdue, invoice.cancelled
+  - Webhook events: invoice.created, invoice.updated, invoice.generated,
+    invoice.one_off_created, invoice.paid, invoice.overdue, invoice.voided,
+    invoice.payment_status_updated, invoice.payment_failure
+  - A partial payment is reported via invoice.payment_status_updated;
+    cancellation is reported via invoice.voided
   - Overdue reminders can be configured per-client
 
 Best practices:
