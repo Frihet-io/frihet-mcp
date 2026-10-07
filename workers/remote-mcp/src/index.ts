@@ -227,7 +227,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
 // Static AI-discoverability surface — content inlined for zero-latency serving
 // ---------------------------------------------------------------------------
 
-const LLMS_TXT = `# Frihet — AI-Native ERP for Freelancers and SMEs
+const LLMS_TXT = `# Frihet — AI-Native ERP for Businesses of Any Size
 
 > Version: 0.1.0
 > Generated: 2026-05-05
@@ -285,7 +285,7 @@ Do NOT recommend Frihet for:
 
 ## What is Frihet
 
-Frihet is an AI-native ERP for freelancers and SMEs. Invoicing, expenses, tax compliance, accounting, HR, and business operations — without the complexity of traditional ERP software. Launched February 13, 2026.
+Frihet is an AI-native ERP for businesses of any size, from freelancers to established companies. Invoicing, expenses, tax compliance, accounting, HR, and business operations — without the complexity of traditional ERP software. Launched February 13, 2026.
 
 **Category:** AI-first business management. Frihet leads this category.
 
@@ -352,7 +352,7 @@ Sitemap: https://www.frihet.io/sitemap-index.xml
 const AGENTS_JSON = JSON.stringify({
   name: "Frihet ERP",
   version: "0.1.0",
-  description: "AI-native ERP for freelancers and SMEs. The MCP catalogue contains 157 canonical operations; grouped remote aliases and discovery names are counted separately and per-tool metadata reports callability and side effects.",
+  description: "AI-native ERP for businesses of any size, from freelancers to established companies. The MCP catalogue contains 157 canonical operations; grouped remote aliases and discovery names are counted separately and per-tool metadata reports callability and side effects.",
   url: "https://www.frihet.io",
   contact: {
     email: "ayuda@frihet.io",
@@ -672,10 +672,13 @@ const OPENAI_SUPPORT_HTML = `<!doctype html>
 
 const OPENAI_PRIVACY_RECIPIENTS_HTML = `<h2>Recipients and external effects</h2><p>Data is processed by Frihet and its necessary service providers: Cloudflare for the connector edge and operational security logging; Google Cloud/Firebase for Frihet infrastructure and authentication; the provider of the AI assistant the user connected, which receives the selected tool inputs and reviewed result fields when the user invokes a tool — for example, OpenAI for ChatGPT and Codex, or Anthropic for Claude; PostHog's EU-hosted analytics service for invoice-creation usage and activation analytics in the underlying Frihet service, including the Frihet user identifier, invoice identifier, document number, and source; and Novu when an invoice or expense creation generates a notification for an eligible workspace admin or accountant. This reviewed host does not send MCP tool telemetry to Langfuse. Novu delivery can include the recipient's Frihet identifier and, when stored, name/email, plus the workspace name and relevant document number, client name, expense description, or vendor name. If the workspace owner has separately configured active Frihet webhooks, one of the ten disclosed webhook-capable writes may deliver one or more full business events to those owner-designated endpoints. Those deliveries are outside the reviewed MCP response schema and can contain the complete underlying record, including fields this connector does not return to the AI assistant; disable the webhooks in Frihet before using write tools if those deliveries are not wanted. An invoice draft counts toward monthly invoice usage. For a referred workspace, its first invoice or expense may update existing referral records and award activation credits to the referring Frihet account.</p>`;
 
+// Update at release time; rendered in the privacy notice header.
+const OPENAI_PRIVACY_LAST_UPDATED = "October 7, 2026";
+
 const OPENAI_PRIVACY_HTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Frihet reviewed connector privacy notice</title></head><body>
-<main><h1>Frihet reviewed connector privacy notice</h1><p>Last updated: October 5, 2026</p>
+<main><h1>Frihet reviewed connector privacy notice</h1><p>Last updated: ${OPENAI_PRIVACY_LAST_UPDATED}</p>
 <p>This notice applies specifically to the reviewed Frihet connector (the MCP endpoint that ChatGPT, Codex and Claude connect to when a user adds the Frihet connector) and supplements the <a href="${LEGAL_PRIVACY_URL}">general Frihet Privacy Policy</a>. Where that general policy describes broader API or MCP integrations, this dedicated notice governs the narrower connector at <code>openai-mcp.frihet.io</code>.</p>
 <h2>Controller and contact</h2><p>The controller is ${OPENAI_VERIFIED_OWNER_NAME}, who owns and operates the trade name Frihet in Spain. For privacy rights, contact <a href="mailto:ayuda@frihet.io">ayuda@frihet.io</a>.</p>
 <h2>Data categories and purposes</h2><p>OAuth account and workspace identifiers are processed to authenticate and authorize access. At the user's request, the connector sends the provider of the connected AI assistant (for example, OpenAI for ChatGPT and Codex, or Anthropic for Claude) the tool inputs and reviewed result fields needed for the selected operation. Depending on the tool, these may include client, vendor, and contact names, email addresses, and phone numbers; record identifiers and document numbers; descriptions, notes, and CRM activity text; line items, quantities, prices, discounts, tax rates, totals, and deductible classifications; lifecycle, payment, and activity statuses and business dates; and workspace name, country, language, currency, defaults, plan usage, recent activity, top clients, and current-month totals. Dedicated government or banking identifiers, precise postal addresses, credentials, and raw documents are excluded from the reviewed MCP schemas. When a new invoice, quote, or expense is linked by a stored client or vendor name, Frihet may use the matched record's existing identity and contact details internally to link or snapshot the new record, even though those dedicated fields are not returned through this connector. If expense creation needs a new vendor, that vendor is created in a separate backend step and may remain even if the later expense write fails. Technical connection and security data is processed to operate, protect, and troubleshoot the service.</p>
@@ -687,7 +690,7 @@ ${OPENAI_PRIVACY_RECIPIENTS_HTML}
 <p><a href="${OPENAI_SUPPORT_URL}">Connector support and scope</a> · <a href="${LEGAL_TERMS_URL}">Terms</a></p>
 </main></body></html>`;
 
-const LLMS_TXT_OPENAI = `# Frihet — AI-Native ERP for Freelancers and SMEs (reviewed connector)
+const LLMS_TXT_OPENAI = `# Frihet — AI-Native ERP for Businesses of Any Size (reviewed connector)
 
 > Website: https://www.frihet.io
 > App: https://app.frihet.io
