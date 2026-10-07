@@ -261,6 +261,21 @@ test("OAuth state attempts are bounded and arming after the lease TTL is refused
   assert.deepEqual(await stateJson(store, "/reserve"), { outcome: "exhausted" });
 });
 
+test("OAuth state arms an attempt only with 30 s of state lifetime left", async (context) => {
+  let now = 1_800_000_000_000;
+  context.mock.method(Date, "now", () => now);
+  const arm = async (remainingMs: number) => {
+    const { store } = makeStore();
+    now = 1_800_000_000_000;
+    assert.equal(await putState(store, "request"), 204);
+    now += 10 * 60_000 - remainingMs;
+    const lease = await stateJson(store, "/reserve");
+    return stateJson(store, "/attempt", { leaseId: lease.leaseId, uid: "firebase-user", reconciled: [] });
+  };
+  assert.deepEqual(await arm(30_000), { outcome: "armed" });
+  assert.deepEqual(await arm(29_999), { outcome: "expired" });
+});
+
 test("OAuth state rejects replacement and expires through its alarm", async (context) => {
   let now = 1_800_000_000_000;
   context.mock.method(Date, "now", () => now);

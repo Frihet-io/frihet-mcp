@@ -11,6 +11,7 @@
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
 import {
+  oauthProvisioningPreflightError,
   parseProvisionedOAuthApiKey,
   provisionOAuthApiKey,
   reconcileOAuthApiKeyCorrelation,
@@ -60,6 +61,24 @@ type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 const OAUTH_CALLBACK_MAX_BODY_BYTES = 20 * 1024;
 
 const app = new Hono<{ Bindings: AuthEnv }>();
+
+/** Grants the user already holds for this client, listed before a new one exists. */
+async function listClientGrantIds(
+  helpers: OAuthHelpers,
+  userId: string,
+  clientId: string,
+): Promise<string[]> {
+  const grantIds: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await helpers.listUserGrants(userId, cursor ? { cursor } : undefined);
+    for (const grant of page.items) {
+      if (grant.clientId === clientId) grantIds.push(grant.id);
+    }
+    cursor = page.cursor;
+  } while (cursor);
+  return grantIds;
+}
 
 function validateReviewedAuthorizeQuery(request: Request): string | undefined {
   const params = new URL(request.url).searchParams;
@@ -466,6 +485,27 @@ app.post("/callback", async (c) => {
       oauthResource: accessProfile === "openai" ? OPENAI_REVIEW_ORIGIN : FULL_MCP_ORIGIN,
     } as const;
 
+    // Refuse here what the provisioning leaf would refuse, before the attempt
+    // is recorded as possibly sent (an armed attempt must be reconcilable).
+    if (
+      oauthProvisioningPreflightError(
+        provisioningUrl,
+        oauthServiceSecret,
+        provisioningBinding,
+        lease.correlationId,
+      )
+    ) {
+      log({
+        level: "error",
+        message: "OAuth callback: API-key provisioning was refused before sending",
+        operation: "oauth_callback",
+      });
+      return {
+        settlement: "clean",
+        response: c.json({ error: "Failed to provision API key" }, 502),
+      };
+    }
+
     // An earlier attempt of this state whose outcome is unknown may still hold
     // an active key. Prove each one revoked before this attempt may send, so
     // one authorization never leaves two live backend credentials.
@@ -503,6 +543,12 @@ app.post("/callback", async (c) => {
       decoded.uid,
       reconciled,
     );
+    if (armed === "expired") {
+      return {
+        settlement: "clean",
+        response: c.json({ error: "Invalid or expired state" }, 400),
+      };
+    }
     if (armed !== "armed") {
       log({
         level: "warn",
@@ -651,11 +697,20 @@ app.post("/callback", async (c) => {
     // Complete OAuth authorization. The raw API key never leaves encrypted grant
     // props; its opaque keyId is retained so refresh-family replay or explicit
     // grant revocation can disable the exact backend credential later.
+    // Earlier grants for this user+client are replaced only after the commit:
+    // a holder that loses its lease must never revoke the winner's grant.
     let redirectTo: string;
+    let replacedGrantIds: string[];
     try {
+      replacedGrantIds = await listClientGrantIds(
+        c.env.OAUTH_PROVIDER,
+        decoded.uid,
+        oauthReq.clientId,
+      );
       ({ redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
         request: oauthReq,
         userId: decoded.uid,
+        revokeExistingGrants: false,
         metadata: {
           label: decoded.email || decoded.uid,
         },
@@ -733,6 +788,20 @@ app.post("/callback", async (c) => {
           committed === "lease_lost" ? 409 : 503,
         ),
       };
+    }
+
+    const replaced = await Promise.allSettled(
+      replacedGrantIds.map(async (grantId) =>
+        c.env.OAUTH_PROVIDER.revokeGrant(grantId, decoded.uid)),
+    );
+    if (replaced.some((result) => result.status === "rejected")) {
+      // Same tolerance as the provider's own replacement: the new grant is
+      // committed; a surviving older grant only keeps its own family usable.
+      log({
+        level: "warn",
+        message: "OAuth callback: an earlier grant could not be replaced",
+        operation: "oauth_callback",
+      });
     }
 
     log({

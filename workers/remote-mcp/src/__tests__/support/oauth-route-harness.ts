@@ -340,7 +340,9 @@ export type DeleteFault =
   | { kind: "network" }
   | { kind: "status"; status: number }
   /** Runs `before` (e.g. advance the clock: a slow DELETE), then answers normally. */
-  | { kind: "slow"; before: () => void };
+  | { kind: "slow"; before: () => void }
+  /** Revokes as asked, but answers a bare 200 that is not the proof shape. */
+  | { kind: "not-proof" };
 
 type IssuedKey = { uid: string; correlationId: string; apiKey: string; revoked: boolean };
 
@@ -460,7 +462,8 @@ export class FakeErpAuthority {
       if (fault?.kind === "slow") fault.before();
       if (fault?.kind === "network") throw new TypeError("fetch failed");
       if (fault?.kind === "status") return json({ error: "injected" }, fault.status);
-      return this.revokeCorrelation(uid, body.correlationId);
+      const revoked = this.revokeCorrelation(uid, body.correlationId);
+      return fault?.kind === "not-proof" ? json({ revoked: true }) : revoked;
     }
     const key = this.keys.get(String(body.keyId));
     if (!key || key.uid !== uid) return json({ error: "not found" }, 404);
@@ -558,8 +561,7 @@ export async function createOAuthRouteHarness(
   const send = (request: Request, exchange?: OAuthTokenFamilyExchange) =>
     provider(exchange).fetch(request, env, executionContext());
 
-  /** DCR + GET /authorize; returns the state the login page would post back. */
-  async function startLogin(): Promise<{ clientId: string; stateKey: string }> {
+  async function register(): Promise<string> {
     const registration = await send(new Request(`${OPENAI_REVIEW_ORIGIN}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -572,7 +574,17 @@ export async function createOAuthRouteHarness(
       }),
     }));
     assert.equal(registration.status, 201);
-    const clientId = (await registration.json() as { client_id: string }).client_id;
+    return (await registration.json() as { client_id: string }).client_id;
+  }
+
+  /**
+   * DCR (unless reconnecting an existing client) + GET /authorize; returns
+   * the state the login page would post back.
+   */
+  async function startLogin(
+    existingClientId?: string,
+  ): Promise<{ clientId: string; stateKey: string }> {
+    const clientId = existingClientId ?? await register();
     const url = new URL(`${OPENAI_REVIEW_ORIGIN}/authorize`);
     url.search = new URLSearchParams({
       response_type: "code",
@@ -630,13 +642,18 @@ export async function createOAuthRouteHarness(
     const settlement = await exchange.settle(tokenResponse);
     const tokens = await settlement.response.json() as Record<string, unknown>;
     assert.equal(settlement.response.status, 200, JSON.stringify(tokens));
-    const mcp = await send(new Request(`${OPENAI_REVIEW_ORIGIN}/mcp`, {
+    const accessToken = String(tokens.access_token);
+    const mcp = await callMcp(accessToken);
+    assert.equal(mcp.status, 200);
+    return { ...await mcp.json() as { keyId: string; userId: string }, accessToken };
+  }
+
+  function callMcp(accessToken: string): Promise<Response> {
+    return send(new Request(`${OPENAI_REVIEW_ORIGIN}/mcp`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${String(tokens.access_token)}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
       body: "{}",
     }));
-    assert.equal(mcp.status, 200);
-    return await mcp.json() as { keyId: string; userId: string };
   }
 
   /** Run the expired-state alarm of the state object behind `stateKey`. */
@@ -657,6 +674,7 @@ export async function createOAuthRouteHarness(
     startLogin,
     callback,
     redeem,
+    callMcp,
     runStateAlarm,
   };
 }

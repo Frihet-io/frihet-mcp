@@ -145,6 +145,32 @@ export function parseProvisionedOAuthApiKey(
 }
 
 /**
+ * Every check `provisionOAuthApiKey` applies before sending, without sending.
+ * Callers run it before recording an attempt, so a request this leaf would
+ * refuse is never recorded as possibly sent.
+ */
+export function oauthProvisioningPreflightError(
+  provisioningUrl: string,
+  serviceSecret: string,
+  binding: OAuthProvisioningBinding,
+  correlationId: string,
+): string | undefined {
+  if (!isTrustedOAuthApiKeyUrl(provisioningUrl)) {
+    return "OAuth API-key lifecycle authority is not trusted";
+  }
+  if (!isValidOAuthServiceSecret(serviceSecret)) {
+    return "OAuth API-key service authentication is not configured";
+  }
+  if (!UUID_V4_PATTERN.test(correlationId)) {
+    return "OAuth API-key correlation is invalid";
+  }
+  if (!isExactOpenAiBinding(binding)) {
+    return "OAuth API-key provisioning is restricted to the OpenAI profile";
+  }
+  return undefined;
+}
+
+/**
  * Credential-bearing OAuth provisioning request.
  *
  * URL authorization is resolved before this leaf is called. Redirects are
@@ -159,18 +185,13 @@ export function provisionOAuthApiKey(
   correlationId: string,
   fetchImpl: FetchImplementation = globalThis.fetch,
 ): Promise<Response> {
-  if (!isTrustedOAuthApiKeyUrl(provisioningUrl)) {
-    throw new Error("OAuth API-key lifecycle authority is not trusted");
-  }
-  if (!isValidOAuthServiceSecret(serviceSecret)) {
-    throw new Error("OAuth API-key service authentication is not configured");
-  }
-  if (!UUID_V4_PATTERN.test(correlationId)) {
-    throw new Error("OAuth API-key correlation is invalid");
-  }
-  if (!isExactOpenAiBinding(binding)) {
-    throw new Error("OAuth API-key provisioning is restricted to the OpenAI profile");
-  }
+  const preflightError = oauthProvisioningPreflightError(
+    provisioningUrl,
+    serviceSecret,
+    binding,
+    correlationId,
+  );
+  if (preflightError) throw new Error(preflightError);
   return fetchImpl(provisioningUrl, {
     method: "POST",
     redirect: "manual",

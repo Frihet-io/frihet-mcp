@@ -470,6 +470,150 @@ test("attempts are bounded per authorization request", async (t) => {
 });
 
 // ---------------------------------------------------------------------------
+// Late holders, proof shape, arming window and refused profiles
+// ---------------------------------------------------------------------------
+
+/** Holds the next callback inside completeAuthorization (its client lookup). */
+function stallCompleteAuthorization(h: Harness) {
+  const kv = h.kv as unknown as { get: (key: string, options?: unknown) => Promise<unknown> };
+  const get = kv.get.bind(kv);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let arrived!: () => void;
+  const reached = new Promise<void>((resolve) => { arrived = resolve; });
+  let pending = true;
+  kv.get = async (key, options) => {
+    if (pending && key.startsWith("client:")) {
+      pending = false;
+      arrived();
+      await gate;
+    }
+    return get(key, options);
+  };
+  return { reached, release };
+}
+
+test("a holder resuming after a takeover never revokes the committed grant", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  const { clientId, stateKey } = await h.startLogin();
+  const idToken = await mintIdToken();
+  const stall = stallCompleteAuthorization(h);
+
+  // A provisioned, then stalls past its lease before writing its grant.
+  const stale = h.callback(stateKey, idToken);
+  await stall.reached;
+  h.clock.offsetMs += 61_000;
+
+  const takeover = await h.callback(stateKey, idToken);
+  assert.equal(takeover.status, 200, JSON.stringify(takeover.body));
+  const mcp = await h.redeem(clientId, takeover.body.redirectTo);
+  const [committedGrant] = h.kv.grantKeys();
+
+  stall.release();
+  const late = await stale;
+  assert.equal(late.status, 409, JSON.stringify(late.body));
+  assert.equal("redirectTo" in late.body, false);
+  assert.deepEqual(h.erp.activeKeyIds(), [mcp.keyId], "the stale holder's key is revoked");
+  assert.ok(h.kv.grantKeys().includes(committedGrant!), "the committed grant survives");
+  assert.equal((await h.callMcp(mcp.accessToken)).status, 200);
+});
+
+test("a 200 revocation reply without the proof shape keeps the attempt unreconciled", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  const { clientId, stateKey } = await h.startLogin();
+  const idToken = await mintIdToken();
+  h.erp.postFaults.push({ kind: "lost-after" });
+  h.erp.deleteFaults.push({ kind: "not-proof" });
+
+  assert.equal((await h.callback(stateKey, idToken)).status, 502);
+  const storage = h.namespace.object(stateKey).state.storage;
+  const record = await storage.get<{ unreconciled: unknown[] }>("oauth_request");
+  assert.equal(record?.unreconciled.length, 1, "a bare 200 is not a proof");
+
+  const retried = await h.callback(stateKey, idToken);
+  assert.equal(retried.status, 200, JSON.stringify(retried.body));
+  await assertSingleUsableCredential(h, clientId, retried.body.redirectTo);
+});
+
+test("an attempt is not armed with less than 30 s of state lifetime left", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  const { stateKey } = await h.startLogin();
+  const idToken = await mintIdToken();
+  h.clock.offsetMs += 10 * 60_000 - 29_000;
+
+  const late = await h.callback(stateKey, idToken);
+  assert.equal(late.status, 400);
+  assert.deepEqual(late.body, { error: "Invalid or expired state" });
+  assert.ok(h.events.includes("do:/attempt"));
+  assert.equal(h.erp.postCorrelations.length, 0, "nothing is sent");
+});
+
+test("the state alarm firing mid-attempt fences the armed holder", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  const { stateKey } = await h.startLogin();
+  const idToken = await mintIdToken();
+  h.clock.offsetMs += 10 * 60_000 - 31_000;
+  h.erp.postFaults.push({ kind: "hang" });
+  const holder = h.callback(stateKey, idToken);
+  await h.erp.hangStarted;
+
+  // The state expires while the holder's lease is still live.
+  h.clock.offsetMs += 32_000;
+  await h.runStateAlarm(stateKey);
+  h.erp.releaseHang();
+  const result = await holder;
+  assert.notEqual(result.status, 200);
+  assert.equal("redirectTo" in result.body, false);
+  assert.deepEqual(h.erp.activeKeyIds(), []);
+  assert.equal((await h.callback(stateKey, idToken)).status, 400);
+});
+
+test("a profile the provisioning leaf refuses is rejected before the attempt is armed", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  const { clientId, stateKey } = await h.startLogin();
+  const idToken = await mintIdToken();
+  h.env.FRIHET_OPENAI_MODE = "false";
+  h.namespace.fail("/release", "before");
+
+  const refused = await h.callback(stateKey, idToken);
+  assert.equal(refused.status, 502);
+  assert.deepEqual(refused.body, { error: "Failed to provision API key" });
+  assert.equal(h.events.includes("do:/attempt"), false);
+  assert.equal(h.erp.postCorrelations.length, 0);
+
+  // The lease outlives the lost release but holds no armed attempt, so the
+  // takeover has nothing to reconcile.
+  h.env.FRIHET_OPENAI_MODE = "true";
+  h.clock.offsetMs += 61_000;
+  const retried = await h.callback(stateKey, idToken);
+  assert.equal(retried.status, 200, JSON.stringify(retried.body));
+  assert.equal(h.events.some((event) => event.startsWith("erp:DELETE:")), false);
+  await assertSingleUsableCredential(h, clientId, retried.body.redirectTo);
+});
+
+test("a reconnect replaces the client's earlier grant only once it commits", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  const first = await h.startLogin();
+  const idToken = await mintIdToken();
+  const connected = await h.callback(first.stateKey, idToken);
+  assert.equal(connected.status, 200, JSON.stringify(connected.body));
+  const earlier = await h.redeem(first.clientId, connected.body.redirectTo);
+
+  const { stateKey } = await h.startLogin(first.clientId);
+  h.namespace.fail("/commit", "before", 2);
+  const uncommitted = await h.callback(stateKey, idToken);
+  assert.equal(uncommitted.status, 503, JSON.stringify(uncommitted.body));
+  assert.equal((await h.callMcp(earlier.accessToken)).status, 200, "nothing replaced before the commit");
+
+  const reconnected = await h.callback(stateKey, idToken);
+  assert.equal(reconnected.status, 200, JSON.stringify(reconnected.body));
+  const current = await h.redeem(first.clientId, reconnected.body.redirectTo);
+  assert.equal((await h.callMcp(earlier.accessToken)).status, 401);
+  assert.equal((await h.callMcp(current.accessToken)).status, 200);
+  assert.equal(h.kv.grantKeys().length, 1, "the earlier and the uncommitted grant are both gone");
+});
+
+// ---------------------------------------------------------------------------
 // Expired state with an unproven attempt: the alarm reconciles it
 // ---------------------------------------------------------------------------
 

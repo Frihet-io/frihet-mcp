@@ -13,6 +13,10 @@
  * whose backend outcome is unknown stays recorded until a revocation by
  * correlation proves it left no active credential: the next attempt cannot
  * arm while one is unproven, and an abandoned state is reconciled by its alarm.
+ *
+ * Rollback: a Worker that only reads the v1 envelope deletes these records,
+ * including unproven attempts. Let pending states expire and their alarms
+ * reconcile before rolling back.
  */
 
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
@@ -20,6 +24,9 @@ import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
 const STATE_STORAGE_KEY = "oauth_request";
 const STATE_TTL_MS = 10 * 60 * 1000;
 const STATE_LEASE_TTL_MS = 60 * 1000;
+// Arming starts the credential request; leave the attempt room to commit
+// before the state itself expires.
+const STATE_ARM_MIN_REMAINING_MS = 30 * 1000;
 const STATE_MAX_ATTEMPTS = 5;
 // Candidate OAuth keys expire after 30 days; past that horizon an unproven
 // attempt can no longer hold an active credential.
@@ -86,7 +93,7 @@ export type OAuthStateReservation<T> =
     }
   | { outcome: "missing" | "expired" | "committed" | "busy" | "exhausted" };
 
-export type OAuthStateArmResult = "armed" | "lease_lost" | "unreconciled";
+export type OAuthStateArmResult = "armed" | "expired" | "lease_lost" | "unreconciled";
 export type OAuthStateCommitResult = "committed" | "lease_lost";
 export type OAuthStateReleaseOutcome = "clean" | "unknown";
 
@@ -719,11 +726,14 @@ export class OAuthStateStore {
         }
         const record = await this.readStateRecord();
         const now = Date.now();
+        if (!record || record.status !== "pending") {
+          return noStoreJson({ outcome: "lease_lost" });
+        }
+        if (record.expiresAtMs - now < STATE_ARM_MIN_REMAINING_MS) {
+          return noStoreJson({ outcome: "expired" });
+        }
         if (
-          !record
-          || record.status !== "pending"
-          || now >= record.expiresAtMs
-          || !record.lease
+          !record.lease
           || record.lease.leaseId !== leaseId
           // Arming is the last step before the credential request, so it
           // must happen inside the lease; a late holder cannot start sending.
@@ -741,9 +751,11 @@ export class OAuthStateStore {
           return noStoreJson({ outcome: "unreconciled" });
         }
         record.lease.uid = uid;
-        // Renew on arming: everything after it is bounded by the 10 s
-        // lifecycle timeouts (POST, then at most one correlation DELETE), so
-        // no takeover can start while the holder may still complete a grant.
+        // Renew on arming so a holder provisioning at normal speed is not
+        // taken over mid-request. Safety does not rest on this window (the
+        // grant write and the commit have no deadline): a holder resuming
+        // after a takeover cannot commit, revokes its own correlation, and
+        // never replaces other grants, which only happens after a commit.
         record.lease.expiresAtMs = now + STATE_LEASE_TTL_MS;
         await this.state.storage.put(STATE_STORAGE_KEY, record);
         return noStoreJson({ outcome: "armed" });
@@ -1209,7 +1221,12 @@ export async function armOAuthStateAttempt(
     }),
     "arm attempt",
   );
-  if (body.outcome === "armed" || body.outcome === "lease_lost" || body.outcome === "unreconciled") {
+  if (
+    body.outcome === "armed"
+    || body.outcome === "expired"
+    || body.outcome === "lease_lost"
+    || body.outcome === "unreconciled"
+  ) {
     return body.outcome;
   }
   throw new Error("OAuth state store returned an invalid attempt outcome");
