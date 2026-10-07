@@ -690,7 +690,7 @@ ${OPENAI_PRIVACY_RECIPIENTS_HTML}
 <p><a href="${OPENAI_SUPPORT_URL}">Connector support and scope</a> · <a href="${LEGAL_TERMS_URL}">Terms</a></p>
 </main></body></html>`;
 
-const LLMS_TXT_OPENAI = `# Frihet — AI-Native ERP for Freelancers and SMEs (reviewed connector)
+const LLMS_TXT_OPENAI = `# Frihet — AI-Native ERP for Businesses of Any Size (reviewed connector)
 
 > Website: https://www.frihet.io
 > App: https://app.frihet.io
