@@ -39,6 +39,8 @@ const DEFAULT_RETRY_DELAY_MS = 1000;
 const REQUEST_TIMEOUT_MS = 30000;
 /** Total time one logical call may spend sleeping on 429s before it is deferred to the caller. */
 const RETRY_BUDGET_MS = 30000;
+/** setTimeout fires immediately above this (32-bit signed); a larger wait must defer, never sleep. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /**
  * Hard size caps for document responses. Enforced TWICE: precheck on
@@ -436,7 +438,12 @@ export class FrihetClient {
     this.apiKey = apiKey;
     this.baseUrl = resolvedBaseUrl;
     this.timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
-    this.retryBudgetMs = options?.retryBudgetMs ?? RETRY_BUDGET_MS;
+    const budget = options?.retryBudgetMs;
+    // NaN/negative would make every `> budget` comparison pass or fail silently.
+    this.retryBudgetMs =
+      typeof budget === "number" && Number.isFinite(budget) && budget >= 0
+        ? Math.min(budget, MAX_TIMER_MS)
+        : RETRY_BUDGET_MS;
     this.sleepFn = options?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.nowFn = options?.now ?? Date.now;
     if (options?.oauthServiceSecret !== undefined) {

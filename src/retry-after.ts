@@ -55,7 +55,7 @@ function weekdayMatches(ms: number, name: string, list: string[]): boolean {
   return list[(new Date(ms).getUTCDay() + 6) % 7] === name;
 }
 
-function parseHttpDate(value: string): number | null {
+function parseHttpDate(value: string, nowMs: number): number | null {
   let m = IMF_FIXDATE.exec(value);
   if (m) {
     const ms = utcMs(+m[4], m[3], +m[2], +m[5], +m[6], +m[7]);
@@ -65,7 +65,7 @@ function parseHttpDate(value: string): number | null {
   if (m) {
     // RFC 9110 §5.6.7: a two-digit year more than 50 years ahead is the past century.
     const yy = +m[4];
-    const nowYear = new Date().getUTCFullYear();
+    const nowYear = new Date(nowMs).getUTCFullYear();
     let year = Math.floor(nowYear / 100) * 100 + yy;
     if (year > nowYear + 50) year -= 100;
     const ms = utcMs(year, m[3], +m[2], +m[5], +m[6], +m[7]);
@@ -92,7 +92,7 @@ export function parseRetryAfter(value: string | null | undefined, nowMs: number)
     return seconds * 1000;
   }
 
-  const dateMs = parseHttpDate(v);
+  const dateMs = parseHttpDate(v, nowMs);
   if (dateMs === null) return null;
   return Math.max(0, dateMs - nowMs);
 }

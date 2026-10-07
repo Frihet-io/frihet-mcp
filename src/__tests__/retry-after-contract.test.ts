@@ -190,6 +190,30 @@ describe("Retry-After honored through FrihetClient", () => {
     assert.equal(hits.length, 2);
   });
 
+  test("a budget larger than the timer limit never lets an overflowing wait become an immediate retry", async () => {
+    script = ["3000000"]; // 3e9 ms > 2^31-1: setTimeout would fire at once
+    const { sleeps, client } = harness({ retryBudgetMs: 1e12 });
+    await assert.rejects(credit(client), (e: unknown) => e instanceof FrihetApiError && e.errorCode === "rate_limit_deferred");
+    assert.deepEqual(sleeps, []);
+    assert.equal(hits.length, 1);
+  });
+
+  for (const bad of [Number.NaN, -1, Number.POSITIVE_INFINITY]) {
+    test(`invalid retryBudgetMs ${bad} falls back to the default, not an unbounded sleep`, async () => {
+      script = ["31"];
+      const { sleeps, client } = harness({ retryBudgetMs: bad });
+      await assert.rejects(credit(client), (e: unknown) => e instanceof FrihetApiError && e.errorCode === "rate_limit_deferred");
+      assert.deepEqual(sleeps, []);
+    });
+  }
+
+  test("surrounding whitespace is tolerated; a non-GMT zone is malformed", async () => {
+    script = ["  2 ", "Mon, 05 Oct 2026 22:40:02 PST"];
+    const { sleeps, client } = harness();
+    await credit(client);
+    assert.deepEqual(sleeps, [2000, 2000]);
+  });
+
   test("repeated 429s stop at the attempt limit", async () => {
     always429 = "1";
     const { sleeps, client } = harness();
@@ -228,6 +252,15 @@ describe("parseRetryAfter", () => {
     for (const v of [null, undefined, "", "  ", "abc", "-1", "+1", "1.0", "NaN", "Infinity"]) {
       assert.equal(parseRetryAfter(v, NOW), null, JSON.stringify(v));
     }
+  });
+
+  test("RFC 850 two-digit year pivots on the injected clock, not the wall clock", () => {
+    const v = "Monday, 05-Oct-99 22:40:02 GMT";
+    // From 2090, "99" is 2099 (a Monday, future): a positive wait.
+    const wait = parseRetryAfter(v, Date.parse("2090-10-05T22:40:00Z"));
+    assert.ok(wait !== null && wait > 0);
+    // From 2026, "99" is 1999 (a Tuesday): the weekday disagrees, so malformed.
+    assert.equal(parseRetryAfter(v, NOW), null);
   });
 
   test("weekday must agree with the date", () => {
