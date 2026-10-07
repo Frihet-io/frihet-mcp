@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "757a7500efbc63d6360a4a9e592cbb7b8cf826c25a3c3b0963009148ac368c3e", // openai-plugin-package: reviewed portable ZIP validation and Python standard-library packaging
+  "package.json": "9fcb82658faa850074663d52db88c7d0137c557e3f040f55e81198f036688732", // retry-after: test-script registration only, no new deps or emitters
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -250,7 +250,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "3a46dbc53642065b8897d2a128ef2eb00a844a6777e8a14a597b340cd5d8c627", // fix/fiscal-period-wiring: fiscal modelo query param mapping + requestId read from the existing error response (same single fetch sink, no new destination); review F5 = doc-comment-only rewording of FrihetApiError.requestId
+  "src/client.ts": "03b9a2fc65851af5cf5563108d64e69aa74515733a908292722973b526560ada", // retry-after (#2336): 429 wait parsing + budget only, same single fetch sink, no new destination; earlier note: fix/fiscal-period-wiring: fiscal modelo query param mapping + requestId read from the existing error response (same single fetch sink, no new destination); review F5 = doc-comment-only rewording of FrihetApiError.requestId
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
   "workers/api-proxy/worker.js": "640d3aa873f1a20b705f9e73cdafe368bcb0bbe43f187afe5c9583336373accb",
