@@ -2467,10 +2467,16 @@ test("OpenAI topology bootstrap — the reviewed-main bridge decision is explici
   }
 
   assert.match(guide, /Last updated/);
+  const workerSource = readFileSync("workers/remote-mcp/src/index.ts", "utf8");
   assert.match(
-    readFileSync("workers/remote-mcp/src/index.ts", "utf8"),
-    /<p>Last updated: [A-Z][a-z]+ \d{1,2}, \d{4}<\/p>/,
+    workerSource,
+    /const OPENAI_PRIVACY_LAST_UPDATED = "[A-Z][a-z]+ \d{1,2}, \d{4}";/,
     "the privacy-date step must refer to a date the reviewed host actually serves",
+  );
+  assert.match(
+    workerSource,
+    /<p>Last updated: \$\{OPENAI_PRIVACY_LAST_UPDATED\}<\/p>/,
+    "the served privacy notice must render the single date constant",
   );
   assert.doesNotMatch(guide, /wrangler (?:deploy|deployments|versions|rollback|secret)/iu);
 });

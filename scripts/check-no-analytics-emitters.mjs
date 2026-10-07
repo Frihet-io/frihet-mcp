@@ -260,7 +260,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
   "workers/remote-mcp/src/auth-handler.ts": "b1da0f18536ace42052793a59d68dad5dcbdcdae0ecb0eafb149b5383c33ce87", // callback reserve/commit: state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
-  "workers/remote-mcp/src/index.ts": "76a54b587fcf7188e621b960ae3a68744676f0239c037003f6f0d56e812bf5f9", // session init no longer hands the provisioning credential to the tool client
+  "workers/remote-mcp/src/index.ts": "d6c0033f919a779edd6789a40f886684954d75c7302c5571dc2358c7a7957af0", // privacy notice date is a single constant; sinks unchanged
   "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "dd79003720debeaba12b6ae943569be6e9d286c6f9b83b24c6117639805ac938", // callback reserve/commit: revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
@@ -308,7 +308,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/conformance/run-phase0.mjs": "8298c4dc4c586622b79caa6a7f86d6376b3970d52c2b8a8af1dcb74585b112f7",
   "scripts/conformance/validate-baseline.mjs": "8acd56c5364c488280280af7b39e6f94091e3544103fb6bd56b1cc954af555e7",
   "scripts/generate-agent-onboarding.mjs": "64c195c341c9c822f17026617db56326b34282a90f5c16a10ddf5bb195360e06",
-  "scripts/generate-openai-submission.mjs": "028fb642e4dab066988b837d6f5913d96e554d6c5c62dae045f303b62dd93f33",
+  "scripts/generate-openai-submission.mjs": "24106c72f477fd489a91c1815e943268e5eb8144f67243296c606a403bc716ad",
   "scripts/generate-public-capability-contract.mjs": "7c6f08e3a28c9bc2cd50a9e791571eaf4987b2c618f4c614ae55c9ed811cf1f2",
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
   "scripts/no-public-leak.sh": "b1f545a1bce2fc8f3e227f9bff41e737ea398ef5f15001403e4b8c7bfc684855",

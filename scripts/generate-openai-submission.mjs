@@ -383,7 +383,7 @@ function buildPlugin(submission) {
         },
         publication: {
           countries: ["ES"],
-          release_notes: "Package 1.0.1 adds the reviewed Frihet MCP connection and existing light and dark icons, corrects the listing to the 33-tool reviewed scope, and includes three read-only starter prompts, Spanish listing text, and five positive plus three negative review cases. This package does not change the hosted server. Live ChatGPT web/mobile verification and a reviewer-accessible video are required before submission.",
+          release_notes: "Frihet connector for ChatGPT, package 1.0.1. Frihet is a business management platform; the connector lets a user work with their own Frihet workspace from ChatGPT through 33 tools: find and read invoices, quotes, expenses, clients, products and vendors; prepare numbered invoice and quote drafts; create and update expenses, clients, products and vendors; and manage client contacts, notes and activities. Sign-in uses OAuth to the user's own Frihet workspace; no API key is needed. Write tools disclose their lasting or external effects. The connector does not process payments, email invoices, file taxes, or access banking, payroll or HR data.",
           translations: {
             "es-ES": {
               subtitle: "Facturas, gastos y clientes",
