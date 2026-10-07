@@ -558,6 +558,7 @@ export class FrihetClient {
       }
 
       // Release the discarded 429 body before waiting so the socket is freed.
+      // (requestDocument has already drained it in readBoundedBody.)
       await response.body?.cancel().catch(() => undefined);
 
       const delayMs = this.rateLimitDelayMs(
@@ -801,6 +802,7 @@ export class FrihetClient {
             "Rate limit exceeded after multiple retries. Please try again later.",
           );
         }
+        clearTimeout(timeoutId);
         const delayMs = this.rateLimitDelayMs(
           response.headers.get("Retry-After"),
           retryCount,
@@ -808,7 +810,6 @@ export class FrihetClient {
           method,
           path,
         );
-        clearTimeout(timeoutId);
         await this.sleepFn(delayMs);
         return this.requestDocument(
           method,
@@ -876,9 +877,9 @@ export class FrihetClient {
 
   /**
    * Wait before the next 429 retry: the server's `Retry-After` when it parses
-   * (RFC 9110 §10.2.3), otherwise bounded exponential backoff. A server wait
-   * that does not fit the remaining budget is deferred to the caller, never
-   * shortened into an early retry.
+   * (RFC 9110 §10.2.3), otherwise exponential backoff. Either wait that does
+   * not fit the remaining cumulative budget is deferred to the caller; a server
+   * wait is never shortened into an early retry.
    */
   private rateLimitDelayMs(
     retryAfter: string | null,
@@ -888,14 +889,16 @@ export class FrihetClient {
     path: string,
   ): number {
     const serverMs = parseRetryAfter(retryAfter, this.nowFn());
-    if (serverMs !== null && waitedMs + serverMs > this.retryBudgetMs) {
+    const delayMs = serverMs ?? DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
+    if (waitedMs + delayMs > this.retryBudgetMs) {
       throw new FrihetApiError(
         429,
         "rate_limit_deferred",
-        `Rate limited: the server asks to wait ${Math.ceil(serverMs / 1000)} seconds, which exceeds this operation's retry budget. Retry after that time; nothing was retried early.`,
+        serverMs !== null
+          ? `Rate limited: the server asks to wait ${Math.ceil(serverMs / 1000)} seconds, which exceeds this operation's retry budget. Retry after that time; nothing was retried early.`
+          : "Rate limited: the next backoff wait exceeds this operation's retry budget. Retry later.",
       );
     }
-    const delayMs = serverMs ?? DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
     logRetry(method, path, retryCount, delayMs, serverMs === null ? "backoff" : "retry_after");
     return delayMs;
   }

@@ -214,6 +214,81 @@ describe("Retry-After honored through FrihetClient", () => {
     assert.deepEqual(sleeps, [2000, 2000]);
   });
 
+  test("the backoff path (no usable Retry-After) is bounded by the same budget", async () => {
+    script = [undefined, undefined, undefined];
+    const { sleeps, client } = harness({ retryBudgetMs: 1500 });
+    await assert.rejects(credit(client), (e: unknown) => e instanceof FrihetApiError && e.errorCode === "rate_limit_deferred");
+    assert.deepEqual(sleeps, [1000], "second backoff (2000 ms) would take the total to 3000 ms > 1500 ms");
+    assert.equal(hits.length, 2);
+  });
+
+  test("a deferred document call leaves no per-attempt timer pending", async () => {
+    const TIMEOUT = 123_457; // sentinel: identifies this client's timer among all timers
+    const origSet = globalThis.setTimeout;
+    const origClear = globalThis.clearTimeout;
+    const live = new Set<unknown>();
+    (globalThis as any).setTimeout = (fn: any, ms?: number, ...rest: any[]) => {
+      const h = origSet(fn, ms, ...rest);
+      if (ms === TIMEOUT) live.add(h);
+      return h;
+    };
+    (globalThis as any).clearTimeout = (h: any) => {
+      live.delete(h);
+      return origClear(h);
+    };
+    try {
+      script = ["31"];
+      const { client } = harness({ timeoutMs: TIMEOUT });
+      await assert.rejects(client.getInvoicePdf("inv_1"), (e: unknown) => e instanceof FrihetApiError && e.errorCode === "rate_limit_deferred");
+      assert.equal(live.size, 0);
+    } finally {
+      globalThis.setTimeout = origSet;
+      globalThis.clearTimeout = origClear;
+    }
+  });
+
+  test("a 429 body is fully released before waiting, on both call paths", async () => {
+    const origFetch = globalThis.fetch;
+    try {
+      for (const call of [
+        (c: FrihetClient) => credit(c),
+        (c: FrihetClient) => c.getInvoicePdf("inv_1"),
+      ]) {
+        let first = true;
+        let released = false;
+        let sleptWhileHeld = false;
+        globalThis.fetch = (async () => {
+          if (first) {
+            first = false;
+            const stream = new ReadableStream<Uint8Array>({
+              pull(ctrl) {
+                ctrl.enqueue(new TextEncoder().encode("{}"));
+                ctrl.close();
+                released = true;
+              },
+              cancel() {
+                released = true;
+              },
+            });
+            return new Response(stream, { status: 429, headers: { "Retry-After": "1" } });
+          }
+          return new Response("%PDF-1.4 test", { status: 200, headers: { "Content-Type": "application/pdf" } });
+        }) as typeof fetch;
+        const c = new FrihetClient("fri_test_key", baseUrl, {
+          sleep: async () => {
+            sleptWhileHeld = !released;
+          },
+          now: () => NOW,
+        } as Record<string, unknown>);
+        await call(c).catch(() => undefined);
+        assert.equal(sleptWhileHeld, false, "slept before the 429 body was released");
+        assert.equal(released, true);
+      }
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
   test("repeated 429s stop at the attempt limit", async () => {
     always429 = "1";
     const { sleeps, client } = harness();
