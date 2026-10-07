@@ -2915,7 +2915,9 @@ function fullDeployMutationViolations(files) {
   return found;
 }
 
-test("Full Worker topology guard — the only non-OpenAI Cloudflare mutation is the step after both guards", () => {
+// Covers direct `wrangler`/`npx`/`bunx` invocations and known actions in workflow steps. It does
+// not see script files, `wrangler@<ver>`, flags before the subcommand, or `npm --prefix … run deploy`.
+test("Full Worker topology guard — direct wrangler/npx/bunx and known-action Cloudflare mutations in workflow steps are only the step after both guards", () => {
   const files = Object.fromEntries(readdirSync(".github/workflows")
     .filter((name) => /\.ya?ml$/.test(name))
     .map((name) => [name, readFileSync(`.github/workflows/${name}`, "utf8")]));

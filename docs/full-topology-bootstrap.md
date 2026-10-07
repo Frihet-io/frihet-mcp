@@ -25,7 +25,9 @@ topology plus a baseline status.
   recorded baseline, including the migration tag.
 
 `scripts/check-full-worker-topology.mjs` implements both checks. It also fails
-if `wrangler.toml` drifts from the reviewed target in the baseline file. CI runs
+if `wrangler.toml` drifts from the reviewed target in the baseline file, but only
+for canonical-format drift: the parse is regex-based, so non-canonical TOML can
+slip past until a follow-up replaces it with Wrangler's own config reader. CI runs
 `scripts/__tests__/release-workflow-contract.test.mjs`, which pins the job
 wiring (ordering, no `if:`, no `continue-on-error`) and the checker's behavior.
 

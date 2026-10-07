@@ -43,8 +43,11 @@ const keysOf = (body) => [...body.matchAll(/^([A-Za-z_][\w.-]*)\s*=/gmu)].map((m
 const inlineKeys = (value) => [...value.matchAll(/\{([^}]*)\}/gu)]
   .map((match) => [...match[1].matchAll(/([a-z_]+)\s*=/gu)].map((entry) => entry[1]).sort());
 const ROOT_KEYS = ["compatibility_date", "compatibility_flags", "main", "name", "routes"];
-// Closed set: anything else at the top level (r2_buckets, services, d1, ...) is a topology
-// change this gate cannot see. [env.openai*] tables belong to the OpenAI Worker's own gate.
+// Closed set of top-level tables and keys (r2_buckets, services, d1, ... are rejected).
+// Limit: the parse is line-based regex over canonical TOML formatting. Indented keys,
+// quoted keys inside tables and table headers with trailing comments are NOT detected.
+// A follow-up issue tracks replacing it with Wrangler's own config reader.
+// [env.openai*] tables belong to the OpenAI Worker's own gate.
 const TABLES = new Set(["alias", "assets", "dev", "durable_objects", "kv_namespaces", "migrations",
   "observability", "vars"]);
 const ENV_TABLES = new Set(["env.openai", "env.openai.assets", "env.openai.durable_objects",
