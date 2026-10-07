@@ -29,6 +29,16 @@ if `wrangler.toml` drifts from the reviewed target in the baseline file. CI runs
 `scripts/__tests__/release-workflow-contract.test.mjs`, which pins the job
 wiring (ordering, no `if:`, no `continue-on-error`) and the checker's behavior.
 
+## Scope of the guard
+
+The guard covers the CI release path only. It runs in the `preflight` job (so
+a pending baseline stops the release before any npm version is published) and
+again in `deploy-worker`. `npm run deploy` in `workers/remote-mcp`, and direct
+Wrangler, API or dashboard changes, are unguarded local paths: they would apply
+migration `v2` without consulting the baseline. Wrangler is pointed explicitly
+at `wrangler.toml` in CI so it cannot resolve a different config than the
+checker reads.
+
 ## Who decides
 
 The repository owner alone decides when to apply `v2`. Moving the status to

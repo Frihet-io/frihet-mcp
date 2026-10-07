@@ -44,7 +44,15 @@
         "binding": "OAUTH_KV",
         "namespaceId": "9207b98598f849109139ad11f3b0ac51"
       }
-    ]
+    ],
+    "assets": {
+      "binding": "ASSETS",
+      "directory": "./public"
+    },
+    "vars": {
+      "FRIHET_OPENAI_MODE": "false",
+      "FRIHET_TOOL_MODE": "grouped"
+    }
   },
   "baseline": null,
   "recovery": {

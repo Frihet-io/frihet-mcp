@@ -39,6 +39,42 @@ const strList = (body, key) => [...(body.match(new RegExp(`^${key}\\s*=\\s*\\[([
 const inline = (value) => [...value.matchAll(/\{([^}]*)\}/gu)].map((match) => Object.fromEntries(
   [...match[1].matchAll(/([a-z_]+)\s*=\s*"([^"]*)"/gu)].map((entry) => [entry[1], entry[2]])));
 
+const keysOf = (body) => [...body.matchAll(/^([A-Za-z_][\w.-]*)\s*=/gmu)].map((match) => match[1]).sort();
+const inlineKeys = (value) => [...value.matchAll(/\{([^}]*)\}/gu)]
+  .map((match) => [...match[1].matchAll(/([a-z_]+)\s*=/gu)].map((entry) => entry[1]).sort());
+const ROOT_KEYS = ["compatibility_date", "compatibility_flags", "main", "name", "routes"];
+// Closed set: anything else at the top level (r2_buckets, services, d1, ...) is a topology
+// change this gate cannot see. [env.openai*] tables belong to the OpenAI Worker's own gate.
+const TABLES = new Set(["alias", "assets", "dev", "durable_objects", "kv_namespaces", "migrations",
+  "observability", "vars"]);
+const ENV_TABLES = new Set(["env.openai", "env.openai.assets", "env.openai.durable_objects",
+  "env.openai.kv_namespaces", "env.openai.vars"]);
+
+function configShapeIssues(toml, root) {
+  const issues = [];
+  const exact = (actual, expected, label) => {
+    if (!same(actual, [...expected].sort())) issues.push(`${label}:FIELDS`);
+  };
+  exact(keysOf(root), ROOT_KEYS, "root");
+  if (/^\s*["']/mu.test(root)) issues.push("root:QUOTED_KEY");
+  for (const match of toml.matchAll(/^\s*\[\[?\s*([^\]\s]+)\s*\]\]?\s*$/gmu)) {
+    if (!TABLES.has(match[1]) && !ENV_TABLES.has(match[1])) issues.push(`UNEXPECTED_SECTION:${match[1]}`);
+  }
+  tables(toml, "migrations", true).forEach((body) => exact(keysOf(body), ["new_sqlite_classes", "tag"], "migrations"));
+  tables(toml, "kv_namespaces", true).forEach((body) => exact(keysOf(body), ["binding", "id"], "kv_namespaces"));
+  tables(toml, "durable_objects").forEach((body) => {
+    exact(keysOf(body), ["bindings"], "durable_objects");
+    inlineKeys(body).forEach((keys) => exact(keys, ["class_name", "name"], "durable_objects.bindings"));
+  });
+  inlineKeys(root.match(/^routes\s*=\s*\[([^\]]*)\]/mu)?.[1] ?? "")
+    .forEach((keys) => exact(keys, ["pattern", "zone_name"], "routes"));
+  tables(toml, "assets").forEach((body) => exact(keysOf(body), ["binding", "directory"], "assets"));
+  for (const header of ["assets", "durable_objects", "vars"]) {
+    if (tables(toml, header).length !== 1) issues.push(`${header}:COUNT`);
+  }
+  return issues.sort();
+}
+
 // Top-level (default environment) topology only: [env.*] tables are other Workers.
 export function deriveFullTargetTopology(toml) {
   const firstTable = toml.search(/^\s*\[/mu);
@@ -57,12 +93,20 @@ export function deriveFullTargetTopology(toml) {
       .map((entry) => ({ binding: entry.name ?? "", className: entry.class_name ?? "" })).sort(byName("binding")),
     kvNamespaces: tables(toml, "kv_namespaces", true)
       .map((body) => ({ binding: str(body, "binding"), namespaceId: str(body, "id") })).sort(byName("binding")),
+    assets: { binding: str(tables(toml, "assets")[0] ?? "", "binding"), directory: str(tables(toml, "assets")[0] ?? "", "directory") },
+    vars: Object.fromEntries([...(tables(toml, "vars")[0] ?? "").matchAll(/^([A-Z][A-Z0-9_]*)\s*=\s*"([^"]*)"\s*$/gmu)]
+      .map((match) => [match[1], match[2]])),
+    configShapeIssues: configShapeIssues(toml, root),
   };
 }
 
 export function validateFullConfigAgainstContract(toml, contract) {
   const errors = [];
-  const derived = deriveFullTargetTopology(toml);
+  const { configShapeIssues: shape, ...derived } = deriveFullTargetTopology(toml);
+  errors.push(...shape);
+  if ((tables(toml, "vars")[0] ?? "") && !same(keysOf(tables(toml, "vars")[0]), Object.keys(derived.vars).sort())) {
+    errors.push("vars:FIELDS");
+  }
   const { migrationTag: _tag, ...expected } = { workerName: contract?.workerName, ...contract?.targetTopology };
   if (!same(derived, expected)) errors.push("TARGET_TOPOLOGY_DRIFT");
   if (contract?.targetTopology?.migrationTag !== derived.migrations.at(-1)?.tag || !derived.migrations.length) {
