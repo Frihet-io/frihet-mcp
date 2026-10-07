@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "757a7500efbc63d6360a4a9e592cbb7b8cf826c25a3c3b0963009148ac368c3e", // openai-plugin-package: reviewed portable ZIP validation and Python standard-library packaging
+  "package.json": "d5805bf083e1b2203722c32049869e4b509978395849a3f6026a5a184d420bb5", // eu-catalog: test-script registration only, no new deps or emitters
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
