@@ -4,6 +4,10 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **The provisioning service credential is no longer sent to the public API.** The OAuth Worker attached it as the `x-frihet-oauth-key` header to every tool-call request, although only the API-key provisioning endpoints read it. The tool client no longer accepts it; the provisioning calls keep it. A wire test asserts no public API request carries the header or the value. The credential should be rotated after this ships.
+
 ## [1.18.0] — 2026-10-07
 
 ### Added

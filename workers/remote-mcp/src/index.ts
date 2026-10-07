@@ -89,7 +89,6 @@ import {
   OAuthTokenFamilyRevocation,
   type OAuthTokenFamilySettlement,
 } from "./oauth-token-family.js";
-import { isValidOAuthServiceSecret } from "./oauth-provisioning.js";
 import type { OAuthApiKeyBinding } from "./oauth-state-store.js";
 import {
   BoundedRequestBodyError,
@@ -188,20 +187,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     // 25s Workers timeout. Base URL comes from the FRIHET_API_BASE secret
     // (normalized to /v1); if unset, the adapter uses the direct Cloud Function
     // origin rather than a same-zone Worker hop through api.frihet.io.
-    const oauthServiceSecret = this.props?.authMethod === "oauth"
-      ? this.env.FRIHET_OAUTH_API_KEY
-      : undefined;
-    if (
-      this.props?.authMethod === "oauth"
-      && !isValidOAuthServiceSecret(oauthServiceSecret)
-    ) {
-      throw new Error("OAuth API-key service authentication is unavailable");
-    }
-    const client = new FrihetClient(
-      apiKey,
-      this.env.FRIHET_API_BASE,
-      oauthServiceSecret,
-    );
+    const client = new FrihetClient(apiKey, this.env.FRIHET_API_BASE);
 
     // The worker and root project both use @modelcontextprotocol/sdk 1.26.0 but
     // TypeScript sees them as separate types due to different node_modules paths.

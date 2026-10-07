@@ -149,7 +149,7 @@ describe("anti-defang contract", () => {
       "track",
       "unregister",
     ]);
-    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 11);
+    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 10);
     assert.equal(Object.keys(APPROVED_SOURCE_FILE_HASHES).length, 13);
     assert.equal(Object.values(APPROVED_SOURCE_FILE_HASHES).every((hash) => /^[a-f0-9]{64}$/u.test(hash)), true);
     for (const sink of Object.keys(APPROVED_NETWORK_SINKS)) {
