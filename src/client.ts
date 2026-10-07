@@ -27,12 +27,6 @@ import { parseRetryAfter } from "./retry-after.js";
 import { fiscalModeloQuery } from "./fiscal-period.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
-const OAUTH_CLOUD_FUNCTION_BASE_URL =
-  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1";
-const OAUTH_SERVICE_TRUSTED_BASE_URLS = new Set([
-  BASE_URL,
-  OAUTH_CLOUD_FUNCTION_BASE_URL,
-]);
 
 const MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
@@ -403,12 +397,6 @@ export interface FrihetClientOptions {
    */
   timeoutMs?: number;
   /**
-   * Internal second factor for API keys provisioned by Frihet OAuth Workers.
-   * Ordinary dashboard/API keys must omit it. The value is sent only to the
-   * already-normalized API origin and is never included in logs or errors.
-   */
-  oauthServiceSecret?: string;
-  /**
    * Cumulative time one call may sleep across 429 retries. A server-requested
    * wait that does not fit is never shortened: the call fails with a
    * `rate_limit_deferred` error carrying the wait to honor. Defaults to 30000.
@@ -423,7 +411,6 @@ export class FrihetClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
-  private readonly oauthServiceSecret?: string;
   private readonly retryBudgetMs: number;
   private readonly sleepFn: (ms: number) => Promise<void>;
   private readonly nowFn: () => number;
@@ -446,22 +433,6 @@ export class FrihetClient {
         : RETRY_BUDGET_MS;
     this.sleepFn = options?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.nowFn = options?.now ?? Date.now;
-    if (options?.oauthServiceSecret !== undefined) {
-      if (
-        new TextEncoder().encode(options.oauthServiceSecret).byteLength < 32
-        || /[\r\n\0]/u.test(options.oauthServiceSecret)
-      ) {
-        throw new Error("OAuth API-key service authentication is not configured");
-      }
-      // A dashboard/API-key caller may still use a custom API base. The
-      // internal OAuth second factor may not: pin its authority at the sink so
-      // a future caller cannot exfiltrate both credentials by changing only
-      // constructor input while leaving the approved fetch fingerprint intact.
-      if (!OAUTH_SERVICE_TRUSTED_BASE_URLS.has(resolvedBaseUrl)) {
-        throw new Error("OAuth API-key service authority is not trusted");
-      }
-      this.oauthServiceSecret = options.oauthServiceSecret;
-    }
   }
 
   // ------------------------------------------------------------------ HTTP
@@ -502,9 +473,6 @@ export class FrihetClient {
       "X-Frihet-Source": SOURCE_MARKER,
       "User-Agent": SOURCE_USER_AGENT,
     };
-    if (this.oauthServiceSecret) {
-      headers["x-frihet-oauth-key"] = this.oauthServiceSecret;
-    }
 
     if (resolvedIdempotencyKey) {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
@@ -674,9 +642,6 @@ export class FrihetClient {
       "X-Frihet-Source": SOURCE_MARKER,
       "User-Agent": SOURCE_USER_AGENT,
     };
-    if (this.oauthServiceSecret) {
-      headers["x-frihet-oauth-key"] = this.oauthServiceSecret;
-    }
     if (resolvedIdempotencyKey) {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
     }

@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "7d7d7969370b965a236e989126e094f626b35e91b42e18a2b464ef953e4f472c", // retry-after: test-script registration only, no new deps or emitters
+  "package.json": "51a572e915c97154ced943fa2f0540b2c69e75e6978e40067a736ed93ea1f334", // registers the provisioning-credential wire test; no new deps or emitters
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -235,7 +235,6 @@ export const APPROVED_EMBEDDED_RESOURCES = Object.freeze({
  */
 export const APPROVED_STATIC_BINDINGS = Object.freeze({
   "src/client.ts|BASE_URL": "https://api.frihet.io/v1",
-  "src/client.ts|OAUTH_CLOUD_FUNCTION_BASE_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1",
   "src/observability.ts|CANONICAL_LANGFUSE_ORIGIN": "https://langfuse.frihet.io",
   "workers/api-proxy/worker.js|DEFAULT_UPSTREAM": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api",
   "workers/remote-mcp/src/index.ts|UPSTREAM_HEALTH": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/health",
@@ -254,14 +253,14 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "03b9a2fc65851af5cf5563108d64e69aa74515733a908292722973b526560ada", // retry-after (#2336): 429 wait parsing + budget only, same single fetch sink, no new destination; earlier note: fix/fiscal-period-wiring: fiscal modelo query param mapping + requestId read from the existing error response (same single fetch sink, no new destination); review F5 = doc-comment-only rewording of FrihetApiError.requestId
+  "src/client.ts": "b7cc8a4cc73d5426720939c27c87663ad6aacaf4fa2802876c53e2da9dc881b0", // provisioning credential removed from the public API client; sinks unchanged
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
   "workers/api-proxy/worker.js": "640d3aa873f1a20b705f9e73cdafe368bcb0bbe43f187afe5c9583336373accb",
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
   "workers/remote-mcp/src/auth-handler.ts": "b1da0f18536ace42052793a59d68dad5dcbdcdae0ecb0eafb149b5383c33ce87", // callback reserve/commit: state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
-  "workers/remote-mcp/src/client.ts": "9b80ffc8c0f3fbef3d0a39d490f5a704ad4c1d054f08b53665dc28928afc2562",
-  "workers/remote-mcp/src/index.ts": "af5bec927004f3298af413948af20bf458ccca7271ed251133dfee17a53f9d35", // OpenAI candidate: privacy notice date October 5, 2026; no runtime logic or destination changes
+  "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
+  "workers/remote-mcp/src/index.ts": "76a54b587fcf7188e621b960ae3a68744676f0239c037003f6f0d56e812bf5f9", // session init no longer hands the provisioning credential to the tool client
   "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "dd79003720debeaba12b6ae943569be6e9d286c6f9b83b24c6117639805ac938", // callback reserve/commit: revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
