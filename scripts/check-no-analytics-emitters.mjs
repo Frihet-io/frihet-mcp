@@ -328,7 +328,7 @@ export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
-  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "3cd0e234340ce88acb57b1adfe9e49b2a20401b57e1d286f88b2513d6bb3fd14", // OAuth/OIDC review: exact scopes, OIDC discovery/UserInfo contract and 33-tool security schemes
+  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "00b5ce103dc0309092b2f317cab66406389f957e3e923555bd6c24a4118193e3", // Reviewed invoice reads: three description-only boundaries for unavailable external evidence; schemas, OAuth and 33-tool security schemes unchanged
   "src/__tests__/fixtures/public-capability-contract.json": "8248f321a13b5a729e3dc2ec205328f163bfef27b5715542cab1557d37c8d05d",
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
