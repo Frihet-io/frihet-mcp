@@ -75,6 +75,23 @@ test("package-local tools/list remains semantically identical to the reviewed de
   assert.doesNotThrow(() => assertOpenAIReviewContract(actual, EXPECTED));
 });
 
+for (const name of ["list_invoices", "get_invoice", "search_invoices"]) {
+  test(`invoice evidence boundary: ${name} must not substitute records for external receipts`, async () => {
+    const surface = await captureOpenAIReviewMcpSurface();
+    const tool = surface.tools.find((candidate) => candidate.name === name);
+    assert.ok(tool, `reviewed surface must retain ${name}`);
+    const description = String(tool.description);
+    assert.match(description, /internal invoice records only/i);
+    assert.match(description, /status and issue date do not prove external submission or delivery/i);
+    assert.match(description, /do not call this tool to check Peppol delivery receipts/i);
+    assert.match(description, /EN 16931 validation results/i);
+    assert.match(description, /e-invoicing transmission or acceptance status/i);
+    assert.match(description, /without invoking Frihet tools/i);
+    assert.match(description, /no invoques esta herramienta para comprobar acuses de entrega Peppol/i);
+    assert.match(description, /sin invocar herramientas de Frihet/i);
+  });
+}
+
 test("OpenAI tool justifications name exactly the reviewed business surface", () => {
   const document = readFileSync(TOOL_JUSTIFICATIONS_PATH, "utf8");
   const reviewedSections = document.split("## Explicitly excluded capabilities", 1)[0] ?? "";
