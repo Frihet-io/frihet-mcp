@@ -2135,6 +2135,86 @@ test("OpenAI topology contract — exact DO migration and dedicated KV drift fai
   }
 });
 
+test("OpenAI topology contract — real Cloudflare named handlers require matching SQLite namespaces", () => {
+  const contract = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
+  const sourceSha = "a".repeat(40);
+  const versionId = "11111111-1111-4111-8111-111111111111";
+  const version = {
+    id: versionId, number: 42,
+    metadata: { created_on: "2026-10-08T00:00:00Z", source: "wrangler" },
+    resources: {
+      script: { etag: "real-schema-etag", handlers: ["fetch"], named_handlers: [
+        { name: "FrihetMCP", handlers: ["class"] },
+        { name: "OAuthStateStore", handlers: ["class"] },
+      ] },
+      script_runtime: { compatibility_date: "2025-12-01", compatibility_flags: ["nodejs_compat"],
+        migration_tag: "v2" },
+      bindings: [
+        { type: "durable_object_namespace", name: "MCP_OBJECT", class_name: "FrihetMCP", namespace_id: "2".repeat(32) },
+        { type: "durable_object_namespace", name: "OAUTH_STATE", class_name: "OAuthStateStore", namespace_id: "3".repeat(32) },
+        { type: "kv_namespace", name: "OAUTH_KV", namespace_id: "7df4e387eee243268669425594aae45e" },
+        { type: "assets", name: "ASSETS" },
+        { type: "plain_text", name: "FRIHET_OPENAI_MODE", text: "true" },
+        { type: "plain_text", name: "FRIHET_TOOL_MODE", text: "full" },
+        { type: "plain_text", name: "RELEASE_SOURCE_SHA", text: sourceSha },
+        { type: "plain_text", name: "RELEASE_VERSION", text: "1.18.0" },
+        ...contract.targetTopology.secretNames.map((name) => ({ type: "secret_text", name })),
+      ],
+    },
+  };
+  const namespaces = { success: true, result: [
+    { id: "2".repeat(32), class: "FrihetMCP", script: "frihet-openai-mcp", use_sqlite: true },
+    { id: "3".repeat(32), class: "OAuthStateStore", script: "frihet-openai-mcp", use_sqlite: true },
+    { id: "4".repeat(32), class: "FrihetMCP", script: "frihet-remote-mcp", use_sqlite: true },
+  ], result_info: { page: 1, count: 3, total_count: 3 } };
+  const options = { sourceSha, sourceVersion: "1.18.0", accountId: "b".repeat(32),
+    workerName: "frihet-openai-mcp", environment: "openai", now: new Date("2026-10-08T00:02:00Z"),
+    durableObjectNamespacesView: namespaces,
+    deploymentView: { id: "44444444-4444-4444-8444-444444444444", created_on: "2026-10-08T00:01:00Z",
+      source: "wrangler", strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] } };
+  assert.deepEqual(validateCompatibleVersion(contract, version, options), []);
+  assert.deepEqual(cloudflareTopology(version, options).durableObjectExports, contract.targetTopology.durableObjectExports);
+  assert.ok(validateCompatibleVersion(contract, version, { ...options, durableObjectNamespacesView: undefined }).length > 0);
+
+  for (const [label, mutate] of [
+    ["extra default handler", (v) => v.resources.script.handlers.push("scheduled")],
+    ["extra named worker", (v) => v.resources.script.named_handlers.push({ name: "Other", handlers: ["fetch"] })],
+    ["extra class", (v) => v.resources.script.named_handlers.push({ name: "Other", handlers: ["class"] })],
+    ["duplicate class", (v) => v.resources.script.named_handlers.push(v.resources.script.named_handlers[0])],
+    ["mixed class handlers", (v) => v.resources.script.named_handlers[0].handlers.push("fetch")],
+    ["namespace ID mismatch", (_v, n) => n.result[0].id = "5".repeat(32)],
+    ["namespace class mismatch", (_v, n) => n.result[0].class = "Other"],
+    ["namespace script mismatch", (_v, n) => n.result[0].script = "other-worker"],
+    ["non SQLite", (_v, n) => n.result[0].use_sqlite = false],
+    ["missing storage proof", (_v, n) => delete n.result[0].use_sqlite],
+    ["failed API envelope", (_v, n) => n.success = false],
+    ["partial namespace list", (_v, n) => n.result_info.total_count = 4],
+    ["duplicate namespace", (_v, n) => n.result[2] = { ...n.result[0] }],
+    ["mixed export schemas", (v) => v.resources.script_runtime.exports = { default: { type: "worker" } }],
+  ]) {
+    const changedVersion = structuredClone(version);
+    const changedNamespaces = structuredClone(namespaces);
+    mutate(changedVersion, changedNamespaces);
+    assert.ok(validateCompatibleVersion(contract, changedVersion,
+      { ...options, durableObjectNamespacesView: changedNamespaces }).length > 0, label);
+  }
+
+  const dir = mkdtempSync(join(tmpdir(), "openai-real-topology-"));
+  try {
+    for (const [name, value] of Object.entries({ version, namespaces, deployment: options.deploymentView })) {
+      writeFileSync(join(dir, `${name}.json`), JSON.stringify(value));
+    }
+    const result = spawnSync(process.execPath, ["scripts/check-openai-worker-topology.mjs", "--require-compatible",
+      "--live-version", join(dir, "version.json"), "--active-deployment", join(dir, "deployment.json"),
+      "--durable-object-namespaces", join(dir, "namespaces.json"), "--expected-source-sha", sourceSha,
+      "--expected-source-version", "1.18.0", "--account-id", options.accountId,
+      "--worker-name", options.workerName, "--environment", "openai"], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("OpenAI topology contract — immutable anchor and JIT recovery authority fail closed", () => {
   const contract = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
   const toml = readFileSync(OPENAI_WRANGLER, "utf8");
