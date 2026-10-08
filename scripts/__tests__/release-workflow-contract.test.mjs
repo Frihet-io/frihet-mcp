@@ -248,14 +248,18 @@ function stageEnvValue(stage, name) {
   return match?.[1];
 }
 
-function validateNamespaceWorkflowInputs(body, checker, expectedGates) {
+function validateNamespaceWorkflowInputs(body, checker, expectedGates, requireStdinHeader = false) {
   const shell = body.replace(/\\\n\s*/g, " ").replace(/[ \t]+/g, " ");
   const commands = shell.split("\n");
   const gates = commands.filter((line) => line.includes(`node ../../scripts/${checker}`)
     && line.includes("--live-version"));
   const errors = [];
   if (gates.length !== expectedGates.length) errors.push("namespace-version-gate-set-changed");
-  if (!shell.includes('-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"')
+  const hasAuthorization = requireStdinHeader
+    ? /builtin printf '%s\\n' "Authorization: Bearer \$\{CLOUDFLARE_API_TOKEN\}" \| curl [^\n]+ -H @-(?: |$)/u.test(shell)
+      && !shell.includes('-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"')
+    : shell.includes('-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"');
+  if (!hasAuthorization
     || !shell.includes('"https://api.cloudflare.com/client/v4/$1"')) {
     errors.push("namespace-capture-not-authenticated");
   }
@@ -2832,7 +2836,7 @@ function validateFullDeployTopologyGuard(yaml) {
   const liveStep = steps.find((step) => step.startsWith(FULL_GUARD_STEPS[1])) ?? "";
   errors.push(...validateNamespaceWorkflowInputs(liveStep, "check-full-worker-topology.mjs", [
     { mode: "--require-live-match", version: "$STATE_DIR/version.json", namespaces: "$STATE_DIR/namespaces.json" },
-  ]));
+  ], true));
   if (!new RegExp(`^    ${FULL_RELEASE_IF.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m").test(stage.body)) {
     errors.push("deploy-job-condition-changed");
   }
@@ -2937,6 +2941,8 @@ test("Full Worker topology guard — hostile case: deploy job cannot skip, reord
     "namespace gate input omitted": workflow.replace(live2, ""),
     "namespace capture omitted": workflow.replace('api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces"', "true"),
     "namespace envelope stripped": workflow.replace('api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces"', 'api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" | jq \'.result\''),
+    "namespace auth header missing": workflow.replace('-H @-', '-H "Content-Type: application/json"'),
+    "namespace auth token in curl argv": workflow.replace('-H @-', '-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"'),
     "M7 guard 2 set +e": workflow.replace("          set -euo pipefail\n          STATE_DIR=", "          set -euo pipefail\n          set +e\n          STATE_DIR="),
     "guard 2 if": workflow.replace(guard2, `${guard2}        if: always()\n`),
     "deploy job continue-on-error": insertJobLine(workflow, "deploy-worker", "    continue-on-error: true"),

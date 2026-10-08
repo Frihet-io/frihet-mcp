@@ -773,9 +773,10 @@ jobs:
           WORKER_NAME="$(jq -er '.workerName' full-topology-baseline.json)"
           test "$WORKER_NAME" = "frihet-remote-mcp"
           api_get() {
-            curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 \
+            builtin printf '%s\n' "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              | curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 \
               --connect-timeout 10 --max-time 45 \
-              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H @- \
               -H 'Content-Type: application/json' \
               "https://api.cloudflare.com/client/v4/$1"
           }
