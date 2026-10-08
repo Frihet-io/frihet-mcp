@@ -146,6 +146,7 @@ export const FILE_TO_GROUP: Record<string, ToolGroupId> = {
 
   expenses: "expenses",
   vendors: "expenses",
+  purchaseOrders: "expenses",
 
   fiscal: "fiscal",
   igic: "fiscal",

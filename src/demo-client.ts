@@ -50,6 +50,7 @@ import {
   demoExpenses,
   demoQuotes,
   demoVendors,
+  demoPurchaseOrders,
   demoBankAccounts,
   demoTransactions,
 } from "./demo-fixtures.js";
@@ -228,6 +229,20 @@ export class DemoFrihetClient implements IFrihetClient {
   }
   async deleteVendor(_id: string): Promise<void> {
     return;
+  }
+
+  // ---------------------------------------------------------------- Purchase Orders
+  // Read-only surface (ADR 0027 S2). Write tools are intentionally absent.
+  async listPurchaseOrders(params?: { status?: string; vendorId?: string; limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
+    const filtered = demoPurchaseOrders.filter((po) => {
+      if (params?.status && po.status !== params.status) return false;
+      if (params?.vendorId && po.vendorId !== params.vendorId) return false;
+      return true;
+    });
+    return demoPage(filtered, params);
+  }
+  async getPurchaseOrder(id: string): Promise<Rec> {
+    return findOrStub(demoPurchaseOrders, id);
   }
 
   // ---------------------------------------------------------------- Invoice actions

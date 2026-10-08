@@ -18,6 +18,7 @@ import { registerClientTools } from "./clients.js";
 import { registerProductTools } from "./products.js";
 import { registerQuoteTools } from "./quotes.js";
 import { registerVendorTools } from "./vendors.js";
+import { registerPurchaseOrderTools } from "./purchaseOrders.js";
 import { registerWebhookTools } from "./webhooks.js";
 import { registerIntelligenceTools } from "./intelligence.js";
 import { registerCrmTools } from "./crm.js";
@@ -100,6 +101,7 @@ export function registerAllTools(server: McpServer, client: IFrihetClient): void
   registerProductTools(server, client);
   registerQuoteTools(server, client);
   registerVendorTools(server, client);
+  registerPurchaseOrderTools(server, client);
   registerWebhookTools(server, client);
   registerDepositTools(server, client);
   registerEInvoiceTools(server, client);
