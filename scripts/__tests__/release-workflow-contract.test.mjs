@@ -248,6 +248,37 @@ function stageEnvValue(stage, name) {
   return match?.[1];
 }
 
+function validateNamespaceWorkflowInputs(body, checker, expectedGates, requireStdinHeader = false) {
+  const shell = body.replace(/\\\n\s*/g, " ").replace(/[ \t]+/g, " ");
+  const commands = shell.split("\n");
+  const gates = commands.filter((line) => line.includes(`node ../../scripts/${checker}`)
+    && line.includes("--live-version"));
+  const errors = [];
+  if (gates.length !== expectedGates.length) errors.push("namespace-version-gate-set-changed");
+  const hasAuthorization = requireStdinHeader
+    ? /builtin printf '%s\\n' "Authorization: Bearer \$\{CLOUDFLARE_API_TOKEN\}" \| curl [^\n]+ -H @-(?: |$)/u.test(shell)
+      && !shell.includes('-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"')
+    : shell.includes('-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"');
+  if (!hasAuthorization
+    || !shell.includes('"https://api.cloudflare.com/client/v4/$1"')) {
+    errors.push("namespace-capture-not-authenticated");
+  }
+  expectedGates.forEach(({ mode, version, namespaces }, index) => {
+    const gate = gates[index] ?? "";
+    const gateOffset = shell.indexOf(gate) + gate.indexOf(`node ../../scripts/${checker}`);
+    const capture = `api_get "accounts/\${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" > "${namespaces}"`;
+    if (!gate.includes(mode) || !gate.includes(`--live-version "${version}"`)
+      || !gate.includes(`--durable-object-namespaces "${namespaces}"`)) {
+      errors.push(`namespace-version-gate-input-missing:${index}`);
+    }
+    if (shell.indexOf(capture) < 0 || shell.indexOf(capture) > gateOffset
+      || commands.some((line) => line.includes("jq ") && line.includes(`> "${namespaces}"`))) {
+      errors.push(`namespace-complete-envelope-not-captured:${index}`);
+    }
+  });
+  return errors;
+}
+
 function validateOpenAIReleaseSemantics(yaml) {
   const stages = parseWorkflowStages(yaml);
   const byId = Object.fromEntries(stages.map((stage) => [stage.id, stage]));
@@ -271,6 +302,23 @@ function validateOpenAIReleaseSemantics(yaml) {
   const deploy = executableStageBody(byId["deploy-openai"]);
   const publicVerify = executableStageBody(byId["verify-public"]);
   const rollback = executableStageBody(byId["rollback-openai"]);
+
+  for (const [scope, body, gates] of [
+    ["prestate", capture, [
+      { mode: "--require-established", version: "$VERSION_FILE", namespaces: "$NAMESPACES_FILE" },
+    ]],
+    ["deploy", deploy, [
+      { mode: "--write-jit-prestate", version: "$version", namespaces: "$namespaces" },
+      { mode: "--require-compatible", version: "$STATE_DIR/deployed-version.json", namespaces: "$STATE_DIR/ambiguous-deploy-namespaces.json" },
+      { mode: "--require-compatible", version: "$STATE_DIR/deployed-version.json", namespaces: "$STATE_DIR/deployed-namespaces.json" },
+    ]],
+    ["recovery", rollback, [
+      { mode: "--require-recovery-target", version: "$VERSION_FILE", namespaces: "$NAMESPACES_FILE" },
+      { mode: "--require-compatible", version: "$CURRENT_VERSION_FILE", namespaces: "$NAMESPACES_FILE" },
+      { mode: "--require-recovery-target", version: "$VERSION_FILE", namespaces: "$NAMESPACES_FILE" },
+    ]],
+  ]) errors.push(...validateNamespaceWorkflowInputs(body, "check-openai-worker-topology.mjs", gates)
+    .map((error) => `${scope}:${error}`));
 
   if (
     !preflight.includes("github.workflow_ref")
@@ -2054,6 +2102,35 @@ test("OpenAI release workflow — semantic mutants cannot bypass topology recove
   );
 });
 
+test("OpenAI release workflow — complete namespace captures reach every version gate", () => {
+  const workflow = loadOpenAIWorkflow();
+  assert.deepEqual(validateOpenAIReleaseSemantics(workflow), []);
+  const stages = parseWorkflowStages(workflow);
+  const endpoint = 'api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces"';
+  for (const id of ["capture-rollback-state", "deploy-openai", "rollback-openai"]) {
+    const stage = findStage(stages, id);
+    const namespaceFlags = [...stage.body.matchAll(/^\s*--durable-object-namespaces[^\n]*\n/gm)];
+    assert.equal(namespaceFlags.length, id === "capture-rollback-state" ? 1 : 3);
+    for (const match of namespaceFlags) {
+      const mutatedBody = stage.body.slice(0, match.index) + stage.body.slice(match.index + match[0].length);
+      assert.ok(validateOpenAIReleaseSemantics(workflow.replace(stage.body, mutatedBody))
+        .some((error) => error.includes("namespace-version-gate-input-missing")),
+      `${id}: every gate must consume its namespace evidence`);
+    }
+    const captures = [...stage.body.matchAll(new RegExp(endpoint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))];
+    assert.equal(captures.length, id === "deploy-openai" ? 3 : 1);
+    for (const match of captures) {
+      const mutate = (replacement) => workflow.replace(stage.body,
+        stage.body.slice(0, match.index) + replacement + stage.body.slice(match.index + endpoint.length));
+      for (const replacement of ["true", `${endpoint} | jq '.result'`]) {
+        assert.ok(validateOpenAIReleaseSemantics(mutate(replacement))
+          .some((error) => error.includes("namespace-complete-envelope-not-captured")),
+        `${id}: an omitted or stripped capture must fail`);
+      }
+    }
+  }
+});
+
 test("OpenAI topology contract — exact DO migration and dedicated KV drift fail closed", () => {
   const toml = readFileSync(OPENAI_WRANGLER, "utf8");
   const contract = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
@@ -2132,6 +2209,86 @@ test("OpenAI topology contract — exact DO migration and dedicated KV drift fai
       validateConfigAgainstContract(mutant, contract).includes("TARGET_TOPOLOGY_DRIFT"),
       "route, Assets directory/routing, and profile-var mutants must fail",
     );
+  }
+});
+
+test("OpenAI topology contract — real Cloudflare named handlers require matching SQLite namespaces", () => {
+  const contract = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
+  const sourceSha = "a".repeat(40);
+  const versionId = "11111111-1111-4111-8111-111111111111";
+  const version = {
+    id: versionId, number: 42,
+    metadata: { created_on: "2026-10-08T00:00:00Z", source: "wrangler" },
+    resources: {
+      script: { etag: "real-schema-etag", handlers: ["fetch"], named_handlers: [
+        { name: "FrihetMCP", handlers: ["class"] },
+        { name: "OAuthStateStore", handlers: ["class"] },
+      ] },
+      script_runtime: { compatibility_date: "2025-12-01", compatibility_flags: ["nodejs_compat"],
+        migration_tag: "v2" },
+      bindings: [
+        { type: "durable_object_namespace", name: "MCP_OBJECT", class_name: "FrihetMCP", namespace_id: "2".repeat(32) },
+        { type: "durable_object_namespace", name: "OAUTH_STATE", class_name: "OAuthStateStore", namespace_id: "3".repeat(32) },
+        { type: "kv_namespace", name: "OAUTH_KV", namespace_id: "7df4e387eee243268669425594aae45e" },
+        { type: "assets", name: "ASSETS" },
+        { type: "plain_text", name: "FRIHET_OPENAI_MODE", text: "true" },
+        { type: "plain_text", name: "FRIHET_TOOL_MODE", text: "full" },
+        { type: "plain_text", name: "RELEASE_SOURCE_SHA", text: sourceSha },
+        { type: "plain_text", name: "RELEASE_VERSION", text: "1.18.0" },
+        ...contract.targetTopology.secretNames.map((name) => ({ type: "secret_text", name })),
+      ],
+    },
+  };
+  const namespaces = { success: true, result: [
+    { id: "2".repeat(32), class: "FrihetMCP", script: "frihet-openai-mcp", use_sqlite: true },
+    { id: "3".repeat(32), class: "OAuthStateStore", script: "frihet-openai-mcp", use_sqlite: true },
+    { id: "4".repeat(32), class: "FrihetMCP", script: "frihet-remote-mcp", use_sqlite: true },
+  ], result_info: { page: 1, count: 3, total_count: 3 } };
+  const options = { sourceSha, sourceVersion: "1.18.0", accountId: "b".repeat(32),
+    workerName: "frihet-openai-mcp", environment: "openai", now: new Date("2026-10-08T00:02:00Z"),
+    durableObjectNamespacesView: namespaces,
+    deploymentView: { id: "44444444-4444-4444-8444-444444444444", created_on: "2026-10-08T00:01:00Z",
+      source: "wrangler", strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] } };
+  assert.deepEqual(validateCompatibleVersion(contract, version, options), []);
+  assert.deepEqual(cloudflareTopology(version, options).durableObjectExports, contract.targetTopology.durableObjectExports);
+  assert.ok(validateCompatibleVersion(contract, version, { ...options, durableObjectNamespacesView: undefined }).length > 0);
+
+  for (const [label, mutate] of [
+    ["extra default handler", (v) => v.resources.script.handlers.push("scheduled")],
+    ["extra named worker", (v) => v.resources.script.named_handlers.push({ name: "Other", handlers: ["fetch"] })],
+    ["extra class", (v) => v.resources.script.named_handlers.push({ name: "Other", handlers: ["class"] })],
+    ["duplicate class", (v) => v.resources.script.named_handlers.push(v.resources.script.named_handlers[0])],
+    ["mixed class handlers", (v) => v.resources.script.named_handlers[0].handlers.push("fetch")],
+    ["namespace ID mismatch", (_v, n) => n.result[0].id = "5".repeat(32)],
+    ["namespace class mismatch", (_v, n) => n.result[0].class = "Other"],
+    ["namespace script mismatch", (_v, n) => n.result[0].script = "other-worker"],
+    ["non SQLite", (_v, n) => n.result[0].use_sqlite = false],
+    ["missing storage proof", (_v, n) => delete n.result[0].use_sqlite],
+    ["failed API envelope", (_v, n) => n.success = false],
+    ["partial namespace list", (_v, n) => n.result_info.total_count = 4],
+    ["duplicate namespace", (_v, n) => n.result[2] = { ...n.result[0] }],
+    ["mixed export schemas", (v) => v.resources.script_runtime.exports = { default: { type: "worker" } }],
+  ]) {
+    const changedVersion = structuredClone(version);
+    const changedNamespaces = structuredClone(namespaces);
+    mutate(changedVersion, changedNamespaces);
+    assert.ok(validateCompatibleVersion(contract, changedVersion,
+      { ...options, durableObjectNamespacesView: changedNamespaces }).length > 0, label);
+  }
+
+  const dir = mkdtempSync(join(tmpdir(), "openai-real-topology-"));
+  try {
+    for (const [name, value] of Object.entries({ version, namespaces, deployment: options.deploymentView })) {
+      writeFileSync(join(dir, `${name}.json`), JSON.stringify(value));
+    }
+    const result = spawnSync(process.execPath, ["scripts/check-openai-worker-topology.mjs", "--require-compatible",
+      "--live-version", join(dir, "version.json"), "--active-deployment", join(dir, "deployment.json"),
+      "--durable-object-namespaces", join(dir, "namespaces.json"), "--expected-source-sha", sourceSha,
+      "--expected-source-version", "1.18.0", "--account-id", options.accountId,
+      "--worker-name", options.workerName, "--environment", "openai"], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -2676,6 +2833,10 @@ function validateFullDeployTopologyGuard(yaml) {
   const flags = steps.join("\n");
   if (!/check-full-worker-topology\.mjs --require-established\s*$/m.test(flags)) errors.push("missing-require-established");
   if (!flags.includes("--require-established --require-live-match")) errors.push("missing-require-live-match");
+  const liveStep = steps.find((step) => step.startsWith(FULL_GUARD_STEPS[1])) ?? "";
+  errors.push(...validateNamespaceWorkflowInputs(liveStep, "check-full-worker-topology.mjs", [
+    { mode: "--require-live-match", version: "$STATE_DIR/version.json", namespaces: "$STATE_DIR/namespaces.json" },
+  ], true));
   if (!new RegExp(`^    ${FULL_RELEASE_IF.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m").test(stage.body)) {
     errors.push("deploy-job-condition-changed");
   }
@@ -2764,7 +2925,7 @@ test("Full Worker topology guard — hostile case: deploy job cannot skip, reord
   const [first] = FULL_GUARD_STEPS;
   const deployMarker = `      - name: ${FULL_DEPLOY_STEP}\n`;
   const guard2 = `      - name: ${FULL_GUARD_STEPS[1]}\n`;
-  const live2 = '            --live-version "$STATE_DIR/version.json"\n';
+  const live2 = '            --durable-object-namespaces "$STATE_DIR/namespaces.json"\n';
   const preflightRun = `        ${FULL_RELEASE_IF}\n        run: node scripts/check-full-worker-topology.mjs --require-established`;
   const mutants = {
     "removed guard": workflow.replace(`      - name: ${first}\n`, "      - name: Renamed\n"),
@@ -2777,6 +2938,11 @@ test("Full Worker topology guard — hostile case: deploy job cannot skip, reord
     "M2b deploy if !cancelled()": workflow.replace(deployMarker, `${deployMarker}        if: \${{ !cancelled() }}\n`),
     "deploy step continue-on-error": workflow.replace(deployMarker, `${deployMarker}        continue-on-error: true\n`),
     "M3 guard 2 or true": workflow.replace(live2, `${live2.trimEnd()} || true\n`),
+    "namespace gate input omitted": workflow.replace(live2, ""),
+    "namespace capture omitted": workflow.replace('api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces"', "true"),
+    "namespace envelope stripped": workflow.replace('api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces"', 'api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" | jq \'.result\''),
+    "namespace auth header missing": workflow.replace('-H @-', '-H "Content-Type: application/json"'),
+    "namespace auth token in curl argv": workflow.replace('-H @-', '-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"'),
     "M7 guard 2 set +e": workflow.replace("          set -euo pipefail\n          STATE_DIR=", "          set -euo pipefail\n          set +e\n          STATE_DIR="),
     "guard 2 if": workflow.replace(guard2, `${guard2}        if: always()\n`),
     "deploy job continue-on-error": insertJobLine(workflow, "deploy-worker", "    continue-on-error: true"),
@@ -2853,6 +3019,51 @@ test("Full Worker topology guard — established baseline requires an exact, fre
   block("malformed JSON", live, { contract, files: { "--active-deployment": "{", "--live-version": "null" } }, /INPUT_INVALID/);
   // --require-live-match alone must still refuse a pending baseline.
   block("live match on pending", ["--require-live-match"], { files: inputs() }, /BASELINE_PENDING_BOOTSTRAP/);
+});
+
+test("Full Worker topology guard — real named handlers need complete namespace evidence", () => {
+  const view = fullLiveView();
+  view.resources.script.named_handlers = [
+    { name: "FrihetMCP", handlers: ["class"] },
+    { name: "OAuthStateStore", handlers: ["class"] },
+  ];
+  view.resources.bindings[0].namespace_id = "2".repeat(32);
+  view.resources.bindings[1].namespace_id = "3".repeat(32);
+  const namespaces = { success: true, result: [
+    { id: "2".repeat(32), class: "FrihetMCP", script: "frihet-remote-mcp", use_sqlite: true },
+    { id: "3".repeat(32), class: "OAuthStateStore", script: "frihet-remote-mcp", use_sqlite: true },
+  ], result_info: { page: 1, count: 2, total_count: 2 } };
+  const topology = cloudflareTopology(view, { workerName: "frihet-remote-mcp", durableObjectNamespacesView: namespaces });
+  const contract = { ...readJson(FULL_TOPOLOGY_BASELINE), status: "established",
+    baseline: { topology, topologySha256: topologyFingerprint(topology) } };
+  const files = { "--active-deployment": fullDeployment(view.id), "--live-version": view };
+  const args = ["--require-established", "--require-live-match"];
+  const ok = runFullTopology(args, { contract, files: { ...files, "--durable-object-namespaces": namespaces } });
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.equal(runFullTopology(args, { contract, files }).status, 1, "omitted namespaces must block");
+  for (const [label, mutate] of [
+    ["partial pagination", (n) => n.result_info.total_count = 3],
+    ["wrong page", (n) => n.result_info.page = 2],
+    ["missing pagination", (n) => delete n.result_info],
+    ["wrong worker", (n) => n.result[0].script = "frihet-openai-mcp"],
+    ["non SQLite", (n) => n.result[0].use_sqlite = false],
+  ]) {
+    const changed = structuredClone(namespaces);
+    mutate(changed);
+    assert.equal(runFullTopology(args, { contract, files: { ...files, "--durable-object-namespaces": changed } }).status, 1, label);
+  }
+  const unverified = cloudflareTopology(view);
+  const falseAnchor = { ...contract, baseline: { topology: unverified, topologySha256: topologyFingerprint(unverified) } };
+  assert.equal(runFullTopology(args, { contract: falseAnchor, files }).status, 1,
+    "matching an unverified projection must not prove an established baseline");
+  const noStorageProof = structuredClone(namespaces);
+  delete noStorageProof.result[0].use_sqlite;
+  const falseStorage = cloudflareTopology(view, { workerName: contract.workerName, durableObjectNamespacesView: noStorageProof });
+  const falseStorageAnchor = { ...contract,
+    baseline: { topology: falseStorage, topologySha256: topologyFingerprint(falseStorage) } };
+  assert.equal(runFullTopology(args, { contract: falseStorageAnchor,
+    files: { ...files, "--durable-object-namespaces": noStorageProof } }).status, 1,
+  "an anchor cannot replace missing SQLite evidence");
 });
 
 const FULL_PROBE_BASE = () => FULL_TOML();

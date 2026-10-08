@@ -296,7 +296,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
   "scripts/audit-mcp-refs.mjs": "06f01587aee4e12e732700a4ef47379b6271174304c1f53b2e0b76fba04a0f2b", // fix/mcp-refs-watch-locales: tool-count detector widened (qualifier words, non-ASCII noun endings, CJK), glob watch lists, --root override for hermetic fixtures, --fix kept symmetric with the detector
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
-  "scripts/check-openai-worker-topology.mjs": "448bb2a78c8df9ee70595c779ccfb5e65675730671db1e59da60363c16c02c20",
+  "scripts/check-openai-worker-topology.mjs": "9faa435df74bda80ef9a1ecf52d322e7604f3d751c67f6ecab4213643e98172f",
   "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",
   "scripts/conformance/applicability.json": "a561dcb009c695cd3d5287aaa1aef6f0c43518b38a377c6ed5770b1f4d68eb25",
   "scripts/conformance/classify.mjs": "5e6980e479636d4dbd15601f7c025ce1ec01cb5b9d4ee515d791ef080f876609",

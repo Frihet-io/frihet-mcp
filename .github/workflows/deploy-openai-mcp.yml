@@ -594,6 +594,7 @@ jobs:
           IDENTITY_FILE="$STATE_DIR/identity.json"
           STATUS_FILE="$STATE_DIR/deployment.json"
           VERSION_FILE="$STATE_DIR/version.json"
+          NAMESPACES_FILE="$STATE_DIR/durable-object-namespaces.json"
           ZONE_ENVELOPE="$STATE_DIR/zone-envelope.json"
           ZONE_FILE="$STATE_DIR/zone.json"
           ROUTES_ENVELOPE="$STATE_DIR/routes-envelope.json"
@@ -621,6 +622,8 @@ jobs:
           # migration drift, namespace drift, or binding drift stops here.
           ./node_modules/.bin/wrangler versions view "$PREVIOUS_VERSION_ID" \
             --env openai --name "$WORKER_NAME" --json > "$VERSION_FILE"
+          api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+            > "$NAMESPACES_FILE"
           api_get "zones?name=${ZONE_NAME}&account.id=${CLOUDFLARE_ACCOUNT_ID}&status=active&per_page=50" \
             > "$ZONE_ENVELOPE"
           jq -e --arg accountId "$CLOUDFLARE_ACCOUNT_ID" --arg zoneName "$ZONE_NAME" \
@@ -644,6 +647,7 @@ jobs:
             --require-established \
             --active-deployment "$STATUS_FILE" \
             --live-version "$VERSION_FILE" \
+            --durable-object-namespaces "$NAMESPACES_FILE" \
             --health "$HEALTH_FILE" \
             --identity "$IDENTITY_FILE" \
             --zone "$ZONE_FILE" \
@@ -911,6 +915,7 @@ jobs:
             local identity="$STATE_DIR/${label}-identity.json"
             local deployment="$STATE_DIR/${label}-deployment.json"
             local version="$STATE_DIR/${label}-version.json"
+            local namespaces="$STATE_DIR/${label}-durable-object-namespaces.json"
             local zone_envelope="$STATE_DIR/${label}-zone-envelope.json"
             local zone="$STATE_DIR/${label}-zone.json"
             local routes_envelope="$STATE_DIR/${label}-routes-envelope.json"
@@ -935,6 +940,8 @@ jobs:
             version_id="$(jq -r '.versions[0].version_id' "$deployment")"
             ./node_modules/.bin/wrangler versions view "$version_id" \
               --env openai --name "$WORKER_NAME" --json > "$version"
+            api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+              > "$namespaces"
             api_get "zones?name=${ZONE_NAME}&account.id=${CLOUDFLARE_ACCOUNT_ID}&status=active&per_page=50" \
               > "$zone_envelope"
             jq -e --arg accountId "$CLOUDFLARE_ACCOUNT_ID" --arg zoneName "$ZONE_NAME" \
@@ -960,6 +967,7 @@ jobs:
               --snapshot-started-at-file "$snapshot_started_at" \
               --active-deployment "$deployment" \
               --live-version "$version" \
+              --durable-object-namespaces "$namespaces" \
               --health "$health" \
               --identity "$identity" \
               --zone "$zone" \
@@ -1049,10 +1057,13 @@ jobs:
                 echo "version_id=$JIT_VERSION_ID" >> "$GITHUB_OUTPUT"
               elif ./node_modules/.bin/wrangler versions view "$VERSION_ID" \
                 --env openai --name "$WORKER_NAME" --json > "$STATE_DIR/deployed-version.json" 2>/dev/null \
+                && api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+                  > "$STATE_DIR/ambiguous-deploy-namespaces.json" 2>/dev/null \
                 && node ../../scripts/check-openai-worker-topology.mjs \
                   --require-compatible \
                   --active-deployment "$STATE_DIR/deployed-state.json" \
                   --live-version "$STATE_DIR/deployed-version.json" \
+                  --durable-object-namespaces "$STATE_DIR/ambiguous-deploy-namespaces.json" \
                   --expected-source-sha "$SOURCE_COMMIT" \
                   --expected-source-version "$VERSION" \
                   --account-id "$CLOUDFLARE_ACCOUNT_ID" \
@@ -1095,10 +1106,13 @@ jobs:
           fi
           ./node_modules/.bin/wrangler versions view "$VERSION_ID" \
             --env openai --name "$WORKER_NAME" --json > "$STATE_DIR/deployed-version.json"
+          api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+            > "$STATE_DIR/deployed-namespaces.json"
           node ../../scripts/check-openai-worker-topology.mjs \
             --require-compatible \
             --active-deployment "$STATE_DIR/deployed-state.json" \
             --live-version "$STATE_DIR/deployed-version.json" \
+            --durable-object-namespaces "$STATE_DIR/deployed-namespaces.json" \
             --expected-source-sha "$SOURCE_COMMIT" \
             --expected-source-version "$VERSION" \
             --account-id "$CLOUDFLARE_ACCOUNT_ID" \
@@ -1545,11 +1559,14 @@ jobs:
           STATUS_FILE="$STATE_DIR/status.json"
           VERSION_FILE="$STATE_DIR/jit-recovery-version.json"
           CURRENT_VERSION_FILE="$STATE_DIR/current-version.json"
+          NAMESPACES_FILE="$STATE_DIR/durable-object-namespaces.json"
           HEALTH_FILE="$STATE_DIR/health.json"
           HEALTH_CANONICAL="$STATE_DIR/health-canonical.json"
 
           capture_network_surface() {
             ./node_modules/.bin/wrangler whoami --json > "$IDENTITY_FILE"
+            api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+              > "$NAMESPACES_FILE"
             api_get "zones?name=${ZONE_NAME}&account.id=${CLOUDFLARE_ACCOUNT_ID}&status=active&per_page=50" \
               > "$ZONE_ENVELOPE"
             jq -e --arg accountId "$CLOUDFLARE_ACCOUNT_ID" --arg zoneName "$ZONE_NAME" \
@@ -1577,6 +1594,7 @@ jobs:
           node ../../scripts/check-openai-worker-topology.mjs \
             --require-recovery-target \
             --live-version "$VERSION_FILE" \
+            --durable-object-namespaces "$NAMESPACES_FILE" \
             --identity "$IDENTITY_FILE" \
             --zone "$ZONE_FILE" \
             --routes "$ROUTES_FILE" \
@@ -1628,6 +1646,7 @@ jobs:
               --require-compatible \
               --active-deployment "$STATUS_FILE" \
               --live-version "$CURRENT_VERSION_FILE" \
+              --durable-object-namespaces "$NAMESPACES_FILE" \
               --expected-source-sha "$SOURCE_COMMIT" \
               --expected-source-version "$VERSION" \
               --account-id "$CLOUDFLARE_ACCOUNT_ID" \
@@ -1664,6 +1683,7 @@ jobs:
           node ../../scripts/check-openai-worker-topology.mjs \
             --require-recovery-target \
             --live-version "$VERSION_FILE" \
+            --durable-object-namespaces "$NAMESPACES_FILE" \
             --identity "$IDENTITY_FILE" \
             --zone "$ZONE_FILE" \
             --routes "$ROUTES_FILE" \

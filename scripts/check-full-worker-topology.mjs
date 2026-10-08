@@ -124,14 +124,23 @@ export function validateFullConfigAgainstContract(toml, contract) {
 
 // The only way past "pending-bootstrap": an established baseline whose recorded
 // live topology still equals the 100%-active Cloudflare version right now.
-export function validateFullLiveAgainstBaseline(contract, { deploymentView, versionView }) {
+export function validateFullLiveAgainstBaseline(contract, { deploymentView, versionView, durableObjectNamespacesView }) {
   if (contract?.status !== "established") return ["BASELINE_PENDING_BOOTSTRAP"];
   const baseline = contract.baseline;
   if (!baseline || typeof baseline !== "object" || !baseline.topology) return ["BASELINE_MISSING"];
   const errors = [];
   if (!SHA256_PATTERN.test(baseline.topologySha256 ?? "") ||
     baseline.topologySha256 !== topologyFingerprint(baseline.topology)) errors.push("BASELINE_FINGERPRINT_INVALID");
-  const live = cloudflareTopology(versionView);
+  const live = cloudflareTopology(versionView, { durableObjectNamespacesView, workerName: contract.workerName });
+  if (live.unexpectedExports.length) errors.push("LIVE_EXPORT_PROJECTION_UNVERIFIED");
+  if (Object.hasOwn(versionView?.resources?.script ?? {}, "named_handlers")) {
+    const exports = (contract.targetTopology?.durableObjects ?? [])
+      .map(({ className }) => ({ className, state: "created", storage: "sqlite" }))
+      .sort((left, right) => left.className.localeCompare(right.className));
+    if (!same(live.workerEntrypoints, ["default"]) || !same(live.durableObjectExports, exports)) {
+      errors.push("LIVE_EXPORT_PROJECTION_UNVERIFIED");
+    }
+  }
   if (!live.migrationTag || live.migrationTag !== contract.targetTopology?.migrationTag) errors.push("LIVE_MIGRATION_TAG_MISMATCH");
   if (!same(live, baseline.topology)) errors.push("LIVE_TOPOLOGY_ANCHOR_MISMATCH");
   const versions = deploymentView?.versions;
@@ -169,6 +178,8 @@ function runCli() {
   if (process.argv.includes("--require-live-match")) {
     errors.push(...validateFullLiveAgainstBaseline(contract, {
       deploymentView: requiredJson("--active-deployment", errors), versionView: requiredJson("--live-version", errors),
+      durableObjectNamespacesView: arg("--durable-object-namespaces")
+        ? requiredJson("--durable-object-namespaces", errors) : undefined,
     }));
   }
   if (errors.length) {

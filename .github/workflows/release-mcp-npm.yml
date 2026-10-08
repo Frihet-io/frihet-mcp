@@ -772,15 +772,26 @@ jobs:
           trap 'rm -rf "$STATE_DIR"' EXIT
           WORKER_NAME="$(jq -er '.workerName' full-topology-baseline.json)"
           test "$WORKER_NAME" = "frihet-remote-mcp"
+          api_get() {
+            builtin printf '%s\n' "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              | curl -fsSL --retry 3 --retry-all-errors --retry-delay 3 \
+              --connect-timeout 10 --max-time 45 \
+              -H @- \
+              -H 'Content-Type: application/json' \
+              "https://api.cloudflare.com/client/v4/$1"
+          }
           ./node_modules/.bin/wrangler deployments status --config wrangler.toml \
             --name "$WORKER_NAME" --json > "$STATE_DIR/deployment.json"
           LIVE_VERSION_ID="$(jq -er '.versions[0].version_id' "$STATE_DIR/deployment.json")"
           ./node_modules/.bin/wrangler versions view "$LIVE_VERSION_ID" --config wrangler.toml \
             --name "$WORKER_NAME" --json > "$STATE_DIR/version.json"
+          api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+            > "$STATE_DIR/namespaces.json"
           node ../../scripts/check-full-worker-topology.mjs \
             --require-established --require-live-match \
             --active-deployment "$STATE_DIR/deployment.json" \
-            --live-version "$STATE_DIR/version.json"
+            --live-version "$STATE_DIR/version.json" \
+            --durable-object-namespaces "$STATE_DIR/namespaces.json"
 
       - name: Deploy full-profile Worker with source-SHA + version vars
         # The source SHA + version vars are the second half of the
