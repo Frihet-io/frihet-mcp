@@ -1250,6 +1250,28 @@ export default {
       ), env);
     }
 
+    // Legal-page HEAD requests carry the same HTML metadata as GET, without
+    // a body. Intercept both before the generic HEAD response below.
+    if (
+      openai
+      && (url.pathname === "/support" || url.pathname === "/privacy")
+      && (request.method === "GET" || request.method === "HEAD")
+    ) {
+      return new Response(
+        request.method === "HEAD"
+          ? null
+          : url.pathname === "/support" ? OPENAI_SUPPORT_HTML : OPENAI_PRIVACY_HTML,
+        {
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Language": "en",
+            "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+            ...getSecurityHeaders(env),
+          },
+        },
+      );
+    }
+
     // The reviewed host exposes no parallel REST/OpenAPI contract under any
     // method. Keep HEAD aligned with the GET containment response so a scanner
     // cannot infer an undocumented OpenAPI surface from a generic health 200.
@@ -1345,20 +1367,6 @@ export default {
     // ---------------------------------------------------------------------------
     if (request.method === "GET") {
       const { pathname } = url;
-      if (openai && (pathname === "/support" || pathname === "/privacy")) {
-        return new Response(
-          pathname === "/support" ? OPENAI_SUPPORT_HTML : OPENAI_PRIVACY_HTML,
-          {
-            headers: {
-              "Content-Type": "text/html; charset=utf-8",
-              "Content-Language": "en",
-              "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
-              ...getSecurityHeaders(env),
-            },
-          },
-        );
-      }
-
       if (pathname === "/" && openai) {
         return new Response(WELL_KNOWN_MCP_OPENAI, {
           headers: {

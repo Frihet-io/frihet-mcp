@@ -317,7 +317,7 @@ test("OpenAI discovery points to dedicated scoped support and privacy pages", ()
   assert.match(descriptor, /privacy:\s*OPENAI_PRIVACY_URL/);
   assert.doesNotMatch(descriptor, /openapi/i);
 
-  assert.match(indexSrc, /if \(openai && \(pathname === "\/support" \|\| pathname === "\/privacy"\)\)/);
+  assert.match(indexSrc, /openai\s*&& \(url\.pathname === "\/support" \|\| url\.pathname === "\/privacy"\)\s*&& \(request\.method === "GET" \|\| request\.method === "HEAD"\)/);
   assert.match(indexSrc, /VICTOR BERTHELIUS PATO/);
   assert.match(indexSrc, /advances the workspace numbering counter/);
   assert.match(indexSrc, /vendor is created in a separate backend step and may remain even if the later expense write fails/);

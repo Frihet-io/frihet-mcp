@@ -32,6 +32,75 @@ function ancestorsOf(node) {
   return out;
 }
 
+// Exercise the production Worker wrapper with the same AST/VM approach used
+// below. The OAuth provider is never reached by these public-route requests.
+const workerExport = indexSource.statements.find((node) => ts.isExportAssignment(node));
+const workerExpression = workerExport && ts.isSatisfiesExpression(workerExport.expression)
+  ? workerExport.expression.expression : workerExport?.expression;
+assert.ok(workerExpression && ts.isObjectLiteralExpression(workerExpression));
+const securityConstant = findAll(indexSource, (node) => ts.isVariableDeclaration(node)
+  && node.name.getText(indexSource) === "BASE_SECURITY_HEADERS")[0];
+const securityFunctions = indexSource.statements.filter((node) => ts.isFunctionDeclaration(node)
+  && ["getSecurityHeaders", "withSecurityHeaders"].includes(node.name?.text));
+assert.ok(securityConstant?.initializer);
+assert.equal(securityFunctions.length, 2);
+const publicWorkerSource = ts.transpileModule(`
+  const BASE_SECURITY_HEADERS = ${securityConstant.initializer.getText(indexSource)};
+  ${securityFunctions.map((node) => node.getText(indexSource)).join("\n")}
+  (${workerExpression.getText(indexSource)})
+`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
+
+function publicWorkerRequest(pathname, method, mode = "true", origin = "https://openai-mcp.frihet.io") {
+  const worker = vm.runInNewContext(publicWorkerSource, {
+    URL, Request, Response, Headers,
+    OPENAI_REVIEW_ORIGIN: "https://openai-mcp.frihet.io",
+    OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH: "/.well-known/oauth-protected-resource/mcp",
+    OPENAI_CSP: "default-src 'none'",
+    OPENAI_SUPPORT_HTML: "<main>reviewed support fixture</main>",
+    OPENAI_PRIVACY_HTML: "<main>reviewed privacy fixture</main>",
+    isMcpRouteConfusion: () => false,
+    isOpenApiLookalikePath: () => false,
+    resolveFrihetAccessProfile: (value) => {
+      if (value === "true") return "openai";
+      if (value === "false") return "full";
+      throw new Error("access profile is not configured");
+    },
+  }, { timeout: 1000 });
+  return worker.fetch(new Request(`${origin}${pathname}`, { method }), { FRIHET_OPENAI_MODE: mode }, {});
+}
+
+for (const page of ["privacy", "support"]) {
+  test(`reviewed /${page} HEAD preserves GET HTML metadata with no response body`, async () => {
+    const get = await publicWorkerRequest(`/${page}`, "GET");
+    const head = await publicWorkerRequest(`/${page}`, "HEAD");
+    assert.equal(get.status, 200);
+    assert.equal(await get.text(), `<main>reviewed ${page} fixture</main>`);
+    assert.equal(get.headers.get("Content-Type"), "text/html; charset=utf-8");
+    assert.equal(get.headers.get("Content-Language"), "en");
+    assert.equal(get.headers.get("Cache-Control"), "public, max-age=3600, stale-while-revalidate=86400");
+    assert.equal(head.status, get.status);
+    assert.deepEqual([...head.headers], [...get.headers]);
+    assert.equal(head.body, null);
+    assert.equal(await head.text(), "");
+  });
+}
+
+test("legal-page HEAD parity does not widen the profile, origin or generic HEAD routes", async () => {
+  for (const pathname of ["/privacy", "/support"]) {
+    const full = await publicWorkerRequest(pathname, "HEAD", "false", "https://mcp.frihet.io");
+    assert.equal(full.status, 200);
+    assert.equal(full.headers.get("Content-Type"), "application/json");
+    const otherOrigin = await publicWorkerRequest(pathname, "HEAD", "true", "https://mcp.frihet.io");
+    assert.equal(otherOrigin.status, 421);
+    const unconfigured = await publicWorkerRequest(pathname, "HEAD", null);
+    assert.equal(unconfigured.status, 503);
+  }
+  const mcp = await publicWorkerRequest("/mcp", "HEAD");
+  assert.equal(mcp.status, 200);
+  assert.equal(mcp.headers.get("Content-Type"), "application/json");
+  assert.equal(mcp.body, null);
+});
+
 test("the reviewed host's GET / is intercepted before OAuthProvider and serves the same descriptor as /.well-known/mcp", () => {
   const rootIntercepts = findAll(indexSource, (node) =>
     ts.isIfStatement(node) && node.expression.getText(indexSource) === 'pathname === "/" && openai');
