@@ -197,6 +197,7 @@ const EXTERNAL_SIDE_EFFECTS: Readonly<Record<string, readonly ExternalSideEffect
   create_invoice: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
   duplicate_invoice: ["webhook_delivery_or_configuration"],
   create_credit_note: ["webhook_delivery_or_configuration"],
+  run_recurring_now: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
   update_invoice: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
   mark_invoice_paid: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
   delete_invoice: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
