@@ -114,4 +114,95 @@ describe("MCP Resources P1 Contract (#2340)", () => {
     assert.equal(parsed.data.length, 100);
     assert.match(parsed.note, /100 overdue invoices/i);
   });
+
+  test("resources declare explicit authority and provenance headers", async () => {
+    const server = new StubMcpServer();
+    registerAllResources(server as unknown as McpServer);
+
+    // API schema snapshot
+    const apiSchema = server.resources.get("frihet://api/schema");
+    assert.ok(apiSchema, "api-schema must be registered");
+    const apiSchemaText = (await apiSchema.handler("frihet://api/schema")).contents[0].text;
+    assert.match(apiSchemaText, /Informational Reference Summary Snapshot/i);
+    assert.match(apiSchemaText, /https:\/\/api\.frihet\.io\/v1\/openapi\.json/);
+    assert.match(apiSchema.config.description, /canonical contract/i);
+
+    // Tax rates
+    const taxRates = server.resources.get("frihet://tax/rates");
+    assert.ok(taxRates, "tax-rates must be registered");
+    const taxRatesText = (await taxRates.handler("frihet://tax/rates")).contents[0].text;
+    assert.match(taxRatesText, /Authority:/);
+    assert.match(taxRatesText, /Ley 37\/1992 del IVA \(AEAT\)/);
+    assert.match(taxRatesText, /Ley 20\/1991 del IGIC \(Agencia Tributaria Canaria\)/);
+    assert.match(taxRatesText, /Ley 8\/1991 del IPSI/);
+    assert.match(taxRatesText, /NOT a dynamic tax engine/i);
+
+    // Tax calendar
+    const taxCalendar = server.resources.get("frihet://tax/calendar");
+    assert.ok(taxCalendar, "tax-calendar must be registered");
+    const taxCalendarText = (await taxCalendar.handler("frihet://tax/calendar")).contents[0].text;
+    assert.match(taxCalendarText, /Authority: Calendario del Contribuyente/);
+
+    // Expense categories
+    const expenseCategories = server.resources.get("frihet://config/expense-categories");
+    assert.ok(expenseCategories, "expense-categories must be registered");
+    const expenseCategoriesText = (await expenseCategories.handler("frihet://config/expense-categories")).contents[0].text;
+    assert.match(expenseCategoriesText, /Authority: Statutory deductibility rules derived from Ley 35\/2006[\s\S]*Ley 37\/1992/);
+  });
+
+  test("plan-limits resource extracts quotas and usage from structured context and handles missing fields", async () => {
+    // 1. Nested plan object (as returned by live /context and demo client)
+    const mockClientNested = {
+      getBusinessContext: async () => ({
+        plan: {
+          name: "starter",
+          invoices: { used: 7, limit: 50 },
+          expenses: { used: 3, limit: 50 },
+          aiMessages: { used: 12, limit: 100 },
+        },
+      }),
+    } as unknown as IFrihetClient;
+
+    const server1 = new StubMcpServer();
+    registerAllResources(server1 as unknown as McpServer, mockClientNested);
+    const res1 = server1.resources.get("frihet://status/plan-limits");
+    assert.ok(res1);
+    const parsed1 = JSON.parse((await res1.handler("frihet://status/plan-limits")).contents[0].text);
+    assert.equal(parsed1.plan, "starter");
+    assert.deepEqual(parsed1.limits, { invoices: 50, expenses: 50, aiMessages: 100 });
+    assert.deepEqual(parsed1.usage, { invoices: 7, expenses: 3, aiMessages: 12 });
+
+    // 2. Direct top-level limits and usage with string plan
+    const mockClientDirect = {
+      getBusinessContext: async () => ({
+        plan: "pro",
+        limits: { invoices: 999, apiRateLimit: 100 },
+        usage: { invoices: 120, apiRateLimit: 12 },
+      }),
+    } as unknown as IFrihetClient;
+
+    const server2 = new StubMcpServer();
+    registerAllResources(server2 as unknown as McpServer, mockClientDirect);
+    const res2 = server2.resources.get("frihet://status/plan-limits");
+    assert.ok(res2);
+    const parsed2 = JSON.parse((await res2.handler("frihet://status/plan-limits")).contents[0].text);
+    assert.equal(parsed2.plan, "pro");
+    assert.deepEqual(parsed2.limits, { invoices: 999, apiRateLimit: 100 });
+    assert.deepEqual(parsed2.usage, { invoices: 120, apiRateLimit: 12 });
+
+    // 3. Fallback on empty context
+    const mockClientEmpty = {
+      getBusinessContext: async () => ({}),
+    } as unknown as IFrihetClient;
+
+    const server3 = new StubMcpServer();
+    registerAllResources(server3 as unknown as McpServer, mockClientEmpty);
+    const res3 = server3.resources.get("frihet://status/plan-limits");
+    assert.ok(res3);
+    const parsed3 = JSON.parse((await res3.handler("frihet://status/plan-limits")).contents[0].text);
+    assert.equal(parsed3.plan, "free");
+    assert.deepEqual(parsed3.limits, {});
+    assert.deepEqual(parsed3.usage, {});
+  });
 });
+

@@ -57,7 +57,7 @@ AUTH
 
 ORIENT BEFORE ACTING (read-only)
 - get_business_context — fiscal zone, currency, IRPF/IVA defaults, plan limits. Call this first; the correct tax treatment depends on it.
-- Resources frihet://tax/rates and frihet://tax/calendar carry the Spanish rate table (IVA / IGIC / IPSI) and the filing deadlines. Read them instead of recalling a rate.
+- Resources carry informational reference data with declared provenance: frihet://tax/rates and frihet://tax/calendar (Spanish statutory schedules and deadlines), frihet://config/expense-categories (LIRPF/LIVA deductibility guidelines), frihet://config/countries and currencies (defaults and ISO codes), frihet://api/schema (endpoint snapshot; canonical at https://api.frihet.io/v1/openapi.json). Read them instead of guessing, but treat as informational: writing tools and server endpoints enforce business and fiscal invariants server-side.
 
 CAPABILITY DISCOVERY
 - Every tool in tools/list carries _meta["${CAPABILITY_META_KEY}"] = {callability, writesFrihet, externalInteraction, externalSideEffects}. Read it before you call.
@@ -314,7 +314,7 @@ export async function captureAgentOnboardingDescriptor(): Promise<AgentOnboardin
         {
           call: "resources/read frihet://tax/rates",
           kind: "read",
-          note: "Authoritative IVA / IGIC / IPSI table. Do not recall a rate from memory.",
+          note: "Spanish statutory IVA / IGIC / IPSI reference schedule. Do not recall a rate from memory; server validates transaction math.",
         },
         {
           call: "list_clients",

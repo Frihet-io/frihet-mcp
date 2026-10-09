@@ -20,7 +20,12 @@ export const MCP_RESOURCE_COUNT = MCP_STATIC_RESOURCE_COUNT + MCP_DYNAMIC_RESOUR
 /*  Static data                                                        */
 /* ------------------------------------------------------------------ */
 
-const API_SCHEMA_SUMMARY = `Frihet ERP REST API — OpenAPI 3.1
+const API_SCHEMA_SUMMARY = `Frihet ERP REST API — Informational Reference Summary Snapshot
+=============================================================
+Notice: This resource is an informational, non-exhaustive reference snapshot
+of core REST endpoints for LLM context. The canonical, authoritative live
+contract is the OpenAPI 3.1 specification at https://api.frihet.io/v1/openapi.json.
+
 Base URL: https://api.frihet.io/v1
 Docs: https://docs.frihet.io/desarrolladores/api-reference
 
@@ -86,8 +91,18 @@ Content-Type: application/json
 Monetary values use the currency declared by each record; amounts are decimal major units.
 Dates in ISO 8601 format (YYYY-MM-DD or full datetime).`;
 
-const TAX_RATES = `Spanish Tax Rates by Fiscal Zone
-================================
+const TAX_RATES = `Spanish Tax Rates & Fiscal Zones — Informational Reference Schedule
+===================================================================
+Authority:
+  - Peninsula & Balearics (IVA): Ley 37/1992 del IVA (AEAT)
+  - Canary Islands (IGIC): Ley 20/1991 del IGIC (Agencia Tributaria Canaria)
+  - Ceuta & Melilla (IPSI): Ley 8/1991 del IPSI (Servicios Tributarios locales)
+  - Withholding (IRPF): Ley 35/2006 del IRPF (AEAT)
+  - EU Intra-community: Council Directive 2006/112/EC (Reverse Charge / OSS)
+
+Notice: This resource provides reference rate schedules and classification guidelines.
+It is NOT a dynamic tax engine. Transaction rates must be validated against the operation
+date, place of supply, and fiscal status. Server endpoints validate fiscal rules server-side.
 
 PENINSULA & BALEARIC ISLANDS — IVA (Impuesto sobre el Valor Añadido)
   General:    21%  — Most goods and services
@@ -129,8 +144,15 @@ SPECIAL REGIMES
   Simplified regime: Fixed quarterly quotas based on activity modules
   Agriculture: 12% / 10.5% flat-rate compensation`;
 
-const TAX_CALENDAR = `Spanish Quarterly Tax Calendar
-===============================
+const TAX_CALENDAR = `Spanish Tax Calendar — Statutory Filing Deadlines Reference
+===========================================================
+Authority: Calendario del Contribuyente (Agencia Tributaria AEAT / ATC)
+
+Notice: Informational reference of general quarterly and annual statutory filing
+deadlines in Spain. Deadlines shifting to next business day on weekends/holidays
+or direct-debit (domiciliación bancaria) advance deadlines (typically 5 days earlier)
+are not modeled here. Always verify filing dates with your gestoría or official
+AEAT/ATC electronic office.
 
 All deadlines apply to the corresponding fiscal quarter unless noted.
 
@@ -178,8 +200,15 @@ KEY DATES SUMMARY
   Jan 30 — Q4 filings + annual summaries (390, 180, 190)
   Apr 1–Jun 30 — Annual income tax (Modelo 100)`;
 
-const EXPENSE_CATEGORIES = `Frihet Expense Categories & Deductibility Rules
-=================================================
+const EXPENSE_CATEGORIES = `Frihet Expense Categories & Statutory Deductibility Guidelines
+==============================================================
+Authority: Statutory deductibility rules derived from Ley 35/2006 (IRPF, art. 30)
+and Ley 37/1992 (IVA, arts. 92-96).
+
+Notice: Frihet standard business category mapping with statutory deductibility rules.
+Deductibility requires valid invoices, direct correlation with business activity
+(afectación exclusiva), and accounting registration. Consult your tax advisor
+(gestoría) for specific amortizations or mixed-use deductions.
 
 1. OFFICE (oficina)
    Examples: Rent, utilities, internet, phone, office supplies, cleaning
@@ -416,8 +445,9 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://api/schema",
     {
       description:
-        "Selected core REST endpoint summary with authentication, rate limits, pagination, and error codes. " +
-        "/ Resumen de endpoints REST principales, autenticación, límites, paginación y errores.",
+        "Informational snapshot summary of selected core REST endpoints, auth, and rate limits. " +
+        "Canonical contract: https://api.frihet.io/v1/openapi.json. " +
+        "/ Resumen informativo no exhaustivo de endpoints REST principales; el contrato canónico reside en openapi.json.",
       mimeType: "text/plain",
     },
     async () => ({
@@ -436,9 +466,9 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://tax/rates",
     {
       description:
-        "Current tax rates by Spanish fiscal zone: Peninsula IVA (21/10/4%), Canary Islands IGIC (7/3/0%), " +
-        "Ceuta IPSI, EU reverse charge, international exports, IRPF withholding, and special regimes. " +
-        "/ Tipos impositivos por zona fiscal: IVA, IGIC, IPSI, intracomunitario, exportaciones, IRPF, regímenes especiales.",
+        "Spanish statutory tax rate reference (AEAT/ATC/IPSI, IVA/IGIC/IPSI/IRPF). " +
+        "Informational reference schedule; server validates tax math per transaction. " +
+        "/ Referencia normativa de tipos impositivos por zona fiscal en España.",
       mimeType: "text/plain",
     },
     async () => ({
@@ -457,7 +487,8 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://tax/calendar",
     {
       description:
-        "Spanish quarterly tax calendar with filing deadlines for Modelo 303, 130, 390, 420 (IGIC), and annual returns. " +
+        "Spanish tax filing calendar reference (Calendario del Contribuyente AEAT/ATC). " +
+        "Informational reference for statutory filing deadlines. " +
         "/ Calendario fiscal trimestral español con plazos de presentación de modelos.",
       mimeType: "text/plain",
     },
@@ -477,8 +508,8 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://config/expense-categories",
     {
       description:
-        "The 8 expense categories in Frihet with deductibility rules, IVA treatment, and amortization periods. " +
-        "Essential for correctly categorizing business expenses. " +
+        "Frihet standard expense categories and statutory deductibility guidelines (LIRPF/LIVA). " +
+        "Informational classification guide. " +
         "/ Las 8 categorías de gastos con reglas de deducibilidad, IVA y amortización.",
       mimeType: "text/plain",
     },
@@ -541,8 +572,8 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     {
       description:
         "61 supported countries with ISO codes, fiscal zones (peninsula, canarias, ceuta, melilla, eu, international), " +
-        "default tax rates, tax names, default currencies, and invoice prefixes. " +
-        "/ 61 países soportados con zonas fiscales, tipos impositivos, divisas y prefijos de factura.",
+        "default tax rates, tax names, default currencies, and invoice prefixes. Note: default rates are onboarding suggestions only, not legal determination. " +
+        "/ 61 países soportados con zonas fiscales, tipos impositivos por defecto y prefijos de factura.",
       mimeType: "application/json",
     },
     async () => ({
@@ -654,17 +685,44 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
       "frihet://status/plan-limits",
       {
         description:
-          "Live plan limits and current usage — plan tier, invoices/month, AI messages/day, team members, " +
-          "integrations, API requests/minute, and real-time usage counters. " +
-          "/ Límites del plan y uso actual en vivo — tier, facturas/mes, mensajes IA/día, miembros, integraciones, API req/min.",
+          "Live plan tier, quotas, and usage counters (invoices, expenses, AI messages) from business context. " +
+          "/ Nivel de plan, cuotas y contadores de uso (facturas, gastos, mensajes IA) del contexto del negocio.",
         mimeType: "application/json",
       },
       async () => {
         const ctx = await client.getBusinessContext();
-        const plan = (ctx as Record<string, unknown>).plan ?? "free";
-        const limits = (ctx as Record<string, unknown>).limits ?? {};
-        const usage = (ctx as Record<string, unknown>).usage ?? {};
-        const result = { plan, limits, usage };
+        const planRaw = (ctx as Record<string, unknown>).plan;
+        let plan = "free";
+        let limits = (ctx as Record<string, unknown>).limits as Record<string, unknown> | undefined;
+        let usage = (ctx as Record<string, unknown>).usage as Record<string, unknown> | undefined;
+
+        if (typeof planRaw === "string") {
+          plan = planRaw;
+        } else if (typeof planRaw === "object" && planRaw !== null) {
+          const planObj = planRaw as Record<string, unknown>;
+          plan = typeof planObj.name === "string" ? planObj.name : "free";
+
+          if ((!limits || Object.keys(limits).length === 0) && (!usage || Object.keys(usage).length === 0)) {
+            const extractedLimits: Record<string, unknown> = {};
+            const extractedUsage: Record<string, unknown> = {};
+            for (const [key, val] of Object.entries(planObj)) {
+              if (key !== "name" && typeof val === "object" && val !== null) {
+                const item = val as Record<string, unknown>;
+                if ("limit" in item) extractedLimits[key] = item.limit;
+                if ("used" in item) extractedUsage[key] = item.used;
+              }
+            }
+            limits = extractedLimits;
+            usage = extractedUsage;
+          }
+        }
+
+        const result = {
+          plan,
+          limits: limits ?? {},
+          usage: usage ?? {},
+          ...(typeof planRaw === "object" && planRaw !== null ? { breakdown: planRaw } : {}),
+        };
         return {
           contents: [
             {
