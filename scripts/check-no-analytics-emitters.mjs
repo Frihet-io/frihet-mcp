@@ -101,7 +101,13 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
     dependencies: { "@modelcontextprotocol/sdk": "1.31.0" },
     devDependencies: { "@types/node": "^22.0.0", ajv: "8.18.0", typescript: "^5.7.0", zod: "^3.25.1" },
     optionalDependencies: {},
-    overrides: { hono: "~4.12.34" },
+    overrides: {
+      "@ai-sdk/provider-utils": ">=4.0.33",
+      hono: ">=4.13.13",
+      "ip-address": ">=10.7.3",
+      "proxy-addr": ">=2.0.8",
+      qs: ">=6.15.4",
+    },
     peerDependencies: { zod: ">=3.25.1" },
     resolutions: {},
   },
@@ -111,7 +117,7 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
       "@modelcontextprotocol/sdk": "1.31.0",
       agents: "0.7.5",
       "firebase-auth-cloudflare-workers": "^2.0.6",
-      hono: "~4.12.34",
+      hono: ">=4.13.13",
       zod: "^3.25.0",
     },
     devDependencies: {
@@ -121,8 +127,13 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
     },
     optionalDependencies: {},
     overrides: {
-      "@modelcontextprotocol/sdk": { "@hono/node-server": "2.0.12", hono: "~4.12.34" },
+      "@ai-sdk/provider-utils": ">=4.0.33",
+      "@modelcontextprotocol/sdk": { "@hono/node-server": "2.0.12", hono: ">=4.13.13" },
       agents: { "@modelcontextprotocol/sdk": "1.31.0" },
+      hono: ">=4.13.13",
+      "ip-address": ">=10.7.3",
+      "proxy-addr": ">=2.0.8",
+      qs: ">=6.15.4",
       nanoid: "5.1.16",
     },
     peerDependencies: {},
@@ -268,8 +279,8 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/oauth-token-family.ts": "1facce53ff0b684d4f51c14390e775fe07732ac215a4747a428d90e0428693fb", // OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "11418deebf57631c1e39a2a6fea11eedd7de0dc23c26b5768ae91d5a29dfcb7b",
-  "workers/remote-mcp/package-lock.json": "c36f130ac2574f3fac913f72304e6658bef9a9c341910992bd757673d57fdaf3",
+  "package-lock.json": "62bcc09846f3544ea75d682bc53a8b944f0f525abdf64fa7e0459046fecefbab",
+  "workers/remote-mcp/package-lock.json": "a17f8d10b439e050754559be3f49507f92c98ada81c1cb82cb3e749da6ea9584",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
