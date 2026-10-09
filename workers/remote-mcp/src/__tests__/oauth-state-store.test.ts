@@ -34,6 +34,15 @@ class FakeStorage {
     return this.values.delete(key);
   }
 
+  async list(options: { prefix?: string } = {}): Promise<Map<string, unknown>> {
+    const prefix = options.prefix ?? "";
+    const matched = new Map<string, unknown>();
+    for (const [key, value] of this.values) {
+      if (key.startsWith(prefix)) matched.set(key, structuredClone(value));
+    }
+    return matched;
+  }
+
   async transaction<T>(callback: (transaction: DurableObjectTransaction) => Promise<T>): Promise<T> {
     const snapshot = new Map(
       [...this.values].map(([key, value]) => [key, structuredClone(value)]),
@@ -666,4 +675,280 @@ test("token family bindings accept the full provider-valid Firebase UID segment"
     }, "PUT"));
     assert.equal(response.status, 204, JSON.stringify(uid));
   }
+});
+
+// ---------------------------------------------------------------------------
+// Rotation outbox: a /token-family/commit that rotates keyId A → B must enqueue
+// a Durable-Object-backed revoke intent for the OLD keyId A, atomic with the
+// new binding overwrite, so a Worker termination never strands A as an active
+// credential with no path back to the family.
+// ---------------------------------------------------------------------------
+
+async function initializeWithRefreshToken(
+  store: OAuthStateStore,
+  hash: string,
+  binding: { uid: string; keyId: string } = OPENAI_BINDING,
+): Promise<void> {
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash: hash,
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: binding,
+  }, "PUT"))).status, 204);
+}
+
+test("rotation: a /commit that overwrites keyId writes a revoke intent for the old key only, atomically with the new binding", async () => {
+  const { store, state } = makeStore();
+  const refreshHash = "1".repeat(64);
+  await initializeWithRefreshToken(store, refreshHash);
+
+  const begin = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: refreshHash,
+  });
+  assert.equal(begin.outcome, "started");
+
+  const newRefreshHash = "2".repeat(64);
+  const rotated = await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: newRefreshHash,
+    apiKeyBinding: { ...OPENAI_BINDING, keyId: "Z".repeat(20) },
+  });
+  assert.equal(rotated.outcome, "committed");
+  assert.equal(rotated.apiKeyBinding.keyId, "Z".repeat(20), "the new keyId is bound to the family");
+
+  const intent = state.storage.values.get(
+    "oauth_revoke_previous_binding:" + OPENAI_BINDING.keyId,
+  ) as { version: number; userId: string; keyId: string; attempt: number } | undefined;
+  assert.ok(intent, "the OLD keyId has an outbox entry");
+  assert.equal(intent?.userId, OPENAI_BINDING.uid);
+  assert.equal(intent?.keyId, OPENAI_BINDING.keyId);
+  assert.equal(intent?.attempt, 0);
+  assert.ok((state.storage.alarm ?? 0) <= Date.now() + 5_000, "the alarm is armed for the outbox");
+});
+
+test("rotation: the alarm revokes the old keyId through the outbox and clears it on success", async () => {
+  const revoked: { uid?: string; keyId?: string }[] = [];
+  const cleanupAuthorities: OAuthCleanupAuthorities = {
+    async revokeGrant(): Promise<void> {},
+    async revokeBackend(_env, binding): Promise<boolean> {
+      revoked.push({ uid: binding?.uid, keyId: binding?.keyId });
+      return true;
+    },
+    async revokeBackendCorrelation(): Promise<boolean> {
+      return true;
+    },
+  };
+  const { store, state } = makeStore({ cleanupAuthorities });
+  const refreshHash = "1".repeat(64);
+  await initializeWithRefreshToken(store, refreshHash);
+
+  const begin = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: refreshHash,
+  });
+  assert.equal(begin.outcome, "started");
+
+  const oldKeyId = OPENAI_BINDING.keyId;
+  await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "2".repeat(64),
+    apiKeyBinding: { ...OPENAI_BINDING, keyId: "A".repeat(20) },
+  });
+
+  await store.alarm();
+
+  assert.deepEqual(revoked, [{ uid: OPENAI_BINDING.uid, keyId: oldKeyId }]);
+  assert.equal(
+    state.storage.values.has("oauth_revoke_previous_binding:" + oldKeyId),
+    false,
+    "the intent is removed once the authority acknowledges",
+  );
+  const familyRecord = state.storage.values.get("oauth_token_family") as {
+    apiKeyBinding?: { keyId: string };
+  };
+  assert.equal(familyRecord?.apiKeyBinding?.keyId, "A".repeat(20), "the family keeps the new binding");
+});
+
+test("rotation: a failed revoke retries with backoff and is idempotent on the eventual success", async () => {
+  let backendCalls = 0;
+  const revoked: { keyId?: string }[] = [];
+  const cleanupAuthorities: OAuthCleanupAuthorities = {
+    async revokeGrant(): Promise<void> {},
+    async revokeBackend(_env, binding): Promise<boolean> {
+      backendCalls += 1;
+      if (backendCalls < 2) return false;
+      revoked.push({ keyId: binding?.keyId });
+      return true;
+    },
+    async revokeBackendCorrelation(): Promise<boolean> {
+      return true;
+    },
+  };
+  const { store, state } = makeStore({ cleanupAuthorities });
+  const refreshHash = "1".repeat(64);
+  await initializeWithRefreshToken(store, refreshHash);
+
+  const begin = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: refreshHash,
+  });
+  assert.equal(begin.outcome, "started");
+
+  const oldKeyId = OPENAI_BINDING.keyId;
+  await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "2".repeat(64),
+    apiKeyBinding: { ...OPENAI_BINDING, keyId: "B".repeat(20) },
+  });
+
+  await store.alarm();
+  assert.equal(backendCalls, 1, "the first attempt fires the authority");
+  let intent = state.storage.values.get(
+    `oauth_revoke_previous_binding:${oldKeyId}`,
+  ) as { attempt: number } | undefined;
+  assert.ok(intent, "the intent remains after a failed revoke");
+  assert.equal(intent?.attempt, 1);
+
+  await store.alarm();
+  assert.equal(backendCalls, 2, "the second attempt fires the authority again");
+  assert.equal(
+    state.storage.values.has(`oauth_revoke_previous_binding:${oldKeyId}`),
+    false,
+    "the intent is cleared on the eventual success",
+  );
+  assert.deepEqual(revoked, [{ keyId: oldKeyId }]);
+
+  // A subsequent alarm must NOT re-revoke the already-acknowledged old keyId.
+  await store.alarm();
+  assert.equal(backendCalls, 2, "no retry once the outbox is cleared");
+});
+
+test("rotation: two rotations queue two independent revoke intents", async () => {
+  const revoked: { keyId?: string }[] = [];
+  const cleanupAuthorities: OAuthCleanupAuthorities = {
+    async revokeGrant(): Promise<void> {},
+    async revokeBackend(_env, binding): Promise<boolean> {
+      revoked.push({ keyId: binding?.keyId });
+      return true;
+    },
+    async revokeBackendCorrelation(): Promise<boolean> {
+      return true;
+    },
+  };
+  const { store, state } = makeStore({ cleanupAuthorities });
+  const firstHash = "1".repeat(64);
+  await initializeWithRefreshToken(store, firstHash, { ...OPENAI_BINDING, keyId: "K".repeat(20) });
+
+  const begin1 = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: firstHash,
+  });
+  assert.equal(begin1.outcome, "started");
+  const secondHash = "2".repeat(64);
+  await familyJson(store, "/token-family/commit", {
+    leaseId: begin1.leaseId,
+    newRefreshTokenHash: secondHash,
+    apiKeyBinding: { ...OPENAI_BINDING, keyId: "L".repeat(20) },
+  });
+
+  const begin2 = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: secondHash,
+  });
+  assert.equal(begin2.outcome, "started");
+  const thirdHash = "3".repeat(64);
+  await familyJson(store, "/token-family/commit", {
+    leaseId: begin2.leaseId,
+    newRefreshTokenHash: thirdHash,
+    apiKeyBinding: { ...OPENAI_BINDING, keyId: "M".repeat(20) },
+  });
+
+  assert.ok(state.storage.values.has("oauth_revoke_previous_binding:" + "K".repeat(20)));
+  assert.ok(state.storage.values.has("oauth_revoke_previous_binding:" + "L".repeat(20)));
+
+  await store.alarm();
+  await store.alarm();
+
+  const revokedKeyIds = revoked.map((entry) => entry.keyId).sort();
+  assert.deepEqual(revokedKeyIds, ["K".repeat(20), "L".repeat(20)].sort());
+  const familyRecord = state.storage.values.get("oauth_token_family") as {
+    apiKeyBinding?: { keyId: string };
+  };
+  assert.equal(familyRecord?.apiKeyBinding?.keyId, "M".repeat(20));
+});
+
+test("rotation: a commit that keeps the same keyId does NOT enqueue an outbox", async () => {
+  const { store, state } = makeStore();
+  const refreshHash = "1".repeat(64);
+  await initializeWithRefreshToken(store, refreshHash);
+
+  const begin = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: refreshHash,
+  });
+  assert.equal(begin.outcome, "started");
+
+  await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "2".repeat(64),
+    apiKeyBinding: OPENAI_BINDING,
+  });
+
+  const outboxKeys = [...state.storage.values.keys()].filter((key) =>
+    typeof key === "string" && key.startsWith("oauth_revoke_previous_binding:")
+  );
+  assert.equal(outboxKeys.length, 0, "no outbox is enqueued for an idempotent rotation");
+});
+
+test("rotation: a /commit that omits apiKeyBinding keeps the family's existing binding and is not a rotation", async () => {
+  const { store, state } = makeStore();
+  const refreshHash = "1".repeat(64);
+  await initializeWithRefreshToken(store, refreshHash);
+
+  const begin = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: refreshHash,
+  });
+  assert.equal(begin.outcome, "started");
+
+  const committed = await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "2".repeat(64),
+  });
+  assert.equal(committed.outcome, "committed");
+  assert.deepEqual(committed.apiKeyBinding, OPENAI_BINDING);
+
+  const outboxKeys = [...state.storage.values.keys()].filter((key) =>
+    typeof key === "string" && key.startsWith("oauth_revoke_previous_binding:")
+  );
+  assert.equal(outboxKeys.length, 0);
+});
+
+test("rotation: a hard identity mismatch (different uid) still tombstones the family", async () => {
+  const { store, state } = makeStore();
+  const refreshHash = "1".repeat(64);
+  await initializeWithRefreshToken(store, refreshHash);
+
+  const begin = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: refreshHash,
+  });
+  assert.equal(begin.outcome, "started");
+
+  const outcome = await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "2".repeat(64),
+    apiKeyBinding: { ...OPENAI_BINDING, uid: "another-user" },
+  });
+  assert.equal(outcome.outcome, "revoked", "a forged binding tombstones the family");
+  assert.ok(
+    state.storage.values.has("oauth_token_family_cleanup"),
+    "the tombstone arms the cleanup outbox",
+  );
+
+  const outboxKeys = [...state.storage.values.keys()].filter((key) =>
+    typeof key === "string" && key.startsWith("oauth_revoke_previous_binding:")
+  );
+  assert.equal(outboxKeys.length, 0, "no rotation outbox is enqueued for a forgery");
 });
