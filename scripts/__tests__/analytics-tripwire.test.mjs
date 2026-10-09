@@ -166,7 +166,7 @@ describe("anti-defang contract", () => {
     });
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES[".github/workflows/ci.yml"],
-      "f39fc984aa328aa3cebae66d239d15d92eb05b3896e5365c69dd40bea09afce2",
+      "9a594e290d8ecc91a205d73077e2e269951a929dcc0791e2868575e62a3321e0",
     );
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES["scripts/audit-mcp-refs.mjs"],
