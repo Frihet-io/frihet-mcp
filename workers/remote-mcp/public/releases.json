@@ -3,15 +3,15 @@
   "languageCount": 17,
   "lastEmit": "2026-07-12T01:39:18.540Z",
   "manifestChecksum": "cb7bccb0cc7fcbb4c0189809cf6368eec4adc6955b4701aae97f64f505bd1782",
-  "mcpToolCount": 158,
+  "mcpToolCount": 156,
   "surfaceCounts": {
     "localFull": {
-      "tools": 163,
+      "tools": 161,
       "resources": 11,
       "prompts": 10
     },
     "remoteGrouped": {
-      "tools": 166,
+      "tools": 164,
       "resources": 7,
       "prompts": 10
     },
@@ -50,11 +50,11 @@
     {
       "version": "1.18.0",
       "date": "2026-09-03",
-      "mcpToolCount": 158,
-      "toolNamesCount": 166,
+      "mcpToolCount": 156,
+      "toolNamesCount": 164,
       "resourcesCount": 7,
       "promptsCount": 10,
-      "notes": "Adds the read-only, workspace-scoped global_search canonical operation for invoices, expenses, vendors, clients, and products. The default hosted grouped profile now exposes 158 canonical operations plus 5 fiscal aliases and 3 discovery names; the separately reviewed OpenAI profile is unchanged and is not deployed by the default release workflow. This source release also carries corrected e-invoice/client contracts, the offline cross-surface authority gate, the profile-scoped OAuth permission mirror, and the fail-closed npm/full-profile Worker provenance pipeline."
+      "notes": "Adds the read-only, workspace-scoped global_search canonical operation for invoices, expenses, vendors, clients, and products. The default hosted grouped profile now exposes 156 canonical operations plus 5 fiscal aliases and 3 discovery names; the separately reviewed OpenAI profile is unchanged and is not deployed by the default release workflow. This source release also carries the onboarding tools withdrawal tracked under issue #124 (onboarding_status / onboarding_persona_set removed because the Frihet-ERP /v1/onboarding/* family is not yet shipped — see README 'Onboarding — withdrawn via #124'), corrected e-invoice/client contracts, the offline cross-surface authority gate, the profile-scoped OAuth permission mirror, and the fail-closed npm/full-profile Worker provenance pipeline."
     },
     {
       "version": "1.16.4",
@@ -84,7 +84,7 @@
       "version": "1.16.0",
       "date": "2026-07-18",
       "mcpToolCount": 157,
-      "notes": "outputSchema coverage complete (160/160 schemas across 158 tools); honest OAuth consent-scope disclosure (#82)."
+      "notes": "outputSchema coverage complete (160/160 schemas across 156 tools); honest OAuth consent-scope disclosure (#82)."
     },
     {
       "version": "1.15.2",

@@ -806,14 +806,6 @@ export class DemoFrihetClient implements IFrihetClient {
     };
   }
 
-  // ---------------------------------------------------------------- Onboarding
-  async getOnboardingStatus(): Promise<Rec> {
-    return { workspaceId: "demo_ws_001", persona: "autonomo", completedSteps: ["profile"], pendingSteps: ["bank", "invoice"], percentComplete: 33, startedAt: DEMO_NOW, ...READ_STAMP };
-  }
-  async setOnboardingPersona(data: { persona: "autonomo" | "empresa" | "agencia" | "gestoria" }): Promise<Rec> {
-    return { workspaceId: "demo_ws_001", persona: data.persona, updatedAt: DEMO_NOW, ...READ_STAMP };
-  }
-
   // ---------------------------------------------------------------- Permissions
   async getPermissionsMatrix(): Promise<Rec> {
     return {

@@ -66,9 +66,9 @@ Run `/frihet status` — if you see your account info, you're ready.
 | `/frihet webhooks` | Configure automation triggers | `/frihet webhooks` |
 | `/frihet setup` | Guided connection setup | `/frihet setup` |
 
-## MCP catalogue (158 canonical operations)
+## MCP catalogue (156 canonical operations)
 
-The table below lists the core resource groups. The catalogue contains **158 canonical operations across 20+ domains**; alias and discovery names are profile-specific. See the [README catalogue](https://github.com/Frihet-io/frihet-mcp#catalogue-operations-158) for the full list and capability semantics.
+The table below lists the core resource groups. The catalogue contains **156 canonical operations across 20+ domains**; alias and discovery names are profile-specific. See the [README catalogue](https://github.com/Frihet-io/frihet-mcp#catalogue-operations-156) for the full list and capability semantics.
 
 | Resource | Tools | Operations |
 |----------|-------|------------|

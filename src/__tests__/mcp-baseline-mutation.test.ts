@@ -30,8 +30,8 @@ describe("MCP Compatibility Lab — Mutation Proofs", () => {
   test("fixture setup: capture valid baseline", async () => {
     goldenBaseline = await runMcpBaseline();
     assert.equal(goldenBaseline.summary.overallStatus, "PASS_WITH_GAPS");
-    assert.equal(goldenBaseline.summary.totalTools, 163);
-    assert.equal(goldenBaseline.summary.canonicalOperations, 158);
+    assert.equal(goldenBaseline.summary.totalTools, 161);
+    assert.equal(goldenBaseline.summary.canonicalOperations, 156);
     assert.equal(goldenBaseline.summary.resources, 11);
     assert.equal(goldenBaseline.summary.prompts, 10);
     assert.equal(goldenBaseline.summary.checks.pass, 21);
@@ -43,7 +43,7 @@ describe("MCP Compatibility Lab — Mutation Proofs", () => {
     const mutated = structuredClone(goldenBaseline);
     mutated.tools = mutated.tools.filter((t) => t.name !== "create_invoice");
     mutated.summary.totalTools = mutated.tools.length;
-    mutated.summary.canonicalOperations = 156;
+    mutated.summary.canonicalOperations = 154;
 
     assert.throws(
       () => assertMcpBaseline(mutated, goldenBaseline),

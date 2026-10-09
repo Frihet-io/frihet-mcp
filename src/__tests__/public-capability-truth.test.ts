@@ -183,8 +183,8 @@ test("real SDK surfaces match the generated public capability contract", async (
       ]),
     ),
     {
-      localFull: { tools: 163, resources: 11, prompts: 10 },
-      remoteGrouped: { tools: 166, resources: 7, prompts: 10 },
+      localFull: { tools: 161, resources: 11, prompts: 10 },
+      remoteGrouped: { tools: 164, resources: 7, prompts: 10 },
       openaiFull: { tools: 33, resources: 0, prompts: 0 },
     },
   );
@@ -282,9 +282,13 @@ test("canonical callability classes remain conservative and exhaustive", async (
   // 180/415/418/425/AIEM/200/202 moved runtime_checked → unavailable: Frihet-ERP
   // has no route for them (publicApi.ts serves fiscal/modelo/{303,130,390,347}
   // only; no /igic/* and no /is/* route).
+  // onboarding_status / onboarding_persona_set withdrawn via #124: removed
+  // entirely from the catalogue instead of being runtime_checked, so the
+  // runtime_checked count drops by 2 (their inner withBackendGuard still
+  // exists in src/tools/onboarding.ts and remains the reference pattern).
   assert.deepEqual(counts, {
     api_dependent: 100,
-    runtime_checked: 42,
+    runtime_checked: 40,
     deferred: 8,
     unavailable: 8,
   });
