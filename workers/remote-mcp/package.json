@@ -15,7 +15,7 @@
     "@modelcontextprotocol/sdk": "1.31.0",
     "agents": "0.7.5",
     "firebase-auth-cloudflare-workers": "^2.0.6",
-    "hono": "~4.12.34",
+    "hono": ">=4.13.13",
     "zod": "^3.25.0"
   },
   "devDependencies": {
@@ -26,11 +26,16 @@
   "overrides": {
     "@modelcontextprotocol/sdk": {
       "@hono/node-server": "2.0.12",
-      "hono": "~4.12.34"
+      "hono": ">=4.13.13"
     },
     "agents": {
       "@modelcontextprotocol/sdk": "1.31.0"
     },
+    "hono": ">=4.13.13",
+    "ip-address": ">=10.7.3",
+    "proxy-addr": ">=2.0.8",
+    "qs": ">=6.15.4",
+    "@ai-sdk/provider-utils": ">=4.0.33",
     "nanoid": "5.1.16"
   }
 }
