@@ -546,6 +546,40 @@ test("an attempt is not armed with less than 30 s of state lifetime left", async
   assert.deepEqual(late.body, { error: "Invalid or expired state" });
   assert.ok(h.events.includes("do:/attempt"));
   assert.equal(h.erp.postCorrelations.length, 0, "nothing is sent");
+  // #205: the /attempt expired exit now emits a structured log so an
+  // operator can correlate it with a follow-up attempt or alarm reconcile.
+  assert.ok(
+    h.logs.some((line) => (
+      line.includes("\"component\":\"oauth-state-store\"")
+      && line.includes("\"outcome\":\"expired\"")
+      && line.includes("\"stage\":\"attempt\"")
+      && line.includes("\"reason\":\"below_arm_min_remaining\"")
+    )),
+    `expected an attempt expired log; got: ${JSON.stringify(h.logs)}`,
+  );
+});
+
+test("the state alarm firing on a TTL-expired record logs an expired outcome before reconciling", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  const { stateKey } = await h.startLogin();
+  const idToken = await mintIdToken();
+  // The holder armed a credential request whose backend outcome stayed
+  // unknown, so when the state TTL elapses the alarm must reconcile the
+  // abandoned correlation and surface an expired-stage log line.
+  h.erp.postFaults.push({ kind: "lost-after" });
+  h.erp.deleteFaults.push({ kind: "not-proof" });
+  assert.equal((await h.callback(stateKey, idToken)).status, 502);
+  h.clock.offsetMs += 11 * 60_000;
+  await h.runStateAlarm(stateKey);
+  assert.ok(
+    h.logs.some((line) => (
+      line.includes("\"component\":\"oauth-state-store\"")
+      && line.includes("\"outcome\":\"expired\"")
+      && line.includes("\"stage\":\"alarm_reconcile\"")
+      && line.includes("\"reason\":\"state_ttl_reached\"")
+    )),
+    `expected an alarm reconcile expired log; got: ${JSON.stringify(h.logs)}`,
+  );
 });
 
 test("the state alarm firing mid-attempt fences the armed holder", async (t) => {

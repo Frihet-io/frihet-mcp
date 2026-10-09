@@ -222,6 +222,17 @@ function noStoreJson(value: unknown, status = 200): Response {
   });
 }
 
+/**
+ * Emit a single structured log line for an OAuth-state lifecycle outcome.
+ * The Durable Object bundle cannot share the Worker `log()` helper, but the
+ * test harness captures `console.error` lines, so JSON-encoded records keep
+ * the same observability story for both paths without pulling a module in
+ * across the bundle boundary.
+ */
+function logOAuthStateEvent(event: Record<string, unknown>): void {
+  console.error(JSON.stringify({ component: "oauth-state-store", ...event }));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -602,6 +613,12 @@ export class OAuthStateStore {
       await this.state.storage.deleteAll();
       return;
     }
+    logOAuthStateEvent({
+      outcome: "expired",
+      stage: "alarm_reconcile",
+      reason: "state_ttl_reached",
+      pendingCount: pending.length,
+    });
     if (!this.env) {
       throw new Error("OAuth state reconciliation environment is unavailable");
     }
@@ -730,6 +747,7 @@ export class OAuthStateStore {
           return noStoreJson({ outcome: "lease_lost" });
         }
         if (record.expiresAtMs - now < STATE_ARM_MIN_REMAINING_MS) {
+          logOAuthStateEvent({ outcome: "expired", stage: "attempt", reason: "below_arm_min_remaining" });
           return noStoreJson({ outcome: "expired" });
         }
         if (
