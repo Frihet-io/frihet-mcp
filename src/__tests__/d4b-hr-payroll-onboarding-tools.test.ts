@@ -13,6 +13,7 @@
 import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { permissionsMatrixOutput, permissionsMeOutput } from "../tools/shared.js";
+import * as registerAll from "../tools/register-all.js";
 
 // ── Minimal McpServer stub ───────────────────────────────────────────────────
 
@@ -206,10 +207,6 @@ function makeSuccessClient(): import("../client-interface.js").IFrihetClient {
     exportPayroll: async () => MOCK_PAYROLL_EXPORT,
     getPayrollChecklist: async () => MOCK_PAYROLL_CHECKLIST,
 
-    // Onboarding
-    getOnboardingStatus: async () => MOCK_ONBOARDING_STATUS,
-    setOnboardingPersona: async (d: Record<string, unknown>) => ({ ...MOCK_ONBOARDING_PERSONA_RESULT, persona: d["persona"] }),
-
     // Permissions
     getPermissionsMatrix: async () => MOCK_PERMISSIONS_MATRIX,
     getMyPermissions: async () => MOCK_PERMISSIONS_ME,
@@ -252,13 +249,6 @@ async function makePayrollServer(clientFn: () => import("../client-interface.js"
   return server;
 }
 
-async function makeOnboardingServer(clientFn: () => import("../client-interface.js").IFrihetClient): Promise<StubMcpServer> {
-  const server = new StubMcpServer();
-  const { registerOnboardingTools } = await import("../tools/onboarding.js");
-  registerOnboardingTools(server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, clientFn());
-  return server;
-}
-
 async function makePermissionsServer(clientFn: () => import("../client-interface.js").IFrihetClient): Promise<StubMcpServer> {
   const server = new StubMcpServer();
   const { registerPermissionsTools } = await import("../tools/permissions.js");
@@ -272,6 +262,12 @@ async function makeAccountingCloseServer(clientFn: () => import("../client-inter
   registerAccountingCloseTools(server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer, clientFn());
   return server;
 }
+
+// (Onboarding family withdrawn via issue #124: there is no registerOnboardingTools
+//  anymore because the Frihet-ERP /v1/onboarding/* family does not exist. No
+//  standalone onboarding server is created here; if a future ERP release
+//  ships the family and re-introduces src/tools/onboarding.ts, restore the
+//  makeOnboardingServer helper alongside registerOnboardingTools.)
 
 // ── Registration tests ───────────────────────────────────────────────────────
 
@@ -307,11 +303,18 @@ describe("D4-B Registration counts", () => {
     assert.ok(s.tools.has("payroll_checklist"));
   });
 
-  test("Onboarding tools — 2 registered", async () => {
-    const s = await makeOnboardingServer(makeSuccessClient);
-    assert.equal(s.tools.size, 2);
-    assert.ok(s.tools.has("onboarding_status"));
-    assert.ok(s.tools.has("onboarding_persona_set"));
+  test("Onboarding tools — withdrawn via #124 (none registered)", () => {
+    // Frihet-ERP has no /v1/onboarding/* family; src/tools/onboarding.ts and
+    // its registration in src/tools/register-all.ts were deleted. This guard
+    // catches any silent re-introduction that would re-create the original
+    // bug (catalogue-overpromising tools that always 404 / return NOT_DEPLOYED).
+    // Runtime check against the namespace import above: the build will fail if
+    // register-all.ts ever exports registerOnboardingTools again.
+    assert.equal(
+      typeof (registerAll as unknown as Record<string, unknown>)["registerOnboardingTools"],
+      "undefined",
+      "registerOnboardingTools must not be exported — onboarding family is withdrawn via #124",
+    );
   });
 
   test("Permissions tools — 2 registered", async () => {
@@ -442,24 +445,15 @@ describe("Payroll Tools", () => {
   });
 });
 
-// ── Onboarding ───────────────────────────────────────────────────────────────
-
-describe("Onboarding Tools", () => {
-  test("onboarding_status returns persona + steps", async () => {
-    const server = await makeOnboardingServer(makeSuccessClient);
-    const r = await server.tools.get("onboarding_status")!.handler({});
-    assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["persona"], "empresa");
-    assert.equal(r.structuredContent!["percentComplete"], 50);
-  });
-
-  test("onboarding_persona_set updates persona", async () => {
-    const server = await makeOnboardingServer(makeSuccessClient);
-    const r = await server.tools.get("onboarding_persona_set")!.handler({ persona: "gestoria" });
-    assert.ok(!r.isError);
-    assert.equal(r.structuredContent!["persona"], "gestoria");
-  });
-});
+// ── Onboarding — withdrawn via issue #124 ───────────────────────────────────
+// The Frihet-ERP /v1/onboarding/* family does not exist as of this change.
+// src/tools/onboarding.ts and the registration in register-all.ts were
+// deleted; there is no `onboarding_status` or `onboarding_persona_set` tool
+// to call. If a future Frihet-ERP release ships the family, reintroduce
+// src/tools/onboarding.ts (mirroring src/tools/igic.ts for the inline
+// NOT_DEPLOYED precedent or restoring real handlers once the family ships)
+// and add a positive describe block here. The "Onboarding tools — withdrawn
+// via #124" test above pins this state.
 
 // ── Permissions ──────────────────────────────────────────────────────────────
 

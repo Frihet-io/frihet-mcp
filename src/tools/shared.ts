@@ -1214,7 +1214,13 @@ export const gestoriaAgingConsolidatedOutput = z.object({
   generatedAt: z.string().optional(),
 }).passthrough();
 
-/* --- D4-B: HR / Webhook test / Payroll / Onboarding / Permissions / Period close --- */
+/* --- D4-B: HR / Webhook test / Payroll / Permissions / Period close ---
+ * Onboarding (onboarding_status, onboarding_persona_set) was withdrawn via
+ * issue #124 because Frihet-ERP has no /v1/onboarding/* family. The schemas
+ * lived here previously; the registration in register-all.ts and the file
+ * src/tools/onboarding.ts are also gone. If a future Frihet-ERP release
+ * ships the family, restore src/tools/onboarding.ts, re-add the export
+ * symbols here, and re-import them in register-all.ts.
 
 /** Leave/PTO request — backend `/v1/leaves`. */
 export const leaveRequestItemOutput = z.object({
@@ -1363,24 +1369,6 @@ export const payrollChecklistOutput = z.object({
   readyEmployees: z.never().optional(),
   missingEmployees: z.never().optional(),
   generatedAt: z.never().optional(),
-}).passthrough();
-
-/** Onboarding workspace state — backend `/v1/onboarding/status`. */
-export const onboardingStatusOutput = z.object({
-  workspaceId: z.string().optional(),
-  persona: z.enum(["autonomo", "empresa", "agencia", "gestoria"]).optional(),
-  completedSteps: z.array(z.string()).optional(),
-  pendingSteps: z.array(z.string()).optional(),
-  percentComplete: z.number().min(0).max(100).optional(),
-  startedAt: z.string().optional(),
-  completedAt: z.string().optional(),
-}).passthrough();
-
-/** Onboarding persona update result. */
-export const onboardingPersonaResultOutput = z.object({
-  workspaceId: z.string().optional(),
-  persona: z.enum(["autonomo", "empresa", "agencia", "gestoria"]),
-  updatedAt: z.string().optional(),
 }).passthrough();
 
 const rbacRoleOutput = z.enum(["owner", "admin", "manager", "sales", "accountant", "employee", "viewer"]);

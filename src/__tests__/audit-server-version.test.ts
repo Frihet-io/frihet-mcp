@@ -203,13 +203,13 @@ describe("current release projection gate", () => {
 
   test("canonical and per-profile count drift fails in prose and structured metadata", () => {
     const mutations: Array<[string, (input: ReleaseProjectionInput) => void]> = [
-      ["package canonical prose", (input) => { input.packageJson.description = "157 canonical operations"; }],
-      ["README generated surface", (input) => { input.readme = input.readme.replace("166 tool names, 7 resources, and 10 prompts", "165 tool names, 9 resources, and 10 prompts"); }],
+      ["package canonical prose", (input) => { input.packageJson.description = "155 canonical operations"; }],
+      ["README generated surface", (input) => { input.readme = input.readme.replace("164 tool names, 7 resources, and 10 prompts", "163 tool names, 9 resources, and 10 prompts"); }],
       ["Glama remote surface", (input) => { input.glamaJson.description = "158 canonical operations"; }],
       ["release local resources", (input) => { input.releasesJson.surfaceCounts.localFull.resources = 9; }],
       ["release OpenAI prompts", (input) => { input.releasesJson.surfaceCounts.openaiFull.prompts = 10; }],
-      ["skill catalogue", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replaceAll("158 canonical operations", "157 canonical operations"); }],
-      ["Anthropic remote profile", (input) => { input.anthropicManifest.description = input.anthropicManifest.description.replace("166 tool names, 7 resources, and 10 prompts", "163 tool names, 11 resources, and 10 prompts"); }],
+      ["skill catalogue", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replaceAll("156 canonical operations", "155 canonical operations"); }],
+      ["Anthropic remote profile", (input) => { input.anthropicManifest.description = input.anthropicManifest.description.replace("164 tool names, 7 resources, and 10 prompts", "161 tool names, 11 resources, and 10 prompts"); }],
     ];
     for (const [label, mutate] of mutations) {
       const input = releaseProjectionInput();
@@ -223,8 +223,8 @@ describe("current release projection gate", () => {
 
   test("README counts are bound to their exact profile labels", () => {
     const input = releaseProjectionInput();
-    const localCounts = "163 tool names, 11 resources, and 10 prompts";
-    const remoteCounts = "166 tool names, 7 resources, and 10 prompts";
+    const localCounts = "161 tool names, 11 resources, and 10 prompts";
+    const remoteCounts = "164 tool names, 7 resources, and 10 prompts";
     input.readme = input.readme
       .replace(localCounts, "__LOCAL_COUNTS__")
       .replace(remoteCounts, localCounts)
@@ -240,15 +240,15 @@ describe("current release projection gate", () => {
   test("contradictory duplicate public claims cannot hide behind a correct claim", () => {
     const mutations: Array<[string, (input: ReleaseProjectionInput) => void]> = [
       ["README", (input) => {
-        const current = "158 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources; the hosted Worker deliberately serves the 7 static resources, while API-backed workspace resources remain local-profile only.";
-        const stale = current.replace("158 canonical operations", "157 canonical operations");
+        const current = "156 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources; the hosted Worker deliberately serves the 7 static resources, while API-backed workspace resources remain local-profile only.";
+        const stale = current.replace("156 canonical operations", "155 canonical operations");
         input.readme = input.readme.replace(current, `${current}\n${stale}`);
       }],
-      ["Glama", (input) => { input.glamaJson.description += " The grouped remote profile serves 165 tool names, 7 resources, and 10 prompts."; }],
-      ["package", (input) => { input.packageJson.description += " Legacy claim: 157 canonical operations."; }],
-      ["Anthropic", (input) => { input.anthropicManifest.description += " The grouped remote profile exposes 165 tool names, 7 resources, and 10 prompts."; }],
+      ["Glama", (input) => { input.glamaJson.description += " The grouped remote profile serves 163 tool names, 7 resources, and 10 prompts."; }],
+      ["package", (input) => { input.packageJson.description += " Legacy claim: 155 canonical operations."; }],
+      ["Anthropic", (input) => { input.anthropicManifest.description += " The grouped remote profile exposes 163 tool names, 7 resources, and 10 prompts."; }],
       ["skill metadata", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 1.18.0", "  version: 1.18.0\n  version: 0.0.0"); }],
-      ["current changelog", (input) => { input.changelog = input.changelog.replace("The catalogue has 158 canonical operations.", "The catalogue has 158 canonical operations. The catalogue has 157 canonical operations. `localFull` exposes 999 tool names, 11 resources, and 10 prompts."); }],
+      ["current changelog", (input) => { input.changelog = input.changelog.replace("The catalogue has 156 canonical operations", "The catalogue has 156 canonical operations. The catalogue has 155 canonical operations. `localFull` exposes 999 tool names, 11 resources, and 10 prompts."); }],
     ];
     for (const [label, mutate] of mutations) {
       const input = releaseProjectionInput();
@@ -262,8 +262,8 @@ describe("current release projection gate", () => {
 
   test("stale canonical prose beside resource counts cannot bypass the README gate", () => {
     const input = releaseProjectionInput();
-    const current = "158 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources";
-    const stale = "157 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources";
+    const current = "156 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources";
+    const stale = "155 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources";
     assert.match(input.readme, new RegExp(current.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")));
     input.readme = input.readme.replace(current, stale);
 

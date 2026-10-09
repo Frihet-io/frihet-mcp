@@ -2277,22 +2277,13 @@ export class FrihetClient {
     });
   }
 
-  // ---------------------------------------------------------------- Onboarding
-  // NOTE: /v1/onboarding/* — D4-A parallel deploy. 404 propagates until backend ships.
-
-  async getOnboardingStatus(): Promise<Record<string, unknown>> {
-    return this.request("GET", "/onboarding/status");
-  }
-
-  async setOnboardingPersona(
-    data: { persona: "autonomo" | "empresa" | "agencia" | "gestoria" },
-  ): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("PATCH", "/onboarding/persona", data);
-  }
-
   // ---------------------------------------------------------------- Permissions
   // These are standard ERP family responses: unwrap their single-object
   // `{ data, meta }` envelope before handing the payload to MCP output schemas.
+  //
+  // Note: /v1/onboarding/* methods (getOnboardingStatus, setOnboardingPersona)
+  // were removed when the onboarding family was withdrawn via issue #124.
+  // See src/tools/igic.ts for the rationale and the inline-stub precedent.
 
   async getPermissionsMatrix(): Promise<Record<string, unknown>> {
     return this.requestUnwrapped("GET", "/permissions/matrix");
