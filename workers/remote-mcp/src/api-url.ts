@@ -35,6 +35,9 @@ const TRUSTED_CLOUD_FUNCTION_HOST =
 export const OAUTH_API_KEY_PROVISIONING_URL =
   "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning";
 
+export const CLAUDE_OAUTH_API_KEY_PROVISIONING_URL =
+  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning";
+
 interface ParsedApiBase {
   toolBase: string;
 }
@@ -111,10 +114,15 @@ export function resolveApiBaseUrl(apiBase?: string): string {
  *
  * FRIHET_API_BASE is still parsed fail-closed because a malformed Worker
  * deployment must not silently pass configuration validation. Its value never
- * selects the credential-bearing destination: provisioning is OpenAI-only and
- * always targets the exact dedicated function above.
+ * selects the credential-bearing destination: each candidate profile targets
+ * its exact dedicated function, and the full profile has no authority.
  */
-export function resolveOAuthApiKeyUrl(apiBase?: string): string {
+export function resolveOAuthApiKeyUrl(
+  apiBase?: string,
+  accessProfile: "openai" | "claude" | "full" = "openai",
+): string {
   parseApiBase(apiBase || DEFAULT_API_BASE);
-  return OAUTH_API_KEY_PROVISIONING_URL;
+  if (accessProfile === "openai") return OAUTH_API_KEY_PROVISIONING_URL;
+  if (accessProfile === "claude") return CLAUDE_OAUTH_API_KEY_PROVISIONING_URL;
+  throw new Error("OAuth API-key authority is unavailable for this profile");
 }

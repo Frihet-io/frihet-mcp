@@ -27,6 +27,7 @@
  */
 
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
+import { resolveWorkerAccessProfile, type WorkerAccessProfile } from "./oauth-profile.js";
 
 const STATE_STORAGE_KEY = "oauth_request";
 const STATE_TTL_MS = 10 * 60 * 1000;
@@ -53,9 +54,10 @@ export type OAuthTokenKind = "authorization_code" | "refresh_token";
 export type OAuthApiKeyBinding = {
   uid: string;
   keyId: string;
-  accessProfile: "openai";
-  oauthResource: "https://openai-mcp.frihet.io";
-};
+} & (
+  | { accessProfile: "openai"; oauthResource: "https://openai-mcp.frihet.io" }
+  | { accessProfile: "claude"; oauthResource: "https://claude-mcp.frihet.io" }
+);
 
 /** One provisioning request that may have reached the ERP authority. */
 export type OAuthStateAttempt = {
@@ -80,6 +82,7 @@ type OAuthStateLease = {
 
 type OAuthStateRecord = {
   version: 2;
+  accessProfile?: WorkerAccessProfile;
   status: "pending" | "committed";
   /** Serialized authorization request; present only while pending. */
   payload?: string;
@@ -108,6 +111,7 @@ export type OAuthStateReleaseOutcome = "clean" | "unknown";
 
 type TokenFamilyRecord = {
   version: 1;
+  accessProfile?: WorkerAccessProfile;
   status: "active" | "revoked";
   userId: string;
   grantId: string;
@@ -125,6 +129,7 @@ type TokenFamilyRecord = {
 
 type TokenFamilyCleanupIntent = {
   version: 1;
+  accessProfile?: WorkerAccessProfile;
   userId: string;
   grantId: string;
   apiKeyBinding?: OAuthApiKeyBinding;
@@ -147,7 +152,10 @@ type OAuthStateStoreEnv = {
   OAUTH_KV: KVNamespace;
   OAUTH_STATE: DurableObjectNamespace;
   FRIHET_API_BASE: string;
-  FRIHET_OAUTH_API_KEY: string;
+  FRIHET_OPENAI_MODE?: string;
+  FRIHET_CLAUDE_MODE?: string;
+  FRIHET_OAUTH_API_KEY?: string;
+  FRIHET_CLAUDE_OAUTH_API_KEY?: string;
 };
 
 export type OAuthCleanupAuthorities = {
@@ -208,31 +216,36 @@ export const DEFAULT_CLEANUP_AUTHORITIES: OAuthCleanupAuthorities = {
   },
   async revokeBackend(env, binding): Promise<boolean> {
     if (!binding) return true;
-    const [{ resolveOAuthApiKeyUrl }, { revokeOAuthApiKey }] = await Promise.all([
+    const accessProfile = resolveWorkerAccessProfile(env);
+    if (binding.accessProfile !== accessProfile) {
+      throw new Error("OAuth API-key cleanup profile differs from the Worker");
+    }
+    const [{ resolveOAuthApiKeyUrl }, { revokeOAuthApiKey, resolveOAuthServiceSecret }] = await Promise.all([
       import("./api-url.js"),
       import("./oauth-provisioning.js"),
     ]);
     const response = await revokeOAuthApiKey(
-      resolveOAuthApiKeyUrl(env.FRIHET_API_BASE),
-      env.FRIHET_OAUTH_API_KEY,
+      resolveOAuthApiKeyUrl(env.FRIHET_API_BASE, accessProfile),
+      resolveOAuthServiceSecret(env, accessProfile),
       binding,
     );
     return response.ok || response.status === 404;
   },
   async revokeBackendCorrelation(env, attempt): Promise<boolean> {
-    const [{ resolveOAuthApiKeyUrl }, { reconcileOAuthApiKeyCorrelation }] = await Promise.all([
+    const accessProfile = resolveWorkerAccessProfile(env);
+    if (accessProfile === "full") {
+      throw new Error("OAuth API-key authority is unavailable for this profile");
+    }
+    const [{ resolveOAuthApiKeyUrl }, { reconcileOAuthApiKeyCorrelation, resolveOAuthServiceSecret }] = await Promise.all([
       import("./api-url.js"),
       import("./oauth-provisioning.js"),
     ]);
     return reconcileOAuthApiKeyCorrelation(
-      resolveOAuthApiKeyUrl(env.FRIHET_API_BASE),
-      env.FRIHET_OAUTH_API_KEY,
-      {
-        uid: attempt.uid,
-        accessProfile: "openai",
-        oauthResource: "https://openai-mcp.frihet.io",
-        correlationId: attempt.correlationId,
-      },
+      resolveOAuthApiKeyUrl(env.FRIHET_API_BASE, accessProfile),
+      resolveOAuthServiceSecret(env, accessProfile),
+      accessProfile === "claude"
+        ? { ...attempt, accessProfile, oauthResource: "https://claude-mcp.frihet.io" }
+        : { ...attempt, accessProfile, oauthResource: "https://openai-mcp.frihet.io" },
     );
   },
 };
@@ -339,9 +352,11 @@ function parseStateRecord(value: unknown): OAuthStateRecord | undefined {
         "unreconciled",
         "committedLeaseId",
         "reconcileAttempt",
+        "accessProfile",
       ]),
     )
     || value.version !== 2
+    || (value.accessProfile !== undefined && !isWorkerAccessProfile(value.accessProfile))
     || (value.status !== "pending" && value.status !== "committed")
     || typeof value.expiresAtMs !== "number"
     || !Number.isSafeInteger(value.expiresAtMs)
@@ -368,6 +383,7 @@ function parseStateRecord(value: unknown): OAuthStateRecord | undefined {
   if (value.lease !== undefined && !lease) return undefined;
   const record: OAuthStateRecord = {
     version: 2,
+    ...(value.accessProfile === undefined ? {} : { accessProfile: value.accessProfile as WorkerAccessProfile }),
     status: value.status,
     expiresAtMs: value.expiresAtMs,
     attempts: value.attempts,
@@ -428,6 +444,10 @@ function isTokenKind(value: unknown): value is OAuthTokenKind {
   return value === "authorization_code" || value === "refresh_token";
 }
 
+function isWorkerAccessProfile(value: unknown): value is WorkerAccessProfile {
+  return value === "openai" || value === "claude" || value === "full";
+}
+
 function isGrantId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{16}$/u.test(value);
 }
@@ -458,17 +478,17 @@ function parseApiKeyBinding(value: unknown): OAuthApiKeyBinding | undefined {
     !isSafeUid(uid)
     || typeof keyId !== "string"
     || !/^[A-Za-z0-9]{20}$/u.test(keyId)
-    || accessProfile !== "openai"
-    || oauthResource !== "https://openai-mcp.frihet.io"
+    || !hasOnlyKeys(value, new Set(["uid", "keyId", "accessProfile", "oauthResource"]))
   ) {
     return undefined;
   }
-  return {
-    uid,
-    keyId,
-    accessProfile,
-    oauthResource: "https://openai-mcp.frihet.io",
-  };
+  if (accessProfile === "openai" && oauthResource === "https://openai-mcp.frihet.io") {
+    return { uid, keyId, accessProfile, oauthResource };
+  }
+  if (accessProfile === "claude" && oauthResource === "https://claude-mcp.frihet.io") {
+    return { uid, keyId, accessProfile, oauthResource };
+  }
+  return undefined;
 }
 
 async function readJsonBody(message: Request | Response): Promise<Record<string, unknown> | undefined> {
@@ -506,9 +526,11 @@ function isCleanupIntent(value: unknown): value is TokenFamilyCleanupIntent {
       "grantRevoked",
       "backendRevoked",
       "attempt",
+      "accessProfile",
     ]),
   )
     && value.version === 1
+    && (value.accessProfile === undefined || isWorkerAccessProfile(value.accessProfile))
     && isSafeUid(value.userId)
     && isGrantId(value.grantId)
     && (value.apiKeyBinding === undefined || binding !== undefined)
@@ -562,8 +584,32 @@ export class OAuthStateStore {
     this.cleanupAuthorities = cleanupAuthorities;
   }
 
+  private workerAccessProfile(): WorkerAccessProfile {
+    if (!this.env) throw new Error("OAuth state store environment is unavailable");
+    return resolveWorkerAccessProfile(this.env);
+  }
+
+  /** A misbound namespace must never read or revoke another Worker's grants. */
+  private assertRecordProfile(record: Record<string, unknown>): void {
+    const accessProfile = this.workerAccessProfile();
+    if (
+      (record.accessProfile !== undefined && record.accessProfile !== accessProfile)
+      // Legacy records belong to the existing Worker, never the new Claude one.
+      || (record.accessProfile === undefined && accessProfile === "claude")
+    ) {
+      throw new Error("OAuth state store profile differs from the Worker");
+    }
+    if (record.apiKeyBinding !== undefined) {
+      const binding = parseApiKeyBinding(record.apiKeyBinding);
+      if (!binding || binding.accessProfile !== accessProfile) {
+        throw new Error("OAuth API-key binding differs from the Worker");
+      }
+    }
+  }
+
   /** Atomically make the family unusable and register its durable cleanup. */
   private async tombstoneTokenFamily(record: TokenFamilyRecord): Promise<void> {
+    this.assertRecordProfile(record);
     const tombstoned: TokenFamilyRecord = { ...record, status: "revoked" };
     delete tombstoned.inflight;
     const now = Date.now();
@@ -574,6 +620,7 @@ export class OAuthStateStore {
       if (storedIntent !== undefined && !isCleanupIntent(storedIntent)) {
         throw new Error("OAuth token-family cleanup intent is invalid");
       }
+      if (isRecord(storedIntent)) this.assertRecordProfile(storedIntent);
       const existing = storedIntent as TokenFamilyCleanupIntent | undefined;
       if (
         existing
@@ -583,6 +630,7 @@ export class OAuthStateStore {
       }
       const intent: TokenFamilyCleanupIntent = existing ?? {
         version: 1,
+        accessProfile: this.workerAccessProfile(),
         userId: tombstoned.userId,
         grantId: tombstoned.grantId,
         ...(tombstoned.apiKeyBinding ? { apiKeyBinding: tombstoned.apiKeyBinding } : {}),
@@ -599,6 +647,7 @@ export class OAuthStateStore {
   }
 
   private async processCleanup(intent: TokenFamilyCleanupIntent): Promise<void> {
+    this.assertRecordProfile(intent);
     if (!this.env) {
       throw new Error("OAuth token-family cleanup environment is unavailable");
     }
@@ -651,6 +700,7 @@ export class OAuthStateStore {
    * the next alarm is armed before any external I/O.
    */
   private async processStateReconcile(record: OAuthStateRecord): Promise<void> {
+    this.assertRecordProfile(record);
     const pending = stateAttemptsToReconcile(record);
     const now = Date.now();
     if (pending.length === 0 || now >= record.expiresAtMs + STATE_RECONCILE_HORIZON_MS) {
@@ -752,6 +802,11 @@ export class OAuthStateStore {
   async fetch(request: Request): Promise<Response> {
     const pathname = new URL(request.url).pathname;
     return this.state.blockConcurrencyWhile(async () => {
+      const accessProfile = this.workerAccessProfile();
+      const stored = await this.state.storage.get<unknown>(
+        pathname.startsWith("/token-family") ? TOKEN_FAMILY_STORAGE_KEY : STATE_STORAGE_KEY,
+      );
+      if (isRecord(stored)) this.assertRecordProfile(stored);
       if (request.method === "PUT" && pathname === "/state") {
         if (await this.state.storage.get(STATE_STORAGE_KEY)) {
           return new Response(null, { status: 409 });
@@ -761,6 +816,7 @@ export class OAuthStateStore {
         const now = Date.now();
         const record: OAuthStateRecord = {
           version: 2,
+          accessProfile,
           status: "pending",
           payload,
           expiresAtMs: now + STATE_TTL_MS,
@@ -912,6 +968,7 @@ export class OAuthStateStore {
         }
         const committed: OAuthStateRecord = {
           version: 2,
+          accessProfile,
           status: "committed",
           expiresAtMs: record.expiresAtMs,
           attempts: record.attempts,
@@ -998,6 +1055,7 @@ export class OAuthStateStore {
           || expiresAtMs > Date.now() + 366 * 24 * 60 * 60 * 1000
           || (body.apiKeyBinding !== undefined && !apiKeyBinding)
           || (apiKeyBinding !== undefined && apiKeyBinding.uid !== userId)
+          || (apiKeyBinding !== undefined && apiKeyBinding.accessProfile !== accessProfile)
         ) {
           return noStoreJson({ outcome: "invalid" }, 400);
         }
@@ -1021,6 +1079,7 @@ export class OAuthStateStore {
 
         const record: TokenFamilyRecord = {
           version: 1,
+          accessProfile,
           status: "active",
           userId,
           grantId,
@@ -1155,6 +1214,7 @@ export class OAuthStateStore {
           || !isLeaseId(leaseId)
           || !isSha256(newRefreshTokenHash)
           || (body.apiKeyBinding !== undefined && !apiKeyBinding)
+          || (apiKeyBinding !== undefined && apiKeyBinding.accessProfile !== accessProfile)
         ) {
           return noStoreJson({ outcome: "invalid" }, 400);
         }
@@ -1285,6 +1345,7 @@ export class OAuthStateStore {
 
       const storedState = await this.state.storage.get<unknown>(STATE_STORAGE_KEY);
       if (storedState !== undefined) {
+        if (isRecord(storedState)) this.assertRecordProfile(storedState);
         const record = parseStateRecord(storedState);
         if (!record) {
           await this.state.storage.deleteAll();
@@ -1299,6 +1360,7 @@ export class OAuthStateStore {
       const family = await this.state.storage.get<TokenFamilyRecord>(
         TOKEN_FAMILY_STORAGE_KEY,
       );
+      if (family) this.assertRecordProfile(family);
       if (family && family.expiresAtMs > Date.now()) {
         await this.state.storage.setAlarm(family.expiresAtMs);
         return;
