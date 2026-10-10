@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "54152a43584f960c4c58e6d3f7c93e7e2f7e1641d89e75bac91a9060446f5170", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands; no new deps, lifecycle or network script
+  "package.json": "e3b7c8de63212d2781216467d4c09935fdb28188b7fb9fd249f12db5e21835a4", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test; no new deps, lifecycle or network script
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -295,7 +295,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
   "docs/agent-onboarding.json": "0cf30d7ef2e1b33256dda5ecb71773873d8867d032c4af8d4c0f2969f6ca97b3", // Task 1 recurring confirmation and declared fiscal/webhook effects; no new emitter
-  "README.md": "363c49672a849f0e4e2388def0394a171eadb01b9ceed23b3e645aeb866fd5ac", // GitHub Registry discovery links + static badge on existing img.shields.io host, unreleased local candidate flag and corrected deposit/recurring semantics; no new runtime emitter or destination
+  "README.md": "ffdfb26630a74b505806af5c623e5d9c153d1a431dd767261012ba1c1dfaab53", // GitHub Registry discovery links + static badge on existing img.shields.io host, unreleased local candidate flag and corrected deposit/recurring semantics, portable Claude preview link; no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
