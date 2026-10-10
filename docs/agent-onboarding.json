@@ -71,7 +71,7 @@
       "toolNames": 163,
       "readOnly": 82,
       "writesFrihet": 81,
-      "externalInteraction": 36,
+      "externalInteraction": 37,
       "destructive": 61,
       "resources": 11,
       "prompts": 10
@@ -116,6 +116,7 @@
       "refund_deposit",
       "refund_sale",
       "remove_team_member",
+      "run_recurring_now",
       "send_invoice",
       "send_quote",
       "ticketbai_submit",
@@ -262,6 +263,13 @@
         "tool": "refund_sale",
         "effects": [
           "money_movement"
+        ]
+      },
+      {
+        "tool": "run_recurring_now",
+        "effects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
         ]
       },
       {

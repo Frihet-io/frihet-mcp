@@ -113,7 +113,7 @@ describe("agent onboarding — initialize.instructions", () => {
     // Anti-phantom: a doc that promises onboarding text while index.ts never
     // wires it would pass every other assertion in this file.
     const index = readRepoFile("src/index.ts");
-    assert.match(index, /instructions:\s*AGENT_SERVER_INSTRUCTIONS/);
+    assert.match(index, /instructions:\s*claudeMode \? CLAUDE_CANDIDATE_INSTRUCTIONS : AGENT_SERVER_INSTRUCTIONS/);
   });
 
   test("initialize surfaces the instructions to a client", async () => {

@@ -433,7 +433,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `pause_recurring_invoice` | Pause an active template — no invoices generated while paused |
 | `resume_recurring_invoice` | Resume a paused template — next invoice on next scheduled cycle |
 | `delete_recurring_invoice` | Permanently delete a template (confirm=true required) |
-| `run_recurring_now` | Manually trigger immediate generation of the next invoice instance |
+| `run_recurring_now` | Generate the next recurring invoice with explicit `confirm=true` in full and grouped modes; workspace settings may trigger fiscal issuance, submission and webhooks |
 
 ### Team Management (4)
 
@@ -510,7 +510,7 @@ If you need to digitize paper invoices or receipts, extract the data first (e.g.
 | `update_deposit` | Update deposit fields |
 | `delete_deposit` | Delete a deposit (confirm=true required) |
 | `apply_deposit` | Apply a deposit balance against an invoice |
-| `refund_deposit` | Issue a refund for a deposit |
+| `refund_deposit` | Record a deposit refund in Frihet bookkeeping with `confirm=true`; optional `amount` records that portion, omission records the remaining refundable balance. Does not transfer money |
 
 ### Vendors (5)
 
@@ -716,6 +716,12 @@ Two transports:
 | `FRIHET_API_KEY` | Yes (stdio) | -- |
 | `FRIHET_API_URL` | No | `https://api.frihet.io/v1` |
 | `FRIHET_TOOL_MODE` | No | `full` |
+| `FRIHET_CLAUDE_MODE` | No (unreleased local candidate) | `false` |
+
+The source-only Claude candidate requires building this checkout and running
+`dist/index.js`; existing npm releases are not claimed to support the flag.
+See [candidate scope, exclusions and checks](marketplace/anthropic/SUBMISSION.md).
+It cannot be combined with `FRIHET_OPENAI_MODE=true` and is not enabled in the deployed Worker.
 
 ---
 

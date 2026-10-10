@@ -222,34 +222,21 @@ export function registerAllPrompts(server: McpServer): void {
           content: {
             type: "text" as const,
             text:
-              `Help me follow up on overdue invoices.\n\n` +
-              `Follow these steps:\n\n` +
-              `1. FIND OVERDUE INVOICES\n` +
-              `   - Use list_invoices to find all invoices with status "overdue" or "sent" past their due date\n` +
-              `   - For each, note: invoice ID, client name, amount, due date, days overdue\n` +
-              `   - Sort by days overdue (most overdue first)\n\n` +
-              `2. GROUP BY CLIENT\n` +
-              `   - Group overdue invoices by client\n` +
-              `   - Calculate total outstanding per client\n` +
-              `   - Use get_client to get contact details for each client\n\n` +
-              `3. DRAFT FOLLOW-UP MESSAGES\n` +
-              `   For each client, draft a professional payment reminder:\n` +
-              `   - Tone: Firm but polite. Maintain the business relationship.\n` +
-              `   - Include: Invoice number(s), amount(s), original due date(s)\n` +
-              `   - 1-15 days overdue: Friendly reminder, assume it was overlooked\n` +
-              `   - 16-30 days overdue: Firmer tone, request confirmation of payment date\n` +
-              `   - 31-60 days overdue: Escalation notice, mention potential late fees\n` +
-              `   - 60+ days overdue: Final notice, mention potential debt collection\n` +
-              `   - Provide both English and Spanish versions\n\n` +
-              `4. SUGGEST ACTIONS\n` +
-              `   - Recommend which invoices to update to "overdue" status if still "sent"\n` +
-              `   - Suggest setting up webhook notifications for future overdue invoices\n` +
-              `   - Flag any clients with multiple overdue invoices (potential bad debt risk)\n\n` +
-              `5. SUMMARY\n` +
-              `   - Total overdue amount\n` +
-              `   - Number of clients affected\n` +
-              `   - Oldest unpaid invoice\n` +
-              `   - Recommended priority order for follow-up`,
+              `Help me prepare overdue invoice follow-ups for review.
+
+1. GATHER RECORDS
+   - Use list_invoices for sent, partial and overdue records. Paginate every result set using the returned pagination fields until exhausted; deduplicate by invoice ID. If a page fails or results are incomplete, disclose that limitation.
+   - Use get_invoice when detail is missing. Record invoice ID/number, client, currency, due date and remaining unpaid balance after recorded payments and credits. Do not count full invoice totals as outstanding for partially paid records. If balance cannot be verified, flag it as unknown instead of assuming it.
+   - Confirm the as-of date and workspace timezone. Separate not-yet-due and due-today invoices from overdue invoices. Missing or invalid due dates need review, not an invented age. Invoice status alone does not prove delivery.
+
+2. GROUP AND DRAFT
+   - Group verified positive overdue balances by client and currency; never sum different currencies or infer conversion rates. Show the source invoices, balances and days overdue.
+   - Use get_client to verify contact details. Draft a neutral, professional reminder in English and Spanish, listing invoice numbers, due dates, remaining balances and currencies. Do not assume why payment is late or that a debt is undisputed.
+
+3. USER REVIEW
+   - Present drafts, recipients and supporting records for user approval before any actions, including sending messages, changing records or setting reminders.
+   - Do not automatically impose late fees, write off balances, stop work, threaten collection, assign collectible probabilities or make business decisions based on age alone. Ask the user to review disputes and their agreed terms.
+   - Summarize overdue balances per currency, clients affected, oldest verified overdue invoice and any missing evidence. Keep not-yet-due balances separate.`,
           },
         },
       ],
@@ -536,7 +523,7 @@ export function registerAllPrompts(server: McpServer): void {
     {
       title: "Invoice Aging Review",
       description:
-        "Accounts receivable aging analysis: group unpaid invoices by aging bucket (0-30, 31-60, 61-90, 90+ days), " +
+        "Accounts receivable aging analysis: separate not-yet-due balances from overdue buckets by currency, " +
         "identify top debtors, and suggest collection actions. " +
         "/ Análisis de antigüedad de cuentas por cobrar: agrupar facturas impagadas por tramos, " +
         "identificar mayores deudores y sugerir acciones de cobro.",
@@ -548,55 +535,22 @@ export function registerAllPrompts(server: McpServer): void {
           content: {
             type: "text" as const,
             text:
-              `Perform an accounts receivable aging analysis. Follow these steps:\n\n` +
-              `1. GATHER UNPAID INVOICES\n` +
-              `   - Use list_invoices to find all invoices with status "sent" or "overdue"\n` +
-              `   - For each invoice, note: invoice ID/number, client name, amount (with tax),\n` +
-              `     issue date, due date, and days since due date\n` +
-              `   - If due date is in the future, calculate days until due (negative = not yet due)\n\n` +
-              `2. AGING BUCKETS\n` +
-              `   Group all unpaid invoices into these buckets:\n` +
-              `   - CURRENT (0-30 days): Not yet due or less than 30 days overdue\n` +
-              `   - 31-60 DAYS: Between 31 and 60 days overdue\n` +
-              `   - 61-90 DAYS: Between 61 and 90 days overdue\n` +
-              `   - 90+ DAYS: More than 90 days overdue (high risk)\n` +
-              `   For each bucket, show:\n` +
-              `   - Number of invoices\n` +
-              `   - Total amount\n` +
-              `   - Percentage of total outstanding receivables\n` +
-              `   - List of invoices in that bucket\n\n` +
-              `3. TOP DEBTORS\n` +
-              `   - Use get_client for each client with unpaid invoices to get their details\n` +
-              `   - Rank clients by total outstanding amount (highest first)\n` +
-              `   - For each top debtor, show:\n` +
-              `     - Client name and contact info\n` +
-              `     - Number of unpaid invoices\n` +
-              `     - Total outstanding amount\n` +
-              `     - Oldest unpaid invoice date\n` +
-              `     - Average days overdue\n\n` +
-              `4. COLLECTION ACTIONS\n` +
-              `   Suggest specific actions for each bucket:\n` +
-              `   - CURRENT (0-30 days): No action needed, monitor normally\n` +
-              `   - 31-60 DAYS: Send a friendly payment reminder (use overdue-followup prompt pattern)\n` +
-              `   - 61-90 DAYS: Escalate — phone call + formal written reminder,\n` +
-              `     consider pausing new work for this client\n` +
-              `   - 90+ DAYS: Final notice before debt collection,\n` +
-              `     evaluate write-off vs collection agency cost,\n` +
-              `     stop all new work for this client\n\n` +
-              `5. WRITE-OFF CANDIDATES\n` +
-              `   - Flag any invoices 90+ days overdue with amounts under €100 — likely not worth pursuing\n` +
-              `   - For larger amounts 90+ days, suggest formal demand letter before write-off\n` +
-              `   - Note: written-off invoices may still be tax-deductible as bad debt\n` +
-              `     (requires documentation of collection attempts)\n\n` +
-              `6. SUMMARY DASHBOARD\n` +
-              `   Present a clear overview:\n` +
-              `   - Total accounts receivable (all unpaid invoices)\n` +
-              `   - Breakdown by aging bucket (amount and % of total)\n` +
-              `   - Weighted collection estimate:\n` +
-              `     Current: 95% collectible, 31-60: 80%, 61-90: 50%, 90+: 20%\n` +
-              `   - Expected collectible amount vs total outstanding\n` +
-              `   - Number of clients with overdue invoices\n` +
-              `   - Most urgent actions to take (prioritized list)`,
+              `Prepare an accounts receivable aging review.
+
+1. VERIFY THE DATA
+   - Use list_invoices for sent, partial and overdue records. Paginate every result set using the returned pagination fields until exhausted; deduplicate by invoice ID. Report any failed page or incomplete coverage.
+   - Use get_invoice when needed to verify currency, due date and remaining unpaid balance after recorded payments and credits. Do not count full invoice totals as outstanding for partially paid invoices. Mark unverifiable balances as unknown; do not invent totals.
+   - Confirm the as-of date and workspace timezone. Exclude settled, draft and cancelled records from receivables. Status alone does not establish delivery or an undisputed debt.
+
+2. AGE VERIFIED BALANCES
+   - Keep separate buckets: not-yet-due; due today; 1-30 days overdue; 31-60 days overdue; 61-90 days overdue; more than 90 days overdue. Missing or invalid due dates form an unknown-age bucket.
+   - Group by currency. For each bucket, show invoice IDs, count, remaining unpaid balance and percentage of that currency's verified receivables (only when the denominator is positive). Never combine currencies without a user-supplied conversion basis.
+   - Use get_client for client details and summarize positive balances by client within each currency, showing oldest due dates and missing evidence.
+
+3. REVIEW BEFORE ACTING
+   - Present the per-currency report and possible follow-up drafts using overdue-followup for user approval before any actions. A report is not permission to send, change status or create charges.
+   - Do not assign arbitrary collectible probabilities, automatically write off balances, impose late fees, stop work or make business decisions from age or amount alone. Ask for the user's terms, dispute context and decision before proposing an action.
+   - Keep not-yet-due amounts separate from overdue exposure and disclose unknown balances and incomplete pagination.`,
           },
         },
       ],
