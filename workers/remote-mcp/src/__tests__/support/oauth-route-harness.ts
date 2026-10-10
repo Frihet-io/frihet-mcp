@@ -23,8 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   OAUTH_PROVIDER_REVIEW_OPTIONS,
-  OPENAI_REVIEW_MCP_RESOURCE,
-  OPENAI_REVIEW_OAUTH_RESOURCES,
+  buildReviewedMcpProtectedResourceMetadata,
   OPENAI_REVIEW_OAUTH_SCOPES,
   OPENAI_REVIEW_ORIGIN,
 } from "../../../../../src/openai-review-oauth.ts";
@@ -34,9 +33,17 @@ import {
   type OAuthCleanupAuthorities,
   OAuthStateStore,
 } from "../../oauth-state-store.ts";
+import { boundOAuthProfile, CLAUDE_ORIGIN, resolveWorkerAccessProfile } from "../../oauth-profile.ts";
+import { resolveOAuthApiKeyUrl } from "../../api-url.ts";
+import {
+  reconcileOAuthApiKeyCorrelation,
+  resolveOAuthServiceSecret,
+  revokeOAuthApiKey,
+} from "../../oauth-provisioning.ts";
 import {
   isOAuthAccessTokenFamilyActive,
   OAuthTokenFamilyExchange,
+  OAuthTokenFamilyRevocation,
 } from "../../oauth-token-family.ts";
 
 const PROVIDER_IMPORT_LINE = 'import { WorkerEntrypoint } from "cloudflare:workers";';
@@ -44,8 +51,10 @@ export const ERP_AUTHORITY_URL =
   "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning";
 export const FIREBASE_PROJECT_ID = "frihet-route-test";
 export const SERVICE_SECRET = "route-test-service-secret-0123456789abcdef";
+export const CLAUDE_SERVICE_SECRET = "claude-route-test-service-secret-0123456789abcdef";
 export const USER_ID = "firebase-route-user";
 export const REDIRECT_URI = "https://chatgpt.com/connector_platform_oauth_redirect";
+export const CLAUDE_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback";
 const CODE_VERIFIER = "v".repeat(64);
 const FIREBASE_KID = "route-test-kid";
 
@@ -417,13 +426,18 @@ export class FakeErpAuthority {
    */
   keysPerUid = 0;
   oidMismatch: { status: number } | undefined;
+  readonly requests: Array<{ method: string; body: Record<string, unknown> }> = [];
   private hangRelease: (() => void) | undefined;
   private hangArrived: (() => void) | undefined;
   readonly hangStarted: Promise<void>;
   private readonly events: string[];
+  private readonly authorityUrl: string;
+  private readonly serviceSecret: string;
 
-  constructor(events: string[]) {
+  constructor(events: string[], authorityUrl = ERP_AUTHORITY_URL, serviceSecret = SERVICE_SECRET) {
     this.events = events;
+    this.authorityUrl = authorityUrl;
+    this.serviceSecret = serviceSecret;
     this.hangStarted = new Promise((resolve) => {
       this.hangArrived = resolve;
     });
@@ -532,9 +546,10 @@ export class FakeErpAuthority {
 
   readonly fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init);
-    assert.equal(request.url, ERP_AUTHORITY_URL, `unexpected outbound fetch: ${request.url}`);
-    assert.equal(request.headers.get("x-frihet-oauth-key"), SERVICE_SECRET);
+    assert.equal(request.url, this.authorityUrl, `unexpected outbound fetch: ${request.url}`);
+    assert.equal(request.headers.get("x-frihet-oauth-key"), this.serviceSecret);
     const body = await request.json() as Record<string, unknown>;
+    this.requests.push({ method: request.method, body });
     const uid = String(body.uid);
     if (request.method === "POST") {
       assert.deepEqual(Object.keys(body).sort(), ["correlationId", "uid"]);
@@ -547,6 +562,7 @@ export class FakeErpAuthority {
     assert.equal(request.method, "DELETE");
     assert.equal(request.headers.get("authorization"), null, "revocation never sends a user token");
     if (typeof body.correlationId === "string") {
+      assert.deepEqual(Object.keys(body).sort(), ["correlationId", "uid"]);
       this.events.push(`erp:DELETE:${body.correlationId}`);
       const fault = this.deleteFaults.shift();
       if (fault?.kind === "slow") fault.before();
@@ -555,6 +571,7 @@ export class FakeErpAuthority {
       const revoked = this.revokeCorrelation(uid, body.correlationId);
       return fault?.kind === "not-proof" ? json({ revoked: true }) : revoked;
     }
+    assert.deepEqual(Object.keys(body).sort(), ["keyId", "uid"]);
     const key = this.keys.get(String(body.keyId));
     if (!key || key.uid !== uid) return json({ error: "not found" }, 404);
     key.revoked = true;
@@ -579,9 +596,23 @@ function executionContext(): Record<string, unknown> {
 
 export async function createOAuthRouteHarness(
   t: TestContext,
-  options: { stateStore?: StateStoreFactory } = {},
+  options: { stateStore?: StateStoreFactory; profile?: "openai" | "claude" } = {},
 ) {
-  const { OAuthProvider } = await loadLockedProvider();
+  const { OAuthProvider, getOAuthApi } = await loadLockedProvider();
+  const profile = options.profile ?? "openai";
+  const boundary = boundOAuthProfile(profile);
+  const origin = boundary.origin;
+  const mcpResource = `${origin}/mcp`;
+  const redirectUri = profile === "claude" ? CLAUDE_REDIRECT_URI : REDIRECT_URI;
+  const providerOptions = profile === "claude"
+    ? {
+        ...OAUTH_PROVIDER_REVIEW_OPTIONS,
+        resourceMetadata: {
+          ...buildReviewedMcpProtectedResourceMetadata(origin),
+          resource_name: "Frihet Claude connector",
+        },
+      }
+    : OAUTH_PROVIDER_REVIEW_OPTIONS;
   const events: string[] = [];
   const logs: string[] = [];
   const clock = { offsetMs: 0 };
@@ -590,7 +621,11 @@ export async function createOAuthRouteHarness(
   t.mock.method(console, "error", (...args: unknown[]) => {
     logs.push(args.map(String).join(" "));
   });
-  const erp = new FakeErpAuthority(events);
+  const erp = new FakeErpAuthority(
+    events,
+    resolveOAuthApiKeyUrl(undefined, profile),
+    profile === "claude" ? CLAUDE_SERVICE_SECRET : SERVICE_SECRET,
+  );
   t.mock.method(globalThis, "fetch", erp.fetch);
 
   const kv = new FakeKv();
@@ -600,14 +635,45 @@ export async function createOAuthRouteHarness(
   const env: Record<string, unknown> = {
     OAUTH_KV: kv,
     FIREBASE_PROJECT_ID,
-    FRIHET_OPENAI_MODE: "true",
+    FRIHET_OPENAI_MODE: profile === "openai" ? "true" : "false",
+    ...(profile === "claude" ? { FRIHET_CLAUDE_MODE: "true", FRIHET_CLAUDE_OAUTH_API_KEY: CLAUDE_SERVICE_SECRET } : {}),
     FRIHET_API_BASE: "https://api.frihet.io/v1",
     FRIHET_OAUTH_API_KEY: SERVICE_SECRET,
   };
   const namespace = new FakeDurableObjectNamespace(
     env,
     events,
-    options.stateStore ?? productionStateStore,
+    options.stateStore ?? ((state, storeEnv) => new OAuthStateStore(
+      state as unknown as DurableObjectState,
+      storeEnv as never,
+      {
+        // Node cannot import cloudflare:workers; use getOAuthApi from the same
+        // exact SDK build already adapted by loadLockedProvider above.
+        async revokeGrant(cleanupEnv, userId, grantId) {
+          await getOAuthApi({ ...providerOptions, apiHandler, defaultHandler: authHandler }, cleanupEnv).revokeGrant(grantId, userId);
+        },
+        async revokeBackend(cleanupEnv, binding) {
+          if (!binding) return true;
+          const accessProfile = resolveWorkerAccessProfile(cleanupEnv);
+          const response = await revokeOAuthApiKey(
+            resolveOAuthApiKeyUrl(cleanupEnv.FRIHET_API_BASE, accessProfile),
+            resolveOAuthServiceSecret(cleanupEnv, accessProfile),
+            binding,
+          );
+          return response.ok || response.status === 404;
+        },
+        async revokeBackendCorrelation(cleanupEnv, attempt) {
+          const bound = boundOAuthProfile(resolveWorkerAccessProfile(cleanupEnv));
+          return reconcileOAuthApiKeyCorrelation(
+            resolveOAuthApiKeyUrl(cleanupEnv.FRIHET_API_BASE, bound.accessProfile),
+            resolveOAuthServiceSecret(cleanupEnv, bound.accessProfile),
+            bound.accessProfile === "claude"
+              ? { ...attempt, accessProfile: bound.accessProfile, oauthResource: CLAUDE_ORIGIN }
+              : { ...attempt, accessProfile: bound.accessProfile, oauthResource: OPENAI_REVIEW_ORIGIN },
+          );
+        },
+      },
+    )),
   );
   env.OAUTH_STATE = namespace;
 
@@ -625,7 +691,7 @@ export async function createOAuthRouteHarness(
     },
   };
   const provider = (exchange?: OAuthTokenFamilyExchange) => new OAuthProvider({
-    ...OAUTH_PROVIDER_REVIEW_OPTIONS,
+    ...providerOptions,
     apiHandler,
     defaultHandler: authHandler,
     // Mirrors the Worker's guarded provider: the token family is bound to the
@@ -636,8 +702,9 @@ export async function createOAuthRouteHarness(
         await exchange.reserve(callbackOptions as never, {
           uid: callbackOptions.userId,
           keyId: String(props.keyId),
-          accessProfile: "openai",
-          oauthResource: OPENAI_REVIEW_ORIGIN,
+          ...(profile === "claude"
+            ? { accessProfile: profile, oauthResource: CLAUDE_ORIGIN }
+            : { accessProfile: profile, oauthResource: OPENAI_REVIEW_ORIGIN }),
         });
       }
       return {
@@ -652,19 +719,34 @@ export async function createOAuthRouteHarness(
     provider(exchange).fetch(request, env, executionContext());
 
   async function register(): Promise<string> {
-    const registration = await send(new Request(`${OPENAI_REVIEW_ORIGIN}/register`, {
+    const registration = await send(new Request(`${origin}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        redirect_uris: [REDIRECT_URI],
+        redirect_uris: [redirectUri],
         token_endpoint_auth_method: "none",
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
-        client_name: "ChatGPT",
+        client_name: profile === "claude" ? "Claude" : "ChatGPT",
       }),
     }));
     assert.equal(registration.status, 201);
     return (await registration.json() as { client_id: string }).client_id;
+  }
+
+  async function authorize(clientId: string, resource = mcpResource): Promise<Response> {
+    const url = new URL(`${origin}/authorize`);
+    url.search = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope: OPENAI_REVIEW_OAUTH_SCOPES.join(" "),
+      state: "client-state",
+      code_challenge: await s256(CODE_VERIFIER),
+      code_challenge_method: "S256",
+      resource,
+    }).toString();
+    return send(new Request(url));
   }
 
   /**
@@ -675,18 +757,7 @@ export async function createOAuthRouteHarness(
     existingClientId?: string,
   ): Promise<{ clientId: string; stateKey: string }> {
     const clientId = existingClientId ?? await register();
-    const url = new URL(`${OPENAI_REVIEW_ORIGIN}/authorize`);
-    url.search = new URLSearchParams({
-      response_type: "code",
-      client_id: clientId,
-      redirect_uri: REDIRECT_URI,
-      scope: OPENAI_REVIEW_OAUTH_SCOPES.join(" "),
-      state: "client-state",
-      code_challenge: await s256(CODE_VERIFIER),
-      code_challenge_method: "S256",
-      resource: OPENAI_REVIEW_MCP_RESOURCE,
-    }).toString();
-    const page = await send(new Request(url));
+    const page = await authorize(clientId);
     assert.equal(page.status, 200);
     const html = await page.text();
     const match = /<script type="application\/json" id="server-data">(.*?)<\\?\/script>/su.exec(html);
@@ -697,12 +768,42 @@ export async function createOAuthRouteHarness(
 
   /** POST /callback exactly as the login page does. */
   async function callback(stateKey: string, idToken: string): Promise<CallbackResult> {
-    const response = await send(new Request(`${OPENAI_REVIEW_ORIGIN}/callback`, {
+    const response = await send(new Request(`${origin}/callback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stateKey, idToken, locale: "es" }),
     }));
     return { status: response.status, body: await response.json() as Record<string, unknown> };
+  }
+
+  async function exchangeToken(form: URLSearchParams): Promise<Response> {
+    const exchange = OAuthTokenFamilyExchange.fromForm(
+      form,
+      namespace as unknown as DurableObjectNamespace,
+      kv as unknown as KVNamespace,
+      boundary.acceptedResources,
+    );
+    const revocation = OAuthTokenFamilyRevocation.fromForm(
+      form,
+      namespace as unknown as DurableObjectNamespace,
+      kv as unknown as KVNamespace,
+    );
+    let request = new Request(`${origin}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+    if (revocation) request = await revocation.protectRequest(request, form);
+    try {
+      const response = await send(request, exchange);
+      if (exchange) return (await exchange.settle(response)).response;
+      if (revocation) return (await revocation.settle(response)).response;
+      return response;
+    } catch (error) {
+      const settlement = await exchange?.settleThrown(error);
+      if (!settlement) throw error;
+      return settlement.response;
+    }
   }
 
   /** Redeem the callback's code at /token and call /mcp with the access token. */
@@ -714,32 +815,20 @@ export async function createOAuthRouteHarness(
       grant_type: "authorization_code",
       code,
       client_id: clientId,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: redirectUri,
       code_verifier: CODE_VERIFIER,
     });
-    const exchange = OAuthTokenFamilyExchange.fromForm(
-      form,
-      namespace as unknown as DurableObjectNamespace,
-      kv as unknown as KVNamespace,
-      OPENAI_REVIEW_OAUTH_RESOURCES,
-    );
-    assert.ok(exchange, "token family guard must engage");
-    const tokenResponse = await send(new Request(`${OPENAI_REVIEW_ORIGIN}/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: form.toString(),
-    }), exchange);
-    const settlement = await exchange.settle(tokenResponse);
-    const tokens = await settlement.response.json() as Record<string, unknown>;
-    assert.equal(settlement.response.status, 200, JSON.stringify(tokens));
+    const tokenResponse = await exchangeToken(form);
+    const tokens = await tokenResponse.json() as Record<string, unknown>;
+    assert.equal(tokenResponse.status, 200, JSON.stringify(tokens));
     const accessToken = String(tokens.access_token);
     const mcp = await callMcp(accessToken);
     assert.equal(mcp.status, 200);
-    return { ...await mcp.json() as { keyId: string; userId: string }, accessToken };
+    return { ...await mcp.json() as { keyId: string; userId: string }, accessToken, refreshToken: String(tokens.refresh_token), tokens };
   }
 
   function callMcp(accessToken: string): Promise<Response> {
-    return send(new Request(`${OPENAI_REVIEW_ORIGIN}/mcp`, {
+    return send(new Request(`${origin}/mcp`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       body: "{}",
@@ -775,6 +864,12 @@ export async function createOAuthRouteHarness(
     throw new Error("Durable Object alarms did not settle");
   }
 
+  async function runFamilyAlarms(): Promise<void> {
+    for (const { store, state } of namespace.objects.values()) {
+      if (state.storage.values.has("oauth_token_family_cleanup")) await store.alarm();
+    }
+  }
+
   return {
     env,
     kv,
@@ -783,11 +878,20 @@ export async function createOAuthRouteHarness(
     events,
     logs,
     clock,
+    profile,
+    origin,
+    mcpResource,
+    redirectUri,
+    send,
+    register,
+    authorize,
     startLogin,
     callback,
     redeem,
     callMcp,
     runStateAlarm,
     runDueAlarms,
+    exchangeToken,
+    runFamilyAlarms,
   };
 }
