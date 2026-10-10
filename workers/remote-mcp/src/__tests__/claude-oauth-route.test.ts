@@ -176,3 +176,36 @@ test("Claude local refresh-token disconnect removes the SDK grant and revokes th
   assert.equal(h.kv.grantKeys().length, 0);
   assert.deepEqual(h.erp.requests.at(-1), { method: "DELETE", body: { uid: initial.userId, keyId: initial.keyId } });
 });
+
+for (const host of ["localhost", "127.0.0.1"]) {
+  test(`Claude Code local SDK flow accepts ${host} callback ports that differ from DCR registration`, async (t) => {
+    const registeredRedirectUri = `http://${host}:8080/oauth/callback?client=claude-code`;
+    const redirectUri = `http://${host}:49152/oauth/callback?client=claude-code`;
+    const h = await createOAuthRouteHarness(t, { profile: "claude", registeredRedirectUri, redirectUri });
+    const { clientId, stateKey } = await h.startLogin();
+    const client = await h.kv.get(`client:${clientId}`, { type: "json" }) as { redirectUris: string[] };
+    assert.deepEqual(client.redirectUris, [registeredRedirectUri]);
+    const completed = await h.callback(stateKey, await mintIdToken());
+    assert.equal(completed.status, 200, JSON.stringify(completed.body));
+    const target = new URL(String(completed.body.redirectTo));
+    assert.equal(target.hostname, host);
+    assert.equal(target.port, "49152");
+    assert.equal(target.pathname, "/oauth/callback");
+    assert.equal(target.searchParams.get("client"), "claude-code");
+    const mcp = await h.redeem(clientId, completed.body.redirectTo);
+    assert.equal(mcp.tokens.resource, CLAUDE_MCP_RESOURCE);
+    assert.deepEqual(h.erp.activeKeyIds(), [mcp.keyId]);
+  });
+}
+
+test("OpenAI harness retains the unmodified SDK localhost port comparison", async (t) => {
+  const h = await createOAuthRouteHarness(t, {
+    registeredRedirectUri: "http://localhost:8080/oauth/callback",
+    redirectUri: "http://localhost:49152/oauth/callback",
+  });
+  const clientId = await h.register();
+  const response = await h.authorize(clientId);
+  assert.equal(response.status, 400);
+  assert.equal(h.namespace.objects.size, 0);
+  assert.equal(h.erp.requests.length, 0);
+});
