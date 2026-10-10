@@ -17,7 +17,7 @@ export function filesIn(directory, prefix = "") {
 }
 
 export function exportedFiles() {
-  const paths = [".claude-plugin/plugin.json", "LICENSE", ...filesIn(join(root, "skills")).map((path) => `skills/${path}`)];
+  const paths = [".claude-plugin/plugin.json", ".claude-plugin/icon.png", "LICENSE", ...filesIn(join(root, "skills")).map((path) => `skills/${path}`)];
   return new Map(paths.map((path) => [path, readFileSync(join(root, path))]));
 }
 

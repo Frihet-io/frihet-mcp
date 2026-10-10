@@ -19,6 +19,9 @@ test("remote preview is a small self-contained export of the local plugin skills
   const manifest = JSON.parse(readFileSync(join(plugin, ".claude-plugin/plugin.json"), "utf8"));
   assert.equal(manifest.name, "frihet-erp");
   assert.equal(manifest.license, "MIT");
+  assert.equal(manifest.author.name, "Frihet");
+  assert.equal(manifest.author.email, "hola@frihet.io");
+  assert.equal(manifest.privacyPolicyUrl, "https://mcp.frihet.io/privacy");
   assert.deepEqual(JSON.parse(readFileSync(join(plugin, ".mcp.json"), "utf8")), {
     mcpServers: { frihet: { type: "http", url: "https://mcp.frihet.io/mcp" } },
   });
