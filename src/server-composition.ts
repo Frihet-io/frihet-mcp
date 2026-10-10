@@ -12,6 +12,7 @@ import {
   CAPABILITY_META_KEY,
 } from "./capability-truth.js";
 import { applyFiscalAliases } from "./fiscal-aliases.js";
+import { applyClaudeCandidateProfile, CLAUDE_CANDIDATE_TOOLS, CLAUDE_GROUP_METADATA } from "./claude-profile.js";
 import {
   applyOpenAIProfile,
   applyOpenAIReviewProfiles,
@@ -25,20 +26,23 @@ export interface McpSurfaceComposition {
   readonly openaiMode: boolean;
   readonly groupedMode: boolean;
   readonly includeDynamicResources: boolean;
+  readonly claudeMode?: boolean;
 }
 
 export function localMcpSurfaceComposition(
   openaiMode: boolean,
   groupedMode: boolean,
+  claudeMode = false,
 ): McpSurfaceComposition {
-  return { openaiMode, groupedMode, includeDynamicResources: true };
+  return { openaiMode, groupedMode, includeDynamicResources: true, claudeMode };
 }
 
 export function remoteMcpSurfaceComposition(
   openaiMode: boolean,
   groupedMode: boolean,
+  claudeMode = false,
 ): McpSurfaceComposition {
-  return { openaiMode, groupedMode, includeDynamicResources: false };
+  return { openaiMode, groupedMode, includeDynamicResources: false, claudeMode };
 }
 
 export function registerMcpSurface(
@@ -46,11 +50,18 @@ export function registerMcpSurface(
   client: IFrihetClient,
   options: McpSurfaceComposition,
 ): void {
+  if (options.openaiMode && options.claudeMode) {
+    throw new Error("FRIHET_OPENAI_MODE and FRIHET_CLAUDE_MODE are mutually exclusive");
+  }
   if (options.groupedMode) {
     if (options.openaiMode) {
       applyOpenAIReviewProfiles(server);
     } else {
       applyToolExposureProfile(server, {
+        ...(options.claudeMode ? {
+          allowlist: CLAUDE_CANDIDATE_TOOLS,
+          groupMetadata: CLAUDE_GROUP_METADATA,
+        } : {}),
         capabilityTruth: {
           metaKey: CAPABILITY_META_KEY,
           localDiscovery: buildLocalDiscoveryCapability,
@@ -63,6 +74,10 @@ export function registerMcpSurface(
 
   if (!options.openaiMode) {
     applyPublicCapabilityTruth(server);
+  }
+
+  if (options.claudeMode) {
+    applyClaudeCandidateProfile(server);
   }
 
   registerAllTools(server, client);

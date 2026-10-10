@@ -199,7 +199,8 @@ describe("GAP-04 — irreversible tools declare a required confirm", () => {
       const { server } = makeServer();
       const entry = server.tools.get(tool);
       assert.ok(entry, `${tool} must be registered`);
-      const shape = entry.config.inputSchema ?? {};
+      const inputSchema = entry.config.inputSchema;
+      const shape = inputSchema instanceof z.ZodObject ? inputSchema.shape : inputSchema ?? {};
       assert.ok(
         Object.prototype.hasOwnProperty.call(shape, "confirm"),
         `${tool} must declare a confirm field`,

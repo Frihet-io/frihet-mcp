@@ -35,6 +35,7 @@ const PKG_VERSION: string = (() => {
   }
 })();
 import { OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT } from "./openai-profile.js";
+import { CLAUDE_CANDIDATE_INSTRUCTIONS, CLAUDE_CANDIDATE_TOOLS } from "./claude-profile.js";
 import { resolveToolMode, GROUPED_META_TOOL_COUNT } from "./tool-exposure.js";
 import {
   localMcpSurfaceComposition,
@@ -49,6 +50,12 @@ import { registerShutdownHook } from "./metrics.js";
 import { setTraceContext } from "./observability.js";
 
 function main(): void {
+  const openaiMode = process.env.FRIHET_OPENAI_MODE === "true";
+  const claudeMode = process.env.FRIHET_CLAUDE_MODE === "true";
+  if (openaiMode && claudeMode) {
+    console.error("Error: FRIHET_OPENAI_MODE and FRIHET_CLAUDE_MODE are mutually exclusive");
+    process.exit(1);
+  }
   const apiKey = process.env.FRIHET_API_KEY;
 
   // Demo mode: FRIHET_DEMO=1|true serves fixture-backed example data with NO
@@ -122,7 +129,9 @@ function main(): void {
   const server = new McpServer({
     name: "frihet-erp",
     version: PKG_VERSION,
-    description:
+    description: claudeMode
+      ? `Local Claude candidate for Frihet ERP: ${CLAUDE_CANDIDATE_TOOLS.size} canonical operations, 4 fiscal aliases, 5 resources and 2 prompts. Optional grouped discovery adds 3 names. API-dependent operations require live workspace verification; this is not a published Directory connector.`
+      :
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
       "Provides a catalogue of 158 canonical operations; fiscal aliases and optional grouped discovery names are reported separately. " +
       "The local package serves 11 resources (7 static + 4 API-backed) and 10 workflow prompts " +
@@ -131,10 +140,9 @@ function main(): void {
     // Delivered by `initialize` to every MCP client, which hands it to the model
     // before the first tool call. This is the only onboarding channel that costs
     // the operator zero configuration. Source: src/agent-onboarding.ts.
-    instructions: AGENT_SERVER_INSTRUCTIONS,
+    instructions: claudeMode ? CLAUDE_CANDIDATE_INSTRUCTIONS : AGENT_SERVER_INSTRUCTIONS,
   });
 
-  const openaiMode = process.env.FRIHET_OPENAI_MODE === "true";
   const toolMode = resolveToolMode();
 
   if (toolMode === "grouped") {
@@ -156,7 +164,7 @@ function main(): void {
   registerMcpSurface(
     server,
     client,
-    localMcpSurfaceComposition(openaiMode, toolMode === "grouped"),
+    localMcpSurfaceComposition(openaiMode, toolMode === "grouped", claudeMode),
   );
 
   // Register shutdown hook to log final metrics summary
