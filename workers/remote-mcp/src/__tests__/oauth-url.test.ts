@@ -11,6 +11,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { resolveApiBaseUrl, resolveOAuthApiKeyUrl } from "../api-url.ts";
 import {
+  CLAUDE_OAUTH_PROVISIONING_CONTRACT,
   OAUTH_PROVISIONING_CONTRACT,
   isOAuthCorrelationRevocationProof,
   isTrustedOAuthApiKeyUrl,
@@ -18,12 +19,22 @@ import {
   parseProvisionedOAuthApiKey,
   provisionOAuthApiKey,
   reconcileOAuthApiKeyCorrelation,
+  resolveOAuthServiceSecret,
   revokeOAuthApiKey,
+  revokeOAuthApiKeyCorrelation,
+  type OAuthProvisioningBinding,
 } from "../oauth-provisioning.ts";
 
 const EXPECTED =
   "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning";
 const SERVICE_SECRET = "s".repeat(32);
+const CLAUDE_EXPECTED =
+  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning";
+const CLAUDE_BINDING = {
+  uid: "uid-test",
+  accessProfile: "claude",
+  oauthResource: "https://claude-mcp.frihet.io",
+} as const;
 const CORRELATION_ID = "123e4567-e89b-42d3-a456-426614174000";
 const OPENAI_BINDING = {
   uid: "uid-test",
@@ -98,6 +109,41 @@ test("resolveOAuthApiKeyUrl ignores a valid tool base and selects the dedicated 
   );
 });
 
+test("Claude contract and authority have separate fixed profile, permissions, secret and correlation namespace", () => {
+  assert.deepEqual(CLAUDE_OAUTH_PROVISIONING_CONTRACT, {
+    contractVersion: "2026-10-10",
+    accessProfile: "claude",
+    oauthResource: "https://claude-mcp.frihet.io",
+    authorityUrl: CLAUDE_EXPECTED,
+    permissions: ["read", "write", "einvoice:write"],
+    candidateLifetimeDays: 30,
+    correlationNamespace: "claude-",
+  });
+  for (const base of [undefined, "", "https://api.frihet.io/v1"]) {
+    assert.equal(resolveOAuthApiKeyUrl(base, "claude"), CLAUDE_EXPECTED);
+    assert.throws(() => resolveOAuthApiKeyUrl(base, "full"), /authority is unavailable/u);
+  }
+  assert.throws(() => resolveOAuthApiKeyUrl("https://evil.example/v1", "claude"), /not trusted/u);
+  assert.equal(isTrustedOAuthApiKeyUrl(CLAUDE_EXPECTED, "claude"), true);
+  assert.equal(isTrustedOAuthApiKeyUrl(EXPECTED, "claude"), false);
+  assert.equal(isTrustedOAuthApiKeyUrl(CLAUDE_EXPECTED, "openai"), false);
+  assert.equal(isTrustedOAuthApiKeyUrl(EXPECTED, "full"), false);
+  const secrets = {
+    FRIHET_OAUTH_API_KEY: "o".repeat(32),
+    FRIHET_CLAUDE_OAUTH_API_KEY: "c".repeat(32),
+  };
+  assert.equal(resolveOAuthServiceSecret(secrets, "openai"), secrets.FRIHET_OAUTH_API_KEY);
+  assert.equal(resolveOAuthServiceSecret(secrets, "claude"), secrets.FRIHET_CLAUDE_OAUTH_API_KEY);
+  assert.throws(() => resolveOAuthServiceSecret({ FRIHET_OAUTH_API_KEY: SERVICE_SECRET }, "claude"), /not configured/u);
+  assert.throws(() => resolveOAuthServiceSecret(secrets, "full"), /authority is unavailable/u);
+  assert.throws(() => resolveOAuthServiceSecret(secrets, "unknown" as "full"), /authority is unavailable/u);
+  assert.throws(() => resolveOAuthServiceSecret({ FRIHET_CLAUDE_OAUTH_API_KEY: "short" }, "claude"), /not configured/u);
+  assert.throws(() => resolveOAuthServiceSecret({
+    FRIHET_OAUTH_API_KEY: SERVICE_SECRET,
+    FRIHET_CLAUDE_OAUTH_API_KEY: SERVICE_SECRET,
+  }, "claude"), /must be separate from OpenAI/u);
+});
+
 test("OAuth provisioning accepts only Frihet's exact one-time bound key tuple", () => {
   const valid = `fri_${"A".repeat(43)}`;
   const keyId = "AbCdEfGhIjKlMnOpQrSt";
@@ -106,6 +152,20 @@ test("OAuth provisioning accepts only Frihet's exact one-time bound key tuple", 
     parseProvisionedOAuthApiKey({ apiKey: valid, keyId, expiresAt }, OPENAI_BINDING),
     { apiKey: valid, keyId, expiresAt, ...OPENAI_BINDING },
   );
+  assert.deepEqual(
+    parseProvisionedOAuthApiKey({ apiKey: valid, keyId, expiresAt }, CLAUDE_BINDING),
+    { apiKey: valid, keyId, expiresAt, ...CLAUDE_BINDING },
+  );
+  for (const binding of [
+    FULL_BINDING,
+    { ...CLAUDE_BINDING, oauthResource: OPENAI_BINDING.oauthResource },
+    { ...OPENAI_BINDING, oauthResource: CLAUDE_BINDING.oauthResource },
+  ]) {
+    assert.equal(parseProvisionedOAuthApiKey(
+      { apiKey: valid, keyId, expiresAt },
+      binding as OAuthProvisioningBinding,
+    ), undefined);
+  }
 
   for (const payload of [
     null,
@@ -345,13 +405,13 @@ test("OAuth provision and revoke requests send the narrow server-derived bodies"
     FULL_BINDING,
     CORRELATION_ID,
     fetchImpl,
-  ), /restricted to the OpenAI profile/u);
+  ), /exact OpenAI or Claude profile binding/u);
   assert.throws(() => revokeOAuthApiKey(
     EXPECTED,
     SERVICE_SECRET,
     { ...FULL_BINDING, keyId: "AbCdEfGhIjKlMnOpQrSt" },
     fetchImpl,
-  ), /restricted to the OpenAI profile/u);
+  ), /exact OpenAI or Claude profile binding/u);
   for (const binding of [WRONG_RESOURCE_BINDING, WRONG_PROFILE_BINDING]) {
     assert.throws(() => provisionOAuthApiKey(
       EXPECTED,
@@ -360,7 +420,7 @@ test("OAuth provision and revoke requests send the narrow server-derived bodies"
       binding,
       CORRELATION_ID,
       fetchImpl,
-    ), /restricted to the OpenAI profile/u);
+    ), /exact OpenAI or Claude profile binding/u);
   }
   assert.equal(calls.length, 2);
 });
@@ -447,10 +507,61 @@ test("provisioning preflight refuses, without sending, every request the leaf wo
     ["https://evil.example/oauth/api-key", SERVICE_SECRET, OPENAI_BINDING, CORRELATION_ID, /not trusted/u],
     [EXPECTED, "short", OPENAI_BINDING, CORRELATION_ID, /not configured/u],
     [EXPECTED, SERVICE_SECRET, OPENAI_BINDING, "not-a-uuid", /correlation is invalid/u],
-    [EXPECTED, SERVICE_SECRET, FULL_BINDING, CORRELATION_ID, /restricted to the OpenAI profile/u],
-    [EXPECTED, SERVICE_SECRET, WRONG_RESOURCE_BINDING, CORRELATION_ID, /restricted to the OpenAI profile/u],
-    [EXPECTED, SERVICE_SECRET, WRONG_PROFILE_BINDING, CORRELATION_ID, /restricted to the OpenAI profile/u],
+    [EXPECTED, SERVICE_SECRET, FULL_BINDING, CORRELATION_ID, /exact OpenAI or Claude profile binding/u],
+    [EXPECTED, SERVICE_SECRET, WRONG_RESOURCE_BINDING, CORRELATION_ID, /exact OpenAI or Claude profile binding/u],
+    [EXPECTED, SERVICE_SECRET, WRONG_PROFILE_BINDING, CORRELATION_ID, /exact OpenAI or Claude profile binding/u],
   ] as const) {
     assert.match(oauthProvisioningPreflightError(url, secret, binding, correlationId) ?? "", expected);
+  }
+});
+
+test("every candidate lifecycle call rejects crossed authority/profile pairs before fetch receives a secret", () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return Response.json({ revoked: true });
+  };
+  for (const [url, binding] of [
+    [EXPECTED, CLAUDE_BINDING],
+    [CLAUDE_EXPECTED, OPENAI_BINDING],
+    [`${CLAUDE_EXPECTED}/`, CLAUDE_BINDING],
+    [`${CLAUDE_EXPECTED}?profile=claude`, CLAUDE_BINDING],
+    [`${CLAUDE_EXPECTED}#fragment`, CLAUDE_BINDING],
+    [CLAUDE_EXPECTED.replace("https://", "https://user:pass@"), CLAUDE_BINDING],
+  ] as const) {
+    assert.match(oauthProvisioningPreflightError(url, SERVICE_SECRET, binding, CORRELATION_ID) ?? "", /not trusted/u);
+    assert.throws(() => provisionOAuthApiKey(url, "firebase-token", SERVICE_SECRET, binding, CORRELATION_ID, fetchImpl), /not trusted/u);
+    assert.throws(() => revokeOAuthApiKey(url, SERVICE_SECRET, { ...binding, keyId: "AbCdEfGhIjKlMnOpQrSt" }, fetchImpl), /not trusted/u);
+    assert.throws(() => revokeOAuthApiKeyCorrelation(url, SERVICE_SECRET, { ...binding, correlationId: CORRELATION_ID }, fetchImpl), /not trusted/u);
+  }
+  assert.equal(calls, 0);
+});
+
+test("Claude provision and both revocations keep UUID wire bodies, bound authority, no redirects and timeout", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return Response.json({ revoked: true });
+  };
+  await provisionOAuthApiKey(CLAUDE_EXPECTED, "claude-firebase-token", SERVICE_SECRET, CLAUDE_BINDING, CORRELATION_ID, fetchImpl);
+  await revokeOAuthApiKey(CLAUDE_EXPECTED, SERVICE_SECRET, { ...CLAUDE_BINDING, keyId: "AbCdEfGhIjKlMnOpQrSt" }, fetchImpl);
+  await revokeOAuthApiKeyCorrelation(CLAUDE_EXPECTED, SERVICE_SECRET, { ...CLAUDE_BINDING, correlationId: CORRELATION_ID }, fetchImpl);
+  assert.deepEqual(calls.map((call) => JSON.parse(String(call.init?.body))), [
+    { uid: CLAUDE_BINDING.uid, correlationId: CORRELATION_ID },
+    { uid: CLAUDE_BINDING.uid, keyId: "AbCdEfGhIjKlMnOpQrSt" },
+    { uid: CLAUDE_BINDING.uid, correlationId: CORRELATION_ID },
+  ]);
+  for (const { url, init } of calls) {
+    assert.equal(url, CLAUDE_EXPECTED);
+    assert.equal(init?.redirect, "manual");
+    assert.ok(init?.signal instanceof AbortSignal);
+    assert.equal(init?.signal?.aborted, false);
+    assert.equal(new Headers(init?.headers).get("x-frihet-oauth-key"), SERVICE_SECRET);
+  }
+  for (const status of [301, 302, 303, 307, 308]) {
+    const redirectFetch = async () => new Response(null, { status, headers: { Location: "https://evil.example/sink" } });
+    await assert.rejects(() => provisionOAuthApiKey(CLAUDE_EXPECTED, "id-token", SERVICE_SECRET, CLAUDE_BINDING, CORRELATION_ID, redirectFetch), /Redirect responses are not allowed/u);
+    await assert.rejects(() => revokeOAuthApiKey(CLAUDE_EXPECTED, SERVICE_SECRET, { ...CLAUDE_BINDING, keyId: "AbCdEfGhIjKlMnOpQrSt" }, redirectFetch), /Redirect responses are not allowed/u);
+    await assert.rejects(() => revokeOAuthApiKeyCorrelation(CLAUDE_EXPECTED, SERVICE_SECRET, { ...CLAUDE_BINDING, correlationId: CORRELATION_ID }, redirectFetch), /Redirect responses are not allowed/u);
   }
 });
