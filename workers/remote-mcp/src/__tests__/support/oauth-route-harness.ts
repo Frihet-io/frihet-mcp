@@ -30,7 +30,7 @@ import {
 } from "../../../../../src/openai-review-oauth.ts";
 import { authHandler } from "../../auth-handler.ts";
 import { OAuthStateStore } from "../../oauth-state-store.ts";
-import { boundOAuthProfile, CLAUDE_ORIGIN, resolveWorkerAccessProfile } from "../../oauth-profile.ts";
+import { boundOAuthProfile, CLAUDE_ORIGIN, isClaudeQaUidAllowed, resolveWorkerAccessProfile } from "../../oauth-profile.ts";
 import { resolveOAuthApiKeyUrl } from "../../api-url.ts";
 import {
   reconcileOAuthApiKeyCorrelation,
@@ -562,7 +562,11 @@ export async function createOAuthRouteHarness(
     OAUTH_KV: kv,
     FIREBASE_PROJECT_ID,
     FRIHET_OPENAI_MODE: profile === "openai" ? "true" : "false",
-    ...(profile === "claude" ? { FRIHET_CLAUDE_MODE: "true", FRIHET_CLAUDE_OAUTH_API_KEY: CLAUDE_SERVICE_SECRET } : {}),
+    ...(profile === "claude" ? {
+      FRIHET_CLAUDE_MODE: "true",
+      FRIHET_CLAUDE_OAUTH_API_KEY: CLAUDE_SERVICE_SECRET,
+      FRIHET_CLAUDE_QA_UIDS: JSON.stringify([USER_ID]),
+    } : {}),
     FRIHET_API_BASE: "https://api.frihet.io/v1",
     FRIHET_OAUTH_API_KEY: SERVICE_SECRET,
   };
@@ -606,6 +610,9 @@ export async function createOAuthRouteHarness(
   const apiHandler = {
     async fetch(request: Request, handlerEnv: Record<string, unknown>, ctx: { props?: Record<string, unknown> }) {
       const userId = typeof ctx.props?.userId === "string" ? ctx.props.userId : undefined;
+      if (profile === "claude" && request.method !== "DELETE" && !isClaudeQaUidAllowed(handlerEnv, userId)) {
+        return json({ error: "invalid_token" }, 401);
+      }
       if (!await isOAuthAccessTokenFamilyActive(
         handlerEnv.OAUTH_STATE as DurableObjectNamespace,
         request,
@@ -624,6 +631,9 @@ export async function createOAuthRouteHarness(
     // exact backend key carried by the grant the callback completed.
     tokenExchangeCallback: async (callbackOptions: { props: Record<string, unknown>; userId: string }) => {
       const props = callbackOptions.props;
+      if (profile === "claude" && !isClaudeQaUidAllowed(env, callbackOptions.userId)) {
+        throw new Error("Claude pilot access is unavailable for this identity");
+      }
       if (exchange) {
         await exchange.reserve(callbackOptions as never, {
           uid: callbackOptions.userId,
@@ -727,8 +737,11 @@ export async function createOAuthRouteHarness(
       return response;
     } catch (error) {
       const settlement = await exchange?.settleThrown(error);
-      if (!settlement) throw error;
-      return settlement.response;
+      if (settlement) return settlement.response;
+      if (!exchange) throw error;
+      // The Worker's generic token-exchange fallback also closes when the
+      // provider callback refuses before a family lease is reserved.
+      return json({ error: "invalid_grant" }, 400);
     }
   }
 

@@ -257,15 +257,15 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/claude-public-surface.ts": "3664b8971fd361bdbb17b2353bfcdbda08f55c59b4554f0e9cbdf8539bc15843", // isolated Claude host and authorization boundary
-  "workers/remote-mcp/src/oauth-profile.ts": "1c7a88c3f42a42e4d5489d832073abdce7a2e13cd348400bc679f1e12b8d0b2f", // isolated Claude host and authorization boundary
+  "workers/remote-mcp/src/oauth-profile.ts": "fd78139588876001b0521d5d9370b89a019f065ed783fdc76617a863c978c8a1", // isolated Claude host and authorization boundary
   "src/client.ts": "b7cc8a4cc73d5426720939c27c87663ad6aacaf4fa2802876c53e2da9dc881b0", // provisioning credential removed from the public API client; sinks unchanged
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "042092f9805c06719355a6a3a7d85f7c40dd88e89cb764de9d54208b6275d1c6", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
   "workers/api-proxy/worker.js": "163aa6859d157761709e5f8bf9dfe820f7e0569b6cf49a1d776fcac93385f0d6",
   "workers/remote-mcp/src/api-url.ts": "d30673b8814eae5fc2f0cc0ea6ebdfa0885a710fab0571f2efdd8ac10d85d518",
-  "workers/remote-mcp/src/auth-handler.ts": "62e1ecef87ec0f4cf3e5a37fcc6ea62a0b0d07f05628dddbcfe9089127f41400", // callback reserve/commit: state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
+  "workers/remote-mcp/src/auth-handler.ts": "da2aea35e03e60c15166a2f95e1e2df5aed81ee82f944852e165abf51a36c0fa", // callback reserve/commit: state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
-  "workers/remote-mcp/src/index.ts": "3e23b5848006a9190b016f1aedc212a96ec0d5f4b40795538adb080b72d41097", // HEAD/GET metadata parity for reviewed legal pages; sinks unchanged
+  "workers/remote-mcp/src/index.ts": "2de225f883274f5c5cdc786b3a07592c250e767f0967b0587d22a29765a5f870", // HEAD/GET metadata parity for reviewed legal pages; sinks unchanged
   "workers/remote-mcp/src/login-page.ts": "dd7fe3bfe601c9b313e66692da018d69be443dafc6d5e1d029fe5da3c744e37e", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "9e3217b0f0fe9596c1aa09bb2506bcbf169529686c8fc1dfb0641d5b9a2721d1", // callback reserve/commit: revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)

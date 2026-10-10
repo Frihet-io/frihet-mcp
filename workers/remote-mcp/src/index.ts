@@ -64,7 +64,7 @@ import {
   validateOAuthBoundary,
 } from "../../../src/openai-review-oauth.js";
 import { CLAUDE_CANDIDATE_INSTRUCTIONS } from "../../../src/claude-profile.js";
-import { boundOAuthProfile, CLAUDE_ORIGIN, resolveWorkerAccessProfile, type WorkerAccessProfile } from "./oauth-profile.js";
+import { boundOAuthProfile, CLAUDE_ORIGIN, isClaudeQaUidAllowed, resolveWorkerAccessProfile, type WorkerAccessProfile } from "./oauth-profile.js";
 import { claudePublicSurface } from "./claude-public-surface.js";
 import { reviewedMcpProtectedResourceMetadataResponse } from "./protected-resource-metadata.js";
 import {
@@ -897,7 +897,14 @@ const reviewedMcpApiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const props = (ctx as ExecutionContext & { props?: AuthProps }).props;
     if (
-      !(await isOAuthAccessTokenFamilyActive(
+      // Check at ingress before both new and existing session requests reach
+      // the DO. A QA throw in init() would also prevent DELETE after a DO wakes.
+      // Session deletion is cleanup, so an authenticated principal may still
+      // close its own session after pilot membership has been withdrawn.
+      (resolveWorkerAccessProfile(env) === "claude"
+        && request.method !== "DELETE"
+        && !isClaudeQaUidAllowed(env, props?.userId))
+      || !(await isOAuthAccessTokenFamilyActive(
         env.OAUTH_STATE,
         request,
         props?.userId,
@@ -980,7 +987,7 @@ function validateReviewedTokenExchange({
     requestedScope,
     props,
     userId,
-  }: TokenExchangeCallbackOptions, profile: "openai" | "claude" = "openai"): {
+  }: TokenExchangeCallbackOptions, profile: "openai" | "claude" = "openai", env?: Pick<Env, "FRIHET_CLAUDE_QA_UIDS">): {
     reviewedProps: AuthProps;
     apiKeyBinding: OAuthApiKeyBinding;
     credentialTtlSeconds: number;
@@ -999,6 +1006,7 @@ function validateReviewedTokenExchange({
     || !boundaryProfile.acceptedResources.includes(reviewedProps.oauthAudience)
     || reviewedProps.authMethod !== "oauth"
     || reviewedProps.userId !== userId
+    || (profile === "claude" && !isClaudeQaUidAllowed(env ?? {}, userId))
     || !isVerifiedOpenAIIdentity({
       uid: reviewedProps.userId,
       email: reviewedProps.email,
@@ -1068,28 +1076,29 @@ const openAIProviderOptions: OAuthProviderOptions<Env> = {
 // reviewed connector and cannot authenticate against this provider.
 const openAIOAuthProvider = new OAuthProvider(openAIProviderOptions);
 
-const claudeProviderOptions: OAuthProviderOptions<Env> = {
-  ...openAIProviderOptions,
-  resourceMetadata: {
-    ...buildReviewedMcpProtectedResourceMetadata(CLAUDE_ORIGIN),
-    resource_name: "Frihet Claude connector",
-  },
-  tokenExchangeCallback: (options: TokenExchangeCallbackOptions) => {
-    const { reviewedProps, credentialTtlSeconds } = validateReviewedTokenExchange(options, "claude");
-    return buildReviewedTokenExchangeResult(options, reviewedProps, credentialTtlSeconds);
-  },
-};
-const claudeOAuthProvider = new OAuthProvider(claudeProviderOptions);
+function createClaudeProviderOptions(env: Env): OAuthProviderOptions<Env> {
+  return {
+    ...openAIProviderOptions,
+    resourceMetadata: {
+      ...buildReviewedMcpProtectedResourceMetadata(CLAUDE_ORIGIN),
+      resource_name: "Frihet Claude connector",
+    },
+    tokenExchangeCallback: (options: TokenExchangeCallbackOptions) => {
+      const { reviewedProps, credentialTtlSeconds } = validateReviewedTokenExchange(options, "claude", env);
+      return buildReviewedTokenExchangeResult(options, reviewedProps, credentialTtlSeconds);
+    },
+  };
+}
 
-function createGuardedOpenAIProvider(exchange: OAuthTokenFamilyExchange, profile: "openai" | "claude" = "openai"): OAuthProvider<Env> {
+function createGuardedOpenAIProvider(exchange: OAuthTokenFamilyExchange, env: Env, profile: "openai" | "claude" = "openai"): OAuthProvider<Env> {
   return new OAuthProvider({
-    ...(profile === "claude" ? claudeProviderOptions : openAIProviderOptions),
+    ...(profile === "claude" ? createClaudeProviderOptions(env) : openAIProviderOptions),
     tokenExchangeCallback: async (options: TokenExchangeCallbackOptions) => {
       const {
         reviewedProps,
         apiKeyBinding,
         credentialTtlSeconds,
-      } = validateReviewedTokenExchange(options, profile);
+      } = validateReviewedTokenExchange(options, profile, env);
       await exchange.reserve(options, apiKeyBinding);
       return buildReviewedTokenExchangeResult(
         options,
@@ -1802,9 +1811,9 @@ export default {
         )
       : boundedProviderRequest;
     const selectedProvider = tokenFamilyExchange
-      ? createGuardedOpenAIProvider(tokenFamilyExchange, accessProfile === "claude" ? "claude" : "openai")
+      ? createGuardedOpenAIProvider(tokenFamilyExchange, env, accessProfile === "claude" ? "claude" : "openai")
       : accessProfile === "claude"
-        ? claudeOAuthProvider
+        ? new OAuthProvider(createClaudeProviderOptions(env))
         : openai
         ? openAIOAuthProvider
         : fullOAuthProvider;
