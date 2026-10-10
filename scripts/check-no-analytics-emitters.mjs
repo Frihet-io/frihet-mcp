@@ -42,15 +42,17 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "e3b7c8de63212d2781216467d4c09935fdb28188b7fb9fd249f12db5e21835a4", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test; no new deps, lifecycle or network script
-  "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
+  "package.json": "02d1f352b2a2b764f63bbeb7960bf61407ab986fc779b0adad03779e67e1efef", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test; no new deps, lifecycle or network script
+  "workers/remote-mcp/package.json": "0248007796a87b37d4f7060566b48d767aa4dcdc7a70b9fdb5883387997d1c72", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
   "workers/api-proxy/wrangler.toml": "worker.js",
   "workers/remote-mcp/wrangler.toml": "src/index.ts",
+  "workers/remote-mcp/wrangler.claude.toml": "src/index.ts",
 });
 export const APPROVED_PLATFORM_TELEMETRY = Object.freeze({
   "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
+  "workers/remote-mcp/wrangler.claude.toml|cloudflare-observability": "enabled",
 });
 export const APPROVED_DIST_IMPORTS = Object.freeze({
   "workers/remote-mcp/scripts/capture-openai-review.mjs": Object.freeze([
@@ -256,7 +258,8 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
   "workers/remote-mcp/src/api-url.ts|DEFAULT_API_BASE": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api",
   "workers/remote-mcp/src/api-url.ts|TRUSTED_CLOUD_FUNCTION_HOST": "europe-west1-gen-lang-client-0335716041.cloudfunctions.net",
   "workers/remote-mcp/src/api-url.ts|OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
-  "workers/remote-mcp/src/oauth-provisioning.ts|OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
+  "workers/remote-mcp/src/api-url.ts|CLAUDE_OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning",
+  "workers/remote-mcp/src/oauth-profile.ts|CLAUDE_ORIGIN": "https://claude-mcp.frihet.io",
   "workers/remote-mcp/src/oauth-state-store.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
   "workers/remote-mcp/src/oauth-token-family.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
 });
@@ -270,16 +273,16 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "70acc0ff78b2a0be6ecd32194ec173f8276b989288d89460d78ea5ea7f10426c", // provisioning credential removed from the public API client; sinks unchanged
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
-  "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
+  "src/openai-review-oauth.ts": "042092f9805c06719355a6a3a7d85f7c40dd88e89cb764de9d54208b6275d1c6", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
   "workers/api-proxy/worker.js": "34f6c6e995a6c779d6a80fb954321f589cf64cd99f62c5d9c6b49e0fcaf07fd4",
-  "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
-  "workers/remote-mcp/src/auth-handler.ts": "d19999e6263445c9731ad2f482d5c2639ec703c6152519a482b11bbdee7ccb8e", // #205: commit carries the replaced grant ids into the durable state outbox; inline replacement kept as fast path (no new destination); #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
+  "workers/remote-mcp/src/api-url.ts": "d30673b8814eae5fc2f0cc0ea6ebdfa0885a710fab0571f2efdd8ac10d85d518",
+  "workers/remote-mcp/src/auth-handler.ts": "b144c12035d934de7743c00358f4954f001dfb83bcf432c9b31d009bb1249edc", // #205: commit carries the replaced grant ids into the durable state outbox; inline replacement kept as fast path (no new destination); #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
-  "workers/remote-mcp/src/index.ts": "24e9e40ad2288eea9e5f04d618420d763b0f6f63d81ae4a11827383f284af632", // HEAD/GET metadata parity for reviewed legal pages; sinks unchanged
-  "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
+  "workers/remote-mcp/src/index.ts": "3e23b5848006a9190b016f1aedc212a96ec0d5f4b40795538adb080b72d41097", // HEAD/GET metadata parity for reviewed legal pages; sinks unchanged
+  "workers/remote-mcp/src/login-page.ts": "dd7fe3bfe601c9b313e66692da018d69be443dafc6d5e1d029fe5da3c744e37e", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
-  "workers/remote-mcp/src/oauth-provisioning.ts": "dd79003720debeaba12b6ae943569be6e9d286c6f9b83b24c6117639805ac938", // #203: callback reserve/commit — revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
-  "workers/remote-mcp/src/oauth-state-store.ts": "d872eff53d99b4d6c8b95fa748d161acba8133fc8591bf5c8ee993c7985a219a", // #205: grant-replacement outbox on commit, drained by the alarm before expiry cleanup through the token family's /token-family/supersede (same internal origin); fail-closed keyId binding kept; lifecycle logs carry outcome/stage/counts only (no new destination); #203: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
+  "workers/remote-mcp/src/oauth-provisioning.ts": "9e3217b0f0fe9596c1aa09bb2506bcbf169529686c8fc1dfb0641d5b9a2721d1", // #203: callback reserve/commit — revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
+  "workers/remote-mcp/src/oauth-state-store.ts": "1d2e09005baa65a3c123bd760da82bf4478b9231d5d642139cffaa57e04b8da5", // #205: grant-replacement outbox on commit, drained by the alarm before expiry cleanup through the token family's /token-family/supersede (same internal origin); fail-closed keyId binding kept; lifecycle logs carry outcome/stage/counts only (no new destination); #203: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
   "workers/remote-mcp/src/oauth-token-family.ts": "d8b9c747beefd3fd641068fc6d62830c080443f060b7a382b5ceeb12d39934c6", // #205: supersede tombstones a replaced grant's family on the same internal Durable Object origin; OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
@@ -287,6 +290,7 @@ export const APPROVED_LOCKFILE_HASHES = Object.freeze({
   "workers/remote-mcp/package-lock.json": "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
+  "workers/remote-mcp/wrangler.claude.toml": "854f967c138837702d24ed06ced93f65a4e8ec2500b14cd9c3216b17a6199af6", // dedicated Claude provider alias and bootstrap topology
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
   "workers/remote-mcp/wrangler.toml": "c04ee0033b2d0c53cebfd562ccc3da27810bd1ef5b49e52beeb5d50b218100e5",
 });
@@ -299,9 +303,13 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
+  "scripts/check-claude-hosted-release.mjs": "7b4599c7e2a5bd3730dc863d82d9fafebac3c7b7f2afc2d328d3f88bb3e2c341", // isolated Claude build and release boundary
+  "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
+  "scripts/__tests__/claude-hosted-release.test.mjs": "c9ea9f8e12c1b3afb5d7e481a7ac62be6810f672654b03cfaff361992a029aac", // isolated Claude build and release boundary
+  "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
-  ".github/workflows/ci.yml": "e77888420f0874d90c2ae001b587a07b394b5e57bdf83dbb9e90dd41908e99a0",
+  ".github/workflows/ci.yml": "30ab02839e195501fdc1b701d028d68d473da83f61cb51e5e0a7bfe60f7c4ed2",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",

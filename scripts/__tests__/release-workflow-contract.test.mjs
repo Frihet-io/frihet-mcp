@@ -2589,7 +2589,7 @@ test("OpenAI topology bootstrap — the reviewed-main bridge decision is explici
   assert.match(guide, /creates that Worker without asking/);
   assert.match(
     readFileSync("workers/remote-mcp/src/index.ts", "utf8"),
-    /initLangfuse\(openaiMode \? \{\} : \{/,
+    /initLangfuse\(boundaryProfile \? \{\} : \{/,
     "the reviewed host must keep passing an empty Langfuse configuration",
   );
   assert.match(guide, /No Worker\s+named `frihet-openai-mcp-openai` exists/);
