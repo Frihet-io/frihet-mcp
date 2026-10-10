@@ -3,8 +3,8 @@
  * `/register -> /authorize -> /callback -> provision -> completeAuthorization
  * -> /token -> /mcp`.
  *
- * Runs the exact locked workers-oauth-provider 0.3.0 dist (only its
- * `cloudflare:workers` import line is replaced) with the production
+ * Runs locked workers-oauth-provider 0.3.0 dist, with the audited localhost
+ * build patch only for Claude and a Node adapter for `cloudflare:workers`, with the production
  * `authHandler`, `OAuthStateStore` and token-family exchange. Firebase ID
  * tokens are real RS256 JWTs verified by the real verifier against a local
  * key seeded in KV. The ERP provisioning authority is an in-memory fake of the
@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { patchClaudeOAuthProvider } from "../../../../../scripts/prepare-claude-oauth-provider.mjs";
 
 import {
   OAUTH_PROVIDER_REVIEW_OPTIONS,
@@ -67,11 +68,11 @@ type LockedProvider = {
   };
 };
 
-let lockedProvider: Promise<LockedProvider> | undefined;
+const lockedProviders: Partial<Record<"openai" | "claude", Promise<LockedProvider>>> = {};
 
-function loadLockedProvider(): Promise<LockedProvider> {
-  lockedProvider ??= (async () => {
-    const source = readFileSync(
+function loadLockedProvider(profile: "openai" | "claude"): Promise<LockedProvider> {
+  lockedProviders[profile] ??= (async () => {
+    let source = readFileSync(
       fileURLToPath(
         new URL(
           "../../../node_modules/@cloudflare/workers-oauth-provider/dist/oauth-provider.js",
@@ -80,6 +81,12 @@ function loadLockedProvider(): Promise<LockedProvider> {
       ),
       "utf8",
     );
+    if (profile === "claude") {
+      const sdkVersion = JSON.parse(readFileSync(new URL(
+        "../../../node_modules/@cloudflare/workers-oauth-provider/package.json", import.meta.url,
+      ), "utf8")).version;
+      source = patchClaudeOAuthProvider(source, sdkVersion);
+    }
     const newline = source.indexOf("\n");
     assert.equal(
       source.slice(0, newline),
@@ -95,7 +102,7 @@ function loadLockedProvider(): Promise<LockedProvider> {
       rmSync(dir, { recursive: true, force: true });
     }
   })();
-  return lockedProvider;
+  return lockedProviders[profile]!;
 }
 
 // ---------------------------------------------------------------------------
@@ -596,14 +603,20 @@ function executionContext(): Record<string, unknown> {
 
 export async function createOAuthRouteHarness(
   t: TestContext,
-  options: { stateStore?: StateStoreFactory; profile?: "openai" | "claude" } = {},
+  options: {
+    stateStore?: StateStoreFactory;
+    profile?: "openai" | "claude";
+    registeredRedirectUri?: string;
+    redirectUri?: string;
+  } = {},
 ) {
-  const { OAuthProvider, getOAuthApi } = await loadLockedProvider();
   const profile = options.profile ?? "openai";
+  const { OAuthProvider, getOAuthApi } = await loadLockedProvider(profile);
   const boundary = boundOAuthProfile(profile);
   const origin = boundary.origin;
   const mcpResource = `${origin}/mcp`;
-  const redirectUri = profile === "claude" ? CLAUDE_REDIRECT_URI : REDIRECT_URI;
+  const redirectUri = options.redirectUri ?? (profile === "claude" ? CLAUDE_REDIRECT_URI : REDIRECT_URI);
+  const registeredRedirectUri = options.registeredRedirectUri ?? redirectUri;
   const providerOptions = profile === "claude"
     ? {
         ...OAUTH_PROVIDER_REVIEW_OPTIONS,
@@ -723,7 +736,7 @@ export async function createOAuthRouteHarness(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        redirect_uris: [redirectUri],
+        redirect_uris: [registeredRedirectUri],
         token_endpoint_auth_method: "none",
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
