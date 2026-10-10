@@ -2,13 +2,40 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   boundOAuthProfile, CLAUDE_MCP_RESOURCE, CLAUDE_OAUTH_RESOURCES,
-  CLAUDE_ORIGIN, resolveWorkerAccessProfile,
+  CLAUDE_ORIGIN, isClaudeQaUidAllowed, resolveWorkerAccessProfile,
 } from "../oauth-profile.ts";
 import {
   buildOpenAIUserInfo, FRIHET_CONNECTOR_SCOPE, OPENAI_REVIEW_OAUTH_RESOURCES, OPENAI_REVIEW_OAUTH_SCOPES,
   OPENAI_REVIEW_ORIGIN, validateOAuthBoundary,
 } from "../../../../src/openai-review-oauth.ts";
 import { getLoginPage } from "../login-page.ts";
+
+test("Claude private QA membership uses exact ERP-safe Firebase UIDs without normalization or caching", () => {
+  const uid = "synthetic-qa-user";
+  const env = { FRIHET_CLAUDE_QA_UIDS: JSON.stringify([uid, " spaced uid ", "u".repeat(128)]) };
+  assert.equal(isClaudeQaUidAllowed(env, uid), true);
+  assert.equal(isClaudeQaUidAllowed(env, " spaced uid "), true);
+  assert.equal(isClaudeQaUidAllowed(env, "spaced uid"), false);
+  assert.equal(isClaudeQaUidAllowed(env, "u".repeat(128)), true);
+  assert.equal(isClaudeQaUidAllowed(env, "Synthetic-qa-user"), false);
+  for (const invalidUid of [undefined, null, 1, {}, [], "", ".", "..", "user/path", "user\0name", "u".repeat(129)]) {
+    assert.equal(isClaudeQaUidAllowed({ FRIHET_CLAUDE_QA_UIDS: JSON.stringify([invalidUid]) }, invalidUid), false);
+  }
+  env.FRIHET_CLAUDE_QA_UIDS = JSON.stringify(["other-user"]);
+  assert.equal(isClaudeQaUidAllowed(env, uid), false, "withdrawal is observed on the next decision");
+});
+
+test("Claude private QA config rejects missing, malformed, empty, duplicate and partially invalid lists", () => {
+  const uid = "synthetic-qa-user";
+  for (const configured of [
+    undefined, null, [], {}, "", "{", "null", "false", "1", JSON.stringify(uid), "{}", "[]",
+    JSON.stringify([uid, uid]),
+    ...[null, 1, {}, [], "", ".", "..", "user/path", "user\0name", "u".repeat(129)]
+      .map((invalidUid) => JSON.stringify([uid, invalidUid])),
+  ]) {
+    assert.equal(isClaudeQaUidAllowed({ FRIHET_CLAUDE_QA_UIDS: configured }, uid), false);
+  }
+});
 
 test("Claude flags require explicit isolation while existing profiles retain their resource sets", () => {
   for (const flag of [undefined, "false"]) {

@@ -7,6 +7,7 @@ import {
   CLAUDE_REDIRECT_URI,
   createOAuthRouteHarness,
   mintIdToken,
+  USER_ID,
   type PostFault,
 } from "./support/oauth-route-harness.ts";
 
@@ -17,6 +18,123 @@ function assertNoSecretsInLogs(h: Harness, idToken: string): void {
     for (const log of h.logs) assert.equal(log.includes(secret), false, "synthetic credential reached a log");
   }
 }
+
+for (const [label, configured] of [
+  ["non-QA identity", JSON.stringify(["other-synthetic-qa-user"])],
+  ["missing config", undefined],
+  ["malformed JSON", "{"],
+  ["empty list", "[]"],
+  ["invalid member", JSON.stringify([USER_ID, "user/path"])],
+  ["duplicate member", JSON.stringify([USER_ID, USER_ID])],
+] as const) {
+  test(`Claude callback refuses ${label} before arming, provisioning or completing a grant`, async (t) => {
+    const h = await createOAuthRouteHarness(t, { profile: "claude" });
+    const { stateKey } = await h.startLogin();
+    if (configured === undefined) delete h.env.FRIHET_CLAUDE_QA_UIDS;
+    else h.env.FRIHET_CLAUDE_QA_UIDS = configured;
+    const idToken = await mintIdToken();
+    const response = await h.callback(stateKey, idToken);
+    assert.equal(response.status, 403);
+    assert.equal("redirectTo" in response.body, false);
+    assert.equal(h.events.includes("do:/attempt"), false);
+    assert.equal(h.erp.requests.length, 0);
+    assert.equal(h.kv.grantKeys().length, 0);
+    assertNoSecretsInLogs(h, idToken);
+  });
+}
+
+test("Claude QA membership cannot be spoofed with a caller UID when the verified Firebase user is outside the pilot", async (t) => {
+  const h = await createOAuthRouteHarness(t, { profile: "claude" });
+  const { stateKey } = await h.startLogin();
+  const idToken = await mintIdToken({ uid: "non-qa-firebase-user" });
+  const response = await h.send(new Request(`${CLAUDE_ORIGIN}/callback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stateKey, idToken, uid: USER_ID, userId: USER_ID, accessProfile: "full" }),
+  }));
+  assert.equal(response.status, 403);
+  assert.equal(h.events.includes("do:/attempt"), false);
+  assert.equal(h.erp.requests.length, 0);
+  assert.equal(h.kv.grantKeys().length, 0);
+  assertNoSecretsInLogs(h, idToken);
+});
+
+test("Claude authorization-code exchange rechecks current QA membership after the callback", async (t) => {
+  const h = await createOAuthRouteHarness(t, { profile: "claude" });
+  const { clientId, stateKey } = await h.startLogin();
+  const completed = await h.callback(stateKey, await mintIdToken());
+  assert.equal(completed.status, 200);
+  h.env.FRIHET_CLAUDE_QA_UIDS = JSON.stringify(["other-synthetic-qa-user"]);
+  const code = new URL(String(completed.body.redirectTo)).searchParams.get("code");
+  assert.ok(code);
+  const response = await h.exchangeToken(new URLSearchParams({
+    grant_type: "authorization_code", client_id: clientId, code,
+    redirect_uri: h.redirectUri, code_verifier: "v".repeat(64),
+  }));
+  assert.equal(response.status, 400);
+  const rejected = await response.json() as Record<string, unknown>;
+  assert.equal(rejected.error, "invalid_grant");
+  assert.equal("access_token" in rejected || "refresh_token" in rejected, false);
+  assert.equal([...h.namespace.objects.values()].some(({ state }) => state.storage.values.has("oauth_token_family")), false);
+});
+
+for (const [label, configured] of [
+  ["removed UID", JSON.stringify(["other-synthetic-qa-user"])],
+  ["missing config", undefined],
+  ["malformed config", JSON.stringify([USER_ID, null])],
+] as const) {
+  test(`Claude ${label} blocks existing MCP access and refresh while disconnect and alarm cleanup remain available`, async (t) => {
+    const h = await createOAuthRouteHarness(t, { profile: "claude" });
+    const { clientId, stateKey } = await h.startLogin();
+    const completed = await h.callback(stateKey, await mintIdToken());
+    assert.equal(completed.status, 200);
+    const initial = await h.redeem(clientId, completed.body.redirectTo);
+    if (configured === undefined) delete h.env.FRIHET_CLAUDE_QA_UIDS;
+    else h.env.FRIHET_CLAUDE_QA_UIDS = configured;
+    for (const method of ["GET", "POST"]) {
+      const mcp = await h.send(new Request(`${CLAUDE_ORIGIN}/mcp`, {
+        method,
+        headers: { Authorization: `Bearer ${initial.accessToken}` },
+        ...(method === "POST" ? { body: JSON.stringify({ uid: USER_ID }) } : {}),
+      }));
+      assert.equal(mcp.status, 401, method);
+    }
+    const sessionDelete = await h.send(new Request(`${CLAUDE_ORIGIN}/mcp`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${initial.accessToken}` },
+    }));
+    assert.equal(sessionDelete.status, 200, "authenticated session-cleanup adapter is still reachable");
+    const refreshed = await h.exchangeToken(new URLSearchParams({
+      grant_type: "refresh_token", client_id: clientId, refresh_token: initial.refreshToken,
+    }));
+    assert.equal(refreshed.status, 400);
+    const rejected = await refreshed.json() as Record<string, unknown>;
+    assert.equal(rejected.error, "invalid_grant");
+    assert.equal("access_token" in rejected || "refresh_token" in rejected, false);
+    const disconnected = await h.exchangeToken(new URLSearchParams({
+      token: initial.refreshToken, client_id: clientId, token_type_hint: "refresh_token",
+    }));
+    assert.equal(disconnected.status, 200);
+    assert.equal(h.kv.grantKeys().length, 0);
+    await h.runFamilyAlarms();
+    assert.deepEqual(h.erp.activeKeyIds(), []);
+    assert.deepEqual(h.erp.requests.at(-1), { method: "DELETE", body: { uid: initial.userId, keyId: initial.keyId } });
+  });
+}
+
+test("OpenAI OAuth and MCP access ignore the Claude-only private QA config", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  h.env.FRIHET_CLAUDE_QA_UIDS = "{";
+  const { clientId, stateKey } = await h.startLogin();
+  const completed = await h.callback(stateKey, await mintIdToken());
+  assert.equal(completed.status, 200);
+  const initial = await h.redeem(clientId, completed.body.redirectTo);
+  const refreshed = await h.exchangeToken(new URLSearchParams({
+    grant_type: "refresh_token", client_id: clientId, refresh_token: initial.refreshToken,
+  }));
+  assert.equal(refreshed.status, 200);
+  const tokens = await refreshed.json() as { access_token: string };
+  assert.equal((await h.callMcp(tokens.access_token)).status, 200);
+});
 
 test("Claude local SDK route completes DCR, Firebase verification, credential binding, token redemption and MCP access", async (t) => {
   const h = await createOAuthRouteHarness(t, { profile: "claude" });

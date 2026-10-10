@@ -56,7 +56,7 @@ import {
   OPENAI_REVIEW_ORIGIN,
   validateOAuthBoundary,
 } from "../../../src/openai-review-oauth.js";
-import { boundOAuthProfile, CLAUDE_ORIGIN, resolveWorkerAccessProfile } from "./oauth-profile.js";
+import { boundOAuthProfile, CLAUDE_ORIGIN, isClaudeQaUidAllowed, resolveWorkerAccessProfile } from "./oauth-profile.js";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 const OAUTH_CALLBACK_MAX_BODY_BYTES = 20 * 1024;
@@ -463,6 +463,15 @@ app.post("/callback", async (c) => {
       return {
         settlement: "clean",
         response: c.json({ error: "A verified email address is required" }, 403),
+      };
+    }
+
+    // Membership comes only from the verified Firebase identity, before the
+    // state is armed or any backend credential can be provisioned.
+    if (accessProfile === "claude" && !isClaudeQaUidAllowed(c.env, decoded.uid)) {
+      return {
+        settlement: "clean",
+        response: c.json({ error: "Claude pilot access is unavailable for this identity" }, 403),
       };
     }
 
