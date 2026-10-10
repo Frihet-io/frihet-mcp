@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "c8fcc3fc70d2fc13499ffa57cdaa7aa19ee093752e3500fcb8136b44a0f5a425", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs; no new deps, lifecycle or network script
+  "package.json": "54152a43584f960c4c58e6d3f7c93e7e2f7e1641d89e75bac91a9060446f5170", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands; no new deps, lifecycle or network script
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -294,8 +294,8 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner.svg": "2b32a68014580c334f8b180d8812d842c744a9a59bd2298a586bb95bd6179ebc",
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
-  "docs/agent-onboarding.json": "ce973f35061e589005d83fca9e5cd2013de09467d2faec1af7dfbbb87c20c30a",
-  "README.md": "610ee80753d288477b5a65ae25c8ab65b27565cf85eebc3a4739f7245334e303", // GitHub Registry discovery links + static badge on existing img.shields.io host; no new runtime emitter or destination
+  "docs/agent-onboarding.json": "0cf30d7ef2e1b33256dda5ecb71773873d8867d032c4af8d4c0f2969f6ca97b3", // Task 1 recurring confirmation and declared fiscal/webhook effects; no new emitter
+  "README.md": "363c49672a849f0e4e2388def0394a171eadb01b9ceed23b3e645aeb866fd5ac", // GitHub Registry discovery links + static badge on existing img.shields.io host, unreleased local candidate flag and corrected deposit/recurring semantics; no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
@@ -344,7 +344,7 @@ export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
   "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "00b5ce103dc0309092b2f317cab66406389f957e3e923555bd6c24a4118193e3", // Reviewed invoice reads: three description-only boundaries for unavailable external evidence; schemas, OAuth and 33-tool security schemes unchanged
-  "src/__tests__/fixtures/public-capability-contract.json": "1b0820d9b441a32bae739f7dd7f5f62054cd0e5fa3d81567f8931a4233084157",
+  "src/__tests__/fixtures/public-capability-contract.json": "8e71d8136e7d4a524a16fc14af4bf6804bc9e862f92738278403108376917ddd", // Task 1 deposit retry hint and recurring fiscal/webhook capability truth; no new emitter
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
 

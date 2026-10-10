@@ -550,9 +550,9 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://config/currencies",
     {
       description:
-        "40 supported currencies with ISO codes, symbols, decimal places, locale formatting examples, and associated countries. " +
-        "Use to validate currency inputs and format monetary values. " +
-        "/ 40 divisas soportadas con códigos ISO, símbolos, decimales, formato local y países asociados.",
+        "Currency codes, symbols and display formatting examples with associated countries, including historical codes. " +
+        "Decimals describe these display examples, not authoritative payment precision, conversion rates or API acceptance. " +
+        "/ Códigos y ejemplos de formato de divisas; no determinan precisión de pagos ni tipos de cambio.",
       mimeType: "application/json",
     },
     async () => ({
@@ -645,9 +645,10 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
       "frihet://overdue-invoices",
       {
         description:
-          "Live list of overdue invoices (first page up to 100 items by due date) — invoices past their due date that haven't been paid. " +
-          "Includes client names, amounts, due dates, and days overdue. Critical for cash flow management. " +
-          "/ Lista en vivo de facturas vencidas (primera página hasta 100 registros por fecha de vencimiento) — facturas cuya fecha de vencimiento ha pasado sin cobrar.",
+          "Live invoice records filtered by status overdue (first page up to 100 items). " +
+          "Returns stored fields and pagination bounds; does not calculate unpaid balances or days overdue. " +
+          "Use list_invoices pagination including sent and partial records for a complete receivables review. " +
+          "/ Registros con estado vencida (primera página hasta 100); no calcula saldos pendientes ni días de retraso.",
         mimeType: "application/json",
       },
       async () => {
@@ -666,7 +667,7 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
           limit: 100,
           offset: 0,
           hasMore: total > 100 || list.length === 100,
-          note: "First 100 overdue invoices by due date",
+          note: "First 100 records with status overdue; not a complete receivables or unpaid-balance report",
         };
         return {
           contents: [

@@ -2322,7 +2322,7 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
+            "idempotentHint": false,
             "openWorldHint": false
           },
           "capability": {
@@ -2393,15 +2393,18 @@
             "readOnlyHint": false,
             "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "run_recurring_now",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
@@ -5202,7 +5205,7 @@
           "annotations": {
             "readOnlyHint": false,
             "destructiveHint": true,
-            "idempotentHint": true,
+            "idempotentHint": false,
             "openWorldHint": false
           },
           "capability": {
@@ -5273,15 +5276,18 @@
             "readOnlyHint": false,
             "destructiveHint": true,
             "idempotentHint": false,
-            "openWorldHint": false
+            "openWorldHint": true
           },
           "capability": {
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "run_recurring_now",
             "writesFrihet": true,
-            "externalInteraction": false,
-            "externalSideEffects": []
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
+            ]
           }
         },
         {
