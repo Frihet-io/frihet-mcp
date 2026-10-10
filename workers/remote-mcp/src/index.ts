@@ -52,7 +52,6 @@ import {
   FRIHET_CONNECTOR_SCOPE,
   FULL_MCP_ORIGIN,
   OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH,
-  OPENAI_REVIEW_OAUTH_RESOURCES,
   OPENAI_REVIEW_OAUTH_SCOPES,
   OPENAI_REVIEW_ORIGIN,
   OAUTH_PROVIDER_REVIEW_OPTIONS,
@@ -62,9 +61,11 @@ import {
   hasExactOpenAIReviewScopes,
   isVerifiedOpenAIIdentity,
   isValidPKCECodeVerifier,
-  resolveFrihetAccessProfile,
   validateOAuthBoundary,
 } from "../../../src/openai-review-oauth.js";
+import { CLAUDE_CANDIDATE_INSTRUCTIONS } from "../../../src/claude-profile.js";
+import { boundOAuthProfile, CLAUDE_ORIGIN, resolveWorkerAccessProfile, type WorkerAccessProfile } from "./oauth-profile.js";
+import { claudePublicSurface } from "./claude-public-surface.js";
 import { reviewedMcpProtectedResourceMetadataResponse } from "./protected-resource-metadata.js";
 import {
   MCP_SERVER_VERSION,
@@ -109,12 +110,12 @@ export type AuthProps = {
   userId?: string;
   email?: string;
   name?: string;
-  accessProfile?: "openai" | "full";
+  accessProfile?: WorkerAccessProfile;
   oauthScope?: typeof FRIHET_CONNECTOR_SCOPE;
   oauthScopes?: string[];
-  oauthIssuer?: typeof OPENAI_REVIEW_ORIGIN;
+  oauthIssuer?: typeof OPENAI_REVIEW_ORIGIN | typeof CLAUDE_ORIGIN;
   oauthAudience?: string;
-  oauthResource?: typeof OPENAI_REVIEW_ORIGIN;
+  oauthResource?: typeof OPENAI_REVIEW_ORIGIN | typeof CLAUDE_ORIGIN;
   emailVerified?: true;
   authMethod?: "oauth" | "api-key";
 };
@@ -134,19 +135,20 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     if (!apiKey) {
       throw new Error("No API key in auth context");
     }
-    const openaiMode = resolveFrihetAccessProfile(
-      this.env.FRIHET_OPENAI_MODE,
-    ) === "openai";
+    const accessProfile = resolveWorkerAccessProfile(this.env);
+    const openaiMode = accessProfile === "openai";
+    const claudeMode = accessProfile === "claude";
+    const boundaryProfile = accessProfile === "full" ? undefined : boundOAuthProfile(accessProfile);
     if (
-      openaiMode
+      boundaryProfile
       && (
-        this.props?.accessProfile !== "openai"
+        this.props?.accessProfile !== accessProfile
         || this.props?.oauthScope !== FRIHET_CONNECTOR_SCOPE
         || !hasExactOpenAIReviewScopes(this.props?.oauthScopes)
-        || this.props?.oauthIssuer !== OPENAI_REVIEW_ORIGIN
+        || this.props?.oauthIssuer !== boundaryProfile.origin
         || typeof this.props?.oauthAudience !== "string"
-        || !OPENAI_REVIEW_OAUTH_RESOURCES.includes(this.props.oauthAudience)
-        || this.props?.oauthResource !== OPENAI_REVIEW_ORIGIN
+        || !boundaryProfile.acceptedResources.includes(this.props.oauthAudience)
+        || this.props?.oauthResource !== boundaryProfile.origin
         || this.props?.authMethod !== "oauth"
         || !isVerifiedOpenAIIdentity({
           uid: this.props?.userId,
@@ -160,7 +162,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     // Preserve legacy full-host OAuth sessions while ensuring a reviewed-host
     // token can never cross into the full catalogue, even if a future config
     // mistake points both Workers at the same KV namespace again.
-    if (!openaiMode && this.props?.accessProfile === "openai") {
+    if (accessProfile === "full" && this.props?.accessProfile !== undefined && this.props.accessProfile !== "full") {
       throw new Error("OAuth access context does not match the full Frihet server");
     }
     log({
@@ -174,7 +176,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     // explicit empty Worker config is a durable opt-out even with
     // `nodejs_compat`, where process.env can exist. The full host keeps its
     // independently configured, payload-minimized operational telemetry.
-    initLangfuse(openaiMode ? {} : {
+    initLangfuse(boundaryProfile ? {} : {
       publicKey: this.env.LANGFUSE_PUBLIC_KEY,
       secretKey: this.env.LANGFUSE_SECRET_KEY,
       baseUrl: this.env.LANGFUSE_BASE_URL,
@@ -193,6 +195,9 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     // TypeScript sees them as separate types due to different node_modules paths.
     // The private property mismatch prevents direct cast, so we bridge via unknown.
     // Structurally identical at runtime — this is safe.
+    if (claudeMode) {
+      this.server = new McpServer({ name: "Frihet", version: MCP_SERVER_VERSION }, { instructions: CLAUDE_CANDIDATE_INSTRUCTIONS });
+    }
     const server = this.server as unknown as Parameters<typeof registerMcpSurface>[0];
 
     const toolMode = resolveToolMode({ FRIHET_TOOL_MODE: this.env.FRIHET_TOOL_MODE });
@@ -218,7 +223,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     registerMcpSurface(
       server,
       client,
-      remoteMcpSurfaceComposition(openaiMode, groupedMode),
+      remoteMcpSurfaceComposition(openaiMode, groupedMode, claudeMode),
     );
   }
 }
@@ -975,22 +980,23 @@ function validateReviewedTokenExchange({
     requestedScope,
     props,
     userId,
-  }: TokenExchangeCallbackOptions): {
+  }: TokenExchangeCallbackOptions, profile: "openai" | "claude" = "openai"): {
     reviewedProps: AuthProps;
     apiKeyBinding: OAuthApiKeyBinding;
     credentialTtlSeconds: number;
   } {
   const reviewedProps = props as AuthProps | undefined;
+  const boundaryProfile = boundOAuthProfile(profile);
   if (
     !hasExactOpenAIReviewScopes(scope)
     || !hasExactOpenAIReviewScopes(requestedScope)
-    || reviewedProps?.accessProfile !== "openai"
-    || reviewedProps.oauthResource !== OPENAI_REVIEW_ORIGIN
+    || reviewedProps?.accessProfile !== profile
+    || reviewedProps.oauthResource !== boundaryProfile.origin
     || reviewedProps.oauthScope !== FRIHET_CONNECTOR_SCOPE
     || !hasExactOpenAIReviewScopes(reviewedProps.oauthScopes)
-    || reviewedProps.oauthIssuer !== OPENAI_REVIEW_ORIGIN
+    || reviewedProps.oauthIssuer !== boundaryProfile.origin
     || typeof reviewedProps.oauthAudience !== "string"
-    || !OPENAI_REVIEW_OAUTH_RESOURCES.includes(reviewedProps.oauthAudience)
+    || !boundaryProfile.acceptedResources.includes(reviewedProps.oauthAudience)
     || reviewedProps.authMethod !== "oauth"
     || reviewedProps.userId !== userId
     || !isVerifiedOpenAIIdentity({
@@ -1024,8 +1030,9 @@ function validateReviewedTokenExchange({
     apiKeyBinding: {
       uid: userId,
       keyId: reviewedProps.keyId,
-      accessProfile: "openai",
-      oauthResource: OPENAI_REVIEW_ORIGIN,
+      ...(profile === "claude"
+        ? { accessProfile: profile, oauthResource: CLAUDE_ORIGIN }
+        : { accessProfile: profile, oauthResource: OPENAI_REVIEW_ORIGIN }),
     },
     credentialTtlSeconds,
   };
@@ -1061,15 +1068,28 @@ const openAIProviderOptions: OAuthProviderOptions<Env> = {
 // reviewed connector and cannot authenticate against this provider.
 const openAIOAuthProvider = new OAuthProvider(openAIProviderOptions);
 
-function createGuardedOpenAIProvider(exchange: OAuthTokenFamilyExchange): OAuthProvider<Env> {
+const claudeProviderOptions: OAuthProviderOptions<Env> = {
+  ...openAIProviderOptions,
+  resourceMetadata: {
+    ...buildReviewedMcpProtectedResourceMetadata(CLAUDE_ORIGIN),
+    resource_name: "Frihet Claude connector",
+  },
+  tokenExchangeCallback: (options: TokenExchangeCallbackOptions) => {
+    const { reviewedProps, credentialTtlSeconds } = validateReviewedTokenExchange(options, "claude");
+    return buildReviewedTokenExchangeResult(options, reviewedProps, credentialTtlSeconds);
+  },
+};
+const claudeOAuthProvider = new OAuthProvider(claudeProviderOptions);
+
+function createGuardedOpenAIProvider(exchange: OAuthTokenFamilyExchange, profile: "openai" | "claude" = "openai"): OAuthProvider<Env> {
   return new OAuthProvider({
-    ...openAIProviderOptions,
+    ...(profile === "claude" ? claudeProviderOptions : openAIProviderOptions),
     tokenExchangeCallback: async (options: TokenExchangeCallbackOptions) => {
       const {
         reviewedProps,
         apiKeyBinding,
         credentialTtlSeconds,
-      } = validateReviewedTokenExchange(options);
+      } = validateReviewedTokenExchange(options, profile);
       await exchange.reserve(options, apiKeyBinding);
       return buildReviewedTokenExchangeResult(
         options,
@@ -1095,7 +1115,7 @@ const BASE_SECURITY_HEADERS: Record<string, string> = {
 /** Build security headers — adds CSP in OpenAI mode */
 function getSecurityHeaders(env: Env): Record<string, string> {
   const headers = { ...BASE_SECURITY_HEADERS };
-  if (resolveFrihetAccessProfile(env.FRIHET_OPENAI_MODE) === "openai") {
+  if (resolveWorkerAccessProfile(env) !== "full") {
     headers["Content-Security-Policy"] = OPENAI_CSP;
   }
   return headers;
@@ -1139,9 +1159,9 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
     const startTime = Date.now();
-    let accessProfile: "openai" | "full";
+    let accessProfile: WorkerAccessProfile;
     try {
-      accessProfile = resolveFrihetAccessProfile(env.FRIHET_OPENAI_MODE);
+      accessProfile = resolveWorkerAccessProfile(env);
     } catch {
       return new Response(
         JSON.stringify({ error: "Worker access profile is not configured" }),
@@ -1152,10 +1172,12 @@ export default {
       );
     }
     const openai = accessProfile === "openai";
+    const reviewed = accessProfile !== "full";
+    const boundaryProfile = reviewed ? boundOAuthProfile(accessProfile) : undefined;
     let reviewedTokenForm: URLSearchParams | undefined;
     let boundedProviderRequest = request;
 
-    if (openai && url.origin !== OPENAI_REVIEW_ORIGIN) {
+    if (boundaryProfile && url.origin !== boundaryProfile.origin) {
       return new Response(
         JSON.stringify({ error: "The reviewed connector is available only on its canonical origin" }),
         {
@@ -1171,10 +1193,15 @@ export default {
       return withSecurityHeaders(new Response("Not Found", { status: 404 }), env);
     }
 
+    if (accessProfile === "claude") {
+      const publicResponse = claudePublicSurface(request, env, resolveToolMode({ FRIHET_TOOL_MODE: env.FRIHET_TOOL_MODE }) === "grouped");
+      if (publicResponse) return withSecurityHeaders(publicResponse, env);
+    }
+
     // Bound the actual streamed bytes before the SDK parses JSON. A missing or
     // dishonest Content-Length must not let a chunked request allocate without
     // limit on the public reviewed endpoint.
-    if (openai && request.method === "POST" && url.pathname === "/mcp") {
+    if (reviewed && request.method === "POST" && url.pathname === "/mcp") {
       try {
         boundedProviderRequest = (
           await readBoundedTextRequest(request, OPENAI_MCP_MAX_BODY_BYTES)
@@ -1204,7 +1231,7 @@ export default {
 
     // The reviewed host has no OpenAPI/REST contract. Match common URL
     // canonicalization variants before generic HEAD and asset routing.
-    if (openai && isOpenApiLookalikePath(url.pathname)) {
+    if (reviewed && isOpenApiLookalikePath(url.pathname)) {
       return withSecurityHeaders(new Response(
         request.method === "HEAD"
           ? null
@@ -1221,25 +1248,25 @@ export default {
     // RFC 9728 path-inserted metadata for the reviewed MCP URL. The provider
     // serves only the root document; the reviewed 401 challenge points here.
     // Placed before the generic HEAD handler so HEAD/OPTIONS reach the module.
-    if (openai && url.pathname === OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH) {
+    if (reviewed && url.pathname === OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH) {
       return withSecurityHeaders(
         reviewedMcpProtectedResourceMetadataResponse(
           request,
-          buildReviewedMcpProtectedResourceMetadata(),
+          buildReviewedMcpProtectedResourceMetadata(boundaryProfile!.origin),
         ),
         env,
       );
     }
 
     if (
-      openai
+      reviewed
       && url.pathname === "/.well-known/openid-configuration"
       && (request.method === "GET" || request.method === "HEAD")
     ) {
       return withSecurityHeaders(new Response(
         request.method === "HEAD"
           ? null
-          : JSON.stringify(buildOpenAIReviewOAuthContract().openidConfiguration),
+          : JSON.stringify(buildOpenAIReviewOAuthContract(boundaryProfile!.origin).openidConfiguration),
         {
           status: 200,
           headers: {
@@ -1276,7 +1303,7 @@ export default {
     // method. Keep HEAD aligned with the GET containment response so a scanner
     // cannot infer an undocumented OpenAPI surface from a generic health 200.
     // Other HEAD requests -> 200 (required by Anthropic)
-    if (request.method === "HEAD" && !(openai && url.pathname === "/userinfo")) {
+    if (request.method === "HEAD" && !(reviewed && url.pathname === "/userinfo")) {
       return withSecurityHeaders(new Response(null, {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -1573,7 +1600,7 @@ export default {
     // authorization-code or refresh-token exchange so every internal access
     // token receives a non-empty audience for this Worker only.
     if (
-      openai
+      reviewed
       && request.method === "POST"
       && url.pathname === OAUTH_PROVIDER_REVIEW_OPTIONS.tokenEndpoint
     ) {
@@ -1687,7 +1714,7 @@ export default {
             requireResource: false,
             requireScope: false,
           },
-          OPENAI_REVIEW_OAUTH_RESOURCES,
+          boundaryProfile!.acceptedResources,
         );
         if (!boundary.ok) {
           return withSecurityHeaders(
@@ -1724,7 +1751,7 @@ export default {
     }
 
     if (
-      openai
+      reviewed
       && request.method === "POST"
       && url.pathname === OAUTH_PROVIDER_REVIEW_OPTIONS.clientRegistrationEndpoint
     ) {
@@ -1753,15 +1780,15 @@ export default {
       }
     }
 
-    const tokenFamilyExchange = openai && reviewedTokenForm
+    const tokenFamilyExchange = reviewed && reviewedTokenForm
       ? OAuthTokenFamilyExchange.fromForm(
           reviewedTokenForm,
           env.OAUTH_STATE,
           env.OAUTH_KV,
-          OPENAI_REVIEW_OAUTH_RESOURCES,
+          boundaryProfile!.acceptedResources,
         )
       : undefined;
-    const tokenFamilyRevocation = openai && reviewedTokenForm
+    const tokenFamilyRevocation = reviewed && reviewedTokenForm
       ? OAuthTokenFamilyRevocation.fromForm(
           reviewedTokenForm,
           env.OAUTH_STATE,
@@ -1775,8 +1802,10 @@ export default {
         )
       : boundedProviderRequest;
     const selectedProvider = tokenFamilyExchange
-      ? createGuardedOpenAIProvider(tokenFamilyExchange)
-      : openai
+      ? createGuardedOpenAIProvider(tokenFamilyExchange, accessProfile === "claude" ? "claude" : "openai")
+      : accessProfile === "claude"
+        ? claudeOAuthProvider
+        : openai
         ? openAIOAuthProvider
         : fullOAuthProvider;
 
@@ -1818,9 +1847,9 @@ export default {
       response = tokenSettlement.response;
     }
 
-    if (openai && url.pathname === OAUTH_PROVIDER_REVIEW_OPTIONS.apiRoute && response.status === 401) {
+    if (reviewed && url.pathname === OAUTH_PROVIDER_REVIEW_OPTIONS.apiRoute && response.status === 401) {
       const headers = new Headers(response.headers);
-      headers.set("WWW-Authenticate", buildOpenAIUnauthorizedChallenge());
+      headers.set("WWW-Authenticate", buildOpenAIUnauthorizedChallenge(boundaryProfile!.origin));
       response = new Response(response.body, {
         status: response.status,
         statusText: response.statusText,

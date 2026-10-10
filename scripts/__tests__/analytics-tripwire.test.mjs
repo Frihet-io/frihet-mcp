@@ -15,6 +15,7 @@ import { afterEach, describe, test } from "node:test";
 import {
   ANALYTICS_MODULE_PATTERNS,
   APPROVED_BUILT_NETWORK_SINKS,
+  APPROVED_CONFIG_FILE_HASHES,
   APPROVED_DIST_IMPORTS,
   APPROVED_EMBEDDED_RESOURCES,
   APPROVED_LIFECYCLE_SCRIPTS,
@@ -73,6 +74,7 @@ describe("anti-defang contract", () => {
     assert.deepEqual(APPROVED_WORKER_MAINS, {
       "workers/api-proxy/wrangler.toml": "worker.js",
       "workers/remote-mcp/wrangler.toml": "src/index.ts",
+      "workers/remote-mcp/wrangler.claude.toml": "src/index.ts",
     });
     assert.equal(APPROVED_PACKAGE_RUNTIME_METADATA["package.json"].type, "module");
     assert.equal(APPROVED_PACKAGE_RUNTIME_METADATA["package.json"].files.includes("scripts/postinstall.js"), true);
@@ -109,6 +111,18 @@ describe("anti-defang contract", () => {
       workerScripts.deploy,
       "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:openapi-fresh && wrangler deploy && npm --prefix ../.. run gate:openapi-fresh:live",
     );
+  });
+
+  test("Claude deploy selects the isolated config only after the release guard", () => {
+    const scripts = JSON.parse(readFileSync(join(REPOSITORY_ROOT, "workers/remote-mcp/package.json"), "utf8")).scripts;
+    assert.equal(scripts["deploy:claude"], "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:claude-candidate && npm --prefix ../.. run gate:openai-review-descriptor && node ../../scripts/check-claude-hosted-release.mjs && wrangler deploy --config wrangler.claude.toml");
+    assert.match(APPROVED_CONFIG_FILE_HASHES["workers/remote-mcp/wrangler.claude.toml"], /^[a-f0-9]{64}$/u);
+    for (const path of [
+      "scripts/check-claude-hosted-release.mjs",
+      "scripts/prepare-claude-oauth-provider.mjs",
+      "scripts/__tests__/claude-hosted-release.test.mjs",
+      "scripts/__tests__/claude-oauth-provider.test.mjs",
+    ]) assert.match(APPROVED_OPERATIONAL_FILE_HASHES[path], /^[a-f0-9]{64}$/u);
   });
 
   test("pins providers, methods, authorities, source closure, locks, and platform telemetry", () => {
@@ -149,8 +163,8 @@ describe("anti-defang contract", () => {
       "track",
       "unregister",
     ]);
-    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 10);
-    assert.equal(Object.keys(APPROVED_SOURCE_FILE_HASHES).length, 13);
+    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 11);
+    assert.equal(Object.keys(APPROVED_SOURCE_FILE_HASHES).length, 15);
     assert.equal(Object.values(APPROVED_SOURCE_FILE_HASHES).every((hash) => /^[a-f0-9]{64}$/u.test(hash)), true);
     for (const sink of Object.keys(APPROVED_NETWORK_SINKS)) {
       const owner = sink.split("|")[0].split("#")[0];
@@ -166,7 +180,7 @@ describe("anti-defang contract", () => {
     });
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES[".github/workflows/ci.yml"],
-      "f39fc984aa328aa3cebae66d239d15d92eb05b3896e5365c69dd40bea09afce2",
+      "de9f64ed715ca72cd3431ade381f5750e06615839b6dfaf36f29b308078d3eb7",
     );
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES["scripts/audit-mcp-refs.mjs"],
@@ -178,6 +192,7 @@ describe("anti-defang contract", () => {
     );
     assert.deepEqual(APPROVED_PLATFORM_TELEMETRY, {
       "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
+      "workers/remote-mcp/wrangler.claude.toml|cloudflare-observability": "enabled",
     });
     assert.deepEqual(APPROVED_DIST_IMPORTS, {
       "workers/remote-mcp/scripts/capture-openai-review.mjs": [

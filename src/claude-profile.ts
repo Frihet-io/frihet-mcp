@@ -210,7 +210,7 @@ export const CLAUDE_EXCLUDED_PROMPTS: Readonly<Record<string, string>> = {
   "expense-batch": "Depends on deferred expense-categories and blanket deductibility/receipt thresholds.",
 };
 
-export const CLAUDE_CANDIDATE_INSTRUCTIONS = `Frihet ERP — local Claude candidate profile, not a published Directory connector.
+export const CLAUDE_CANDIDATE_INSTRUCTIONS = `Frihet ERP — Claude candidate profile; Directory acceptance requires separate evidence.
 Discover available tools, resources and prompts from this session's MCP lists. In grouped mode use list_tool_groups, search_tools and describe_tool.
 Read get_business_context for workspace context, not proof of tax treatment or endpoint availability.
 Read each tool's io.frihet/capability metadata: api_dependent/runtime_checked means workspace permissions and backing endpoints still govern execution.
@@ -218,7 +218,7 @@ Resource payloads are workspace records or formatting examples, not authoritativ
 Propose changes and obtain user approval before writes, email, webhooks or fiscal submission. A confirm input is a client interlock, not proof of authorization.
 Read full descriptions and inspect configured external effects before executing. Do not infer delivery from invoice status, a money transfer from an accounting entry, or production acceptance from demo data.
 On 409 IDEMPOTENCY_REQUEST_IN_PROGRESS, read the record before deciding; do not retry with a fresh key.
-FRIHET_DEMO=1 is fixture-only and cannot verify live operations. No hosted Claude-profile endpoint is established by this package.`;
+FRIHET_DEMO=1 is fixture-only and cannot verify live operations. Hosting, OAuth, API availability and Directory acceptance require independent verification.`;
 
 /** Install after discovery interception, before registration: denied names never
  * enter the SDK registry or the grouped catalog. Mirrors the OpenAI interceptor.

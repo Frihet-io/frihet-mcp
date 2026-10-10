@@ -92,6 +92,11 @@ jobs:
       - name: Conformance baseline anti-false-green gate
         run: npm run gate:conformance-baseline
 
+      - name: Claude source profile and isolated topology
+        run: |
+          npm run gate:claude-candidate
+          npm run gate:claude-hosted-source
+
       - name: OpenAI review descriptor freeze
         run: npm run gate:openai-review-descriptor
 

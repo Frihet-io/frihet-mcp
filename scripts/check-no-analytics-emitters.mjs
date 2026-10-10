@@ -42,15 +42,17 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "2ae001136f81b4aabe75c809fd6fd822eef30a26fcd094bd626ff13d12ec604e", // Claude plugin export test; no new deps or emitters
-  "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
+  "package.json": "1f911bc7fdb92b52b9c7736e50e6ad8a522c490ef21cf3947884e6498bc1a2ae", // Claude plugin export test; no new deps or emitters
+  "workers/remote-mcp/package.json": "0248007796a87b37d4f7060566b48d767aa4dcdc7a70b9fdb5883387997d1c72", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
   "workers/api-proxy/wrangler.toml": "worker.js",
   "workers/remote-mcp/wrangler.toml": "src/index.ts",
+  "workers/remote-mcp/wrangler.claude.toml": "src/index.ts",
 });
 export const APPROVED_PLATFORM_TELEMETRY = Object.freeze({
   "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
+  "workers/remote-mcp/wrangler.claude.toml|cloudflare-observability": "enabled",
 });
 export const APPROVED_DIST_IMPORTS = Object.freeze({
   "workers/remote-mcp/scripts/capture-openai-review.mjs": Object.freeze([
@@ -241,7 +243,8 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
   "workers/remote-mcp/src/api-url.ts|DEFAULT_API_BASE": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api",
   "workers/remote-mcp/src/api-url.ts|TRUSTED_CLOUD_FUNCTION_HOST": "europe-west1-gen-lang-client-0335716041.cloudfunctions.net",
   "workers/remote-mcp/src/api-url.ts|OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
-  "workers/remote-mcp/src/oauth-provisioning.ts|OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
+  "workers/remote-mcp/src/api-url.ts|CLAUDE_OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning",
+  "workers/remote-mcp/src/oauth-profile.ts|CLAUDE_ORIGIN": "https://claude-mcp.frihet.io",
   "workers/remote-mcp/src/oauth-state-store.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
   "workers/remote-mcp/src/oauth-token-family.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
 });
@@ -253,18 +256,20 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
+  "workers/remote-mcp/src/claude-public-surface.ts": "3664b8971fd361bdbb17b2353bfcdbda08f55c59b4554f0e9cbdf8539bc15843", // isolated Claude host and authorization boundary
+  "workers/remote-mcp/src/oauth-profile.ts": "1c7a88c3f42a42e4d5489d832073abdce7a2e13cd348400bc679f1e12b8d0b2f", // isolated Claude host and authorization boundary
   "src/client.ts": "b7cc8a4cc73d5426720939c27c87663ad6aacaf4fa2802876c53e2da9dc881b0", // provisioning credential removed from the public API client; sinks unchanged
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
-  "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
+  "src/openai-review-oauth.ts": "042092f9805c06719355a6a3a7d85f7c40dd88e89cb764de9d54208b6275d1c6", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
   "workers/api-proxy/worker.js": "163aa6859d157761709e5f8bf9dfe820f7e0569b6cf49a1d776fcac93385f0d6",
-  "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
-  "workers/remote-mcp/src/auth-handler.ts": "b1da0f18536ace42052793a59d68dad5dcbdcdae0ecb0eafb149b5383c33ce87", // callback reserve/commit: state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
+  "workers/remote-mcp/src/api-url.ts": "d30673b8814eae5fc2f0cc0ea6ebdfa0885a710fab0571f2efdd8ac10d85d518",
+  "workers/remote-mcp/src/auth-handler.ts": "62e1ecef87ec0f4cf3e5a37fcc6ea62a0b0d07f05628dddbcfe9089127f41400", // callback reserve/commit: state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
-  "workers/remote-mcp/src/index.ts": "24e9e40ad2288eea9e5f04d618420d763b0f6f63d81ae4a11827383f284af632", // HEAD/GET metadata parity for reviewed legal pages; sinks unchanged
-  "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
+  "workers/remote-mcp/src/index.ts": "3e23b5848006a9190b016f1aedc212a96ec0d5f4b40795538adb080b72d41097", // HEAD/GET metadata parity for reviewed legal pages; sinks unchanged
+  "workers/remote-mcp/src/login-page.ts": "dd7fe3bfe601c9b313e66692da018d69be443dafc6d5e1d029fe5da3c744e37e", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
-  "workers/remote-mcp/src/oauth-provisioning.ts": "dd79003720debeaba12b6ae943569be6e9d286c6f9b83b24c6117639805ac938", // callback reserve/commit: revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
-  "workers/remote-mcp/src/oauth-state-store.ts": "29c3212634e6dc4f0dddf52608e645240795c1fe5871c94effdacbb3c6229c3e", // callback reserve/commit: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
+  "workers/remote-mcp/src/oauth-provisioning.ts": "9e3217b0f0fe9596c1aa09bb2506bcbf169529686c8fc1dfb0641d5b9a2721d1", // callback reserve/commit: revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
+  "workers/remote-mcp/src/oauth-state-store.ts": "687c54809acc942d65a431cfbaa84bf4ce3c9feb663aac0673be3f418bbd4628", // callback reserve/commit: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
   "workers/remote-mcp/src/oauth-token-family.ts": "1facce53ff0b684d4f51c14390e775fe07732ac215a4747a428d90e0428693fb", // OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
@@ -272,6 +277,7 @@ export const APPROVED_LOCKFILE_HASHES = Object.freeze({
   "workers/remote-mcp/package-lock.json": "c36f130ac2574f3fac913f72304e6658bef9a9c341910992bd757673d57fdaf3",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
+  "workers/remote-mcp/wrangler.claude.toml": "854f967c138837702d24ed06ced93f65a4e8ec2500b14cd9c3216b17a6199af6", // dedicated Claude provider alias and bootstrap topology
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
   "workers/remote-mcp/wrangler.toml": "c04ee0033b2d0c53cebfd562ccc3da27810bd1ef5b49e52beeb5d50b218100e5",
 });
@@ -284,9 +290,13 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
+  "scripts/check-claude-hosted-release.mjs": "7b4599c7e2a5bd3730dc863d82d9fafebac3c7b7f2afc2d328d3f88bb3e2c341", // isolated Claude build and release boundary
+  "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
+  "scripts/__tests__/claude-hosted-release.test.mjs": "c9ea9f8e12c1b3afb5d7e481a7ac62be6810f672654b03cfaff361992a029aac", // isolated Claude build and release boundary
+  "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
-  ".github/workflows/ci.yml": "f39fc984aa328aa3cebae66d239d15d92eb05b3896e5365c69dd40bea09afce2",
+  ".github/workflows/ci.yml": "de9f64ed715ca72cd3431ade381f5750e06615839b6dfaf36f29b308078d3eb7",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",

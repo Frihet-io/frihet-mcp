@@ -8,12 +8,15 @@ propuesta de un cambio guardado, un envío y una aceptación fiscal.
 
 ## Versión de prueba
 
-Este paquete usa el MCP remoto público de Frihet, `https://mcp.frihet.io/mcp`.
+Este paquete está configurado para el candidato remoto de Claude,
+`https://claude-mcp.frihet.io/mcp`. El despliegue y OAuth alojado aún no están
+verificados; no lo instales como una integración disponible hasta completar
+esas comprobaciones.
 Su catálogo, versión y permisos dependen del servidor y de tu cuenta; los skills
 no filtran las herramientas del servidor ni amplían tus permisos. El paquete es
 una versión de prueba y no acredita aprobación de Anthropic ni disponibilidad
-en su directorio. La conexión del candidato de catálogo para Claude se valida
-por separado de este paquete.
+en su directorio. El conector y el plugin deben presentarse desde la misma organización de Claude
+y con este mismo endpoint, después de verificarlo.
 
 ## Instalación
 
@@ -47,16 +50,21 @@ crear un borrador no autoriza enviarlo ni emitirlo fiscalmente.
 
 El paquete contiene un manifiesto, configuración del MCP remoto y archivos de
 instrucciones. No instala ejecutables, hooks ni procesos locales. Las llamadas
-MCP envían los parámetros necesarios a `mcp.frihet.io`; el servidor accede a la
+MCP envían los parámetros necesarios a `claude-mcp.frihet.io`; el servidor accede a la
 API de Frihet para el negocio autorizado y devuelve resultados a Claude. El
 inicio de sesión utiliza el flujo OAuth anunciado por ese servidor. Los skills
 no piden exportar registros a otros servicios.
 
-El servicio puede utilizar procesamiento y observabilidad operativa según su
-configuración y la política de privacidad de Frihet. El [contrato de
+Anthropic recibe los parámetros y resultados MCP de tus peticiones bajo las
+condiciones de tu cuenta de Claude. Cloudflare gestiona OAuth y sesiones;
+Firebase Authentication verifica tu identidad y el backend de Google Cloud
+procesa los registros de Frihet. El perfil Claude desactiva Langfuse. Las
+escrituras del backend pueden enviar eventos completos a PostHog EU y
+notificaciones mediante Novu, además de correo, webhooks o envíos fiscales
+configurados; revisa esos efectos antes de autorizar una acción. El [contrato de
 observabilidad](https://github.com/Frihet-io/frihet-mcp/blob/main/docs/observability.md)
 limita la telemetría a metadatos operativos; no contiene entradas ni salidas de
-herramientas ni credenciales. Consulta la [privacidad](https://mcp.frihet.io/privacy)
+herramientas ni credenciales. Consulta la [privacidad](https://claude-mcp.frihet.io/privacy)
 y las [condiciones](https://www.frihet.io/es/terms) para el tratamiento del servicio.
 
 Los informes dependen de datos y páginas disponibles; señalan cobertura parcial,
@@ -64,4 +72,4 @@ monedas desconocidas y saldos sin verificar. No sustituyen una revisión contabl
 ni deciden automáticamente impuestos, deducibilidad o aceptación fiscal.
 
 Documentación: https://docs.frihet.io/desarrolladores/mcp-server.
-Soporte: ayuda@frihet.io. Licencia MIT.
+Soporte: hola@frihet.io. Licencia MIT.

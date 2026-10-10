@@ -21,9 +21,9 @@ test("remote preview is a small self-contained export of the local plugin skills
   assert.equal(manifest.license, "MIT");
   assert.equal(manifest.author.name, "Frihet");
   assert.equal(manifest.author.email, "hola@frihet.io");
-  assert.equal(manifest.privacyPolicyUrl, "https://mcp.frihet.io/privacy");
+  assert.equal(manifest.privacyPolicyUrl, "https://claude-mcp.frihet.io/privacy");
   assert.deepEqual(JSON.parse(readFileSync(join(plugin, ".mcp.json"), "utf8")), {
-    mcpServers: { frihet: { type: "http", url: "https://mcp.frihet.io/mcp" } },
+    mcpServers: { frihet: { type: "http", url: "https://claude-mcp.frihet.io/mcp" } },
   });
   const readme = readFileSync(join(plugin, "README.md"), "utf8");
   assert.ok(readme.replace(/```[\s\S]*?```/gu, "").split(/\s+/u).length >= 40);

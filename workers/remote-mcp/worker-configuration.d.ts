@@ -9,6 +9,8 @@ interface Env {
   PUBLIC_JWK_CACHE_KV: KVNamespace;
   /** Set to "true" to activate OpenAI-safe profile (strips gov IDs, fixes annotations) */
   FRIHET_OPENAI_MODE: "true" | "false";
+  FRIHET_CLAUDE_MODE?: "true" | "false";
+  FRIHET_CLAUDE_OAUTH_API_KEY?: string;
   /** Set to "grouped" to activate progressive-disclosure tool exposure (default "full" = unchanged) */
   FRIHET_TOOL_MODE?: string;
   /** Langfuse observability — self-hosted at https://langfuse.frihet.io */

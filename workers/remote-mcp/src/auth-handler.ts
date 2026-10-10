@@ -15,6 +15,8 @@ import {
   parseProvisionedOAuthApiKey,
   provisionOAuthApiKey,
   reconcileOAuthApiKeyCorrelation,
+  resolveOAuthServiceSecret,
+  type OAuthProvisioningBinding,
 } from "./oauth-provisioning.js";
 import { resolveOAuthApiKeyUrl } from "./api-url.js";
 import { getLoginPage } from "./login-page.js";
@@ -51,11 +53,10 @@ import {
   isVerifiedOpenAIIdentity,
   isValidS256CodeChallenge,
   OPENAI_REVIEW_OAUTH_SCOPES,
-  OPENAI_REVIEW_OAUTH_RESOURCES,
   OPENAI_REVIEW_ORIGIN,
-  resolveFrihetAccessProfile,
   validateOAuthBoundary,
 } from "../../../src/openai-review-oauth.js";
+import { boundOAuthProfile, CLAUDE_ORIGIN, resolveWorkerAccessProfile } from "./oauth-profile.js";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 const OAUTH_CALLBACK_MAX_BODY_BYTES = 20 * 1024;
@@ -122,7 +123,7 @@ function validateReviewedAuthorizeQuery(request: Request): string | undefined {
 // change ever forwards a reviewed-host request here in error, it must not
 // fall through to the full catalogue below.
 app.get("/", (c) => {
-  if (resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE) === "openai") {
+  if (resolveWorkerAccessProfile(c.env) !== "full") {
     return c.json({ error: "Not found" }, 404);
   }
   return c.json({
@@ -153,7 +154,8 @@ app.get("/health", (c) =>
 );
 
 app.get("/userinfo", async (c) => {
-  if (resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE) !== "openai") {
+  const accessProfile = resolveWorkerAccessProfile(c.env);
+  if (accessProfile === "full") {
     return c.json({ error: "Not found" }, 404);
   }
   const authorization = c.req.header("authorization");
@@ -163,7 +165,7 @@ app.get("/userinfo", async (c) => {
   let userInfo;
   try {
     userInfo = token
-      ? buildOpenAIUserInfo(await c.env.OAUTH_PROVIDER.unwrapToken(token))
+      ? buildOpenAIUserInfo(await c.env.OAUTH_PROVIDER.unwrapToken(token), undefined, boundOAuthProfile(accessProfile))
       : undefined;
     if (
       userInfo
@@ -183,7 +185,7 @@ app.get("/userinfo", async (c) => {
       { error: "invalid_token" },
       401,
       {
-        "WWW-Authenticate": buildOpenAIUnauthorizedChallenge(),
+        "WWW-Authenticate": buildOpenAIUnauthorizedChallenge(boundOAuthProfile(accessProfile).origin),
         "Cache-Control": "no-store",
         Pragma: "no-cache",
       },
@@ -201,8 +203,9 @@ app.get("/userinfo", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.get("/authorize", async (c) => {
-  const accessProfile = resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE);
-  if (accessProfile === "openai") {
+  const accessProfile = resolveWorkerAccessProfile(c.env);
+  const boundaryProfile = accessProfile === "full" ? undefined : boundOAuthProfile(accessProfile);
+  if (boundaryProfile) {
     const queryError = validateReviewedAuthorizeQuery(c.req.raw);
     if (queryError) {
       return c.json({ error: "invalid_request", error_description: queryError }, 400);
@@ -232,7 +235,7 @@ app.get("/authorize", async (c) => {
     return c.text("Invalid OAuth request", 400);
   }
 
-  if (accessProfile === "openai") {
+  if (boundaryProfile) {
     const boundary = validateOAuthBoundary(
       {
         resource: oauthReq.resource,
@@ -240,7 +243,7 @@ app.get("/authorize", async (c) => {
         requireResource: true,
         requireScope: true,
       },
-      OPENAI_REVIEW_OAUTH_RESOURCES,
+      boundaryProfile.acceptedResources,
     );
     if (!boundary.ok) {
       log({
@@ -384,8 +387,9 @@ app.post("/callback", async (c) => {
     response: Response;
   }> => {
     const oauthReq = lease.request;
-    const accessProfile = resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE);
-    if (accessProfile === "openai") {
+    const accessProfile = resolveWorkerAccessProfile(c.env);
+    const boundaryProfile = accessProfile === "full" ? undefined : boundOAuthProfile(accessProfile);
+    if (boundaryProfile) {
       const boundary = validateOAuthBoundary(
         {
           resource: oauthReq.resource,
@@ -393,7 +397,7 @@ app.post("/callback", async (c) => {
           requireResource: true,
           requireScope: true,
         },
-        OPENAI_REVIEW_OAUTH_RESOURCES,
+        boundaryProfile.acceptedResources,
       );
       if (!boundary.ok) {
         log({
@@ -448,7 +452,7 @@ app.post("/callback", async (c) => {
       emailVerified: decoded.email_verified,
     };
     if (
-      accessProfile === "openai"
+      boundaryProfile
       && !isVerifiedOpenAIIdentity(verifiedIdentity)
     ) {
       log({
@@ -462,7 +466,14 @@ app.post("/callback", async (c) => {
       };
     }
 
-    const oauthServiceSecret = c.env.FRIHET_OAUTH_API_KEY;
+    let oauthServiceSecret: string | undefined;
+    try {
+      oauthServiceSecret = accessProfile === "full"
+        ? c.env.FRIHET_OAUTH_API_KEY
+        : resolveOAuthServiceSecret(c.env, accessProfile);
+    } catch {
+      return { settlement: "clean", response: c.json({ error: "OAuth credential lifecycle is unavailable" }, 503) };
+    }
     if (
       typeof oauthServiceSecret !== "string"
       || new TextEncoder().encode(oauthServiceSecret).byteLength < 32
@@ -478,12 +489,12 @@ app.post("/callback", async (c) => {
       };
     }
 
-    const provisioningUrl = resolveOAuthApiKeyUrl(c.env.FRIHET_API_BASE);
-    const provisioningBinding = {
-      uid: decoded.uid,
-      accessProfile,
-      oauthResource: accessProfile === "openai" ? OPENAI_REVIEW_ORIGIN : FULL_MCP_ORIGIN,
-    } as const;
+    const provisioningUrl = resolveOAuthApiKeyUrl(c.env.FRIHET_API_BASE, accessProfile === "claude" ? "claude" : "openai");
+    const provisioningBinding: OAuthProvisioningBinding = accessProfile === "claude"
+      ? { uid: decoded.uid, accessProfile, oauthResource: CLAUDE_ORIGIN }
+      : accessProfile === "openai"
+        ? { uid: decoded.uid, accessProfile, oauthResource: OPENAI_REVIEW_ORIGIN }
+        : { uid: decoded.uid, accessProfile, oauthResource: FULL_MCP_ORIGIN };
 
     // Refuse here what the provisioning leaf would refuse, before the attempt
     // is recorded as possibly sent (an armed attempt must be reconcilable).
@@ -515,9 +526,8 @@ app.post("/callback", async (c) => {
         provisioningUrl,
         oauthServiceSecret,
         {
+          ...provisioningBinding,
           uid: previous.uid,
-          accessProfile: provisioningBinding.accessProfile,
-          oauthResource: provisioningBinding.oauthResource,
           correlationId: previous.correlationId,
         },
       );
@@ -715,7 +725,7 @@ app.post("/callback", async (c) => {
           label: decoded.email || decoded.uid,
         },
         scope: oauthReq.scope,
-        props: accessProfile === "openai"
+        props: boundaryProfile
           ? {
               apiKey: provisioned.apiKey,
               keyId: provisioned.keyId,
@@ -726,9 +736,9 @@ app.post("/callback", async (c) => {
               accessProfile,
               oauthScope: FRIHET_CONNECTOR_SCOPE,
               oauthScopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
-              oauthIssuer: OPENAI_REVIEW_ORIGIN,
+              oauthIssuer: boundaryProfile.origin,
               oauthAudience: oauthReq.resource,
-              oauthResource: OPENAI_REVIEW_ORIGIN,
+              oauthResource: boundaryProfile.origin,
               authMethod: "oauth",
             }
           : {
