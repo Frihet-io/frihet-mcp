@@ -1,0 +1,1359 @@
+{
+  "tools": [
+    {
+      "name": "create_invoice",
+      "title": "Create Invoice",
+      "description": "Create a new invoice. Requires client name and at least one line item. The invoice number is auto-generated. Defaults to draft status and today's date. Example: clientName='Acme Corp', items=[{description:'Consulting', quantity:10, unitPrice:150}], taxRate=21, irpfRate=15 / Crea una nueva factura. Requiere nombre del cliente y al menos un concepto. El numero se genera automaticamente. Por defecto estado borrador y fecha de hoy. Soporta retencion IRPF (autonomos ES), recargo de equivalencia, serie, anticipo y descuento global.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "clientName": {
+            "description": "Client/customer name / Nombre del cliente",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "clientId": {
+            "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
+            "type": "string"
+          },
+          "clientTaxId": {
+            "description": "Client tax ID (NIF/CIF/VAT) shown on the invoice / NIF/CIF del cliente",
+            "type": "string"
+          },
+          "clientAddress": {
+            "description": "Client billing address shown on the invoice / Direccion fiscal del cliente",
+            "type": "string"
+          },
+          "items": {
+            "description": "Line items (each with description, quantity, unitPrice) / Conceptos de la factura",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "description": "Description of the line item / Descripcion del concepto",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "quantity": {
+                  "description": "Quantity / Cantidad",
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1000000
+                },
+                "unitPrice": {
+                  "description": "Unit price in EUR / Precio unitario en EUR",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000000
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "issueDate": {
+            "description": "Issue date in ISO 8601 format (YYYY-MM-DD), defaults to today / Fecha de emision",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "dueDate": {
+            "description": "Due date in ISO 8601 format (YYYY-MM-DD) / Fecha de vencimiento",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "status": {
+            "description": "Invoice status (default: draft) / Estado de la factura",
+            "type": "string",
+            "enum": [
+              "draft",
+              "sent",
+              "paid",
+              "overdue",
+              "cancelled"
+            ]
+          },
+          "notes": {
+            "description": "Additional notes shown on the invoice / Notas adicionales",
+            "type": "string",
+            "maxLength": 10000
+          },
+          "taxRate": {
+            "description": "Tax rate percentage (e.g. 21 for 21% IVA, 7 for IGIC) / Porcentaje de impuesto",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "irpfRate": {
+            "description": "IRPF withholding % (retencion autonomo ES, e.g. 15 or 7) / Retencion IRPF %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "equivalenceSurchargeRate": {
+            "description": "Recargo de equivalencia % (ES retail regime) / Recargo de equivalencia %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "clientLocation": {
+            "description": "Fiscal zone driving IVA vs IGIC vs exempt / Zona fiscal (IVA/IGIC/exento)",
+            "type": "string",
+            "enum": [
+              "peninsula",
+              "canarias",
+              "ceuta_melilla",
+              "eu",
+              "world"
+            ]
+          },
+          "prepayment": {
+            "description": "Prepaid/advance amount already collected in EUR / Anticipo cobrado en EUR",
+            "type": "number",
+            "minimum": 0
+          },
+          "discountRate": {
+            "description": "Global discount % applied to the invoice / Descuento global %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "seriesId": {
+            "description": "Invoice numbering series ID / ID de serie de numeracion",
+            "type": "string"
+          },
+          "documentNumber": {
+            "description": "Externally-issued number for import (honored verbatim) / Numero externo para importacion",
+            "type": "string",
+            "maxLength": 50
+          },
+          "poNumber": {
+            "description": "Client purchase-order reference / Numero de pedido del cliente",
+            "type": "string"
+          },
+          "operationType": {
+            "description": "Operation type (service or goods) / Tipo de operacion",
+            "type": "string",
+            "enum": [
+              "service",
+              "goods"
+            ]
+          },
+          "fiscalTreatment": {
+            "description": "Explicit fiscal treatment declared by the user; never inferred / Tratamiento fiscal declarado expresamente por el usuario; nunca inferido",
+            "type": "string",
+            "enum": [
+              "not_subject_location",
+              "export_exempt"
+            ]
+          }
+        },
+        "required": [
+          "clientName",
+          "items"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unitPrice": {
+                  "type": "number"
+                },
+                "taxRate": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "issueDate": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "taxRate": {
+            "type": "number"
+          },
+          "discountRate": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "create_invoice",
+          "writesFrihet": true,
+          "externalInteraction": true,
+          "externalSideEffects": [
+            "webhook_delivery_or_configuration",
+            "fiscal_or_einvoice_submission"
+          ]
+        }
+      }
+    },
+    {
+      "name": "create_quote",
+      "title": "Create Quote",
+      "description": "Create a new quote/estimate for a client. Requires client name and at least one line item. Quotes can later be converted to invoices. Defaults to draft status. Example: clientName='Acme Corp', items=[{description:'Design', quantity:1, unitPrice:3000}], validUntil='2026-04-30' / Crea un nuevo presupuesto. Requiere nombre del cliente y al menos un concepto. Los presupuestos se pueden convertir en facturas despues.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "clientName": {
+            "description": "Client name / Nombre del cliente",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "clientId": {
+            "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
+            "type": "string"
+          },
+          "clientTaxId": {
+            "description": "Client tax ID (NIF/CIF/VAT) / NIF/CIF del cliente",
+            "type": "string"
+          },
+          "clientAddress": {
+            "description": "Client billing address / Direccion fiscal del cliente",
+            "type": "string"
+          },
+          "issueDate": {
+            "description": "Issue date in ISO 8601 (YYYY-MM-DD), defaults to today / Fecha de emision",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "dueDate": {
+            "description": "Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "taxRate": {
+            "description": "Tax rate % (e.g. 21 IVA, 7 IGIC) / Porcentaje de impuesto",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "irpfRate": {
+            "description": "IRPF withholding % (retencion autonomo ES) / Retencion IRPF %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "equivalenceSurchargeRate": {
+            "description": "Recargo de equivalencia % / Recargo de equivalencia %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "clientLocation": {
+            "description": "Fiscal zone driving IVA vs IGIC vs exempt / Zona fiscal",
+            "type": "string",
+            "enum": [
+              "peninsula",
+              "canarias",
+              "ceuta_melilla",
+              "eu",
+              "world"
+            ]
+          },
+          "items": {
+            "description": "Line items (each with description, quantity, unitPrice) / Conceptos del presupuesto",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "description": "Description of the line item / Descripcion del concepto",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "quantity": {
+                  "description": "Quantity / Cantidad",
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1000000
+                },
+                "unitPrice": {
+                  "description": "Unit price in EUR / Precio unitario en EUR",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000000
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "validUntil": {
+            "description": "Expiry date in ISO 8601 (YYYY-MM-DD) / Fecha de validez",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "notes": {
+            "description": "Additional notes shown on the quote / Notas adicionales",
+            "type": "string",
+            "maxLength": 10000
+          },
+          "status": {
+            "description": "Quote status (default: draft) / Estado del presupuesto",
+            "type": "string",
+            "enum": [
+              "draft",
+              "sent",
+              "accepted",
+              "rejected",
+              "expired"
+            ]
+          }
+        },
+        "required": [
+          "clientName",
+          "items"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unitPrice": {
+                  "type": "number"
+                },
+                "taxRate": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "issueDate": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "validUntil": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total": {
+            "type": "number"
+          },
+          "taxRate": {
+            "type": "number"
+          },
+          "discountRate": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "create_quote",
+          "writesFrihet": true,
+          "externalInteraction": true,
+          "externalSideEffects": [
+            "webhook_delivery_or_configuration"
+          ]
+        }
+      }
+    },
+    {
+      "name": "get_business_context",
+      "title": "Get Business Context",
+      "description": "Get complete business context — profile, defaults, plan limits, recent activity, top clients, and current month summary. Call this FIRST in any session to understand the user's business. Returns everything an AI agent needs to provide personalized help without multiple round-trips. / Obtiene el contexto completo del negocio — perfil, limites del plan, actividad reciente, principales clientes y resumen del mes actual. Llama a esto PRIMERO en cualquier sesion.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "business": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "taxId": {
+                "type": "string"
+              },
+              "fiscalZone": {
+                "type": "string"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "fiscalZone",
+              "currency",
+              "language",
+              "country"
+            ],
+            "additionalProperties": {}
+          },
+          "defaults": {
+            "type": "object",
+            "properties": {
+              "taxRate": {
+                "type": "number"
+              },
+              "irpfRate": {
+                "type": "number"
+              },
+              "dueDays": {
+                "type": "number"
+              },
+              "currency": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "taxRate",
+              "irpfRate",
+              "dueDays",
+              "currency"
+            ],
+            "additionalProperties": {}
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "invoices": {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "number"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "const": "unlimited"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit"
+                ],
+                "additionalProperties": false
+              },
+              "expenses": {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "number"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "const": "unlimited"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit"
+                ],
+                "additionalProperties": false
+              },
+              "aiMessages": {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "number"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "const": "unlimited"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "name",
+              "invoices",
+              "expenses",
+              "aiMessages"
+            ],
+            "additionalProperties": {}
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                },
+                "current": {
+                  "type": "number"
+                },
+                "year": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": {}
+            }
+          },
+          "recentActivity": {
+            "type": "object",
+            "properties": {
+              "lastInvoice": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "number": {
+                        "type": "string"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "client": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastExpense": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string"
+                      },
+                      "vendor": {
+                        "type": "string"
+                      },
+                      "amount": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "amount"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "overdueCount": {
+                "type": "number"
+              },
+              "overdueAmount": {
+                "type": "number"
+              },
+              "unpaidCount": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "lastInvoice",
+              "lastExpense",
+              "overdueCount",
+              "overdueAmount",
+              "unpaidCount"
+            ],
+            "additionalProperties": {}
+          },
+          "topClients": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "totalRevenue": {
+                  "type": "number"
+                },
+                "invoiceCount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "totalRevenue",
+                "invoiceCount"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "currentMonth": {
+            "type": "object",
+            "properties": {
+              "revenue": {
+                "type": "number"
+              },
+              "expenses": {
+                "type": "number"
+              },
+              "profit": {
+                "type": "number"
+              },
+              "invoiceCount": {
+                "type": "number"
+              },
+              "expenseCount": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "revenue",
+              "expenses",
+              "profit",
+              "invoiceCount",
+              "expenseCount"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "business",
+          "defaults",
+          "plan",
+          "series",
+          "recentActivity",
+          "topClients",
+          "currentMonth"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "Business context snapshot: workspace profile, defaults, plan usage, recent activity and current-month performance",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "get_business_context",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "get_invoice",
+      "title": "Get Invoice",
+      "description": "Get a single invoice by its ID. Returns the full invoice including line items, totals, and status. / Obtiene una factura por su ID. Devuelve la factura completa con conceptos, totales y estado.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Invoice ID / ID de la factura",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unitPrice": {
+                  "type": "number"
+                },
+                "taxRate": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "issueDate": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "taxRate": {
+            "type": "number"
+          },
+          "discountRate": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "get_invoice",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "list_expenses",
+      "title": "List Expenses",
+      "description": "List all expenses with optional pagination and date range filters. Returns expenses sorted by date (newest first). Example: from='2026-01-01', to='2026-03-31', limit=50 / Lista todos los gastos con paginacion y filtros de fecha opcionales.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "vendorId": {
+            "description": "Filter by vendor ID / Filtrar por ID de proveedor",
+            "type": "string"
+          },
+          "category": {
+            "description": "Filter by expense category (e.g. 'office', 'travel') / Filtrar por categoria",
+            "type": "string"
+          },
+          "from": {
+            "description": "Start date filter (YYYY-MM-DD) / Fecha inicio",
+            "type": "string"
+          },
+          "to": {
+            "description": "End date filter (YYYY-MM-DD) / Fecha fin",
+            "type": "string"
+          },
+          "fields": {
+            "description": "Comma-separated field names to return (e.g. 'id,description,amount') / Campos a devolver",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max results (1-100) / Resultados maximos",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "description": "Offset / Desplazamiento",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "after": {
+            "description": "Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor",
+            "type": "string"
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "category": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "vendorId": {
+                  "type": "string"
+                },
+                "vendor": {
+                  "type": "string"
+                },
+                "taxDeductible": {
+                  "type": "boolean"
+                },
+                "paidDate": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": {}
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "list_expenses",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "list_invoices",
+      "title": "List Invoices",
+      "description": "List all invoices with optional pagination and filters. Returns a paginated list sorted by issue date (newest first). Supports filtering by status (draft/sent/paid/overdue/cancelled) and date range. Example: status='paid', from='2026-01-01', to='2026-03-31', limit=20 / Lista facturas con paginacion y filtros opcionales. Soporta filtrado por estado y rango de fechas.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Filter by invoice status / Filtrar por estado",
+            "type": "string",
+            "enum": [
+              "draft",
+              "sent",
+              "paid",
+              "overdue",
+              "cancelled"
+            ]
+          },
+          "clientId": {
+            "description": "Filter by client ID / Filtrar por ID de cliente",
+            "type": "string"
+          },
+          "seriesId": {
+            "description": "Filter by invoice series ID / Filtrar por ID de serie",
+            "type": "string"
+          },
+          "from": {
+            "description": "Start date filter in ISO 8601 (YYYY-MM-DD) / Fecha inicio",
+            "type": "string"
+          },
+          "to": {
+            "description": "End date filter in ISO 8601 (YYYY-MM-DD) / Fecha fin",
+            "type": "string"
+          },
+          "fields": {
+            "description": "Comma-separated field names to return (e.g. 'id,clientName,total') / Campos a devolver",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max results per page (1-100, default 50) / Resultados por pagina",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "description": "Number of results to skip / Resultados a saltar",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "after": {
+            "description": "Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor",
+            "type": "string"
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "clientName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "type": "number"
+                      },
+                      "unitPrice": {
+                        "type": "number"
+                      },
+                      "taxRate": {
+                        "type": "number"
+                      },
+                      "discount": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "description",
+                      "quantity",
+                      "unitPrice"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "issueDate": {
+                  "type": "string"
+                },
+                "dueDate": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "notes": {
+                  "type": "string"
+                },
+                "taxRate": {
+                  "type": "number"
+                },
+                "discountRate": {
+                  "type": "number"
+                },
+                "total": {
+                  "type": "number"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": {}
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "list_invoices",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "send_invoice",
+      "title": "Send Invoice",
+      "description": "Send an invoice to the client via email. Requires confirm=true. Optionally override the recipient email address. The invoice must exist and should not already be cancelled. Sending reaches a third party and cannot be recalled. / Envia una factura al cliente por email. Requiere confirm=true. Opcionalmente se puede cambiar el email destinatario. El envio llega a un tercero y no se puede anular.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Invoice ID / ID de la factura",
+            "type": "string"
+          },
+          "to": {
+            "description": "Override recipient email / Email destinatario alternativo",
+            "type": "string"
+          },
+          "confirm": {
+            "description": "Must be true to confirm sending / Debe ser true para confirmar el envio",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "confirm"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "data": {
+            "not": {}
+          },
+          "meta": {
+            "not": {}
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "send_invoice",
+          "writesFrihet": true,
+          "externalInteraction": true,
+          "externalSideEffects": [
+            "email_or_invitation",
+            "webhook_delivery_or_configuration",
+            "fiscal_or_einvoice_submission"
+          ]
+        }
+      }
+    }
+  ]
+}

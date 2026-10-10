@@ -123,6 +123,13 @@ Marketplace availability is pending. Use the local plugin command above or the C
 
 Skill invocation: `/frihet-erp:frihet-mcp`. The bundled `.mcp.json` launches `@frihet/mcp-server` via `npx` — set `FRIHET_API_KEY` in your environment (get one at [app.frihet.io](https://app.frihet.io) → Settings → API keys).
 
+The [portable Claude plugin preview](plugins/claude/frihet-erp/README.md) bundles
+real receivables, document-drafting and monthly-review skills with the existing
+public remote MCP. Load `plugins/claude/frihet-erp` in Claude Code or upload a ZIP
+of that folder in chat/Cowork. Its skills guide behavior; they do not filter the
+hosted catalogue or establish Directory approval. The root local MCP setup above
+keeps its existing API-key configuration.
+
 ### Claude Code — one command
 
 ```bash
