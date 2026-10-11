@@ -3372,6 +3372,8 @@ const REVIEWED_LINES = new Set([
   // scripts/check-full-worker-topology.mjs resolves the Worker-locked Wrangler by name.
   'resolved = requireFromWorker.resolve("wrangler");',
   'const reader = requireFromWorker("wrangler").experimental_readRawConfig;',
+  // scripts/check-claude-hosted-release.mjs reads the Claude config offline; it does not deploy.
+  'import { unstable_readConfig } from "../workers/remote-mcp/node_modules/wrangler/wrangler-dist/cli.js";',
   // scripts/no-public-leak.sh greps for the phrase; it does not run it.
   'if grep -rinE "DO NOT SUBMIT|OPENAI_TOKEN_GOES_HERE|' + 'wrangler (deploy|secret put)|test account at https|submit (first|last)|submission order|awaiting .* final OK|rejection was caused|gh release create|re-triggers crawls|approval needed|night sprint|wave [0-9]+ candidate|--print-current|FRIHET_API_KEY=.*node scripts/test-openai" \\',
 ]);
@@ -3380,6 +3382,9 @@ const REVIEWED_LINES = new Set([
 // (docs/full-topology-bootstrap.md); no workflow may invoke it (see the `deploy` rule).
 const REVIEWED_SCRIPTS = new Map([
   ["workers/remote-mcp/package.json#deploy", "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:openapi-fresh && wrangler deploy && npm --prefix ../.. run gate:openapi-fresh:live"],
+  // The Claude hosted Worker's local path (workers/remote-mcp/wrangler.claude.toml): gated by
+  // check-claude-hosted-release.mjs, never invoked by a workflow.
+  ["workers/remote-mcp/package.json#deploy:claude", "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:claude-candidate && npm --prefix ../.. run gate:openai-review-descriptor && node ../../scripts/check-claude-hosted-release.mjs && wrangler deploy --config wrangler.claude.toml"],
 ]);
 
 const unquote = (word) => word.replace(/^["'`]+|["'`,]+$/gu, "");
