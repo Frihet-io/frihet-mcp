@@ -287,8 +287,10 @@ test("canonical callability classes remain conservative and exhaustive", async (
   // entirely from the catalogue instead of being runtime_checked, so the
   // runtime_checked count drops by 2 (their inner withBackendGuard still
   // exists in src/tools/onboarding.ts and remains the reference pattern).
+  // list_purchase_orders / get_purchase_order (ADR 0027 S2, read-only GET routes) are
+  // api_dependent: +2 over the 100 above.
   assert.deepEqual(counts, {
-    api_dependent: 100,
+    api_dependent: 102,
     runtime_checked: 40,
     deferred: 8,
     unavailable: 8,

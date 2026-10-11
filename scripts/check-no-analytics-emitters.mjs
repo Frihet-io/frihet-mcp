@@ -268,10 +268,10 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "70acc0ff78b2a0be6ecd32194ec173f8276b989288d89460d78ea5ea7f10426c", // provisioning credential removed from the public API client; sinks unchanged
+  "src/client.ts": "3810570b02ca25e03e4ecf3cd4ae54f02537b6bf195df68c3bc6869ee8b61b22", // provisioning credential removed from the public API client; sinks unchanged
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
-  "workers/api-proxy/worker.js": "34f6c6e995a6c779d6a80fb954321f589cf64cd99f62c5d9c6b49e0fcaf07fd4",
+  "workers/api-proxy/worker.js": "8121fb734429b885f566334af9790dab060a5930faa5c417330628668896174e",
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
   "workers/remote-mcp/src/auth-handler.ts": "d19999e6263445c9731ad2f482d5c2639ec703c6152519a482b11bbdee7ccb8e", // #205: commit carries the replaced grant ids into the durable state outbox; inline replacement kept as fast path (no new destination); #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
@@ -294,8 +294,8 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner.svg": "2b32a68014580c334f8b180d8812d842c744a9a59bd2298a586bb95bd6179ebc",
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
-  "docs/agent-onboarding.json": "ce973f35061e589005d83fca9e5cd2013de09467d2faec1af7dfbbb87c20c30a",
-  "README.md": "610ee80753d288477b5a65ae25c8ab65b27565cf85eebc3a4739f7245334e303", // GitHub Registry discovery links + static badge on existing img.shields.io host; no new runtime emitter or destination
+  "docs/agent-onboarding.json": "ff7cf86707db768e0dd7ad3e759f17d0d0287476c2df95cb8b4cbaa237c1b8dc",
+  "README.md": "2ec480f8c4b4b8450f1e0aa3ec32ae3a46322d5055ea1596f2358107a5790473", // GitHub Registry discovery links + static badge on existing img.shields.io host; no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
@@ -344,7 +344,7 @@ export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
   "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "00b5ce103dc0309092b2f317cab66406389f957e3e923555bd6c24a4118193e3", // Reviewed invoice reads: three description-only boundaries for unavailable external evidence; schemas, OAuth and 33-tool security schemes unchanged
-  "src/__tests__/fixtures/public-capability-contract.json": "1b0820d9b441a32bae739f7dd7f5f62054cd0e5fa3d81567f8931a4233084157",
+  "src/__tests__/fixtures/public-capability-contract.json": "bf036fe1d7c5855662748f2677ceba9aa6b23f0951f93d37149b506dde7b4c8e",
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
 
