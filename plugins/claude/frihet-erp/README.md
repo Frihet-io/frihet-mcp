@@ -56,7 +56,7 @@ El servicio puede utilizar procesamiento y observabilidad operativa según su
 configuración y la política de privacidad de Frihet. El [contrato de
 observabilidad](https://github.com/Frihet-io/frihet-mcp/blob/main/docs/observability.md)
 limita la telemetría a metadatos operativos; no contiene entradas ni salidas de
-herramientas ni credenciales. Consulta la [privacidad](https://mcp.frihet.io/privacy)
+herramientas ni credenciales. Consulta la [privacidad](https://www.frihet.io/es/privacy)
 y las [condiciones](https://www.frihet.io/es/terms) para el tratamiento del servicio.
 
 Los informes dependen de datos y páginas disponibles; señalan cobertura parcial,

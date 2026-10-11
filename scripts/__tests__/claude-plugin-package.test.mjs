@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { exportedFiles, filesIn, plugin } from "../sync-claude-plugin.mjs";
+import { exportedFiles, filesIn, plugin, root } from "../sync-claude-plugin.mjs";
 
 test("remote preview is a small self-contained export of the local plugin skills", () => {
   const source = exportedFiles();
@@ -21,7 +21,7 @@ test("remote preview is a small self-contained export of the local plugin skills
   assert.equal(manifest.license, "MIT");
   assert.equal(manifest.author.name, "Frihet");
   assert.equal(manifest.author.email, "hola@frihet.io");
-  assert.equal(manifest.privacyPolicyUrl, "https://mcp.frihet.io/privacy");
+  assert.equal(manifest.privacyPolicyUrl, "https://www.frihet.io/es/privacy");
   assert.deepEqual(JSON.parse(readFileSync(join(plugin, ".mcp.json"), "utf8")), {
     mcpServers: { frihet: { type: "http", url: "https://mcp.frihet.io/mcp" } },
   });
@@ -29,4 +29,14 @@ test("remote preview is a small self-contained export of the local plugin skills
   assert.ok(readme.replace(/```[\s\S]*?```/gu, "").split(/\s+/u).length >= 40);
   assert.deepEqual(files.filter((path) => path.endsWith("/SKILL.md")).map((path) => path.split("/")[1]).sort(),
     ["cobros", "documentos", "frihet-mcp", "revision-mensual"]);
+});
+
+test("skill/ (declared source of truth) is byte-identical to skills/frihet-mcp", () => {
+  const sourceDir = join(root, "skill");
+  const copyDir = join(root, "skills/frihet-mcp");
+  const source = filesIn(sourceDir).filter((path) => path !== "CANONICAL.md");
+  assert.deepEqual(source, filesIn(copyDir));
+  for (const path of source) {
+    assert.deepEqual(readFileSync(join(copyDir, path)), readFileSync(join(sourceDir, path)), `skill/ drift: ${path}`);
+  }
 });
