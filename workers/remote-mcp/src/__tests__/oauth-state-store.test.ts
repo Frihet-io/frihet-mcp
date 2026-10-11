@@ -952,3 +952,66 @@ test("rotation: a hard identity mismatch (different uid) still tombstones the fa
   );
   assert.equal(outboxKeys.length, 0, "no rotation outbox is enqueued for a forgery");
 });
+
+// ---------------------------------------------------------------------------
+// #205 findings from the independent review of #216 — pinned RED first.
+// ---------------------------------------------------------------------------
+
+test("RED #205 finding 3: a pending previous-binding revoke survives a tombstone cleanup that ends in deleteAll", async (context) => {
+  const t0 = 1_800_000_000_000;
+  let now = t0;
+  context.mock.method(Date, "now", () => now);
+  const revoked: string[] = [];
+  const cleanupAuthorities: OAuthCleanupAuthorities = {
+    async revokeGrant(): Promise<void> {},
+    async revokeBackend(_env, binding): Promise<boolean> {
+      revoked.push((binding as { keyId: string }).keyId);
+      return true;
+    },
+    async revokeBackendCorrelation(): Promise<boolean> {
+      return true;
+    },
+  };
+  const { store, state } = makeStore({ cleanupAuthorities });
+  const hash = "7".repeat(64);
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash: hash,
+    expiresAtMs: t0 + 60_000,
+    apiKeyBinding: OPENAI_BINDING,
+  }, "PUT"))).status, 204);
+  const begin = await familyJson(store, "/token-family/begin", { kind: "refresh_token", credentialHash: hash });
+  const rotated = await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "8".repeat(64),
+    apiKeyBinding: { ...OPENAI_BINDING, keyId: "Z".repeat(20) },
+  });
+  assert.equal(rotated.outcome, "committed");
+  // The family is tombstoned and then expires before the outbox ever ran.
+  await familyJson(store, "/token-family/revoke", {});
+  now = t0 + 61_000;
+  for (let i = 0; i < 6 && state.storage.values.size > 0; i += 1) await store.alarm();
+  assert.ok(
+    revoked.includes(OPENAI_BINDING.keyId),
+    `the rotated-away key must be revoked before storage is wiped (revoked: ${revoked.join(",")})`,
+  );
+});
+
+test("RED #205 finding 2: a commit that carries a different keyId than the family's binding tombstones the family", async () => {
+  const { store, state } = makeStore();
+  const hash = "9".repeat(64);
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash: hash,
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: OPENAI_BINDING,
+  }, "PUT"))).status, 204);
+  const begin = await familyJson(store, "/token-family/begin", { kind: "refresh_token", credentialHash: hash });
+  const commit = await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "a".repeat(64),
+    apiKeyBinding: { ...OPENAI_BINDING, keyId: "Z".repeat(20) },
+  });
+  assert.equal(commit.outcome, "revoked", "within one family the keyId is immutable; a different one is a forged commit");
+  assert.equal((state.storage.values.get("oauth_token_family") as { status: string }).status, "revoked");
+});

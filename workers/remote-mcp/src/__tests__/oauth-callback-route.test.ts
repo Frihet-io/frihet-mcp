@@ -806,3 +806,24 @@ test("FakeErpAuthority: oidMismatch surfaces a 403 instead of a 404 when DELETE'
   ));
   assert.equal(baseline.status, 404, "with oidMismatch off, the production default of 404 returns");
 });
+
+// #205 item 1 (review of #216): replacing the earlier grant (auth-handler.ts:793-802)
+// revokes only the OAuth grant; the ERP key bound to it is never revoked, and a failed
+// replacement is only logged, with no retry.
+test("RED #205 finding 1: the ERP key bound to a replaced grant is revoked", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  const first = await h.startLogin();
+  const idToken = await mintIdToken();
+  const connected = await h.callback(first.stateKey, idToken);
+  assert.equal(connected.status, 200, JSON.stringify(connected.body));
+  const earlier = await h.redeem(first.clientId, connected.body.redirectTo);
+
+  const { stateKey } = await h.startLogin(first.clientId);
+  const reconnected = await h.callback(stateKey, idToken);
+  assert.equal(reconnected.status, 200, JSON.stringify(reconnected.body));
+
+  h.clock.offsetMs += 10 * 60_000;
+  for (const { store } of h.namespace.objects.values()) await store.alarm?.();
+  assert.equal((await h.callMcp(earlier.accessToken)).status, 401, "the superseded grant must not stay usable");
+  assert.equal(h.erp.activeKeyIds().length, 1, "only the new grant's ERP key stays active");
+});
