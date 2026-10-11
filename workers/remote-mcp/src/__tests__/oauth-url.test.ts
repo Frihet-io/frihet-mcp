@@ -115,7 +115,7 @@ test("Claude contract and authority have separate fixed profile, permissions, se
     accessProfile: "claude",
     oauthResource: "https://claude-mcp.frihet.io",
     authorityUrl: CLAUDE_EXPECTED,
-    permissions: ["read", "write", "einvoice:write"],
+    permissions: ["read", "write"],
     candidateLifetimeDays: 30,
     correlationNamespace: "claude-",
   });

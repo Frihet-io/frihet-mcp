@@ -24,17 +24,19 @@ Demo fixtures do not establish live acceptance. Setting both `FRIHET_CLAUDE_MODE
 `FRIHET_OPENAI_MODE=true` fails before registration.
 
 The explicit candidate inventory starts with 156 canonical operations at source
-`176de12`: **156 − 8 unavailable − 8 deferred − 4 other exclusions = 136**.
-It retains tax/e-invoicing, invoice email, payroll and banking families, subject
+`176de12`: **156 − 8 unavailable − 8 deferred − 9 other exclusions = 131**. The 5 added exclusions
+(`einvoice_export`, `face_*`, `ticketbai_*`) need an einvoice scope that the Claude pilot
+credential does not carry (M2, ERP #2477).
+It retains tax, invoice email, payroll and banking families, subject
 to each operation's workspace/API availability and declared external effects.
 A profile is not evidence that every endpoint works for every tenant.
 
 | Composition | Canonical operations | Fiscal aliases | Discovery names | Total tool names | Resources | Prompts |
 |---|---:|---:|---:|---:|---:|---:|
-| Local full candidate | 136 | 4 | 0 | 140 | 5 | 2 |
-| Local grouped candidate | 136 | 4 | 3 | 143 | 5 | 2 |
-| Reusable remote full composition | 136 | 4 | 0 | 140 | 1 | 2 |
-| Reusable remote grouped composition | 136 | 4 | 3 | 143 | 1 | 2 |
+| Local full candidate | 131 | 4 | 0 | 135 | 5 | 2 |
+| Local grouped candidate | 131 | 4 | 3 | 138 | 5 | 2 |
+| Reusable remote full composition | 131 | 4 | 0 | 135 | 1 | 2 |
+| Reusable remote grouped composition | 131 | 4 | 3 | 138 | 1 | 2 |
 
 Remote rows describe SDK composition tests, **not a deployed Claude endpoint**.
 Filtering happens before SDK registration and discovery indexing; future

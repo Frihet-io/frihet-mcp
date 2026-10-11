@@ -77,7 +77,7 @@ export const CLAUDE_OAUTH_PROVISIONING_CONTRACT = {
   accessProfile: "claude",
   oauthResource: "https://claude-mcp.frihet.io",
   authorityUrl: "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning",
-  permissions: ["read", "write", "einvoice:write"],
+  permissions: ["read", "write"],
   candidateLifetimeDays: 30,
   correlationNamespace: "claude-",
 } as const;

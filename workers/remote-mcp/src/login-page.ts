@@ -72,11 +72,11 @@ export function getLoginPage(opts: {
         <li>POS, kitchen and stay/PMS operations</li>
         <li>Gestoría, general-ledger entries and portal settings</li>`;
   const consentScopeNote = claudeProfile
-    ? `This connection grants read/write access and the einvoice:write permission for the
-        entire e-invoicing family to this workspace; it is not limited to a single fiscal operation.
-        Plan entitlements and workspace permissions still apply. Writes can delete records,
-        send invoices or configured notifications/webhooks, and submit e-invoices to external
-        recipients or fiscal authorities. Review each tool and approve its actual effect before use.
+    ? `This connection grants read/write access to this workspace and carries
+        no e-invoicing permission: fiscal sends (e-invoice export, FACe, TicketBAI) are not available.
+        Plan entitlements and workspace permissions still apply. Writes can delete records and
+        send invoices or configured notifications/webhooks.
+        Review each tool and approve its actual effect before use.
         Payment transfers, deferred operations and unsafe deletion/delivery workflows are excluded.
         Deposit refunds are bookkeeping entries, not payment transfers. OAuth credentials expire
         within 30 days; reconnect if the underlying credential expires. Disconnect revokes the grant
