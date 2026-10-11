@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "c8fcc3fc70d2fc13499ffa57cdaa7aa19ee093752e3500fcb8136b44a0f5a425", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs; no new deps, lifecycle or network script
+  "package.json": "2b58a9475251afbc53c8603f326f4b8c207397ff368326a7e43c7be5d88ea774", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs; no new deps, lifecycle or network script
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -268,7 +268,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "3810570b02ca25e03e4ecf3cd4ae54f02537b6bf195df68c3bc6869ee8b61b22", // provisioning credential removed from the public API client; sinks unchanged
+  "src/client.ts": "3810570b02ca25e03e4ecf3cd4ae54f02537b6bf195df68c3bc6869ee8b61b22", // provisioning credential removed from the public API client; + two read-only GET purchase-order methods (ADR 0027 S2); sinks unchanged
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
   "workers/api-proxy/worker.js": "8121fb734429b885f566334af9790dab060a5930faa5c417330628668896174e",
@@ -295,7 +295,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
   "docs/agent-onboarding.json": "ff7cf86707db768e0dd7ad3e759f17d0d0287476c2df95cb8b4cbaa237c1b8dc",
-  "README.md": "2ec480f8c4b4b8450f1e0aa3ec32ae3a46322d5055ea1596f2358107a5790473", // GitHub Registry discovery links + static badge on existing img.shields.io host; no new runtime emitter or destination
+  "README.md": "2ec480f8c4b4b8450f1e0aa3ec32ae3a46322d5055ea1596f2358107a5790473", // count-only 156->158 edits; GitHub Registry discovery links + static badge on existing img.shields.io host; no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
