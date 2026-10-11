@@ -1,7 +1,7 @@
 {
   "contractVersion": 2,
   "catalogue": {
-    "canonicalOperations": 156,
+    "canonicalOperations": 158,
     "aliasNames": 5,
     "discoveryNames": 3
   },
@@ -1410,6 +1410,23 @@
           }
         },
         {
+          "name": "get_purchase_order",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_purchase_order",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
           "name": "get_quarterly_taxes",
           "annotations": {
             "readOnlyHint": true,
@@ -1933,6 +1950,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "list_properties",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "list_purchase_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "list_purchase_orders",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
@@ -4273,6 +4307,23 @@
           }
         },
         {
+          "name": "get_purchase_order",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_purchase_order",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
           "name": "get_quarterly_taxes",
           "annotations": {
             "readOnlyHint": true,
@@ -4796,6 +4847,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "list_properties",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "list_purchase_orders",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "list_purchase_orders",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []

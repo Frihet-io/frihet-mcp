@@ -146,6 +146,7 @@ export const FILE_TO_GROUP: Record<string, ToolGroupId> = {
 
   expenses: "expenses",
   vendors: "expenses",
+  purchaseOrders: "expenses",
 
   fiscal: "fiscal",
   igic: "fiscal",
@@ -219,7 +220,7 @@ export function groupForTool(name: string): ToolGroupId {
   if (/(modelo|verifactu|ticketbai|einvoice|datev|face_|ksef|igic|aiem|gl_entry|period_close|period_reopen|vies|portal_onboard)/.test(n))
     return "fiscal";
   if (/(invoice|quote|credit_note|late_fee|recurring|deposit)/.test(n)) return "invoicing";
-  if (/(expense|vendor)/.test(n)) return "expenses";
+  if (/(expense|vendor|purchase_order)/.test(n)) return "expenses";
   if (/(bank|transaction)/.test(n)) return "banking";
   if (/(client|contact|activit|note)/.test(n)) return "crm";
   if (/(leave|attendance|overtime|anomaly|payroll|time_entr|time_summary|team|onboarding|permission)/.test(n))

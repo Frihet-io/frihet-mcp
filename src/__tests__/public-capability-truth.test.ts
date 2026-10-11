@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { LOCAL_FULL_TOOLS, REMOTE_GROUPED_TOOLS } from "./helpers/surface-counts.js";
 
 import {
   CAPABILITY_META_KEY,
@@ -183,8 +184,8 @@ test("real SDK surfaces match the generated public capability contract", async (
       ]),
     ),
     {
-      localFull: { tools: 161, resources: 11, prompts: 10 },
-      remoteGrouped: { tools: 164, resources: 7, prompts: 10 },
+      localFull: { tools: LOCAL_FULL_TOOLS, resources: 11, prompts: 10 },
+      remoteGrouped: { tools: REMOTE_GROUPED_TOOLS, resources: 7, prompts: 10 },
       openaiFull: { tools: 33, resources: 0, prompts: 0 },
     },
   );
@@ -286,8 +287,10 @@ test("canonical callability classes remain conservative and exhaustive", async (
   // entirely from the catalogue instead of being runtime_checked, so the
   // runtime_checked count drops by 2 (their inner withBackendGuard still
   // exists in src/tools/onboarding.ts and remains the reference pattern).
+  // list_purchase_orders / get_purchase_order (ADR 0027 S2, read-only GET routes) are
+  // api_dependent: +2 over the 100 above.
   assert.deepEqual(counts, {
-    api_dependent: 100,
+    api_dependent: 102,
     runtime_checked: 40,
     deferred: 8,
     unavailable: 8,

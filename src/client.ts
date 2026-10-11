@@ -1205,6 +1205,27 @@ export class FrihetClient {
     return this.request("DELETE", `/vendors/${encodeURIComponent(id)}`);
   }
 
+  // ---------------------------------------------------------------- Purchase Orders
+  // ----------------------------------------------------------------
+  // ADR 0027 S2, server-owned lifecycle. Routes are read-only here; the
+  // write surface (create draft, send, confirm, cancel, receive,
+  // reverse-receipt, bill) is deliberately not exposed by the MCP server.
+
+  async listPurchaseOrders(
+    params?: { status?: string; vendorId?: string; limit?: number; offset?: number },
+  ): Promise<PaginatedResponse<Record<string, unknown>>> {
+    return this.requestPaginated("GET", "/purchase-orders", undefined, {
+      status: params?.status,
+      vendorId: params?.vendorId,
+      limit: params?.limit,
+      offset: params?.offset,
+    });
+  }
+
+  async getPurchaseOrder(id: string): Promise<Record<string, unknown>> {
+    return this.requestUnwrapped("GET", `/purchase-orders/${encodeURIComponent(id)}`);
+  }
+
   // ---------------------------------------------------------------- Invoice Actions
   // ----------------------------------------------------------------
 

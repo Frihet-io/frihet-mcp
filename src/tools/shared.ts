@@ -629,6 +629,55 @@ export const vendorItemOutput = z.object({
   updatedAt: z.string().optional(),
 }).passthrough();
 
+/**
+ * Purchase-order output (ADR 0027 S2, server-owned lifecycle).
+ *
+ * Fields mirror the live API shape returned by /v1/purchase-orders GETs:
+ *   - `status` ∈ {draft, sent, confirmed, received, billed, cancelled}
+ *   - `items[].taxRate` is optional because per-line tax rates may override
+ *     the document tax rate; the family router accepts it as a string-coerced
+ *     number in the request, so the response can carry it.
+ *   - `currency` is an ISO 4217 code (e.g. "EUR"). It is the same code the
+ *     server stamps on the stored doc.
+ *   - `createdAt`/`updatedAt` are ISO 8601; `issueDate`/`expectedDate` are
+ *     YYYY-MM-DD.
+ *
+ * `.passthrough()` preserves receipts (`receipts[]`) and the linked expense
+ * id (`billedExpenseId`) once the order moves past `billed`, plus any
+ * additional fields the server adds in later S-stages without breaking
+ * downstream consumers.
+ */
+export const purchaseOrderItemOutput = z.object({
+  id: z.string(),
+  poNumber: z.string().optional(),
+  vendorId: z.string().optional(),
+  vendorName: z.string().optional(),
+  status: z.string().optional(),
+  items: z
+    .array(
+      z
+        .object({
+          description: z.string(),
+          quantity: z.number(),
+          unitPrice: z.number(),
+          productId: z.string().optional(),
+          taxRate: z.number().optional(),
+        })
+        .passthrough(),
+    )
+    .optional(),
+  issueDate: z.string().optional(),
+  expectedDate: z.string().optional(),
+  taxRate: z.number().optional(),
+  subtotal: z.number().optional(),
+  tax: z.number().optional(),
+  total: z.number().optional(),
+  currency: z.string().optional(),
+  notes: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
 export const webhookItemOutput = z.object({
   id: z.string(),
   userId: z.string().optional(),

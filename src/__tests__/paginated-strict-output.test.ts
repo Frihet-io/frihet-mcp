@@ -21,7 +21,7 @@
  *     expenses, clients, vendors, quotes, deposits, crm) is fixed and
  *     verified by the INVENTORY test below.
  *
- * Inventory of paginated consumers: 26 tools across 17 resource files,
+ * Inventory of paginated consumers: 28 tools across 19 resource files,
  * captured in `PAGINATED_TOOLS` below. The full-inventory sweep test
  * iterates every one and asserts strict equality (declared keys ⊇
  * emitted keys, required keys ⊆ emitted keys), so a future regression
@@ -193,7 +193,7 @@ function requiredKeysOf(schema: unknown): Set<string> {
 /* ------------------------------------------------------------------ */
 
 /**
- * The 26 tools that ship a paginated output today. Derived from
+ * The tools that ship a paginated output today. Derived from
  * `grep "paginatedOutput(" src/tools/*.ts` and cross-referenced with the
  * actual `server.registerTool("...")` name on the same block. Adding a
  * tool to paginatedOutput without extending this list turns the
@@ -237,9 +237,31 @@ const PAGINATED_TOOLS = [
   "list_kitchen_tickets",
   "list_kitchen_stations",
   "list_menu_items",
+  // purchase orders (ADR 0027 S2, read-only)
+  "list_purchase_orders",
+  // search (declares the same envelope; was missing from this inventory)
+  "global_search",
 ] as const;
 
 describe("#1580 — paginated outputSchema strict contract", () => {
+  test("every registered tool with the paginated envelope is in PAGINATED_TOOLS (derived from the catalogue)", () => {
+    const { server } = makeServer();
+    const envelope = ["data", "total", "limit", "offset"];
+    const derived = [...server.tools.values()]
+      .filter((t) => {
+        const keys = declaredKeysOf(t.config.outputSchema);
+        return envelope.every((k) => keys.has(k));
+      })
+      .map((t) => t.name)
+      .sort();
+    const listed: string[] = [...PAGINATED_TOOLS].sort();
+    assert.deepEqual(
+      derived,
+      listed,
+      "a tool declares the paginated envelope but is missing from (or stale in) PAGINATED_TOOLS",
+    );
+  });
+
   test("every paginated consumer is registered (inventory is current)", () => {
     const { server } = makeServer();
     const missing = PAGINATED_TOOLS.filter((name) => !server.tools.has(name));
@@ -270,7 +292,7 @@ describe("#1580 — paginated outputSchema strict contract", () => {
     );
     // _suggestions / _warnings must NOT be declared: if they were, the
     // frozen snapshot for the OpenAI reviewed surface would drift AND
-    // every resource that doesn't emit hints (most of the 26 tools) would
+    // every resource that doesn't emit hints (most paginated tools) would
     // carry an unused declaration.
     assert.equal(
       declared.has("_suggestions"),
