@@ -25,8 +25,8 @@ Demo fixtures do not establish live acceptance. Setting both `FRIHET_CLAUDE_MODE
 
 The explicit candidate inventory starts with 156 canonical operations at source
 `176de12`: **156 − 8 unavailable − 8 deferred − 10 other exclusions = 130**. The 6 added exclusions
-(`einvoice_export`, `face_*`, `ticketbai_*`, `send_einvoice`) need an einvoice scope that the Claude pilot
-credential does not carry (M2, ERP #2477).
+(`einvoice_export`, `face_*`, `ticketbai_*`) need an einvoice scope that the Claude pilot
+credential does not carry (M2, ERP #2477); `send_einvoice` has no ERP route (404).
 It retains tax, invoice email, payroll and banking families, subject
 to each operation's workspace/API availability and declared external effects.
 A profile is not evidence that every endpoint works for every tenant.
@@ -52,7 +52,8 @@ The retained aliases are `frihet_modelo_303_summary`,
 |---|---|
 | `ksef_submit`, `get_modelo_180_summary`, `frihet_modelo_415_summary`, `frihet_modelo_418_summary`, `frihet_modelo_425_summary`, `frihet_aiem_calculate`, `frihet_modelo_200_summary`, `frihet_modelo_202_summary` | Eight operations marked unavailable; no deployed backing ERP route in the reviewed contract. |
 | `period_close`, `period_reopen`, `gestoria_message_send`, `gestoria_messages_list`, `gestoria_template_bulk_send`, `gestoria_aging_consolidated`, `create_reservation`, `sync_channel` | Eight operations whose handlers explicitly defer execution. |
-| `einvoice_export`, `face_status`, `face_submit`, `ticketbai_status`, `ticketbai_submit`, `send_einvoice` | The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for these routes. |
+| `einvoice_export`, `face_status`, `face_submit`, `ticketbai_status`, `ticketbai_submit` | The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for these routes. |
+| `send_einvoice` | No deployed backing ERP route: `POST /einvoice/send` is unavailable in the ERP (404). |
 | `refund_sale` | Executes a Stripe money transfer; excluded under Anthropic Directory policy §4.A. Confirmation alone does not change this effect. |
 | `delete_client` | Linked contacts, notes and activities can remain stored but unreachable. |
 | `delete_expense` | Linked attachment metadata/object cleanup is not established. |

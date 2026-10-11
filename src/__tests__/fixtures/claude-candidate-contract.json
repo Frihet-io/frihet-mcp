@@ -38,7 +38,7 @@
       "face_submit": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
       "ticketbai_status": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
       "ticketbai_submit": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
-      "send_einvoice": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); sending requires the einvoice scope and the ERP returns 403 for this route.",
+      "send_einvoice": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); no deployed backing ERP route: POST /einvoice/send is unavailable in the ERP (404).",
       "ksef_submit": "No deployed backing ERP route; capability truth marks this unavailable.",
       "period_close": "The handler deliberately defers execution; capability truth marks this deferred.",
       "period_reopen": "The handler deliberately defers execution; capability truth marks this deferred.",

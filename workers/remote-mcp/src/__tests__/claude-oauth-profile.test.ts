@@ -75,11 +75,12 @@ test("Claude UserInfo rejects tokens with another issuer, audience, profile or i
   assert.equal(buildOpenAIUserInfo({ ...token, audience: CLAUDE_ORIGIN }, now, binding), undefined);
 });
 
-test("Claude consent states that no fiscal send permission is granted", () => {
+test("Claude consent denies e-invoicing permission and discloses VeriFactu submission", () => {
   const html = getLoginPage({ stateKey: "test-state", clientId: "test-client", firebaseProjectId: "test-project", accessProfile: "claude", clientName: "Claude test", redirectUri: "https://claude.ai/api/mcp/auth_callback" });
   for (const text of ["no e-invoicing permission", "30 days", "webhook", "fiscal", "https://claude-mcp.frihet.io/privacy"]) assert.ok(html.includes(text), text);
   assert.doesNotMatch(html, /einvoice:write|entire e-invoicing family|submit e-invoices/u);
   assert.doesNotMatch(html, /complete e-invoicing API family|including exports, submission/u);
+  assert.doesNotMatch(html, /fiscal sends[^.]*not available/iu);
   assert.match(html, /VeriFactu/u);
   assert.match(html, /approve each one/u);
   assert.doesNotMatch(html, /https:\/\/openai-mcp\.frihet\.io/u);
