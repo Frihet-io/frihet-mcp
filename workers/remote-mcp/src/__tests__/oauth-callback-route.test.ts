@@ -846,3 +846,27 @@ test("#205: a superseded grant and its ERP key are revoked durably after a trans
   assert.equal(h.kv.grantKeys().length, 1, "the superseded grant is gone from KV");
   assertLogsAreClean(h, [idToken]);
 });
+
+// #205 item 1, broader than first reported: even a fault-free reconnect only
+// removed the earlier grant from KV; its ERP key stayed active until expiry.
+test("#205: a fault-free reconnect revokes the superseded grant's ERP key", async (t) => {
+  const h = await createOAuthRouteHarness(t);
+  const first = await h.startLogin();
+  const idToken = await mintIdToken();
+  const connected = await h.callback(first.stateKey, idToken);
+  assert.equal(connected.status, 200, JSON.stringify(connected.body));
+  const earlier = await h.redeem(first.clientId, connected.body.redirectTo);
+
+  const { stateKey } = await h.startLogin(first.clientId);
+  const reconnected = await h.callback(stateKey, idToken);
+  assert.equal(reconnected.status, 200, JSON.stringify(reconnected.body));
+  const current = await h.redeem(first.clientId, reconnected.body.redirectTo);
+  h.clock.offsetMs += 10_000;
+  await h.runDueAlarms();
+
+  assert.equal((await h.callMcp(earlier.accessToken)).status, 401);
+  assert.equal((await h.callMcp(current.accessToken)).status, 200);
+  assert.deepEqual(h.erp.activeKeyIds(), [current.keyId], "the superseded ERP key is revoked");
+  assert.equal(h.kv.grantKeys().length, 1);
+  assertLogsAreClean(h, [idToken]);
+});
