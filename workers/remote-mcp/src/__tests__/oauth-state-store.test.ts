@@ -1086,3 +1086,45 @@ test("grant replacement: a retried commit keeps the outbox, and the horizon ends
   await store.alarm();
   assert.equal(state.storage.values.size, 0);
 });
+
+test("production default backend revocation for a Claude token family uses the Claude authority, secret and exact {uid,keyId} body", async (context) => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  context.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return new Response(null, { status: 204 });
+  });
+  const state = new FakeState();
+  // No cleanupAuthorities argument: this exercises DEFAULT_CLEANUP_AUTHORITIES
+  // from production code, not a mirror. OpenAI's secret is configured as well so
+  // a wrong secret binding is observable.
+  const store = new OAuthStateStore(
+    state as unknown as DurableObjectState,
+    { ...TEST_ENV, ...CLAUDE_ENV },
+  );
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash: "a".repeat(64),
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: CLAUDE_BINDING,
+  }, "PUT"))).status, 204);
+  await familyJson(store, "/token-family/revoke", {});
+  // revokeGrant cannot run in Node (cloudflare:workers); allSettled isolates it
+  // and the backend authority must still be invoked.
+  await store.alarm();
+  assert.equal(calls.length, 1);
+  const [call] = calls;
+  assert.equal(call.url, "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning");
+  assert.equal(call.init?.method, "DELETE");
+  assert.equal(call.init?.redirect, "manual");
+  const secret = new Headers(call.init?.headers).get("x-frihet-oauth-key");
+  assert.equal(secret, CLAUDE_ENV.FRIHET_CLAUDE_OAUTH_API_KEY);
+  assert.notEqual(secret, TEST_ENV.FRIHET_OAUTH_API_KEY);
+  assert.deepEqual(JSON.parse(String(call.init?.body)), {
+    uid: CLAUDE_BINDING.uid,
+    keyId: CLAUDE_BINDING.keyId,
+  });
+  assert.equal(
+    (state.storage.values.get("oauth_token_family_cleanup") as { backendRevoked?: boolean } | undefined)?.backendRevoked,
+    true,
+  );
+});
