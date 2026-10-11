@@ -1304,6 +1304,7 @@ export class OAuthStateStore {
         // present it, and the key lapses at its own expiry.
         await this.tombstoneTokenFamily(record ?? {
           version: 1,
+          accessProfile: this.workerAccessProfile(),
           status: "revoked",
           userId,
           grantId,

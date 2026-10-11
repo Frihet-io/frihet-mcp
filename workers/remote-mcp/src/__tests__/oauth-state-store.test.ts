@@ -1009,30 +1009,35 @@ test("token family supersede: tombstones the bound family, or leaves a revoked p
   assert.equal((await bound.store.fetch(familyRequest("/token-family/supersede", supersede))).status, 204);
   assert.deepEqual(bound.state.storage.values.get("oauth_token_family_cleanup"), intent, "a replay keeps the outbox");
 
-  const unredeemed = makeStore();
-  assert.equal((await unredeemed.store.fetch(familyRequest("/token-family/supersede", supersede))).status, 204);
-  assert.equal((await familyJson(unredeemed.store, "/token-family/begin", {
-    kind: "authorization_code",
-    credentialHash: "0".repeat(64),
-  })).outcome, "revoked");
-  assert.equal((await unredeemed.store.fetch(familyRequest("/token-family", {
-    currentKind: "authorization_code",
-    currentHash: "1".repeat(64),
-    expiresAtMs: Date.now() + 60_000,
-    apiKeyBinding: OPENAI_BINDING,
-  }, "PUT"))).status, 409, "a late first redemption cannot revive the grant");
-  assert.deepEqual(
-    unredeemed.state.storage.values.get("oauth_token_family_cleanup"),
-    {
-      version: 1,
-      accessProfile: "openai",
-      userId: "firebase-user",
-      grantId: "g".repeat(16),
-      grantRevoked: false,
-      backendRevoked: true,
-      attempt: 0,
-    },
-  );
+  for (const [env, binding, profile] of [
+    [{}, OPENAI_BINDING, "openai"],
+    [CLAUDE_ENV, CLAUDE_BINDING, "claude"],
+  ] as const) {
+    const unredeemed = makeStore({ env });
+    assert.equal((await unredeemed.store.fetch(familyRequest("/token-family/supersede", supersede))).status, 204);
+    assert.equal((await familyJson(unredeemed.store, "/token-family/begin", {
+      kind: "authorization_code",
+      credentialHash: "0".repeat(64),
+    })).outcome, "revoked");
+    assert.equal((await unredeemed.store.fetch(familyRequest("/token-family", {
+      currentKind: "authorization_code",
+      currentHash: "1".repeat(64),
+      expiresAtMs: Date.now() + 60_000,
+      apiKeyBinding: binding,
+    }, "PUT"))).status, 409, "a late first redemption cannot revive the grant");
+    assert.deepEqual(
+      unredeemed.state.storage.values.get("oauth_token_family_cleanup"),
+      {
+        version: 1,
+        accessProfile: profile,
+        userId: "firebase-user",
+        grantId: "g".repeat(16),
+        grantRevoked: false,
+        backendRevoked: true,
+        attempt: 0,
+      },
+    );
+  }
 });
 
 test("token family supersede rejects another identity and malformed bodies without touching the family", async () => {
