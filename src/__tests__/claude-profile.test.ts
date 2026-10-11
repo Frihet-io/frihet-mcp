@@ -23,7 +23,7 @@ const excluded = [
   "ksef_submit", "get_modelo_180_summary", "frihet_modelo_415_summary", "frihet_modelo_418_summary", "frihet_modelo_425_summary", "frihet_aiem_calculate", "frihet_modelo_200_summary", "frihet_modelo_202_summary",
   "period_close", "period_reopen", "gestoria_message_send", "gestoria_messages_list", "gestoria_template_bulk_send", "gestoria_aging_consolidated", "create_reservation", "sync_channel",
   "refund_sale", "delete_client", "delete_expense", "send_quote",
-  "einvoice_export", "face_submit", "face_status", "ticketbai_submit", "ticketbai_status",
+  "einvoice_export", "face_submit", "face_status", "ticketbai_submit", "ticketbai_status", "send_einvoice",
 ].sort();
 const allowedAliases = Object.entries(FISCAL_MODELO_ALIASES).filter(([, canonical]) => !excluded.includes(canonical));
 const deniedAliases = Object.entries(FISCAL_MODELO_ALIASES).filter(([, canonical]) => excluded.includes(canonical)).map(([alias]) => alias);
@@ -68,8 +68,8 @@ async function denied(client: Client, name: string) {
 
 test("Claude candidate exactly matches the regenerated SDK descriptor and inventory arithmetic", async () => {
   assert.equal(fullNames.length - Object.keys(FISCAL_MODELO_ALIASES).length, 156);
-  assert.equal(canonical.length, 131);
-  assert.equal(excluded.length, 25);
+  assert.equal(canonical.length, 130);
+  assert.equal(excluded.length, 26);
   assert.equal(allowedAliases.length, 4);
   assert.deepEqual([...CLAUDE_CANDIDATE_TOOLS].sort(), canonical);
   assert.deepEqual(Object.keys(CLAUDE_EXCLUDED_TOOLS).sort(), excluded);
@@ -119,7 +119,7 @@ for (const local of [true, false]) for (const grouped of [false, true]) {
         assert.ok(!["unavailable", "deferred"].includes(capability.callability), tool.name);
         assert.ok(!capability.externalSideEffects.includes("money_movement"), tool.name);
       }
-      for (const name of ["get_quarterly_taxes", "send_einvoice", "send_invoice", "payroll_export", "list_bank_accounts", "match_transaction_to_invoice", "refund_deposit", "run_recurring_now"]) {
+      for (const name of ["get_quarterly_taxes", "send_invoice", "payroll_export", "list_bank_accounts", "match_transaction_to_invoice", "refund_deposit", "run_recurring_now"]) {
         assert.ok(tools.some((tool) => tool.name === name), `${name} family retained`);
       }
       assert.ok(tools.find((tool) => tool.name === "run_recurring_now")!.inputSchema.required!.includes("confirm"));
@@ -129,11 +129,11 @@ for (const local of [true, false]) for (const grouped of [false, true]) {
       for (const name of [...excluded, ...deniedAliases, "future_unknown_tool", "execute_tool"]) await denied(client, name);
       if (grouped) {
         const groups = (await client.callTool({ name: "list_tool_groups", arguments: {} })).structuredContent as { totalTools: number; groups: Array<{ group: string; toolCount: number; blurb: string }> };
-        assert.equal(groups.totalTools, 131);
-        assert.equal(groups.groups.reduce((sum, group) => sum + group.toolCount, 0), 131);
+        assert.equal(groups.totalTools, 130);
+        assert.equal(groups.groups.reduce((sum, group) => sum + group.toolCount, 0), 130);
         assert.doesNotMatch(JSON.stringify(groups), /refunds|KSeF|channel sync|onboarding|200\/202|period close,/);
         const searched = (await client.callTool({ name: "search_tools", arguments: { limit: 1000 } })).structuredContent as { count: number; tools: Array<{ name: string }> };
-        assert.equal(searched.count, 131);
+        assert.equal(searched.count, 130);
         assert.deepEqual(searched.tools.map((tool) => tool.name).sort(), canonical);
         for (const group of groups.groups) {
           const result = (await client.callTool({ name: "search_tools", arguments: { group: group.group, limit: 1000 } })).structuredContent as { count: number };
@@ -240,7 +240,7 @@ test("actual stdio Claude flag exposes truthful candidate and rejects mixed flag
     await client.connect(transport);
     assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name).sort(), expectedNames);
     assert.equal(client.getInstructions(), CLAUDE_CANDIDATE_INSTRUCTIONS);
-    assert.match(client.getServerVersion()?.description ?? "", /131 canonical operations/);
+    assert.match(client.getServerVersion()?.description ?? "", /130 canonical operations/);
     assert.doesNotMatch(client.getServerVersion()?.description ?? "", /158|11 resources|full Spanish tax compliance/);
   } finally { await client.close(); }
   await assert.rejects(promisify(execFile)(process.execPath, [entry], {
@@ -255,9 +255,9 @@ test("actual stdio Claude flag exposes truthful candidate and rejects mixed flag
 });
 
 test("M2: the Claude pilot credential has no einvoice scope, so no einvoice/face/ticketbai tool is allowlisted", () => {
-  const scoped = [...CLAUDE_CANDIDATE_TOOLS].filter((name) => /^(einvoice_export|face_|ticketbai_)/u.test(name));
+  const scoped = [...CLAUDE_CANDIDATE_TOOLS].filter((name) => /^(einvoice_export|face_|ticketbai_|send_einvoice$)/u.test(name));
   assert.deepEqual(scoped, []);
-  for (const name of ["einvoice_export", "face_submit", "face_status", "ticketbai_submit", "ticketbai_status"]) {
+  for (const name of ["einvoice_export", "face_submit", "face_status", "ticketbai_submit", "ticketbai_status", "send_einvoice"]) {
     assert.ok(name in CLAUDE_EXCLUDED_TOOLS, `${name} must be an explicit exclusion`);
   }
   assert.doesNotMatch(readFixture("claude-candidate-contract.json"), /einvoice:write/u);

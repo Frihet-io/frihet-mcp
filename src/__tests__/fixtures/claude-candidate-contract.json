@@ -4,7 +4,7 @@
   "inventorySource": "176de12",
   "instructions": "Frihet ERP — Claude candidate profile; Directory acceptance requires separate evidence.\nDiscover available tools, resources and prompts from this session's MCP lists. In grouped mode use list_tool_groups, search_tools and describe_tool.\nRead get_business_context for workspace context, not proof of tax treatment or endpoint availability.\nRead each tool's io.frihet/capability metadata: api_dependent/runtime_checked means workspace permissions and backing endpoints still govern execution.\nResource payloads are workspace records or formatting examples, not authoritative tax advice. The overdue-invoices resource is a status-filtered first page; paginate list_invoices including partial records for a complete balance review.\nPropose changes and obtain user approval before writes, email, webhooks or fiscal submission. A confirm input is a client interlock, not proof of authorization.\nRead full descriptions and inspect configured external effects before executing. Do not infer delivery from invoice status, a money transfer from an accounting entry, or production acceptance from demo data.\nOn 409 IDEMPOTENCY_REQUEST_IN_PROGRESS, read the record before deciding; do not retry with a fresh key.\nFRIHET_DEMO=1 is fixture-only and cannot verify live operations. Hosting, OAuth, API availability and Directory acceptance require independent verification.",
   "catalogue": {
-    "canonicalOperations": 131,
+    "canonicalOperations": 130,
     "aliases": {
       "frihet_modelo_303_summary": "get_modelo_303_summary",
       "frihet_modelo_130_summary": "get_modelo_130_summary",
@@ -38,6 +38,7 @@
       "face_submit": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
       "ticketbai_status": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
       "ticketbai_submit": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
+      "send_einvoice": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); fiscal sends are out of pilot scope and the backing route is unavailable.",
       "ksef_submit": "No deployed backing ERP route; capability truth marks this unavailable.",
       "period_close": "The handler deliberately defers execution; capability truth marks this deferred.",
       "period_reopen": "The handler deliberately defers execution; capability truth marks this deferred.",
@@ -15782,100 +15783,6 @@
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
-          }
-        }
-      },
-      {
-        "name": "send_einvoice",
-        "title": "Send E-Invoice",
-        "description": "Dispatch an e-invoice to the recipient via the selected transport channel. Returns immediately with a workflowRunId — use get_einvoice_status to poll until completion. \n\nSupported formats (11 total):\n  • xrechnung-cii — XRechnung CII syntax (Germany B2G mandatory)\n  • xrechnung-ubl — XRechnung UBL 2.1 syntax (Germany B2G alternative)\n  • facturx-en16931 — Factur-X EN16931 PDF/A-3 (France, EU)\n  • facturx-extended — Factur-X Extended with trade/logistics fields (France, EU)\n  • facturx-basic — Factur-X Basic reduced field set (France, EU)\n  • facturx-minimum — Factur-X Minimum for summary invoices (France, EU)\n  • fatturapa — FatturaPA XML via SDI hub (Italy mandatory)\n  • ubl — Generic UBL 2.1 XML (EU/global)\n  • cii — Generic CII Cross Industry Invoice (EU/global)\n  • peppol-bis-3 — PEPPOL BIS Billing 3.0 network (EU/Nordic/AU/SG)\n  • facturae — Facturae 3.2.x (Spain B2G via FACe/AEAT mandatory)\n\nDispatch modes:\n  • email — attach XML/PDF and send via Resend to client email on file\n  • chorus_pro — submit to French Chorus Pro portal (facturx-* only)\n  • sdi — submit to Italian SDI hub (fatturapa only)\n  • peppol — transmit via PEPPOL access point (peppol-bis-3 only)\n  • download — generate and return a signed download URL only\n\nIf the dispatch backend is not deployed for this workspace, returns an honest 'unavailable' response — never fabricated workflow data. / Envia una factura electronica al destinatario mediante el canal de transporte seleccionado. Devuelve de forma asincrona — consultar get_einvoice_status para seguimiento.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "invoiceId": {
-              "description": "Frihet invoice ID to dispatch / ID de la factura a enviar",
-              "type": "string"
-            },
-            "format": {
-              "description": "E-invoice format. Choose based on recipient country and channel: DE→xrechnung-cii/ubl, FR→facturx-*, IT→fatturapa, ES B2G→facturae, EU PEPPOL→peppol-bis-3, generic→ubl or cii / Formato de factura electronica.",
-              "type": "string",
-              "enum": [
-                "xrechnung-cii",
-                "xrechnung-ubl",
-                "facturx-en16931",
-                "facturx-extended",
-                "facturx-basic",
-                "facturx-minimum",
-                "fatturapa",
-                "ubl",
-                "cii",
-                "peppol-bis-3",
-                "facturae"
-              ]
-            },
-            "dispatchMode": {
-              "description": "Transport channel: email=send via Resend, chorus_pro=French portal, sdi=Italian SDI hub, peppol=PEPPOL network, download=generate URL only / Canal de transporte.",
-              "type": "string",
-              "enum": [
-                "email",
-                "chorus_pro",
-                "sdi",
-                "peppol",
-                "download"
-              ]
-            }
-          },
-          "required": [
-            "invoiceId",
-            "format",
-            "dispatchMode"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": {
-          "type": "object",
-          "properties": {
-            "workflowRunId": {
-              "description": "Hatchet workflow run ID for polling status",
-              "type": "string"
-            },
-            "status": {
-              "description": "Always 'queued' for async dispatch",
-              "type": "string",
-              "const": "queued"
-            },
-            "estimatedCompletionSec": {
-              "description": "Estimated seconds until the workflow completes",
-              "type": "number"
-            }
-          },
-          "required": [
-            "workflowRunId",
-            "status",
-            "estimatedCompletionSec"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": {}
-        },
-        "annotations": {
-          "readOnlyHint": false,
-          "destructiveHint": true,
-          "idempotentHint": false,
-          "openWorldHint": true
-        },
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "_meta": {
-          "io.frihet/capability": {
-            "registered": true,
-            "callability": "runtime_checked",
-            "canonicalOperation": "send_einvoice",
-            "writesFrihet": true,
-            "externalInteraction": true,
-            "externalSideEffects": [
-              "fiscal_or_einvoice_submission"
-            ]
           }
         }
       },
@@ -33955,100 +33862,6 @@
         }
       },
       {
-        "name": "send_einvoice",
-        "title": "Send E-Invoice",
-        "description": "[fiscal] Dispatch an e-invoice to the recipient via the selected transport channel. — full description and input fields via describe_tool('send_einvoice'). [openWorldHint: true — may interact with an external endpoint disclosed in describe_tool.]",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "invoiceId": {
-              "description": "Frihet invoice ID to dispatch / ID de la factura a enviar",
-              "type": "string"
-            },
-            "format": {
-              "description": "E-invoice format. Choose based on recipient country and channel: DE→xrechnung-cii/ubl, FR→facturx-*, IT→fatturapa, ES B2G→facturae, EU PEPPOL→peppol-bis-3, generic→ubl or cii / Formato de factura electronica.",
-              "type": "string",
-              "enum": [
-                "xrechnung-cii",
-                "xrechnung-ubl",
-                "facturx-en16931",
-                "facturx-extended",
-                "facturx-basic",
-                "facturx-minimum",
-                "fatturapa",
-                "ubl",
-                "cii",
-                "peppol-bis-3",
-                "facturae"
-              ]
-            },
-            "dispatchMode": {
-              "description": "Transport channel: email=send via Resend, chorus_pro=French portal, sdi=Italian SDI hub, peppol=PEPPOL network, download=generate URL only / Canal de transporte.",
-              "type": "string",
-              "enum": [
-                "email",
-                "chorus_pro",
-                "sdi",
-                "peppol",
-                "download"
-              ]
-            }
-          },
-          "required": [
-            "invoiceId",
-            "format",
-            "dispatchMode"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": {
-          "type": "object",
-          "properties": {
-            "workflowRunId": {
-              "description": "Hatchet workflow run ID for polling status",
-              "type": "string"
-            },
-            "status": {
-              "description": "Always 'queued' for async dispatch",
-              "type": "string",
-              "const": "queued"
-            },
-            "estimatedCompletionSec": {
-              "description": "Estimated seconds until the workflow completes",
-              "type": "number"
-            }
-          },
-          "required": [
-            "workflowRunId",
-            "status",
-            "estimatedCompletionSec"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": {}
-        },
-        "annotations": {
-          "readOnlyHint": false,
-          "destructiveHint": true,
-          "idempotentHint": false,
-          "openWorldHint": true
-        },
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "_meta": {
-          "io.frihet/capability": {
-            "registered": true,
-            "callability": "runtime_checked",
-            "canonicalOperation": "send_einvoice",
-            "writesFrihet": true,
-            "externalInteraction": true,
-            "externalSideEffects": [
-              "fiscal_or_einvoice_submission"
-            ]
-          }
-        }
-      },
-      {
         "name": "send_invoice",
         "title": "Send Invoice",
         "description": "[invoicing] Send an invoice to the client via email. Requires confirm=true. — full description and input fields via describe_tool('send_invoice'). [openWorldHint: true — may interact with an external endpoint disclosed in describe_tool.]",
@@ -36371,7 +36184,7 @@
         "group": "fiscal",
         "label": "Fiscal & compliance / Fiscal y cumplimiento",
         "blurb": "Modelo 303/130/390/347, VeriFactu, GL audit, period-close status and VIES; backing endpoints govern availability.",
-        "toolCount": 16
+        "toolCount": 15
       },
       {
         "group": "banking",
@@ -36423,29 +36236,29 @@
       }
     ],
     "totalGroups": 11,
-    "totalTools": 131,
+    "totalTools": 130,
     "next": "search_tools(query) to find tools; describe_tool(name) for full description and input fields."
   },
   "surfaces": {
     "localFull": {
       "tools": "full",
       "resources": "local",
-      "toolNames": 135
+      "toolNames": 134
     },
     "localGrouped": {
       "tools": "grouped",
       "resources": "local",
-      "toolNames": 138
+      "toolNames": 137
     },
     "remoteFull": {
       "tools": "full",
       "resources": "remote",
-      "toolNames": 135
+      "toolNames": 134
     },
     "remoteGrouped": {
       "tools": "grouped",
       "resources": "remote",
-      "toolNames": 138
+      "toolNames": 137
     }
   }
 }
