@@ -49,8 +49,8 @@ on:
           - npm-and-worker
       dry_run:
         description: >-
-          If true, run every gate EXCEPT the npm publish, wrangler deploy,
-          GitHub Release, and downstream cascade. Deterministic package
+          If true, run every gate EXCEPT publishing to npm, the Cloudflare
+          Worker release, the GitHub Release, and downstream cascade. Deterministic package
           evidence is still produced and asserted locally.
         required: false
         type: boolean
@@ -225,6 +225,19 @@ jobs:
           fi
           echo "OK — npm-release exists with independent reviewer protection"
 
+      - name: Setup Node for the topology config reader
+        # The topology gate parses wrangler.toml with the Worker-locked Wrangler
+        # (not a parser of its own), so the preflight needs the Worker's
+        # lockfile-pinned dependencies and the same Node major as the gates job.
+        if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install Worker dependencies (inert) for the topology config reader
+        if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'
+        run: npm ci --prefix workers/remote-mcp --ignore-scripts
+
       - name: Full Worker topology baseline must be established (preflight)
         # Same check as the deploy-worker job, run before anything is published
         # so a pending baseline cannot burn an npm version and then stop.
@@ -288,6 +301,13 @@ jobs:
 
       - name: Install (inert — no lifecycle hooks before gates)
         run: npm ci --ignore-scripts
+
+      - name: Install Worker dependencies (inert) for the topology config reader
+        # The contract test below runs scripts/check-full-worker-topology.mjs, which
+        # parses wrangler.toml with the Worker-locked Wrangler. Without this install
+        # five of its tests fail CONFIG_UNREADABLE and no release can pass `gates`.
+        # Node 22 is already set up above, the same major as the preflight job.
+        run: npm ci --prefix workers/remote-mcp --ignore-scripts
 
       - name: Release topology and Full OAuth authority contract
         run: node --test scripts/__tests__/release-workflow-contract.test.mjs
