@@ -8,11 +8,11 @@
     "dev": "wrangler dev",
     "deploy": "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:openapi-fresh && wrangler deploy && npm --prefix ../.. run gate:openapi-fresh:live",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test 'src/__tests__/*.test.ts' 'src/__tests__/*.test.mjs'"
+    "test": "node --experimental-strip-types --import ./src/__tests__/support/register-typescript.mjs --test 'src/__tests__/*.test.ts' 'src/__tests__/*.test.mjs'"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "0.3.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "1.31.0",
     "agents": "0.7.5",
     "firebase-auth-cloudflare-workers": "^2.0.6",
     "hono": "~4.12.34",
@@ -29,7 +29,7 @@
       "hono": "~4.12.34"
     },
     "agents": {
-      "@modelcontextprotocol/sdk": "1.30.0"
+      "@modelcontextprotocol/sdk": "1.31.0"
     },
     "nanoid": "5.1.16"
   }

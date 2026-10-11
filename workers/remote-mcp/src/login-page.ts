@@ -47,7 +47,7 @@ export function getLoginPage(opts: {
         <li>Current business context</li>
         <li>Create or update selected records; permanently delete selected client contacts and client notes; permanently delete a quote only when it is a clean draft with no delivery, response, attachment or conversion evidence; refuse protected drafts; cancel non-draft quotes. Every write requires explicit per-tool confirmation</li>
         <li>Invoice drafts consume monthly invoice usage and may send invoice-creation analytics to PostHog's EU-hosted analytics service</li>
-        <li>Ten confirmed writes may deliver one or more full business events to active endpoints already configured by the workspace owner; those deliveries are outside the reviewed ChatGPT response schema and can include the complete underlying record, including fields this connector does not expose to ChatGPT</li>
+        <li>Ten confirmed writes may deliver one or more full business events to active endpoints already configured by the workspace owner; those deliveries are outside the reviewed connector response schema and can include the complete underlying record, including fields this connector does not return to the AI assistant</li>
         <li>Creating an invoice or expense may notify eligible workspace admins or accountants in-app and through Novu, including recipient identity/contact fields and relevant workspace/document text needed to deliver that notification</li>
         <li>If expense creation needs a new vendor, that vendor is created in a separate backend step and may remain even if the later expense write fails</li>
         <li>A referred workspace's first invoice or expense may award activation credits to the referring Frihet account</li>`

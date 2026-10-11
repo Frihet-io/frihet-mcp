@@ -33,9 +33,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  readFileSync,
+  chmodSync,
   existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -192,7 +199,7 @@ function validateFullOAuthReleaseHold(yaml, contract) {
   const holdBody = guardOffset >= 0 && protectedEnvironmentOffset > guardOffset
     ? body.slice(guardOffset, protectedEnvironmentOffset)
     : "";
-  if (!holdBody.includes("if: inputs.dry_run != true")) errors.push("full-hold-breaks-dry-run-or-is-unconditional");
+  if (!holdBody.includes("if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'")) errors.push("full-hold-breaks-dry-run-or-is-unconditional");
   if (/continue-on-error:|\|\|\s*true/.test(holdBody)) errors.push("full-hold-error-can-be-ignored");
   if (!holdBody.includes(`CONTRACT=${FULL_OAUTH_RELEASE_CONTRACT}`)) errors.push("full-hold-contract-not-source-derived");
   if (!holdBody.includes('.status == "ready"') || contract.status !== "hold") {
@@ -241,6 +248,37 @@ function stageEnvValue(stage, name) {
   return match?.[1];
 }
 
+function validateNamespaceWorkflowInputs(body, checker, expectedGates, requireStdinHeader = false) {
+  const shell = body.replace(/\\\n\s*/g, " ").replace(/[ \t]+/g, " ");
+  const commands = shell.split("\n");
+  const gates = commands.filter((line) => line.includes(`node ../../scripts/${checker}`)
+    && line.includes("--live-version"));
+  const errors = [];
+  if (gates.length !== expectedGates.length) errors.push("namespace-version-gate-set-changed");
+  const hasAuthorization = requireStdinHeader
+    ? /builtin printf '%s\\n' "Authorization: Bearer \$\{CLOUDFLARE_API_TOKEN\}" \| curl [^\n]+ -H @-(?: |$)/u.test(shell)
+      && !shell.includes('-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"')
+    : shell.includes('-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"');
+  if (!hasAuthorization
+    || !shell.includes('"https://api.cloudflare.com/client/v4/$1"')) {
+    errors.push("namespace-capture-not-authenticated");
+  }
+  expectedGates.forEach(({ mode, version, namespaces }, index) => {
+    const gate = gates[index] ?? "";
+    const gateOffset = shell.indexOf(gate) + gate.indexOf(`node ../../scripts/${checker}`);
+    const capture = `api_get "accounts/\${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" > "${namespaces}"`;
+    if (!gate.includes(mode) || !gate.includes(`--live-version "${version}"`)
+      || !gate.includes(`--durable-object-namespaces "${namespaces}"`)) {
+      errors.push(`namespace-version-gate-input-missing:${index}`);
+    }
+    if (shell.indexOf(capture) < 0 || shell.indexOf(capture) > gateOffset
+      || commands.some((line) => line.includes("jq ") && line.includes(`> "${namespaces}"`))) {
+      errors.push(`namespace-complete-envelope-not-captured:${index}`);
+    }
+  });
+  return errors;
+}
+
 function validateOpenAIReleaseSemantics(yaml) {
   const stages = parseWorkflowStages(yaml);
   const byId = Object.fromEntries(stages.map((stage) => [stage.id, stage]));
@@ -265,6 +303,23 @@ function validateOpenAIReleaseSemantics(yaml) {
   const publicVerify = executableStageBody(byId["verify-public"]);
   const rollback = executableStageBody(byId["rollback-openai"]);
 
+  for (const [scope, body, gates] of [
+    ["prestate", capture, [
+      { mode: "--require-established", version: "$VERSION_FILE", namespaces: "$NAMESPACES_FILE" },
+    ]],
+    ["deploy", deploy, [
+      { mode: "--write-jit-prestate", version: "$version", namespaces: "$namespaces" },
+      { mode: "--require-compatible", version: "$STATE_DIR/deployed-version.json", namespaces: "$STATE_DIR/ambiguous-deploy-namespaces.json" },
+      { mode: "--require-compatible", version: "$STATE_DIR/deployed-version.json", namespaces: "$STATE_DIR/deployed-namespaces.json" },
+    ]],
+    ["recovery", rollback, [
+      { mode: "--require-recovery-target", version: "$VERSION_FILE", namespaces: "$NAMESPACES_FILE" },
+      { mode: "--require-compatible", version: "$CURRENT_VERSION_FILE", namespaces: "$NAMESPACES_FILE" },
+      { mode: "--require-recovery-target", version: "$VERSION_FILE", namespaces: "$NAMESPACES_FILE" },
+    ]],
+  ]) errors.push(...validateNamespaceWorkflowInputs(body, "check-openai-worker-topology.mjs", gates)
+    .map((error) => `${scope}:${error}`));
+
   if (
     !preflight.includes("github.workflow_ref")
     || !preflight.includes("github.workflow_sha")
@@ -285,7 +340,9 @@ function validateOpenAIReleaseSemantics(yaml) {
     !preflight.includes("assert_owner_only_environment openai-plugin-release")
     || !preflight.includes("assert_owner_only_environment openai-plugin-rollback")
     || !preflight.includes(".can_admins_bypass == false")
-    || !preflight.includes('.protection_rules | type == "array" and length == 0')
+    || !preflight.includes('[.protection_rules[].type] == ["branch_policy"]')
+    || !preflight.includes('/environments/${name}/deployment_protection_rules"')
+    || !preflight.includes('.total_count == 0 and (.custom_deployment_protection_rules | type == "array" and length == 0)')
     || !preflight.includes(".deployment_branch_policy.protected_branches == false")
     || !preflight.includes(".deployment_branch_policy.custom_branch_policies == true")
     || /required_reviewers|prevent_self_review/.test(preflight)
@@ -1158,6 +1215,14 @@ test("OpenAI release workflow — current source and frozen OpenAI profile are i
   assert.match(preflight.body, /require\('\.\/package\.json'\)\.version/);
   assert.match(preflight.body, /workers\/remote-mcp\/public-openai\/releases\.json/);
   assert.match(preflight.body, /reviewed_profile_version=\$PROFILE_VERSION/);
+  const reviewedProfile = JSON.parse(
+    readFileSync("workers/remote-mcp/public-openai/releases.json", "utf8"),
+  );
+  const submissionGuide = readFileSync("marketplace/openai/SUBMISSION.md", "utf8");
+  assert.ok(
+    submissionGuide.includes(`Release \`${reviewedProfile.version}\``),
+    "OpenAI submission guide must name the exact reviewed profile version",
+  );
   assert.match(preflight.body, /\.surface == "openai-chatgpt"/);
   assert.match(preflight.body, /github\.workflow_ref/);
   assert.match(preflight.body, /github\.workflow_sha/);
@@ -1178,6 +1243,42 @@ test("OpenAI release workflow — current source and frozen OpenAI profile are i
   ]) assert.ok(preflight.body.includes(`${output}:`), `preflight must expose ${output}`);
   assert.doesNotMatch(preflight.body, /refs\/tags|gh release view|npm view/);
   assert.doesNotMatch(preflight.body, /https:\/\/mcp\.frihet\.io\/health/);
+});
+
+test("npm-only release cannot reach Worker or downstream publication", () => {
+  const workflow = loadWorkflow();
+  const stages = parseWorkflowStages(workflow);
+  const preflight = findStage(stages, "preflight");
+  assert.match(workflow, /release_target:\n[\s\S]*?default: npm-only\n[\s\S]*?options:\n          - npm-only\n          - npm-and-worker/);
+  assert.match(preflight.body, /RELEASE_TARGET: \$\{\{ inputs\.release_target \}\}/);
+  const targetStep = preflight.body.split("      - name: Validate release target\n")[1]?.split("      - name:")[0];
+  assert.ok(targetStep, "target allowlist must run in preflight");
+  const shell = targetStep.split("        run: |\n")[1].replace(/^          /gm, "");
+  for (const target of ["npm-only", "npm-and-worker", "", "full", "npm-only; echo unsafe"]) {
+    const result = spawnSync("bash", ["-c", shell], { env: { ...process.env, RELEASE_TARGET: target } });
+    assert.equal(result.status === 0, ["npm-only", "npm-and-worker"].includes(target), `target ${target}`);
+  }
+  const authorization = findStage(stages, "authorize-release");
+  const steps = authorization.body.split(/^      - /m).slice(1);
+  const npmGuard = steps.find((step) => step.startsWith("name: Assert release environment guard\n"));
+  assert.ok(npmGuard, "npm publication retains its protected environment sentinel");
+  assert.doesNotMatch(npmGuard, /^        if:/m);
+  assert.match(npmGuard, /NPM_RELEASE_ENV_GUARD/);
+  for (const step of steps.filter((step) => step !== npmGuard)) {
+    assert.match(step, /^        if: inputs\.release_target == 'npm-and-worker'$/m,
+      "npm-only authorization must not read Worker/registry credentials or run Wrangler");
+  }
+  for (const id of ["deploy-worker", "release-github", "cascade"]) {
+    assert.match(findStage(stages, id).body,
+      /^    if: inputs\.dry_run != true && inputs\.release_target == 'npm-and-worker'(?: && success\(\))?$/m,
+      `${id} must never run for npm-only`);
+  }
+  for (const id of ["publish-npm", "verify-npm"]) {
+    assert.doesNotMatch(findStage(stages, id).body, /inputs\.release_target == 'npm-and-worker'/);
+  }
+  assert.match(findStage(stages, "build-pack").body,
+    /include-hidden-files: true\n          if-no-files-found: error\n          path: \.release-evidence\//,
+    "registry verification must actually receive the hidden packed artifact");
 });
 
 test("Full release workflow — current OpenAI-only lifecycle source remains on explicit HOLD", () => {
@@ -1216,7 +1317,7 @@ test("Full release workflow — current OpenAI-only lifecycle source remains on 
     "reusing the OpenAI lifecycle credential for Full must fail",
   );
   const unconditional = workflow.replace(
-    "      - name: Fail closed while Full OAuth lacks a separate reviewed authority\n        if: inputs.dry_run != true",
+    "      - name: Fail closed while Full OAuth lacks a separate reviewed authority\n        if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'",
     "      - name: Fail closed while Full OAuth lacks a separate reviewed authority",
   );
   assert.ok(
@@ -1300,7 +1401,8 @@ test("OpenAI release workflow — truthful sole-owner governance and recovery fa
   );
   assert.match(preflight.body, /OWNER_CONFIRMATION" != "\$EXPECTED_OWNER_CONFIRMATION/);
   assert.match(preflight.body, /\.can_admins_bypass == false/);
-  assert.match(preflight.body, /\.protection_rules \| type == "array" and length == 0/);
+  assert.match(preflight.body, /\[\.protection_rules\[\]\.type\] == \["branch_policy"\]/);
+  assert.match(preflight.body, /\/deployment_protection_rules"/);
   assert.match(preflight.body, /\.deployment_branch_policy\.protected_branches == false/);
   assert.match(preflight.body, /\.deployment_branch_policy\.custom_branch_policies == true/);
   assert.doesNotMatch(preflight.body, /required_reviewers|prevent_self_review/);
@@ -1349,8 +1451,9 @@ test("OpenAI release workflow — truthful sole-owner governance and recovery fa
   assert.match(deploy.body, /wrangler whoami/);
   assert.match(
     deploy.body,
-    /\.\/node_modules\/\.bin\/wrangler secret list\s+\\\s*\n\s*--env openai --name frihet-openai-mcp --format json/,
+    /\.\/node_modules\/\.bin\/wrangler secret list\s+\\\s*\n\s*--env openai --format json/,
   );
+  assert.doesNotMatch(deploy.body, /wrangler secret [^\n]*(?:\\\s*\n[^\n]*)?--name/);
   assert.match(deploy.body, /targetTopology\.secretNames/);
   const topology = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
   assert.deepEqual(topology.targetTopology.secretNames, [
@@ -1359,6 +1462,235 @@ test("OpenAI release workflow — truthful sole-owner governance and recovery fa
     "FRIHET_API_BASE",
     "FRIHET_OAUTH_API_KEY",
   ]);
+});
+
+// Fixtures follow GitHub's documented `environment` example
+// (github/rest-api-description, components.examples.environment): a custom
+// branch policy is reported back as a built-in `branch_policy` protection rule.
+const BRANCH_POLICY_RULE = Object.freeze({ id: 3, node_id: "MDQ6R2F0ZTM=", type: "branch_policy" });
+const WAIT_TIMER_RULE = Object.freeze({ id: 4, node_id: "MDQ6R2F0ZTQ=", type: "wait_timer", wait_timer: 30 });
+const REVIEWER_RULE = Object.freeze({
+  id: 5,
+  node_id: "MDQ6R2F0ZTU=",
+  prevent_self_review: false,
+  type: "required_reviewers",
+  reviewers: [{ type: "User", reviewer: { login: "octocat", id: 1 } }],
+});
+const CUSTOM_APP_RULE = Object.freeze({
+  id: 6,
+  node_id: "MDQ6R2F0ZTY=",
+  enabled: true,
+  app: {
+    id: 1,
+    node_id: "MDQ6R2F0ZTc=",
+    slug: "a-custom-app",
+    integration_url: "https://api.github.com/apps/a-custom-app",
+  },
+});
+
+function githubEnvironment(overrides = {}) {
+  return {
+    id: 1,
+    node_id: "MDExOkVudmlyb25tZW50MQ==",
+    name: "openai-plugin-release",
+    can_admins_bypass: false,
+    protection_rules: [BRANCH_POLICY_RULE],
+    deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
+    ...overrides,
+  };
+}
+
+/** The jq filters inside the preflight's `assert_owner_only_environment` shell function. */
+function ownerOnlyEnvironmentFilters(yaml) {
+  const preflight = findStage(parseWorkflowStages(yaml), "preflight");
+  assert.ok(preflight, "OpenAI workflow must keep its preflight job");
+  const body = executableStageBody(preflight);
+  const start = body.indexOf("assert_owner_only_environment() {");
+  const end = body.indexOf("assert_main_only() {");
+  assert.ok(start >= 0 && end > start, "environment governance must stay in the named shell function");
+  const shellFunction = body.slice(start, end);
+  return {
+    shellFunction,
+    filters: [...shellFunction.matchAll(/jq -e '([^']*)'/g)].map((match) => match[1]),
+  };
+}
+
+/** Runs the workflow's own jq filter; true only when `jq -e` would let the step continue. */
+function jqAccepts(filter, value) {
+  const result = spawnSync("jq", ["-e", filter], { input: JSON.stringify(value), encoding: "utf8" });
+  assert.equal(result.error, undefined, "jq must be installed to execute the workflow's filters");
+  return result.status === 0;
+}
+
+test("OpenAI release environments — GitHub's branch_policy rule is the only accepted built-in rule", () => {
+  const { filters } = ownerOnlyEnvironmentFilters(loadOpenAIWorkflow());
+  const shapeFilters = filters.filter((filter) => filter.includes(".can_admins_bypass"));
+  assert.equal(shapeFilters.length, 1, "one environment-shape filter must gate both environments");
+  const [filter] = shapeFilters;
+
+  assert.equal(
+    jqAccepts(filter, githubEnvironment()),
+    true,
+    "the intended main-only environment carries GitHub's own branch_policy rule and must pass",
+  );
+  for (const [label, overrides] of Object.entries({
+    "wait timer": { protection_rules: [BRANCH_POLICY_RULE, WAIT_TIMER_RULE] },
+    "required reviewer": { protection_rules: [BRANCH_POLICY_RULE, REVIEWER_RULE] },
+    "GitHub's documented staging example": {
+      protection_rules: [WAIT_TIMER_RULE, REVIEWER_RULE, BRANCH_POLICY_RULE],
+    },
+    "unknown additional built-in rule": { protection_rules: [BRANCH_POLICY_RULE, { id: 7, node_id: "x", type: "future_gate" }] },
+    "unknown rule instead of branch_policy": { protection_rules: [{ id: 7, node_id: "x", type: "future_gate" }] },
+    "duplicated branch_policy": { protection_rules: [BRANCH_POLICY_RULE, BRANCH_POLICY_RULE] },
+    "empty rule list despite a custom branch policy": { protection_rules: [] },
+    "null rule list": { protection_rules: null },
+    "missing rule list": { protection_rules: undefined },
+    "administrator bypass": { can_admins_bypass: true },
+    "protected-branches policy": {
+      deployment_branch_policy: { protected_branches: true, custom_branch_policies: false },
+    },
+    "all branches allowed": { deployment_branch_policy: null },
+  })) {
+    assert.equal(jqAccepts(filter, githubEnvironment(overrides)), false, `${label} must fail closed`);
+  }
+});
+
+test("OpenAI release environments — GitHub App deployment protection rules are read and must be absent", () => {
+  const { shellFunction, filters } = ownerOnlyEnvironmentFilters(loadOpenAIWorkflow());
+  assert.match(
+    shellFunction,
+    /"repos\/\$\{GITHUB_REPOSITORY\}\/environments\/\$\{name\}\/deployment_protection_rules"/,
+    "built-in protection_rules omit GitHub App rules, so the dedicated endpoint must be read",
+  );
+  const customFilters = filters.filter((filter) => filter.includes("custom_deployment_protection_rules"));
+  assert.equal(customFilters.length, 1, "one filter must reject custom deployment protection rules");
+  const [filter] = customFilters;
+
+  assert.equal(jqAccepts(filter, { total_count: 0, custom_deployment_protection_rules: [] }), true);
+  for (const [label, value] of Object.entries({
+    "one enabled app rule": { total_count: 1, custom_deployment_protection_rules: [CUSTOM_APP_RULE] },
+    "count disagrees with list": { total_count: 0, custom_deployment_protection_rules: [CUSTOM_APP_RULE] },
+    "count without list": { total_count: 0 },
+    "list without count": { custom_deployment_protection_rules: [] },
+    "non-array list": { total_count: 0, custom_deployment_protection_rules: {} },
+  })) {
+    assert.equal(jqAccepts(filter, value), false, `${label} must fail closed`);
+  }
+});
+
+/** The dedented `run: |` script of a named workflow step. */
+function stepRunScript(yaml, stepName) {
+  const lines = yaml.split("\n");
+  const start = lines.indexOf(`      - name: ${stepName}`);
+  assert.ok(start >= 0, `${stepName} step must exist`);
+  const run = lines.findIndex((line, index) => index > start && line === "        run: |");
+  assert.ok(
+    run > start && !lines.slice(start + 1, run).some((line) => line.startsWith("      - ")),
+    `${stepName} must have its own run script`,
+  );
+  const body = [];
+  for (const line of lines.slice(run + 1)) {
+    if (line.trim() !== "" && !line.startsWith("          ")) break;
+    body.push(line.slice(10));
+  }
+  return body.join("\n");
+}
+
+// Answers the three GitHub reads of the environment step. STUB_* variables
+// replace one environment's answer; any other gh call is a hard failure.
+const GH_STUB = `#!/usr/bin/env bash
+set -euo pipefail
+url="\${!#}"
+case "$url" in
+  */deployment_protection_rules)
+    name="\${url%/deployment_protection_rules}"; name="\${name##*/}"
+    if [ "\${STUB_CUSTOM_FAIL_FOR:-}" = "$name" ]; then echo "gh: HTTP 403" >&2; exit 1; fi
+    if [ "\${STUB_CUSTOM_FOR:-}" = "$name" ]; then printf '%s' "$STUB_CUSTOM"; exit 0; fi
+    printf '%s' '{"total_count":0,"custom_deployment_protection_rules":[]}' ;;
+  */deployment-branch-policies*)
+    printf '%s' '{"total_count":1,"branch_policies":[{"id":1,"node_id":"x","name":"main","type":"branch"}]}' ;;
+  */environments/*)
+    name="\${url##*/}"
+    if [ "\${STUB_ENV_FAIL_FOR:-}" = "$name" ]; then echo "gh: HTTP 404" >&2; exit 1; fi
+    if [ "\${STUB_ENV_FOR:-}" = "$name" ]; then printf '%s' "$STUB_ENV"; exit 0; fi
+    printf '{"name":"%s","can_admins_bypass":false,"protection_rules":[{"id":3,"node_id":"x","type":"branch_policy"}],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' "$name" ;;
+  *) echo "unexpected gh call: $*" >&2; exit 97 ;;
+esac
+`;
+
+test("OpenAI release environments — the environment step itself fails closed under GitHub's answers", () => {
+  const script = stepRunScript(
+    loadOpenAIWorkflow(),
+    "Assert protected release and non-blocking recovery environments",
+  );
+  const dir = mkdtempSync(join(tmpdir(), "frihet-env-step-"));
+  try {
+    writeFileSync(join(dir, "gh"), GH_STUB);
+    chmodSync(join(dir, "gh"), 0o755);
+    writeFileSync(join(dir, "step.sh"), script);
+    const runStep = (stub) => spawnSync(
+      "bash",
+      ["--noprofile", "--norc", "-eo", "pipefail", join(dir, "step.sh")],
+      {
+        encoding: "utf8",
+        env: {
+          PATH: `${dir}:${process.env.PATH}`,
+          GITHUB_REPOSITORY: "Frihet-io/frihet-mcp",
+          GH_TOKEN: "stub",
+          ...stub,
+        },
+      },
+    );
+    const ok = "OK — non-bypassable owner-only release and non-blocking recovery environments exist";
+
+    const pass = runStep({});
+    assert.equal(pass.error, undefined, "bash and jq must be installed to execute the step");
+    assert.equal(pass.status, 0, `the intended environments must pass:\n${pass.stdout}${pass.stderr}`);
+    assert.ok(pass.stdout.includes(ok));
+
+    for (const [label, stub, error] of [
+      [
+        "unreadable custom rules on the recovery environment",
+        { STUB_CUSTOM_FAIL_FOR: "openai-plugin-rollback" },
+        "openai-plugin-rollback custom deployment protection rules are unreadable",
+      ],
+      [
+        "an enabled GitHub App rule on the release environment",
+        {
+          STUB_CUSTOM_FOR: "openai-plugin-release",
+          STUB_CUSTOM: JSON.stringify({ total_count: 1, custom_deployment_protection_rules: [CUSTOM_APP_RULE] }),
+        },
+        "openai-plugin-release must be free of custom deployment protection gates",
+      ],
+      [
+        "a wait timer on the recovery environment",
+        {
+          STUB_ENV_FOR: "openai-plugin-rollback",
+          STUB_ENV: JSON.stringify(githubEnvironment({
+            name: "openai-plugin-rollback",
+            protection_rules: [BRANCH_POLICY_RULE, WAIT_TIMER_RULE],
+          })),
+        },
+        "openai-plugin-rollback must be non-bypassable, main-only, and free of reviewer or timer gates",
+      ],
+      [
+        "an unreadable release environment",
+        { STUB_ENV_FAIL_FOR: "openai-plugin-release" },
+        "openai-plugin-release environment is missing or unreadable",
+      ],
+    ]) {
+      const result = runStep(stub);
+      assert.notEqual(result.status, 0, `${label} must stop the release`);
+      assert.deepEqual(
+        `${result.stdout}\n${result.stderr}`.split("\n").filter((line) => line.startsWith("::error::")),
+        [`::error::${error}`],
+        `${label} must stop at its own check and nowhere else`,
+      );
+      assert.ok(!result.stdout.includes(ok), `${label} must not report success`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("OpenAI release workflow — full gates and exact-source lockfiles precede deploy", () => {
@@ -1476,6 +1808,7 @@ test("OpenAI release workflow — mutation and production readback are exact and
     "/.well-known/mcp.json",
     "/.well-known/oauth-authorization-server",
     "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/mcp",
     "/support",
     "/privacy",
     "/openapi.json",
@@ -1498,6 +1831,11 @@ test("OpenAI release workflow — mutation and production readback are exact and
   assert.match(verify.body, /resources_count === 0/);
   assert.match(verify.body, /prompts_count === 0/);
   assert.match(verify.body, /frihet:workspace\.manage/);
+  assert.match(
+    verify.body,
+    /equal\(protectedResourceMcp, snapshot\.oauth\.protectedResourceMcp\)/,
+    "production readback must prove the path-inserted metadata the 401 challenge points to",
+  );
   assert.match(verify.body, /for \(const method of \["GET", "HEAD"\]\)/);
   assert.match(verify.body, /challenge\.status === 401/);
   assert.match(verify.body, /node --input-type=module <<'NODE'/);
@@ -1562,13 +1900,24 @@ test("OpenAI release workflow — semantic mutants cannot bypass topology recove
     "administrators must not bypass the exact environment governance",
   );
   const humanGate = workflow.replace(
-    '.protection_rules | type == "array" and length == 0',
-    '.protection_rules | type == "array" and length > 0',
+    '[.protection_rules[].type] == ["branch_policy"]',
+    '([.protection_rules[].type] | index("branch_policy") != null)',
   );
+  assert.notEqual(humanGate, workflow, "the built-in rule mutant must apply");
   assert.ok(
     validateOpenAIReleaseSemantics(humanGate)
       .includes("owner-only-environment-governance-not-enforced"),
-    "a fictional reviewer, wait timer, or custom gate must not enter the sole-owner ceremony",
+    "a fictional reviewer or wait timer must not enter the sole-owner ceremony",
+  );
+  const appGate = workflow.replace(
+    '.total_count == 0 and (.custom_deployment_protection_rules | type == "array" and length == 0)',
+    ".total_count >= 0",
+  );
+  assert.notEqual(appGate, workflow, "the custom-rule mutant must apply");
+  assert.ok(
+    validateOpenAIReleaseSemantics(appGate)
+      .includes("owner-only-environment-governance-not-enforced"),
+    "a GitHub App deployment gate must not enter the sole-owner ceremony",
   );
   const blockedRecovery = workflow.replace(
     "assert_owner_only_environment openai-plugin-rollback",
@@ -1753,6 +2102,35 @@ test("OpenAI release workflow — semantic mutants cannot bypass topology recove
   );
 });
 
+test("OpenAI release workflow — complete namespace captures reach every version gate", () => {
+  const workflow = loadOpenAIWorkflow();
+  assert.deepEqual(validateOpenAIReleaseSemantics(workflow), []);
+  const stages = parseWorkflowStages(workflow);
+  const endpoint = 'api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces"';
+  for (const id of ["capture-rollback-state", "deploy-openai", "rollback-openai"]) {
+    const stage = findStage(stages, id);
+    const namespaceFlags = [...stage.body.matchAll(/^\s*--durable-object-namespaces[^\n]*\n/gm)];
+    assert.equal(namespaceFlags.length, id === "capture-rollback-state" ? 1 : 3);
+    for (const match of namespaceFlags) {
+      const mutatedBody = stage.body.slice(0, match.index) + stage.body.slice(match.index + match[0].length);
+      assert.ok(validateOpenAIReleaseSemantics(workflow.replace(stage.body, mutatedBody))
+        .some((error) => error.includes("namespace-version-gate-input-missing")),
+      `${id}: every gate must consume its namespace evidence`);
+    }
+    const captures = [...stage.body.matchAll(new RegExp(endpoint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))];
+    assert.equal(captures.length, id === "deploy-openai" ? 3 : 1);
+    for (const match of captures) {
+      const mutate = (replacement) => workflow.replace(stage.body,
+        stage.body.slice(0, match.index) + replacement + stage.body.slice(match.index + endpoint.length));
+      for (const replacement of ["true", `${endpoint} | jq '.result'`]) {
+        assert.ok(validateOpenAIReleaseSemantics(mutate(replacement))
+          .some((error) => error.includes("namespace-complete-envelope-not-captured")),
+        `${id}: an omitted or stripped capture must fail`);
+      }
+    }
+  }
+});
+
 test("OpenAI topology contract — exact DO migration and dedicated KV drift fail closed", () => {
   const toml = readFileSync(OPENAI_WRANGLER, "utf8");
   const contract = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
@@ -1831,6 +2209,86 @@ test("OpenAI topology contract — exact DO migration and dedicated KV drift fai
       validateConfigAgainstContract(mutant, contract).includes("TARGET_TOPOLOGY_DRIFT"),
       "route, Assets directory/routing, and profile-var mutants must fail",
     );
+  }
+});
+
+test("OpenAI topology contract — real Cloudflare named handlers require matching SQLite namespaces", () => {
+  const contract = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
+  const sourceSha = "a".repeat(40);
+  const versionId = "11111111-1111-4111-8111-111111111111";
+  const version = {
+    id: versionId, number: 42,
+    metadata: { created_on: "2026-10-08T00:00:00Z", source: "wrangler" },
+    resources: {
+      script: { etag: "real-schema-etag", handlers: ["fetch"], named_handlers: [
+        { name: "FrihetMCP", handlers: ["class"] },
+        { name: "OAuthStateStore", handlers: ["class"] },
+      ] },
+      script_runtime: { compatibility_date: "2025-12-01", compatibility_flags: ["nodejs_compat"],
+        migration_tag: "v2" },
+      bindings: [
+        { type: "durable_object_namespace", name: "MCP_OBJECT", class_name: "FrihetMCP", namespace_id: "2".repeat(32) },
+        { type: "durable_object_namespace", name: "OAUTH_STATE", class_name: "OAuthStateStore", namespace_id: "3".repeat(32) },
+        { type: "kv_namespace", name: "OAUTH_KV", namespace_id: "7df4e387eee243268669425594aae45e" },
+        { type: "assets", name: "ASSETS" },
+        { type: "plain_text", name: "FRIHET_OPENAI_MODE", text: "true" },
+        { type: "plain_text", name: "FRIHET_TOOL_MODE", text: "full" },
+        { type: "plain_text", name: "RELEASE_SOURCE_SHA", text: sourceSha },
+        { type: "plain_text", name: "RELEASE_VERSION", text: "1.18.0" },
+        ...contract.targetTopology.secretNames.map((name) => ({ type: "secret_text", name })),
+      ],
+    },
+  };
+  const namespaces = { success: true, result: [
+    { id: "2".repeat(32), class: "FrihetMCP", script: "frihet-openai-mcp", use_sqlite: true },
+    { id: "3".repeat(32), class: "OAuthStateStore", script: "frihet-openai-mcp", use_sqlite: true },
+    { id: "4".repeat(32), class: "FrihetMCP", script: "frihet-remote-mcp", use_sqlite: true },
+  ], result_info: { page: 1, count: 3, total_count: 3 } };
+  const options = { sourceSha, sourceVersion: "1.18.0", accountId: "b".repeat(32),
+    workerName: "frihet-openai-mcp", environment: "openai", now: new Date("2026-10-08T00:02:00Z"),
+    durableObjectNamespacesView: namespaces,
+    deploymentView: { id: "44444444-4444-4444-8444-444444444444", created_on: "2026-10-08T00:01:00Z",
+      source: "wrangler", strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] } };
+  assert.deepEqual(validateCompatibleVersion(contract, version, options), []);
+  assert.deepEqual(cloudflareTopology(version, options).durableObjectExports, contract.targetTopology.durableObjectExports);
+  assert.ok(validateCompatibleVersion(contract, version, { ...options, durableObjectNamespacesView: undefined }).length > 0);
+
+  for (const [label, mutate] of [
+    ["extra default handler", (v) => v.resources.script.handlers.push("scheduled")],
+    ["extra named worker", (v) => v.resources.script.named_handlers.push({ name: "Other", handlers: ["fetch"] })],
+    ["extra class", (v) => v.resources.script.named_handlers.push({ name: "Other", handlers: ["class"] })],
+    ["duplicate class", (v) => v.resources.script.named_handlers.push(v.resources.script.named_handlers[0])],
+    ["mixed class handlers", (v) => v.resources.script.named_handlers[0].handlers.push("fetch")],
+    ["namespace ID mismatch", (_v, n) => n.result[0].id = "5".repeat(32)],
+    ["namespace class mismatch", (_v, n) => n.result[0].class = "Other"],
+    ["namespace script mismatch", (_v, n) => n.result[0].script = "other-worker"],
+    ["non SQLite", (_v, n) => n.result[0].use_sqlite = false],
+    ["missing storage proof", (_v, n) => delete n.result[0].use_sqlite],
+    ["failed API envelope", (_v, n) => n.success = false],
+    ["partial namespace list", (_v, n) => n.result_info.total_count = 4],
+    ["duplicate namespace", (_v, n) => n.result[2] = { ...n.result[0] }],
+    ["mixed export schemas", (v) => v.resources.script_runtime.exports = { default: { type: "worker" } }],
+  ]) {
+    const changedVersion = structuredClone(version);
+    const changedNamespaces = structuredClone(namespaces);
+    mutate(changedVersion, changedNamespaces);
+    assert.ok(validateCompatibleVersion(contract, changedVersion,
+      { ...options, durableObjectNamespacesView: changedNamespaces }).length > 0, label);
+  }
+
+  const dir = mkdtempSync(join(tmpdir(), "openai-real-topology-"));
+  try {
+    for (const [name, value] of Object.entries({ version, namespaces, deployment: options.deploymentView })) {
+      writeFileSync(join(dir, `${name}.json`), JSON.stringify(value));
+    }
+    const result = spawnSync(process.execPath, ["scripts/check-openai-worker-topology.mjs", "--require-compatible",
+      "--live-version", join(dir, "version.json"), "--active-deployment", join(dir, "deployment.json"),
+      "--durable-object-namespaces", join(dir, "namespaces.json"), "--expected-source-sha", sourceSha,
+      "--expected-source-version", "1.18.0", "--account-id", options.accountId,
+      "--worker-name", options.workerName, "--environment", "openai"], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -2095,6 +2553,91 @@ test("OpenAI topology bootstrap — irreversible boundary and force-cancel recov
   assert.doesNotMatch(guide, /wrangler (?:deploy|deployments|versions|rollback|secret)/iu);
 });
 
+test("OpenAI topology bootstrap — the reviewed-main bridge decision is explicit, irreversible and verifiable", () => {
+  const guide = readFileSync(OPENAI_BOOTSTRAP_GUIDE, "utf8");
+  const workflow = loadOpenAIWorkflow();
+  const topology = JSON.parse(readFileSync(OPENAI_TOPOLOGY, "utf8"));
+
+  assert.match(guide, /^## Owner decision: the reviewed `main` commit is the bridge$/m);
+  assert.match(guide, /\*\*IRREVERSIBLE\.\*\*/);
+  assert.match(guide, /forward-only/);
+  assert.match(guide, /Every OAuth client registration, grant\s+and\s+token/);
+
+  // Exactly the reviewed secret-name set remains; the Langfuse names go.
+  for (const name of topology.targetTopology.secretNames) {
+    assert.match(guide, new RegExp(`\`${name}\``), `${name} must be named as a kept Worker secret`);
+  }
+  for (const name of ["LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"]) {
+    assert.match(guide, new RegExp(`\`${name}\``), `${name} removal must be explicit`);
+    assert.ok(!topology.targetTopology.secretNames.includes(name));
+  }
+  assert.match(guide, /`frihet-openai-mcp-openai`/, "the --name plus --env secret-command trap must be named");
+
+  // Every release secret the runbook names is one the workflow actually reads.
+  const releaseSecrets = new Set(guide.match(/\bOPENAI_[A-Z0-9_]+\b/g) ?? []);
+  assert.ok(releaseSecrets.has("OPENAI_TOKEN_TOPOLOGY_SHA256"));
+  for (const name of releaseSecrets) {
+    assert.match(workflow, new RegExp(`\\bsecrets\\.${name}\\b`), `${name} is not read by the release workflow`);
+  }
+  assert.match(guide, /`baseline\.topologySha256`/);
+  assert.match(workflow, /jq -r '\.baseline\.topologySha256'/);
+
+  // The Wrangler facts behind these sentences are pinned against the locked
+  // CLI in openai-wrangler-resolution.test.mjs.
+  assert.doesNotMatch(guide, /secrets-file/);
+  assert.match(guide, /has no deploy option that uploads secret values/);
+  assert.match(guide, /creates that Worker without asking/);
+  assert.match(
+    readFileSync("workers/remote-mcp/src/index.ts", "utf8"),
+    /initLangfuse\(openaiMode \? \{\} : \{/,
+    "the reviewed host must keep passing an empty Langfuse configuration",
+  );
+  assert.match(guide, /No Worker\s+named `frihet-openai-mcp-openai` exists/);
+
+  // Every test file the runbook cites exists, and the one it names as the pin
+  // of the locked Wrangler behavior really reads the locked CLI.
+  const citedTests = [...guide.matchAll(/`(scripts\/__tests__\/[a-z0-9-]+\.test\.mjs)`/g)].map((match) => match[1]);
+  assert.ok(citedTests.length > 0);
+  for (const file of citedTests) assert.ok(existsSync(file), `${file} is cited but does not exist`);
+  const wranglerPin = guide.match(/`(scripts\/__tests__\/[a-z0-9-]+\.test\.mjs)`\s+pins this behavior\s+against the locked Wrangler/);
+  assert.ok(wranglerPin, "the runbook must name the test that pins the locked Wrangler behavior");
+  assert.match(
+    readFileSync(wranglerPin[1], "utf8"),
+    /"workers\/remote-mcp\/node_modules\/wrangler\/wrangler-dist\/cli\.js"/,
+    `${wranglerPin[1]} does not read the locked Wrangler`,
+  );
+  assert.match(guide, /waives step 1/);
+  assert.match(guide, /missing or shorter than 32 bytes/);
+
+  for (const check of [
+    /releaseSource=wrangler-var/,
+    /migration\s+tag\s+`v2`/,
+    /`\/\.well-known\/oauth-protected-resource\/mcp`/,
+    /`https:\/\/mcp\.frihet\.io\/mcp`[^.]*401/s,
+    /33\s+tools,\s+0\s+resources\s+and\s+0\s+prompts/,
+    /scripts\/check-openai-worker-topology\.mjs/,
+    /scripts\/test-openai-full-compose\.mjs/,
+    /custom\s+connector\s+in\s+Claude/,
+    /ChatGPT\s+draft/,
+  ]) {
+    assert.match(guide, check);
+  }
+
+  assert.match(guide, /Last updated/);
+  const workerSource = readFileSync("workers/remote-mcp/src/index.ts", "utf8");
+  assert.match(
+    workerSource,
+    /const OPENAI_PRIVACY_LAST_UPDATED = "[A-Z][a-z]+ \d{1,2}, \d{4}";/,
+    "the privacy-date step must refer to a date the reviewed host actually serves",
+  );
+  assert.match(
+    workerSource,
+    /<p>Last updated: \$\{OPENAI_PRIVACY_LAST_UPDATED\}<\/p>/,
+    "the served privacy notice must render the single date constant",
+  );
+  assert.doesNotMatch(guide, /wrangler (?:deploy|deployments|versions|rollback|secret)/iu);
+});
+
 test("OpenAI compose smoke — every fetch is bounded and evidence cannot serialize bodies", () => {
   const source = readFileSync(OPENAI_COMPOSE, "utf8");
   assert.deepEqual(validateOpenAIComposeTransport(source), []);
@@ -2197,25 +2740,24 @@ test("OpenAI release workflow — portal hard stops remain explicit", () => {
     assert.match(guide, new RegExp(forbiddenDependency));
   }
   assert.match(guide, /STOP before\s+the portal/);
-  assert.match(guide, /does not declare a workspace-domain restriction/);
-  assert.match(guide, /sole\s+OAuth scope remains `frihet:workspace\.manage`/);
-  assert.match(guide, /do not add or imply UserInfo,\s+`openid`, or `email` support/);
+  assert.match(guide, /requires exactly `openid email\s+frihet:workspace\.manage`/);
+  assert.match(guide, /UserInfo must emit\s+only `sub`, `email`, and literal `email_verified: true`/);
+  assert.match(guide, /unverified or\s+missing Firebase email must fail closed/);
+  assert.match(guide, /deliberately omits\s+`authorization_response_iss_parameter_supported`/);
   assert.match(guide, /Verify domain ownership inside the current portal draft/);
   assert.match(guide, /historical challenge token/);
   assert.match(guide, /STOP before Scan Tools/);
   assert.match(guide, /Never publish or retain multiple verification tokens/);
-  for (const starterPrompt of [
-    "Give me an overview of my current Frihet business context.",
-    "Show me my draft invoices.",
-    "Show me my active products and services.",
-  ]) {
+  // The ZIP owns listing copy; keep the guide aligned with its generated manifest.
+  const plugin = JSON.parse(readFileSync("marketplace/openai/plugin.json", "utf8"));
+  const openai = plugin.extensions["com.openai"];
+  for (const starterPrompt of openai.interface.defaultPrompt) {
     assert.match(guide, new RegExp(starterPrompt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
-  assert.match(
-    guide,
-    /Fourth resubmission: Frihet now exposes only 33 reviewed business tools[^\n]+five positive plus three negative review cases\./,
-  );
-  assert.match(guide, /Select `Spain` only\./);
+  assert.match(guide, /The source of truth is the generated manifest\./);
+  assert.match(guide, /separate package changes from the hosted server/);
+  assert.deepEqual(openai.publication.countries, ["ES"]);
+  assert.match(guide, /`publication\.countries: \["ES"\]`/);
   assert.match(guide, /Do not select another jurisdiction until its commercial,/);
   assert.doesNotMatch(
     guide,
@@ -2231,4 +2773,390 @@ test("OpenAI release workflow — portal hard stops remain explicit", () => {
     validatePortalHardStops(euStopRemoved).includes("eu-mcp-submission-stop-missing"),
     "removing the EU-residency submission stop must fail",
   );
+});
+
+
+test("OpenAI evidence uploads explicitly include only sanitized hidden artifacts", () => {
+  const stages = parseWorkflowStages(loadOpenAIWorkflow());
+  const expected = {
+    "wrangler-dry-run": ["openai-bundle-files.sha256", "wrangler-openai-dry-run.json"],
+    "capture-rollback-state": ["pre-mutation-state.json"],
+    "deploy-openai": ["pre-mutation-auth-readiness.json", "openai-deploy.json", "authenticated-compose.json"],
+    "verify-public": ["public-readback.json"],
+    "rollback-openai": ["rollback-proof.json"],
+  };
+  for (const [id, files] of Object.entries(expected)) {
+    const body = findStage(stages, id).body;
+    const upload = body.slice(body.indexOf("uses: actions/upload-artifact@"));
+    assert.match(upload, /include-hidden-files: true/, `${id} must upload its hidden evidence`);
+    const paths = [...upload.matchAll(/^            (\.openai-release-evidence\/[^\n]+)$/gm)].map((match) => match[1]);
+    assert.deepEqual(paths, files.map((file) => `.openai-release-evidence/${file}`), `${id} upload allowlist`);
+    assert.doesNotMatch(upload, /path: \.openai-release-evidence\/\s*$/, "do not upload the whole hidden directory");
+    if (["wrangler-dry-run", "capture-rollback-state"].includes(id)) {
+      assert.match(upload, /if-no-files-found: error/, `${id} cannot succeed without evidence`);
+    }
+  }
+});
+
+// ── Full-profile Worker topology guard ──────────────────────────────────────
+const FULL_TOPOLOGY_CHECKER = "scripts/check-full-worker-topology.mjs";
+const FULL_TOPOLOGY_BASELINE = "workers/remote-mcp/full-topology-baseline.json";
+const FULL_GUARD_STEPS = [
+  "Full Worker topology baseline must be established",
+  "Full Worker live topology must match the established baseline",
+];
+const FULL_DEPLOY_STEP = "Deploy full-profile Worker with source-SHA + version vars";
+
+const SKIPPABLE_STEP = /^        (?:if|continue-on-error):|\|\||\bset \+[a-z]*e\b/m;
+const FULL_PREFLIGHT_STEP = "Full Worker topology baseline must be established (preflight)";
+const FULL_RELEASE_IF = "if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'";
+
+function validateFullDeployTopologyGuard(yaml) {
+  const stages = parseWorkflowStages(yaml);
+  const stage = findStage(stages, "deploy-worker");
+  if (!stage) return ["missing-deploy-worker"];
+  const body = executableStageBody(stage);
+  const steps = body.split(/^      - name: /m).slice(1);
+  const errors = [];
+  const deployIndex = steps.findIndex((step) => step.startsWith(FULL_DEPLOY_STEP));
+  if (deployIndex < 0) errors.push("missing-deploy-step");
+  else if (SKIPPABLE_STEP.test(steps[deployIndex])) errors.push("deploy-step-conditional-or-ignorable");
+  if (/^    continue-on-error:/m.test(stage.body)) errors.push("deploy-job-continue-on-error");
+  FULL_GUARD_STEPS.forEach((name) => {
+    const index = steps.findIndex((step) => step.startsWith(name));
+    if (index < 0) errors.push(`missing-guard:${name}`);
+    else {
+      if (deployIndex >= 0 && index > deployIndex) errors.push(`guard-after-deploy:${name}`);
+      if (SKIPPABLE_STEP.test(steps[index])) errors.push(`guard-skippable:${name}`);
+    }
+  });
+  const flags = steps.join("\n");
+  if (!/check-full-worker-topology\.mjs --require-established\s*$/m.test(flags)) errors.push("missing-require-established");
+  if (!flags.includes("--require-established --require-live-match")) errors.push("missing-require-live-match");
+  const liveStep = steps.find((step) => step.startsWith(FULL_GUARD_STEPS[1])) ?? "";
+  errors.push(...validateNamespaceWorkflowInputs(liveStep, "check-full-worker-topology.mjs", [
+    { mode: "--require-live-match", version: "$STATE_DIR/version.json", namespaces: "$STATE_DIR/namespaces.json" },
+  ], true));
+  if (!new RegExp(`^    ${FULL_RELEASE_IF.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m").test(stage.body)) {
+    errors.push("deploy-job-condition-changed");
+  }
+  // Wrangler must read the file this checker reads, not wrangler.json/.jsonc or a redirect.
+  for (const invocation of body.replace(/\\\n\s*/g, " ").matchAll(/\bwrangler (?:deploy|deployments|versions)\b[^\n]*/g)) {
+    if (!/\s--config wrangler\.toml(?:\s|$)/.test(invocation[0])) errors.push(`wrangler-config-not-explicit:${invocation[0]}`);
+  }
+  // The checker must also run in preflight, before anything is published.
+  const preflight = findStage(stages, "preflight");
+  const pre = preflight && executableStageBody(preflight).split(/^      - name: /m).slice(1)
+    .find((step) => step.startsWith(FULL_PREFLIGHT_STEP));
+  if (!pre) errors.push("missing-preflight-guard");
+  else {
+    if (!pre.includes(`        ${FULL_RELEASE_IF}\n`)) errors.push("preflight-guard-condition-changed");
+    if (SKIPPABLE_STEP.test(pre.replace(`        ${FULL_RELEASE_IF}\n`, ""))) errors.push("preflight-guard-skippable");
+    if (!/check-full-worker-topology\.mjs --require-established\s*$/m.test(pre)) errors.push("preflight-guard-missing-flag");
+  }
+  return errors;
+}
+
+/** Inserts `line` right after the `    environment: npm-release` of `job`. */
+function insertJobLine(yaml, job, line) {
+  const start = yaml.indexOf(`\n  ${job}:\n`);
+  const anchor = "    environment: npm-release\n";
+  const at = yaml.indexOf(anchor, start) + anchor.length;
+  return `${yaml.slice(0, at)}${line}\n${yaml.slice(at)}`;
+}
+
+function runFullTopology(args, { contract, toml, files = {} } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), "full-topology-"));
+  try {
+    const argv = [FULL_TOPOLOGY_CHECKER, ...args];
+    const put = (name, value) => {
+      const path = join(dir, name);
+      writeFileSync(path, typeof value === "string" ? value : JSON.stringify(value));
+      return path;
+    };
+    if (contract !== undefined) argv.push("--contract", put("contract.json", contract));
+    if (toml !== undefined) argv.push("--config", put("wrangler.toml", toml));
+    for (const [flag, value] of Object.entries(files)) argv.push(flag, put(`${flag.slice(2)}.json`, value));
+    return spawnSync(process.execPath, argv, { encoding: "utf8" });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
+const FULL_TOML = () => readFileSync("workers/remote-mcp/wrangler.toml", "utf8");
+
+function fullLiveView(overrides = {}) {
+  return {
+    id: "11111111-1111-4111-8111-111111111111",
+    resources: {
+      script: { handlers: ["fetch"], etag: "e" },
+      script_runtime: {
+        compatibility_date: "2025-12-01",
+        compatibility_flags: ["nodejs_compat"],
+        migration_tag: "v2",
+        ...overrides.script_runtime,
+      },
+      bindings: [
+        { type: "durable_object_namespace", name: "MCP_OBJECT", class_name: "FrihetMCP", namespace_id: "a" },
+        { type: "durable_object_namespace", name: "OAUTH_STATE", class_name: "OAuthStateStore", namespace_id: "b" },
+        { type: "kv_namespace", name: "OAUTH_KV", namespace_id: "9207b98598f849109139ad11f3b0ac51" },
+      ],
+    },
+  };
+}
+
+function fullEstablished(view = fullLiveView()) {
+  const topology = cloudflareTopology(view);
+  return {
+    ...readJson(FULL_TOPOLOGY_BASELINE),
+    status: "established",
+    baseline: { topology, topologySha256: topologyFingerprint(topology) },
+  };
+}
+
+const fullDeployment = (versionId, versions) => ({
+  id: "d", versions: versions ?? [{ version_id: versionId, percentage: 100 }],
+});
+
+test("Full Worker topology guard — hostile case: deploy job cannot skip, reorder or ignore the guard", () => {
+  const workflow = loadWorkflow();
+  assert.deepEqual(validateFullDeployTopologyGuard(workflow), []);
+  const [first] = FULL_GUARD_STEPS;
+  const deployMarker = `      - name: ${FULL_DEPLOY_STEP}\n`;
+  const guard2 = `      - name: ${FULL_GUARD_STEPS[1]}\n`;
+  const live2 = '            --durable-object-namespaces "$STATE_DIR/namespaces.json"\n';
+  const preflightRun = `        ${FULL_RELEASE_IF}\n        run: node scripts/check-full-worker-topology.mjs --require-established`;
+  const mutants = {
+    "removed guard": workflow.replace(`      - name: ${first}\n`, "      - name: Renamed\n"),
+    "continue-on-error": workflow.replace(`      - name: ${first}\n`, `      - name: ${first}\n        continue-on-error: true\n`),
+    "if condition": workflow.replace(`      - name: ${first}\n`, `      - name: ${first}\n        if: always()\n`),
+    "or true": workflow.replace("node scripts/check-full-worker-topology.mjs --require-established\n\n      - name: Full Worker live", "node scripts/check-full-worker-topology.mjs --require-established || true\n\n      - name: Full Worker live"),
+    "dropped live match": workflow.replace(" --require-live-match", ""),
+    "pending allowed": workflow.replace("check-full-worker-topology.mjs --require-established\n\n      - name: Full Worker live", "check-full-worker-topology.mjs\n\n      - name: Full Worker live"),
+    "M2 deploy if always()": workflow.replace(deployMarker, `${deployMarker}        if: always()\n`),
+    "M2b deploy if !cancelled()": workflow.replace(deployMarker, `${deployMarker}        if: \${{ !cancelled() }}\n`),
+    "deploy step continue-on-error": workflow.replace(deployMarker, `${deployMarker}        continue-on-error: true\n`),
+    "M3 guard 2 or true": workflow.replace(live2, `${live2.trimEnd()} || true\n`),
+    "namespace gate input omitted": workflow.replace(live2, ""),
+    "namespace capture omitted": workflow.replace('api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces"', "true"),
+    "namespace envelope stripped": workflow.replace('api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces"', 'api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" | jq \'.result\''),
+    "namespace auth header missing": workflow.replace('-H @-', '-H "Content-Type: application/json"'),
+    "namespace auth token in curl argv": workflow.replace('-H @-', '-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"'),
+    "M7 guard 2 set +e": workflow.replace("          set -euo pipefail\n          STATE_DIR=", "          set -euo pipefail\n          set +e\n          STATE_DIR="),
+    "guard 2 if": workflow.replace(guard2, `${guard2}        if: always()\n`),
+    "deploy job continue-on-error": insertJobLine(workflow, "deploy-worker", "    continue-on-error: true"),
+    "wrangler config not explicit (deploy)": workflow.replace("            --env \"\" \\\n            --config wrangler.toml \\\n", "            --env \"\" \\\n"),
+    "wrangler config not explicit (status)": workflow.replace("deployments status --config wrangler.toml", "deployments status"),
+    "wrangler config not explicit (view)": workflow.replace('versions view "$LIVE_VERSION_ID" --config wrangler.toml', 'versions view "$LIVE_VERSION_ID"'),
+    "preflight guard removed": workflow.replace(FULL_PREFLIGHT_STEP, "Renamed preflight"),
+    "preflight guard ignorable": workflow.replace(preflightRun, `        ${FULL_RELEASE_IF}\n        continue-on-error: true\n        run: node scripts/check-full-worker-topology.mjs --require-established`),
+    "preflight guard condition widened": workflow.replace(preflightRun, "        if: inputs.dry_run == true\n        run: node scripts/check-full-worker-topology.mjs --require-established"),
+    "preflight guard drops flag": workflow.replace(preflightRun, `        ${FULL_RELEASE_IF}\n        run: node scripts/check-full-worker-topology.mjs`),
+  };
+  for (const [label, mutant] of Object.entries(mutants)) {
+    assert.notDeepEqual(mutant, workflow, `${label}: mutation must change the workflow`);
+    assert.notDeepEqual(validateFullDeployTopologyGuard(mutant), [], `${label} must be detected`);
+  }
+});
+
+test("Full Worker topology guard — pending baseline blocks, target drift blocks", () => {
+  const baseline = readJson(FULL_TOPOLOGY_BASELINE);
+  assert.equal(baseline.status, "pending-bootstrap");
+  assert.equal(baseline.baseline, null);
+  const target = runFullTopology([]);
+  assert.equal(target.status, 0, target.stderr);
+  const pending = runFullTopology(["--require-established"]);
+  assert.equal(pending.status, 1);
+  assert.match(pending.stderr, /BASELINE_PENDING_BOOTSTRAP/);
+  const noV2 = FULL_TOML().replace(/\[\[migrations\]\]\nnew_sqlite_classes = \["OAuthStateStore"\]\ntag = "v2"\n/, "");
+  assert.notEqual(noV2, FULL_TOML());
+  assert.equal(runFullTopology([], { toml: noV2 }).status, 1);
+  const unreadable = runFullTopology([], { contract: "not json" });
+  assert.equal(unreadable.status, 1);
+  assert.match(unreadable.stderr, /CONTRACT_OR_CONFIG_UNREADABLE/);
+  assert.equal(runFullTopology([], { contract: {} }).status, 1);
+  const lying = { ...baseline, status: "pending-bootstrap", baseline: { topology: {} } };
+  assert.equal(runFullTopology([], { contract: lying }).status, 1);
+});
+
+test("Full Worker topology guard — established baseline requires an exact, fresh live match", () => {
+  const view = fullLiveView();
+  const contract = fullEstablished(view);
+  const live = ["--require-established", "--require-live-match"];
+  const inputs = (v = view, d = fullDeployment(v.id)) => ({ "--active-deployment": d, "--live-version": v });
+  const ok = runFullTopology(live, { contract, files: inputs() });
+  assert.equal(ok.status, 0, ok.stderr);
+
+  const block = (label, args, options, expected) => {
+    const result = runFullTopology(args, options);
+    assert.equal(result.status, 1, `${label} must block: ${result.stdout}`);
+    if (expected) assert.match(result.stderr, expected, label);
+  };
+  // Live Worker predates v2 (the real pre-bootstrap state) even if a baseline claims established.
+  const old = fullLiveView({ script_runtime: { migration_tag: "v1" } });
+  block("live migration v1", live, { contract, files: inputs(old) }, /LIVE_MIGRATION_TAG_MISMATCH/);
+  const extraDo = fullLiveView();
+  extraDo.resources.bindings.push({ type: "durable_object_namespace", name: "X", class_name: "X", namespace_id: "c" });
+  block("extra DO binding", live, { contract, files: inputs(extraDo) }, /LIVE_TOPOLOGY_ANCHOR_MISMATCH/);
+  const otherKv = fullLiveView();
+  otherKv.resources.bindings[2].namespace_id = "0".repeat(32);
+  block("other KV namespace", live, { contract, files: inputs(otherKv) }, /LIVE_TOPOLOGY_ANCHOR_MISMATCH/);
+  block("split deployment", live, {
+    contract, files: inputs(view, fullDeployment(view.id, [{ version_id: view.id, percentage: 50 }, { version_id: "z", percentage: 50 }])),
+  }, /LIVE_DEPLOYMENT_NOT_SINGLE_ACTIVE_VERSION/);
+  block("deployment points elsewhere", live, { contract, files: inputs(view, fullDeployment("other")) },
+    /LIVE_DEPLOYMENT_NOT_SINGLE_ACTIVE_VERSION/);
+  const forged = fullEstablished(view);
+  forged.baseline.topologySha256 = "f".repeat(64);
+  block("forged fingerprint", live, { contract: forged, files: inputs() }, /BASELINE_FINGERPRINT_INVALID/);
+  const missing = { ...contract, baseline: null };
+  block("established without baseline", live, { contract: missing, files: inputs() }, /BASELINE_MISSING/);
+
+  // Missing, empty or malformed live inputs never pass.
+  block("no live inputs", live, { contract }, /INPUT_INVALID/);
+  block("empty JSON object", live, { contract, files: { "--active-deployment": {}, "--live-version": {} } }, /INPUT_INVALID/);
+  block("malformed JSON", live, { contract, files: { "--active-deployment": "{", "--live-version": "null" } }, /INPUT_INVALID/);
+  // --require-live-match alone must still refuse a pending baseline.
+  block("live match on pending", ["--require-live-match"], { files: inputs() }, /BASELINE_PENDING_BOOTSTRAP/);
+});
+
+test("Full Worker topology guard — real named handlers need complete namespace evidence", () => {
+  const view = fullLiveView();
+  view.resources.script.named_handlers = [
+    { name: "FrihetMCP", handlers: ["class"] },
+    { name: "OAuthStateStore", handlers: ["class"] },
+  ];
+  view.resources.bindings[0].namespace_id = "2".repeat(32);
+  view.resources.bindings[1].namespace_id = "3".repeat(32);
+  const namespaces = { success: true, result: [
+    { id: "2".repeat(32), class: "FrihetMCP", script: "frihet-remote-mcp", use_sqlite: true },
+    { id: "3".repeat(32), class: "OAuthStateStore", script: "frihet-remote-mcp", use_sqlite: true },
+  ], result_info: { page: 1, count: 2, total_count: 2 } };
+  const topology = cloudflareTopology(view, { workerName: "frihet-remote-mcp", durableObjectNamespacesView: namespaces });
+  const contract = { ...readJson(FULL_TOPOLOGY_BASELINE), status: "established",
+    baseline: { topology, topologySha256: topologyFingerprint(topology) } };
+  const files = { "--active-deployment": fullDeployment(view.id), "--live-version": view };
+  const args = ["--require-established", "--require-live-match"];
+  const ok = runFullTopology(args, { contract, files: { ...files, "--durable-object-namespaces": namespaces } });
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.equal(runFullTopology(args, { contract, files }).status, 1, "omitted namespaces must block");
+  for (const [label, mutate] of [
+    ["partial pagination", (n) => n.result_info.total_count = 3],
+    ["wrong page", (n) => n.result_info.page = 2],
+    ["missing pagination", (n) => delete n.result_info],
+    ["wrong worker", (n) => n.result[0].script = "frihet-openai-mcp"],
+    ["non SQLite", (n) => n.result[0].use_sqlite = false],
+  ]) {
+    const changed = structuredClone(namespaces);
+    mutate(changed);
+    assert.equal(runFullTopology(args, { contract, files: { ...files, "--durable-object-namespaces": changed } }).status, 1, label);
+  }
+  const unverified = cloudflareTopology(view);
+  const falseAnchor = { ...contract, baseline: { topology: unverified, topologySha256: topologyFingerprint(unverified) } };
+  assert.equal(runFullTopology(args, { contract: falseAnchor, files }).status, 1,
+    "matching an unverified projection must not prove an established baseline");
+  const noStorageProof = structuredClone(namespaces);
+  delete noStorageProof.result[0].use_sqlite;
+  const falseStorage = cloudflareTopology(view, { workerName: contract.workerName, durableObjectNamespacesView: noStorageProof });
+  const falseStorageAnchor = { ...contract,
+    baseline: { topology: falseStorage, topologySha256: topologyFingerprint(falseStorage) } };
+  assert.equal(runFullTopology(args, { contract: falseStorageAnchor,
+    files: { ...files, "--durable-object-namespaces": noStorageProof } }).status, 1,
+  "an anchor cannot replace missing SQLite evidence");
+});
+
+const FULL_PROBE_BASE = () => FULL_TOML();
+const replaceOnce = (text, from, to) => {
+  assert.ok(text.includes(from), `fixture drift: ${from}`);
+  return text.replace(from, to);
+};
+
+test("Full Worker topology guard — config shape is closed (deleted classes, extra bindings, extra tables)", () => {
+  const base = FULL_PROBE_BASE();
+  const probes = {
+    "deleted_classes in v2": replaceOnce(base, 'new_sqlite_classes = ["OAuthStateStore"]\n', 'new_sqlite_classes = ["OAuthStateStore"]\ndeleted_classes = ["FrihetMCP"]\n'),
+    "renamed_classes in v2": replaceOnce(base, 'new_sqlite_classes = ["OAuthStateStore"]\n', 'new_sqlite_classes = ["OAuthStateStore"]\nrenamed_classes = [{ from = "A", to = "B" }]\n'),
+    "unexpected top-level table (r2)": `${base}\n[[r2_buckets]]\nbinding = "B"\nbucket_name = "b"\n`,
+    "unexpected top-level table (services)": `${base}\n[[services]]\nbinding = "S"\nservice = "s"\n`,
+    "unexpected other env": `${base}\n[env.staging]\nname = "x"\n`,
+    "unexpected root key (inline r2)": replaceOnce(base, 'main = "src/index.ts"\n', 'main = "src/index.ts"\nr2_buckets = [{ binding = "B", bucket_name = "b" }]\n'),
+    "unexpected root key (quoted)": replaceOnce(base, 'main = "src/index.ts"\n', 'main = "src/index.ts"\n"d1_databases" = []\n'),
+    "extra var": replaceOnce(base, 'FRIHET_OPENAI_MODE = "false"\n', 'FRIHET_OPENAI_MODE = "false"\nEXTRA = "1"\n'),
+    "changed var": replaceOnce(base, 'FRIHET_TOOL_MODE = "grouped"', 'FRIHET_TOOL_MODE = "full"'),
+    "changed assets directory": replaceOnce(base, 'directory = "./public"', 'directory = "./other"'),
+    "extra key in kv namespace": replaceOnce(base, 'id = "9207b98598f849109139ad11f3b0ac51"\n', 'id = "9207b98598f849109139ad11f3b0ac51"\npreview_id = "x"\n'),
+    "extra key in route": replaceOnce(base, 'routes = [{ pattern = "mcp.frihet.io/*", zone_name = "frihet.io" }]', 'routes = [{ pattern = "mcp.frihet.io/*", zone_name = "frihet.io", custom_domain = true }]'),
+    "extra key in DO binding": replaceOnce(base, '{ name = "MCP_OBJECT", class_name = "FrihetMCP" }', '{ name = "MCP_OBJECT", class_name = "FrihetMCP", script_name = "other" }'),
+  };
+  assert.equal(runFullTopology([], { toml: base }).status, 0);
+  for (const [label, toml] of Object.entries(probes)) {
+    const result = runFullTopology([], { toml });
+    assert.equal(result.status, 1, `${label} must block`);
+    assert.match(result.stderr, /BLOCK/, label);
+  }
+});
+
+test("Full Worker topology guard — Wrangler cannot resolve a different config than the checker reads", () => {
+  for (const redirect of [
+    "workers/remote-mcp/wrangler.json",
+    "workers/remote-mcp/wrangler.jsonc",
+    "workers/remote-mcp/.wrangler/deploy/config.json",
+    "wrangler.toml",
+    "wrangler.json",
+    "wrangler.jsonc",
+    ".wrangler/deploy/config.json",
+  ]) assert.equal(existsSync(redirect), false, `${redirect} would let Wrangler read a config the topology gate does not`);
+  assert.match(readFileSync("scripts/check-full-worker-topology.mjs", "utf8"), /workers\/remote-mcp\/wrangler\.toml/);
+});
+
+function fullDeployMutationViolations(files) {
+  const found = [];
+  for (const [file, yaml] of Object.entries(files)) {
+    for (const stage of parseWorkflowStages(yaml)) {
+      for (const step of executableStageBody(stage).split(/^      - name: /m).slice(1)) {
+        const title = step.split("\n")[0];
+        const text = step.replace(/\\\n\s*/g, " ");
+        const mutations = [
+          ...text.matchAll(/\bwrangler\s+(?:deploy|versions\s+(?:deploy|upload)|rollback|delete|pages\s+deploy)\b[^\n]*/g),
+          ...text.matchAll(/\bnpm (?:run )?deploy\b[^\n]*/g),
+          ...text.matchAll(/cloudflare\/wrangler-action[^\n]*/g),
+        ].map((match) => match[0]);
+        for (const mutation of mutations) {
+          if (/--dry-run\b/.test(mutation) || /--env openai\b/.test(mutation)) continue;
+          found.push({ id: `${file}:${stage.id}:${title}`, step });
+        }
+      }
+    }
+  }
+  return found;
+}
+
+// Covers direct `wrangler`/`npx`/`bunx` invocations and known actions in workflow steps. It does
+// not see script files, `wrangler@<ver>`, flags before the subcommand, or `npm --prefix … run deploy`.
+test("Full Worker topology guard — direct wrangler/npx/bunx and known-action Cloudflare mutations in workflow steps are only the step after both guards", () => {
+  const files = Object.fromEntries(readdirSync(".github/workflows")
+    .filter((name) => /\.ya?ml$/.test(name))
+    .map((name) => [name, readFileSync(`.github/workflows/${name}`, "utf8")]));
+  const violations = (current) => fullDeployMutationViolations(current).map((entry) => entry.id);
+  assert.deepEqual(violations(files), [`release-mcp-npm.yml:deploy-worker:${FULL_DEPLOY_STEP}`]);
+  assert.deepEqual(validateFullDeployTopologyGuard(files["release-mcp-npm.yml"]), []);
+
+  const release = files["release-mcp-npm.yml"];
+  const extraStep = (command) => ({
+    ...files,
+    "release-mcp-npm.yml": replaceOnce(release, "      - name: Typecheck Worker\n",
+      `      - name: Sneaky\n        run: ${command}\n\n      - name: Typecheck Worker\n`),
+  });
+  for (const command of [
+    "npx wrangler versions deploy abc@100% --yes",
+    "npx wrangler rollback abc",
+    "npm run deploy --prefix workers/remote-mcp",
+    "npx wrangler deploy --env \"\"",
+  ]) assert.equal(violations(extraStep(command)).length, 2, `${command} must be reported as a second mutation`);
+  const action = { ...files, "ci.yml": `${files["ci.yml"]}\n` };
+  action["ci.yml"] = replaceOnce(action["ci.yml"], "      - name: Checkout\n", "      - name: Action deploy\n        uses: cloudflare/wrangler-action@v3\n\n      - name: Checkout\n");
+  assert.equal(violations(action).length, 2, "wrangler-action must be reported");
+  const another = { ...files, "other.yml": "name: x\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - name: S\n        run: npx wrangler deploy\n" };
+  assert.equal(violations(another).length, 2, "a new workflow that deploys must be reported");
 });

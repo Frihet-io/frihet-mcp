@@ -6,6 +6,48 @@
 export const OPENAI_REVIEW_ORIGIN = "https://openai-mcp.frihet.io";
 export const FULL_MCP_ORIGIN = "https://mcp.frihet.io";
 export const FRIHET_CONNECTOR_SCOPE = "frihet:workspace.manage";
+export const OPENAI_REVIEW_OAUTH_SCOPES: readonly string[] = Object.freeze([
+  "openid",
+  "email",
+  FRIHET_CONNECTOR_SCOPE,
+]);
+
+/**
+ * RFC 8707 resource identifier of the reviewed MCP endpoint. Claude's
+ * connector guide requires protected-resource metadata to name the connector
+ * URL a user enters, including its path; OpenAI documents that ChatGPT takes
+ * the `resource` value it sends from that metadata.
+ */
+export const OPENAI_REVIEW_MCP_RESOURCE = `${OPENAI_REVIEW_ORIGIN}/mcp`;
+
+/** RFC 9728 section 3.1 path-inserted location of the metadata for
+ * OPENAI_REVIEW_MCP_RESOURCE. The 401 challenge points here. */
+export const OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH =
+  "/.well-known/oauth-protected-resource/mcp";
+
+/**
+ * The only RFC 8707 resource values the reviewed authorization boundary
+ * accepts. The canonical MCP URL comes first; the bare origin is the value the
+ * root metadata document still publishes (and the only one it published before
+ * the path-inserted document existed), so clients using it keep working. Both
+ * name this Worker only: the pinned provider matches a token audience by exact
+ * origin plus path prefix, so neither value can authorize the full host.
+ * The runtime checks that use this set are validateOAuthBoundary (below) and
+ * the /token rotation guard in workers/remote-mcp/src/oauth-token-family.ts.
+ * The inventory test in workers/remote-mcp/src/__tests__/openai-review-oauth.test.ts
+ * lists every runtime line that reads a field named `resource` or `audience`
+ * (dot access, string-literal bracket access, or single-line destructuring)
+ * and fails on any new such line, whatever it compares or calls. It does not
+ * follow a value after it is copied into another variable, multi-line
+ * destructuring, or computed property names.
+ * Grant props keep `oauthResource: OPENAI_REVIEW_ORIGIN` as the host-binding
+ * identity checked at session init and API-key provisioning; that field is not
+ * the RFC 8707 value, which the provider stores on the grant itself.
+ */
+export const OPENAI_REVIEW_OAUTH_RESOURCES: readonly string[] = Object.freeze([
+  OPENAI_REVIEW_MCP_RESOURCE,
+  OPENAI_REVIEW_ORIGIN,
+]);
 
 /** RFC 7636 S256 challenges are the 32-byte SHA-256 digest encoded as
  * unpadded base64url, which is always exactly 43 characters. */
@@ -57,16 +99,16 @@ export const OAUTH_PROVIDER_REVIEW_OPTIONS = {
   // This provider does not implement per-tool OAuth authorization. Advertise
   // one honest connector-wide scope instead of implying that `read` prevents
   // writes. Every mutating reviewed tool still requires confirm=true.
-  scopesSupported: [FRIHET_CONNECTOR_SCOPE],
+  scopesSupported: [...OPENAI_REVIEW_OAUTH_SCOPES],
   accessTokenTTL: 3600,
   refreshTokenTTL: 2592000,
   allowPlainPKCE: false,
   resourceMetadata: {
     resource: OPENAI_REVIEW_ORIGIN,
     authorization_servers: [OPENAI_REVIEW_ORIGIN],
-    scopes_supported: [FRIHET_CONNECTOR_SCOPE],
+    scopes_supported: [...OPENAI_REVIEW_OAUTH_SCOPES],
     bearer_methods_supported: ["header"],
-    resource_name: "Frihet ChatGPT connector",
+    resource_name: "Frihet reviewed connector",
   },
 } satisfies FrozenOAuthProviderOptions;
 
@@ -88,22 +130,31 @@ interface OAuthBoundaryParameters {
   requireScope: boolean;
 }
 
+export function hasExactOpenAIReviewScopes(value: unknown): value is string[] {
+  if (!Array.isArray(value) || value.length !== OPENAI_REVIEW_OAUTH_SCOPES.length) {
+    return false;
+  }
+  const scopes = new Set(value);
+  return scopes.size === OPENAI_REVIEW_OAUTH_SCOPES.length
+    && OPENAI_REVIEW_OAUTH_SCOPES.every((scope) => scopes.has(scope));
+}
+
 /**
  * Validate the two OAuth values that form the reviewed-host authorization
- * boundary. RFC 8707 resource comparison is exact by design: accepting an
- * arbitrary absolute URI would let a token minted by one Frihet Worker target
- * the other Worker. Unknown or empty scopes are rejected instead of silently
- * downscoping to an empty token.
+ * boundary. RFC 8707 resource comparison is exact string membership by design:
+ * accepting an arbitrary absolute URI would let a token minted by one Frihet
+ * Worker target the other Worker. Unknown or empty scopes are rejected instead
+ * of silently downscoping to an empty token.
  */
 export function validateOAuthBoundary(
   parameters: OAuthBoundaryParameters,
-  expectedResource: string,
+  acceptedResources: readonly string[],
 ): OAuthBoundaryResult {
   if (parameters.resource === undefined && !parameters.requireResource) {
     // The provider will inherit the exact resource stored on the grant.
   } else if (
     typeof parameters.resource !== "string"
-    || parameters.resource !== expectedResource
+    || !acceptedResources.includes(parameters.resource)
   ) {
     return {
       ok: false,
@@ -118,11 +169,11 @@ export function validateOAuthBoundary(
     : typeof parameters.scope === "string"
       ? parameters.scope.split(/\s+/u).filter(Boolean)
       : [];
-  if (scopes.length !== 1 || scopes[0] !== FRIHET_CONNECTOR_SCOPE) {
+  if (!hasExactOpenAIReviewScopes(scopes)) {
     return {
       ok: false,
       error: "invalid_scope",
-      description: `The only supported OAuth scope is ${FRIHET_CONNECTOR_SCOPE}.`,
+      description: `The required OAuth scopes are ${OPENAI_REVIEW_OAUTH_SCOPES.join(" ")}.`,
     };
   }
   return { ok: true };
@@ -137,17 +188,34 @@ export function buildOpenAIUnauthorizedChallenge(
 ): string {
   const resourceMetadataUrl = endpoint(
     new URL(origin).origin,
-    "/.well-known/oauth-protected-resource",
+    OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH,
   );
   return `Bearer realm="OAuth", resource_metadata="${resourceMetadataUrl}", ` +
-    `scope="${FRIHET_CONNECTOR_SCOPE}", error="invalid_token", ` +
+    `scope="${OPENAI_REVIEW_OAUTH_SCOPES.join(" ")}", error="invalid_token", ` +
     'error_description="Missing or invalid access token"';
 }
 
 /**
+ * Path-inserted protected-resource metadata for the reviewed MCP endpoint,
+ * served by the Worker itself (the pinned provider only serves the root
+ * document). It differs from the root document only in `resource`.
+ */
+export function buildReviewedMcpProtectedResourceMetadata(origin = OPENAI_REVIEW_ORIGIN) {
+  const normalizedOrigin = new URL(origin).origin;
+  return {
+    resource: endpoint(normalizedOrigin, OAUTH_PROVIDER_REVIEW_OPTIONS.apiRoute),
+    authorization_servers: [normalizedOrigin],
+    scopes_supported: [...OAUTH_PROVIDER_REVIEW_OPTIONS.scopesSupported],
+    bearer_methods_supported: ["header"],
+    resource_name: OAUTH_PROVIDER_REVIEW_OPTIONS.resourceMetadata.resource_name,
+  };
+}
+
+/**
  * Materialize the public metadata generated by workers-oauth-provider 0.3.0
- * from the same options used by the Worker. The dependency version is pinned
- * separately in the canonical descriptor snapshot.
+ * from the same options used by the Worker, plus the path-inserted document
+ * the Worker serves itself. The dependency version is pinned separately in
+ * the canonical descriptor snapshot.
  */
 export function buildOpenAIReviewOAuthContract(origin = OPENAI_REVIEW_ORIGIN) {
   const normalizedOrigin = new URL(origin).origin;
@@ -165,7 +233,7 @@ export function buildOpenAIReviewOAuthContract(origin = OPENAI_REVIEW_ORIGIN) {
   );
   const resourceMetadataUrl = endpoint(
     normalizedOrigin,
-    "/.well-known/oauth-protected-resource",
+    OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH,
   );
 
   return {
@@ -194,9 +262,120 @@ export function buildOpenAIReviewOAuthContract(origin = OPENAI_REVIEW_ORIGIN) {
       bearer_methods_supported: ["header"],
       resource_name: OAUTH_PROVIDER_REVIEW_OPTIONS.resourceMetadata.resource_name,
     },
+    protectedResourceMcp: buildReviewedMcpProtectedResourceMetadata(normalizedOrigin),
+    openidConfiguration: {
+      issuer: normalizedOrigin,
+      authorization_endpoint: authorizationEndpoint,
+      token_endpoint: tokenEndpoint,
+      userinfo_endpoint: endpoint(normalizedOrigin, "/userinfo"),
+      registration_endpoint: registrationEndpoint,
+      scopes_supported: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      response_types_supported: ["code"],
+      response_modes_supported: ["query"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      subject_types_supported: ["public"],
+      token_endpoint_auth_methods_supported: [
+        "client_secret_basic",
+        "client_secret_post",
+        "none",
+      ],
+      code_challenge_methods_supported: ["S256"],
+    },
     wwwAuthenticate: {
       resourceMetadataUrl,
       missingTokenHeader: buildOpenAIUnauthorizedChallenge(normalizedOrigin),
     },
+  };
+}
+
+interface ReviewedAccessTokenSummary {
+  userId?: unknown;
+  expiresAt?: unknown;
+  audience?: unknown;
+  scope?: unknown;
+  grant?: {
+    scope?: unknown;
+    props?: unknown;
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isVerifiedEmail(email: unknown, verified: unknown): email is string {
+  return verified === true
+    && typeof email === "string"
+    && email.length >= 3
+    && email.length <= 320
+    && email === email.trim()
+    && !/[\u0000-\u001f\u007f]/u.test(email)
+    && /^[^@\s]+@[^@\s]+$/u.test(email);
+}
+
+export function isVerifiedOpenAIIdentity(value: {
+  uid?: unknown;
+  email?: unknown;
+  emailVerified?: unknown;
+}): value is { uid: string; email: string; emailVerified: true } {
+  return typeof value.uid === "string"
+    && value.uid.length > 0
+    && value.uid.length <= 128
+    && isVerifiedEmail(value.email, value.emailVerified);
+}
+
+export type OpenAIUserInfo = {
+  sub: string;
+  email: string;
+  email_verified: true;
+};
+
+/**
+ * Validate the provider's opaque access-token summary before serving OIDC
+ * UserInfo. The provider already verifies the encrypted token and KV expiry;
+ * this second boundary deliberately rechecks every OpenAI-specific binding.
+ */
+export function buildOpenAIUserInfo(
+  token: ReviewedAccessTokenSummary | null,
+  nowEpochSeconds = Math.floor(Date.now() / 1000),
+): OpenAIUserInfo | undefined {
+  const audience = token?.audience;
+  if (
+    !token
+    || !Number.isSafeInteger(token.expiresAt)
+    || (token.expiresAt as number) <= nowEpochSeconds
+    || typeof audience !== "string"
+    || !OPENAI_REVIEW_OAUTH_RESOURCES.includes(audience)
+    || !hasExactOpenAIReviewScopes(token.scope)
+    || !hasExactOpenAIReviewScopes(token.grant?.scope)
+    || !isRecord(token.grant?.props)
+  ) {
+    return undefined;
+  }
+
+  const props = token.grant.props;
+  const identity = {
+    uid: props.userId,
+    email: props.email,
+    emailVerified: props.emailVerified,
+  };
+  if (
+    props.accessProfile !== "openai"
+    || props.authMethod !== "oauth"
+    || props.oauthIssuer !== OPENAI_REVIEW_ORIGIN
+    || props.oauthResource !== OPENAI_REVIEW_ORIGIN
+    || props.oauthAudience !== audience
+    || props.oauthScope !== FRIHET_CONNECTOR_SCOPE
+    || !hasExactOpenAIReviewScopes(props.oauthScopes)
+    || token.userId !== props.userId
+    || !isVerifiedOpenAIIdentity(identity)
+  ) {
+    return undefined;
+  }
+
+  return {
+    sub: identity.uid,
+    email: identity.email,
+    email_verified: true,
   };
 }

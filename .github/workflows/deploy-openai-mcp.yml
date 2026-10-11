@@ -197,15 +197,35 @@ jobs:
           assert_owner_only_environment() {
             local name="$1"
             local environment_json
+            local custom_rules_json
             environment_json="$(read_environment "$name")"
+            # GitHub reports a deployment branch policy as a built-in
+            # branch_policy protection rule, so the required custom main-only
+            # policy always yields exactly that rule. Any other built-in rule
+            # type (a reviewer or wait timer) would block the ceremony.
             if [ "$(jq -r '.name // ""' <<< "$environment_json")" != "$name" ] \
               || ! jq -e '
                 .can_admins_bypass == false
-                and (.protection_rules | type == "array" and length == 0)
+                and (.protection_rules | type == "array")
+                and ([.protection_rules[].type] == ["branch_policy"])
                 and .deployment_branch_policy.protected_branches == false
                 and .deployment_branch_policy.custom_branch_policies == true
               ' <<< "$environment_json" >/dev/null; then
-              echo "::error::$name must be non-bypassable, main-only, and free of reviewer, timer, or custom gates"
+              echo "::error::$name must be non-bypassable, main-only, and free of reviewer or timer gates"
+              return 1
+            fi
+            # Built-in protection_rules never list GitHub App (custom)
+            # deployment protection rules; they have their own endpoint.
+            if ! custom_rules_json="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/environments/${name}/deployment_protection_rules")"; then
+              echo "::error::$name custom deployment protection rules are unreadable"
+              return 1
+            fi
+            if ! jq -e '.total_count == 0 and (.custom_deployment_protection_rules | type == "array" and length == 0)' \
+              <<< "$custom_rules_json" >/dev/null; then
+              echo "::error::$name must be free of custom deployment protection gates"
               return 1
             fi
           }
@@ -472,7 +492,11 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-wrangler-dry-run-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/openai-bundle-files.sha256
+            .openai-release-evidence/wrangler-openai-dry-run.json
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 90
 
   capture-rollback-state:
@@ -570,6 +594,7 @@ jobs:
           IDENTITY_FILE="$STATE_DIR/identity.json"
           STATUS_FILE="$STATE_DIR/deployment.json"
           VERSION_FILE="$STATE_DIR/version.json"
+          NAMESPACES_FILE="$STATE_DIR/durable-object-namespaces.json"
           ZONE_ENVELOPE="$STATE_DIR/zone-envelope.json"
           ZONE_FILE="$STATE_DIR/zone.json"
           ROUTES_ENVELOPE="$STATE_DIR/routes-envelope.json"
@@ -597,6 +622,8 @@ jobs:
           # migration drift, namespace drift, or binding drift stops here.
           ./node_modules/.bin/wrangler versions view "$PREVIOUS_VERSION_ID" \
             --env openai --name "$WORKER_NAME" --json > "$VERSION_FILE"
+          api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+            > "$NAMESPACES_FILE"
           api_get "zones?name=${ZONE_NAME}&account.id=${CLOUDFLARE_ACCOUNT_ID}&status=active&per_page=50" \
             > "$ZONE_ENVELOPE"
           jq -e --arg accountId "$CLOUDFLARE_ACCOUNT_ID" --arg zoneName "$ZONE_NAME" \
@@ -620,6 +647,7 @@ jobs:
             --require-established \
             --active-deployment "$STATUS_FILE" \
             --live-version "$VERSION_FILE" \
+            --durable-object-namespaces "$NAMESPACES_FILE" \
             --health "$HEALTH_FILE" \
             --identity "$IDENTITY_FILE" \
             --zone "$ZONE_FILE" \
@@ -667,7 +695,10 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-pre-mutation-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/pre-mutation-state.json
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 90
 
   deploy-openai:
@@ -760,8 +791,11 @@ jobs:
           ./node_modules/.bin/wrangler whoami >/dev/null 2>&1
           SECRET_LIST="$(mktemp)"
           trap 'rm -f "$SECRET_LIST"' EXIT
+          # Worker-secret commands resolve `--name X --env openai` to the
+          # Worker `X-openai`; `--env openai` alone selects the name declared
+          # in [env.openai], which is the Worker the deploy step targets.
           ./node_modules/.bin/wrangler secret list \
-            --env openai --name frihet-openai-mcp --format json > "$SECRET_LIST"
+            --env openai --format json > "$SECRET_LIST"
           if ! jq -e 'type == "array" and all(.[]; (.name | type) == "string")' \
             "$SECRET_LIST" >/dev/null; then
             echo "::error::Cloudflare returned an invalid OpenAI Worker secret inventory"
@@ -881,6 +915,7 @@ jobs:
             local identity="$STATE_DIR/${label}-identity.json"
             local deployment="$STATE_DIR/${label}-deployment.json"
             local version="$STATE_DIR/${label}-version.json"
+            local namespaces="$STATE_DIR/${label}-durable-object-namespaces.json"
             local zone_envelope="$STATE_DIR/${label}-zone-envelope.json"
             local zone="$STATE_DIR/${label}-zone.json"
             local routes_envelope="$STATE_DIR/${label}-routes-envelope.json"
@@ -905,6 +940,8 @@ jobs:
             version_id="$(jq -r '.versions[0].version_id' "$deployment")"
             ./node_modules/.bin/wrangler versions view "$version_id" \
               --env openai --name "$WORKER_NAME" --json > "$version"
+            api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+              > "$namespaces"
             api_get "zones?name=${ZONE_NAME}&account.id=${CLOUDFLARE_ACCOUNT_ID}&status=active&per_page=50" \
               > "$zone_envelope"
             jq -e --arg accountId "$CLOUDFLARE_ACCOUNT_ID" --arg zoneName "$ZONE_NAME" \
@@ -930,6 +967,7 @@ jobs:
               --snapshot-started-at-file "$snapshot_started_at" \
               --active-deployment "$deployment" \
               --live-version "$version" \
+              --durable-object-namespaces "$namespaces" \
               --health "$health" \
               --identity "$identity" \
               --zone "$zone" \
@@ -1019,10 +1057,13 @@ jobs:
                 echo "version_id=$JIT_VERSION_ID" >> "$GITHUB_OUTPUT"
               elif ./node_modules/.bin/wrangler versions view "$VERSION_ID" \
                 --env openai --name "$WORKER_NAME" --json > "$STATE_DIR/deployed-version.json" 2>/dev/null \
+                && api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+                  > "$STATE_DIR/ambiguous-deploy-namespaces.json" 2>/dev/null \
                 && node ../../scripts/check-openai-worker-topology.mjs \
                   --require-compatible \
                   --active-deployment "$STATE_DIR/deployed-state.json" \
                   --live-version "$STATE_DIR/deployed-version.json" \
+                  --durable-object-namespaces "$STATE_DIR/ambiguous-deploy-namespaces.json" \
                   --expected-source-sha "$SOURCE_COMMIT" \
                   --expected-source-version "$VERSION" \
                   --account-id "$CLOUDFLARE_ACCOUNT_ID" \
@@ -1065,10 +1106,13 @@ jobs:
           fi
           ./node_modules/.bin/wrangler versions view "$VERSION_ID" \
             --env openai --name "$WORKER_NAME" --json > "$STATE_DIR/deployed-version.json"
+          api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+            > "$STATE_DIR/deployed-namespaces.json"
           node ../../scripts/check-openai-worker-topology.mjs \
             --require-compatible \
             --active-deployment "$STATE_DIR/deployed-state.json" \
             --live-version "$STATE_DIR/deployed-version.json" \
+            --durable-object-namespaces "$STATE_DIR/deployed-namespaces.json" \
             --expected-source-sha "$SOURCE_COMMIT" \
             --expected-source-version "$VERSION" \
             --account-id "$CLOUDFLARE_ACCOUNT_ID" \
@@ -1136,7 +1180,11 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-deploy-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/pre-mutation-auth-readiness.json
+            .openai-release-evidence/openai-deploy.json
+            .openai-release-evidence/authenticated-compose.json
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 90
 
@@ -1304,8 +1352,10 @@ jobs:
 
           const { body: authorizationServer } = await json("/.well-known/oauth-authorization-server");
           const { body: protectedResource } = await json("/.well-known/oauth-protected-resource");
+          const { body: protectedResourceMcp } = await json("/.well-known/oauth-protected-resource/mcp");
           assert(equal(authorizationServer, snapshot.oauth.authorizationServer), "authorization-server drift");
           assert(equal(protectedResource, snapshot.oauth.protectedResource), "protected-resource drift");
+          assert(equal(protectedResourceMcp, snapshot.oauth.protectedResourceMcp), "path-inserted protected-resource drift");
 
           const legal = {};
           for (const path of ["/support", "/privacy"]) {
@@ -1366,6 +1416,7 @@ jobs:
               oauth: {
                 issuer: authorizationServer.issuer,
                 resource: protectedResource.resource,
+                mcpResource: protectedResourceMcp.resource,
                 scopes: protectedResource.scopes_supported,
               },
               legal,
@@ -1381,7 +1432,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-public-readback-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/public-readback.json
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 90
 
@@ -1506,11 +1559,14 @@ jobs:
           STATUS_FILE="$STATE_DIR/status.json"
           VERSION_FILE="$STATE_DIR/jit-recovery-version.json"
           CURRENT_VERSION_FILE="$STATE_DIR/current-version.json"
+          NAMESPACES_FILE="$STATE_DIR/durable-object-namespaces.json"
           HEALTH_FILE="$STATE_DIR/health.json"
           HEALTH_CANONICAL="$STATE_DIR/health-canonical.json"
 
           capture_network_surface() {
             ./node_modules/.bin/wrangler whoami --json > "$IDENTITY_FILE"
+            api_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/durable_objects/namespaces" \
+              > "$NAMESPACES_FILE"
             api_get "zones?name=${ZONE_NAME}&account.id=${CLOUDFLARE_ACCOUNT_ID}&status=active&per_page=50" \
               > "$ZONE_ENVELOPE"
             jq -e --arg accountId "$CLOUDFLARE_ACCOUNT_ID" --arg zoneName "$ZONE_NAME" \
@@ -1538,6 +1594,7 @@ jobs:
           node ../../scripts/check-openai-worker-topology.mjs \
             --require-recovery-target \
             --live-version "$VERSION_FILE" \
+            --durable-object-namespaces "$NAMESPACES_FILE" \
             --identity "$IDENTITY_FILE" \
             --zone "$ZONE_FILE" \
             --routes "$ROUTES_FILE" \
@@ -1589,6 +1646,7 @@ jobs:
               --require-compatible \
               --active-deployment "$STATUS_FILE" \
               --live-version "$CURRENT_VERSION_FILE" \
+              --durable-object-namespaces "$NAMESPACES_FILE" \
               --expected-source-sha "$SOURCE_COMMIT" \
               --expected-source-version "$VERSION" \
               --account-id "$CLOUDFLARE_ACCOUNT_ID" \
@@ -1625,6 +1683,7 @@ jobs:
           node ../../scripts/check-openai-worker-topology.mjs \
             --require-recovery-target \
             --live-version "$VERSION_FILE" \
+            --durable-object-namespaces "$NAMESPACES_FILE" \
             --identity "$IDENTITY_FILE" \
             --zone "$ZONE_FILE" \
             --routes "$ROUTES_FILE" \
@@ -1695,6 +1754,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: openai-rollback-proof-${{ needs.preflight.outputs.reviewedProfileVersion }}
-          path: .openai-release-evidence/
+          path: |
+            .openai-release-evidence/rollback-proof.json
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 90

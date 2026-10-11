@@ -21,6 +21,7 @@
  */
 
 import { log } from "./logger.js";
+import { rejectRedirectResponse } from "./fetch-no-redirect.js";
 
 // Declared to avoid TS errors in Workers environment where `process` is not typed
 declare const process: { env?: Record<string, string | undefined> } | undefined;
@@ -203,14 +204,14 @@ async function sendBatch(config: LangfuseConfig, batch: IngestionBatch): Promise
 
   const resp = await fetch(`${config.baseUrl}/api/public/ingestion`, {
     method: "POST",
-    redirect: "error",
+    redirect: "manual",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Basic ${credentials}`,
     },
     body: JSON.stringify(batch),
     signal: AbortSignal.timeout(5000),
-  });
+  }).then(rejectRedirectResponse);
 
   if (!resp.ok) {
     // Never read/log the provider response body. Status is sufficient to

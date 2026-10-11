@@ -88,7 +88,7 @@
       {
         "call": "resources/read frihet://tax/rates",
         "kind": "read",
-        "note": "Authoritative IVA / IGIC / IPSI table. Do not recall a rate from memory."
+        "note": "Spanish statutory IVA / IGIC / IPSI reference schedule. Do not recall a rate from memory; server validates transaction math."
       },
       {
         "call": "list_clients",

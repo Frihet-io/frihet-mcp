@@ -32,10 +32,9 @@ export type { PaginatedResponse, ApiError } from "../../../src/types.js";
 const WORKER_REQUEST_TIMEOUT_MS = 25000;
 
 export class FrihetClient extends BaseFrihetClient {
-  constructor(apiKey: string, baseUrl?: string, oauthServiceSecret?: string) {
+  constructor(apiKey: string, baseUrl?: string) {
     super(apiKey, resolveApiBaseUrl(baseUrl), {
       timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
-      ...(oauthServiceSecret ? { oauthServiceSecret } : {}),
     });
   }
 }

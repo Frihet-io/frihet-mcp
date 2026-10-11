@@ -149,7 +149,7 @@ describe("anti-defang contract", () => {
       "track",
       "unregister",
     ]);
-    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 11);
+    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 10);
     assert.equal(Object.keys(APPROVED_SOURCE_FILE_HASHES).length, 13);
     assert.equal(Object.values(APPROVED_SOURCE_FILE_HASHES).every((hash) => /^[a-f0-9]{64}$/u.test(hash)), true);
     for (const sink of Object.keys(APPROVED_NETWORK_SINKS)) {
@@ -161,12 +161,12 @@ describe("anti-defang contract", () => {
       );
     }
     assert.deepEqual(APPROVED_LOCKFILE_HASHES, {
-      "package-lock.json": "b8eac56e1f88e2537c4239d1ee583dc3c11ef2643486a00ed1e80887ef661bec",
-      "workers/remote-mcp/package-lock.json": "9bd3aaa0bce155f446ef4f8c8fa792ba2a0871a4cb1f7468a4993c784c412191",
+      "package-lock.json": "11418deebf57631c1e39a2a6fea11eedd7de0dc23c26b5768ae91d5a29dfcb7b",
+      "workers/remote-mcp/package-lock.json": "c36f130ac2574f3fac913f72304e6658bef9a9c341910992bd757673d57fdaf3",
     });
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES[".github/workflows/ci.yml"],
-      "ea74b270c7fe75bfdff4de3b79a7337cac1ac71afb0f3a367ea535703fe79b27",
+      "f39fc984aa328aa3cebae66d239d15d92eb05b3896e5365c69dd40bea09afce2",
     );
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES["scripts/audit-mcp-refs.mjs"],
@@ -174,7 +174,7 @@ describe("anti-defang contract", () => {
     );
     assert.equal(
       APPROVED_PUBLISHED_FILE_HASHES["README.md"],
-      "7ec5eb4d2556be673abfc3e461eb4ec2fca60c5dd4b980eb736d042ddb49017e",
+      "3fc11ccc0f7dfddb5cdd7c7fb69bfccd0fabd519baf036831592585627f8b4c9",
     );
     assert.deepEqual(APPROVED_PLATFORM_TELEMETRY, {
       "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
@@ -216,7 +216,7 @@ describe("anti-defang contract", () => {
   });
 
   test("pins exact source, built, navigation, and resource inventories", () => {
-    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 26);
+    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 30);
     assert.deepEqual(APPROVED_NETWORK_SINKS, {
       "src/client.ts|request|fetch|url.toString()": 1,
       "src/client.ts|fetchRaw|fetch|url.toString()": 1,
@@ -230,7 +230,11 @@ describe("anti-defang contract", () => {
       "workers/remote-mcp/src/mcp-session-binding.ts|fetch|unboundHandler.fetch|sdkRequest": 1,
       "workers/remote-mcp/src/oauth-provisioning.ts|provisionOAuthApiKey|fetchImpl|provisioningUrl": 1,
       "workers/remote-mcp/src/oauth-provisioning.ts|revokeOAuthApiKey|fetchImpl|provisioningUrl": 1,
-      "workers/remote-mcp/src/oauth-state-store.ts|consumeOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/consume`": 1,
+      "workers/remote-mcp/src/oauth-provisioning.ts|revokeOAuthApiKeyCorrelation|fetchImpl|provisioningUrl": 1,
+      "workers/remote-mcp/src/oauth-state-store.ts|armOAuthStateAttempt|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/attempt`": 1,
+      "workers/remote-mcp/src/oauth-state-store.ts|commitOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/commit`": 1,
+      "workers/remote-mcp/src/oauth-state-store.ts|releaseOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/release`": 1,
+      "workers/remote-mcp/src/oauth-state-store.ts|reserveOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/reserve`": 1,
       "workers/remote-mcp/src/oauth-state-store.ts|storeOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/state`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|beginOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/begin`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|checkOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/check`": 1,
@@ -577,7 +581,7 @@ describe("executable analytics shapes fail closed", () => {
   test("the current source repository satisfies the complete gate", () => {
     const result = scanRepository(REPOSITORY_ROOT);
     assert.deepEqual(result.findings, []);
-    assert.equal(result.sinks.length, 26);
+    assert.equal(result.sinks.length, 30);
     assert.equal(result.resources.length, 2);
   });
 });

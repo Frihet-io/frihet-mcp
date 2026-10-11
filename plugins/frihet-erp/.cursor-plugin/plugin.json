@@ -2,7 +2,7 @@
   "name": "frihet-erp",
   "displayName": "Frihet ERP",
   "version": "1.0.0",
-  "description": "AI-native ERP for Spain & the EU. The MCP catalogue contains 157 canonical operations for invoicing, expenses, CRM and fiscal workflows; per-tool metadata reports runtime capability and side effects separately.",
+  "description": "AI-native ERP for Spain & the EU. Connect your assistant to invoicing, expenses, clients and business workflows in Frihet. Availability depends on your workspace configuration and permissions.",
   "author": {
     "name": "Frihet",
     "email": "support@frihet.io"
@@ -21,5 +21,18 @@
     "finance",
     "tax"
   ],
-  "logo": "assets/logo.svg"
+  "logo": "assets/logo.svg",
+  "variables": {
+    "type": "object",
+    "properties": {
+      "FRIHET_API_KEY": {
+        "type": "string",
+        "title": "Frihet API key",
+        "description": "API key for your Frihet workspace"
+      }
+    },
+    "required": [
+      "FRIHET_API_KEY"
+    ]
+  }
 }

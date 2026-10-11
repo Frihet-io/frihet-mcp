@@ -6,7 +6,11 @@ catalogue. The independently versioned reviewed-profile candidate recorded in
 
 - MCP endpoint: `https://openai-mcp.frihet.io/mcp`;
 - OAuth issuer and protected resource: `https://openai-mcp.frihet.io`;
-- sole OAuth scope: `frihet:workspace.manage`;
+- exact OAuth scopes: `openid email frihet:workspace.manage`;
+- OpenID discovery at `/.well-known/openid-configuration` and a protected
+  `/userinfo` endpoint that returns only `sub`, `email`, and
+  `email_verified: true` after the Firebase claim and access-token bindings are
+  independently verified;
 - exactly 33 reviewed business operations with complete descriptions and no
   discovery meta-tools;
 - 0 prompts and 0 resources;
@@ -53,9 +57,9 @@ attachment, or conversion evidence can also be deleted; a protected draft is
 refused, and deleting a non-draft quote cancels it.
 
 The canonical evidence is
-`src/__tests__/fixtures/openai-review-descriptor.snapshot.json`; the provider
-form is generated as `marketplace/openai/chatgpt-app-submission.json`. Verify
-both with:
+`src/__tests__/fixtures/openai-review-descriptor.snapshot.json`; the legacy provider
+form and portable `plugin.json`/`mcp.json` manifests are generated under
+`marketplace/openai/`. Verify them with:
 
 ```bash
 npm run gate:openai-review-descriptor
@@ -88,7 +92,7 @@ not merely portal copy to complete at submission time:
 | Test cases were incorrect or inconsistent | Generate exactly five positive and three negative cases from the frozen descriptor, seed deterministic review data, and execute every case successfully in both ChatGPT web and mobile against the release candidate. Record the expected and observed outcomes. |
 | Returned user-data categories were not fully disclosed | Keep recursively closed output schemas, runtime redaction, the dedicated connector privacy notice, and explicit disclosures for internal linking/snapshots, notifications, analytics, referrals, and owner-configured webhook deliveries. |
 | The app solicited sensitive personal data | Expose no dedicated government-ID, banking, credential, precise-address, raw-document, or regulated-payload fields. Every reviewed user-entered free-text field must warn against credentials, card data, health data, and official identifiers. |
-| Submission metadata was incomplete or invalid | Live-smoke the canonical website, connector support URL, connector privacy URL, support contact, and reviewer-accessible demo-recording URL; verify the generated five/three test cases contain concrete expected outcomes before uploading the JSON. |
+| Submission metadata was incomplete or invalid | Live-smoke the canonical website, connector support URL, connector privacy URL, support contact, and reviewer-accessible demo-recording URL; verify the generated five/three test cases contain concrete expected outcomes before submitting the plugin ZIP. |
 
 Do not mark a row complete from local source alone. Public identity, URLs,
 OAuth behavior, and test outcomes require release-candidate evidence. Portal
@@ -136,7 +140,10 @@ marked `established`, use this ceremony:
 1. Create both exact-main-only GitHub environments before dispatch.
    `openai-plugin-release` and `openai-plugin-rollback` must each set
    `can_admins_bypass=false`, use custom branch policy with exactly `main`, and
-   have zero reviewer, wait-timer, or custom-gate protection rules. Frihet has
+   have zero reviewer, wait-timer, or custom-gate protection rules. GitHub
+   reports the custom branch policy itself as one `branch_policy` protection
+   rule; the workflow accepts exactly that rule and separately reads the
+   custom deployment protection rules, which must be empty. Frihet has
    one repository owner, so do not configure a fictitious independent reviewer
    or claim prevent-self-review governance that cannot exist. Recovery must
    remain automatically runnable after mutation. Referencing an absent
@@ -282,12 +289,20 @@ after the evidence has been reviewed.
   without a Frihet/OpenAI team login, expiring invitation, MFA, email approval,
   or private network, and contain no customer data, credentials, tokens, or
   private release evidence. Validate the final link from a signed-out browser.
-  The submission JSON cannot populate this portal-only field; **STOP before the
-  portal** if the final recording or its anonymous readback is missing.
-- This connector does not declare a workspace-domain restriction. Its sole
-  OAuth scope remains `frihet:workspace.manage`; do not add or imply UserInfo,
-  `openid`, or `email` support. Those identity claims are needed only if a
-  future, separately reviewed draft actually declares domain restriction.
+  The portable package can populate `extensions.com.openai.review.demo_recording_url`;
+  the legacy submission JSON cannot. The package omits it until a real recording
+  exists. **STOP before submitting for review** if the final recording or its
+  anonymous readback is missing.
+- The connector advertises and requires exactly `openid email
+  frihet:workspace.manage`. Verify `/.well-known/openid-configuration` and the
+  protected `/userinfo` response in the released candidate: UserInfo must emit
+  only `sub`, `email`, and literal `email_verified: true`, and an unverified or
+  missing Firebase email must fail closed before a grant is issued. This
+  enables OpenAI workspace-domain enforcement but does not prove that any
+  workspace has verified its domain. The metadata deliberately omits
+  `authorization_response_iss_parameter_supported`; do not set it to `true`
+  unless both successful and error authorization redirects are proven to
+  return the exact issuer.
 - Verify domain ownership inside the current portal draft. The live verification
   endpoint may still return a historical challenge token, which is not evidence
   that a new draft or app version accepts it. If the draft already shows the
@@ -297,13 +312,37 @@ after the evidence has been reviewed.
   Never publish or retain multiple verification tokens, and never hardcode a new
   token without the current draft's exact challenge.
 
-The submission JSON schema does not carry starter prompts, release notes, or
-regional availability. Enter these portal-only values exactly in the current
-draft:
+## Portable plugin package
+
+Run `npm run generate:openai-submission` after editing the generator, then
+`npm run package:openai-plugin` (Python 3 required, no Python dependencies).
+Upload `marketplace/openai/dist/frihet-1.0.1.zip` as a new plugin
+(**Upload new or existing plugin**, identity **Business — Frihet**); the legacy
+record `plugin_asdk_app_69b6147ce32c81918680c89bfa7c9b36` has no MCP server and
+cannot gain one, so it is not updated. The ZIP includes root `plugin.json`, root `mcp.json` and three existing
+512 px PNG assets; its reviewed endpoint is `https://openai-mcp.frihet.io/mcp`.
+It contains no credentials, reviewer instructions, placeholder video,
+screenshots, skills or full-profile MCP connection. Packaging does not deploy
+or validate the live server. All five positive and three negative cases still
+require execution in ChatGPT web and mobile against the actual candidate.
+
+Legacy apps can reject ZIP migration with `Publish the existing MCP app before
+updating its plugin ZIP.` Keep the existing plugin identity and MCP connection.
+Publish that existing app only after its review and release requirements are
+satisfied; if no eligible path is available, ask OpenAI support to resolve the
+migration state. Do not create a replacement identity, change the MCP URL or add
+an `.app.json` reference to bypass this portal guard. Such references are for
+local/workspace packages and are not accepted for public submission. Keep the
+support request and portal evidence outside this public repository.
+
+The portable manifest imports the following values through
+`extensions.com.openai.interface`, `review` and `publication`; the legacy
+submission JSON does not carry them. Confirm the imported settings in the draft.
+See the current [submission field reference](https://developers.openai.com/plugins/deploy/submission#automatically-provide-submission-and-review-information).
 
 **Starter prompts**
 
-1. `Give me an overview of my current Frihet business context.`
+1. `Give me an overview of my business this month.`
 2. `Show me my draft invoices.`
 3. `Show me my active products and services.`
 
@@ -313,11 +352,15 @@ confirmation.
 
 **Release notes**
 
-> Fourth resubmission: Frihet now exposes only 33 reviewed business tools with complete schemas and explicit action hints; removes discovery tools, prompts, resources, OpenAPI, regulated workflows, raw documents, and dedicated sensitive-identifier fields; aligns the verified Identity `Business — Frihet` and Plugin Author `Frihet`, OAuth scope, privacy disclosures, and five positive plus three negative review cases.
+The package release notes describe version `1.0.1`: the reviewed MCP connection,
+existing light/dark icons, corrected listing, three read-only starters, Spanish
+listing text and five positive plus three negative cases. They explicitly
+separate package changes from the hosted server and the outstanding live tests
+and video. The source of truth is the generated manifest.
 
 **Availability**
 
-Select `Spain` only. Do not select another jurisdiction until its commercial,
+The package selects `Spain` only (`publication.countries: ["ES"]`). Do not select another jurisdiction until its commercial,
 legal, authentication, and support availability is documented and separately
 reviewed.
 

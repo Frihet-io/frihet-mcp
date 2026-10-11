@@ -274,6 +274,15 @@ async function main() {
     JSON.stringify(canonicalize(protectedResource)) ===
       JSON.stringify(canonicalize(SNAPSHOT.oauth.protectedResource)),
   );
+  const protectedResourceMcp = await safeJson(
+    await boundedFetch(`${origin}/.well-known/oauth-protected-resource/mcp`),
+    "OAuth path-inserted protected-resource metadata",
+  );
+  check(
+    "protectedResourceMcpMatchesSnapshot",
+    JSON.stringify(canonicalize(protectedResourceMcp)) ===
+      JSON.stringify(canonicalize(SNAPSHOT.oauth.protectedResourceMcp)),
+  );
   const challenge = await boundedFetch(ENDPOINT, {
     method: "POST",
     headers: {

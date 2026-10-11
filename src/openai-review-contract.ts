@@ -24,13 +24,13 @@ import {
   OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS,
 } from "./openai-profile.js";
 import { SENSITIVE_FIELD_NAMES } from "./redaction.js";
-import { FRIHET_CONNECTOR_SCOPE } from "./openai-review-oauth.js";
+import { hasExactOpenAIReviewScopes } from "./openai-review-oauth.js";
 import {
   registerMcpSurface,
   remoteMcpSurfaceComposition,
 } from "./server-composition.js";
 
-export const OPENAI_REVIEW_CONTRACT_VERSION = 6;
+export const OPENAI_REVIEW_CONTRACT_VERSION = 7;
 export const OPENAI_REVIEW_BUSINESS_TOOL_COUNT = 33;
 export const OPENAI_REVIEW_TOTAL_TOOL_COUNT = OPENAI_REVIEW_BUSINESS_TOOL_COUNT;
 
@@ -406,10 +406,9 @@ function assertReviewedOAuthSecuritySchemes(
     || Object.keys(scheme).sort().join(",") !== "scopes,type"
     || scheme.type !== "oauth2"
     || !Array.isArray(scheme.scopes)
-    || scheme.scopes.length !== 1
-    || scheme.scopes[0] !== FRIHET_CONNECTOR_SCOPE
+    || !hasExactOpenAIReviewScopes(scheme.scopes)
   ) {
-    throw new Error(`${path} must require only the reviewed connector OAuth scope`);
+    throw new Error(`${path} must require exactly the reviewed OpenAI OAuth scopes`);
   }
 }
 

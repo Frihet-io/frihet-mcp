@@ -31,8 +31,15 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { FrihetClient } from "../client.js";
+import { registerInvoiceTools } from "../tools/invoices.js";
+import { registerIntelligenceTools } from "../tools/intelligence.js";
+import { applyOpenAIReviewProfiles } from "../openai-profile.js";
+import type { CreateInvoiceInput, Invoice, UpdateInvoiceInput } from "../types.js";
 import {
   invoiceItemOutput,
   paginatedOutput,
@@ -44,6 +51,11 @@ import {
 
 let server: Server;
 let baseUrl: string;
+const invoiceWrites: Array<{ method: string; body: Record<string, unknown> }> = [];
+const CLASSIFICATIONS = [
+  { operationType: "service", fiscalTreatment: "not_subject_location" },
+  { operationType: "goods", fiscalTreatment: "export_exempt" },
+] as const;
 
 function envelope(data: unknown, meta: Record<string, unknown> = { requestId: "test" }) {
   return { data, meta };
@@ -58,16 +70,17 @@ const FULL_INVOICE = {
 };
 const FULL_CLIENT = { id: "cli_new", name: "Acme Corp", email: "billing@acme.example" };
 
-async function readBody(req: import("node:http").IncomingMessage): Promise<void> {
+async function readBody(req: import("node:http").IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
-    req.on("data", () => {});
-    req.on("end", () => resolve());
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => resolve(body ? JSON.parse(body) : {}));
   });
 }
 
 before(async () => {
   server = createServer(async (req, res) => {
-    await readBody(req);
+    const body = await readBody(req);
     const url = new URL(req.url ?? "/", "http://localhost");
     res.setHeader("Content-Type", "application/json");
     const send = (status: number, body: unknown) => {
@@ -77,11 +90,22 @@ before(async () => {
 
     // create invoice (201) — main-resource envelope
     if (url.pathname === "/invoices" && req.method === "POST") {
+      invoiceWrites.push({ method: req.method, body });
       return send(201, envelope(FULL_INVOICE));
     }
     // update invoice (PATCH) — main-resource envelope
     if (url.pathname === "/invoices/inv_new" && req.method === "PATCH") {
+      invoiceWrites.push({ method: req.method, body });
       return send(200, envelope({ ...FULL_INVOICE, status: "sent" }));
+    }
+    if (url.pathname.startsWith("/invoices/original_") && req.method === "GET") {
+      const index = Number(url.pathname.slice("/invoices/original_".length));
+      return send(200, envelope({
+        ...FULL_INVOICE,
+        ...CLASSIFICATIONS[index],
+        status: "paid",
+        verifactu: { hash: "stored-only" },
+      }));
     }
     // mark paid (POST action, 200) — action envelope, NO id, has success/status/paidAt
     if (url.pathname === "/invoices/inv_new/paid" && req.method === "POST") {
@@ -121,6 +145,139 @@ function assertNoEnvelopeLeak(result: unknown) {
   assert.equal("data" in (result as object), false, "envelope 'data' key must NOT leak into the mutation result");
   assert.equal("meta" in (result as object), false, "envelope 'meta' key must NOT leak into the mutation result");
 }
+
+async function withInvoiceMcp(run: (client: Client) => Promise<void>, reviewed = false): Promise<void> {
+  const mcpServer = new McpServer({ name: "invoice-contract", version: "0.0.0" });
+  if (reviewed) applyOpenAIReviewProfiles(mcpServer);
+  registerInvoiceTools(mcpServer, makeClient());
+  registerIntelligenceTools(mcpServer, makeClient());
+  const mcpClient = new Client({ name: "invoice-contract-test", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([mcpClient.connect(clientTransport), mcpServer.connect(serverTransport)]);
+  try {
+    await run(mcpClient);
+  } finally {
+    await mcpClient.close();
+    await mcpServer.close();
+  }
+}
+
+describe("invoice classification — real MCP SDK to HTTP payload", () => {
+  const createArgs = { clientName: FULL_INVOICE.clientName, items: FULL_INVOICE.items };
+  const mutations = [
+    { name: "create_invoice", args: createArgs, method: "POST" },
+    { name: "update_invoice", args: { id: "inv_new" }, method: "PATCH" },
+  ];
+
+  test("shared invoice/create/update types preserve the same optional classification", () => {
+    const invoice: Invoice = {
+      ...FULL_INVOICE,
+      operationType: "service",
+      fiscalTreatment: "not_subject_location",
+    };
+    const create: CreateInvoiceInput = {
+      ...createArgs,
+      operationType: invoice.operationType,
+      fiscalTreatment: invoice.fiscalTreatment,
+    };
+    const update: UpdateInvoiceInput = {
+      operationType: create.operationType,
+      fiscalTreatment: create.fiscalTreatment,
+    };
+    assert.deepEqual(update, CLASSIFICATIONS[0]);
+  });
+
+  for (const mutation of mutations) {
+    test(`${mutation.name} forwards each explicit classification unchanged`, async () => {
+      await withInvoiceMcp(async (client) => {
+        for (const classification of CLASSIFICATIONS) {
+          const before = invoiceWrites.length;
+          const result = await client.callTool({
+            name: mutation.name,
+            arguments: { ...mutation.args, ...classification },
+          });
+          assert.notEqual(result.isError, true);
+          assert.equal(invoiceWrites.length, before + 1);
+          assert.equal(invoiceWrites.at(-1)?.method, mutation.method);
+          assert.equal(invoiceWrites.at(-1)?.body.operationType, classification.operationType);
+          assert.equal(invoiceWrites.at(-1)?.body.fiscalTreatment, classification.fiscalTreatment);
+        }
+      });
+    });
+
+    test(`${mutation.name} leaves omitted classification absent`, async () => {
+      await withInvoiceMcp(async (client) => {
+        const result = await client.callTool({ name: mutation.name, arguments: mutation.args });
+        assert.notEqual(result.isError, true);
+        assert.equal("operationType" in invoiceWrites.at(-1)!.body, false);
+        assert.equal("fiscalTreatment" in invoiceWrites.at(-1)!.body, false);
+      });
+    });
+
+    test(`${mutation.name} rejects malformed classification before any API write`, async () => {
+      await withInvoiceMcp(async (client) => {
+        const before = invoiceWrites.length;
+        for (const invalid of ["exempt", "not_subject", "S1", "", null, 0]) {
+          const result = await client.callTool({
+            name: mutation.name,
+            arguments: { ...mutation.args, fiscalTreatment: invalid },
+          });
+          assert.equal(result.isError, true, `must reject fiscalTreatment=${JSON.stringify(invalid)}`);
+        }
+        const result = await client.callTool({
+          name: mutation.name,
+          arguments: { ...mutation.args, operationType: "S1" },
+        });
+        assert.equal(result.isError, true);
+        assert.equal(invoiceWrites.length, before);
+      });
+    });
+  }
+
+  test("duplicate_invoice preserves declared classification but never derives missing values", async () => {
+    await withInvoiceMcp(async (client) => {
+      for (let index = 0; index <= CLASSIFICATIONS.length; index++) {
+        const result = await client.callTool({
+          name: "duplicate_invoice",
+          arguments: { id: `original_${index}`, newIssueDate: "2026-09-30" },
+        });
+        assert.notEqual(result.isError, true);
+        const body = invoiceWrites.at(-1)!.body;
+        assert.equal(body.operationType, CLASSIFICATIONS[index]?.operationType);
+        assert.equal(body.fiscalTreatment, CLASSIFICATIONS[index]?.fiscalTreatment);
+        assert.equal(body.status, "draft");
+        assert.equal(body.issueDate, "2026-09-30");
+        assert.equal("verifactu" in body, false);
+      }
+    });
+  });
+
+  test("reviewed OpenAI create_invoice keeps fiscal classification outside its frozen contract", async () => {
+    await withInvoiceMcp(async (client) => {
+      const { tools } = await client.listTools();
+      const create = tools.find((tool) => tool.name === "create_invoice");
+      assert.ok(create);
+      assert.equal("operationType" in create.inputSchema.properties!, false);
+      assert.equal("fiscalTreatment" in create.inputSchema.properties!, false);
+      assert.equal(tools.some((tool) => tool.name === "update_invoice"), false);
+      const before = invoiceWrites.length;
+      for (const classification of [
+        { operationType: "service" },
+        { fiscalTreatment: "not_subject_location" },
+        { fiscalTreatment: "export_exempt" },
+        { clientLocation: "world" },
+        { clientLocation: "world", ...CLASSIFICATIONS[0] },
+      ]) {
+        const result = await client.callTool({
+          name: "create_invoice",
+          arguments: { ...createArgs, confirm: true, ...classification },
+        });
+        assert.equal(result.isError, true);
+      }
+      assert.equal(invoiceWrites.length, before, "reviewed calls reject before reaching the API");
+    }, true);
+  });
+});
 
 describe("BUG-1 — mutation client methods unwrap the { data, meta } envelope", () => {
   test("createInvoice unwraps + validates against invoiceItemOutput", async () => {

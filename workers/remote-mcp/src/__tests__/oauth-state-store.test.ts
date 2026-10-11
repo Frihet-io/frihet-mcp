@@ -89,6 +89,9 @@ const SUCCESSFUL_CLEANUP: OAuthCleanupAuthorities = {
   async revokeBackend(): Promise<boolean> {
     return true;
   },
+  async revokeBackendCorrelation(): Promise<boolean> {
+    return true;
+  },
 };
 
 function makeStore(options: {
@@ -142,55 +145,156 @@ async function familyJson(
   return response.json() as Promise<Record<string, unknown>>;
 }
 
-test("OAuth state is stored once, non-cacheable, and consumed exactly once", async () => {
-  const { store, state } = makeStore();
-  const payload = JSON.stringify({ clientId: "client_test", scope: ["frihet:workspace.manage"] });
-  const stored = await store.fetch(new Request("https://oauth-state.internal/state", {
+function stateRequest(path: string, body?: unknown, method = "POST"): Request {
+  return new Request(`https://oauth-state.internal${path}`, {
+    method,
+    ...(body === undefined
+      ? {}
+      : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  });
+}
+
+async function stateJson(store: OAuthStateStore, path: string, body?: unknown) {
+  const response = await store.fetch(stateRequest(path, body));
+  assert.equal(response.status, 200);
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
+async function putState(store: OAuthStateStore, payload: string): Promise<number> {
+  return (await store.fetch(new Request("https://oauth-state.internal/state", {
     method: "PUT",
     body: payload,
-  }));
+  }))).status;
+}
 
-  assert.equal(stored.status, 204);
+test("OAuth state is stored once, non-cacheable, and leased to one callback at a time", async () => {
+  const { store, state } = makeStore();
+  const payload = JSON.stringify({ clientId: "client_test", scope: ["frihet:workspace.manage"] });
+  assert.equal(await putState(store, payload), 204);
   assert.ok((state.storage.alarm ?? 0) > Date.now());
 
   const [left, right] = await Promise.all([
-    store.fetch(new Request("https://oauth-state.internal/consume", { method: "POST" })),
-    store.fetch(new Request("https://oauth-state.internal/consume", { method: "POST" })),
+    store.fetch(stateRequest("/reserve")),
+    store.fetch(stateRequest("/reserve")),
   ]);
-  const ordered = [left, right].sort((a, b) => a.status - b.status);
+  const bodies = await Promise.all([left, right].map((response) => response.json())) as Array<Record<string, unknown>>;
+  const reserved = bodies.find((body) => body.outcome === "reserved")!;
+  assert.deepEqual(bodies.map((body) => body.outcome).sort(), ["busy", "reserved"]);
+  assert.equal(reserved.payload, payload);
+  assert.equal(reserved.attempt, 1);
+  assert.deepEqual(reserved.reconcile, []);
+  assert.notEqual(reserved.correlationId, reserved.leaseId);
+  assert.equal(left.headers.get("cache-control"), "no-store");
+  assert.equal(left.headers.get("pragma"), "no-cache");
 
-  assert.deepEqual(ordered.map((response) => response.status), [200, 404]);
-  assert.equal(await ordered[0]!.text(), payload);
-  assert.equal(ordered[0]!.headers.get("cache-control"), "no-store");
-  assert.equal(ordered[0]!.headers.get("pragma"), "no-cache");
+  // Commit requires the armed lease; afterwards the state only reads as committed.
+  assert.deepEqual(await stateJson(store, "/commit", { leaseId: reserved.leaseId }), { outcome: "lease_lost" });
+  assert.deepEqual(
+    await stateJson(store, "/attempt", { leaseId: reserved.leaseId, uid: "firebase-user", reconciled: [] }),
+    { outcome: "armed" },
+  );
+  assert.deepEqual(await stateJson(store, "/commit", { leaseId: reserved.leaseId }), { outcome: "committed" });
+  assert.deepEqual(
+    await stateJson(store, "/commit", { leaseId: reserved.leaseId }),
+    { outcome: "committed" },
+    "commit is idempotent for its own lease",
+  );
+  assert.deepEqual(await stateJson(store, "/reserve"), { outcome: "committed" });
+  assert.equal(JSON.stringify(state.storage.values.get("oauth_request")).includes("client_test"), false);
+});
+
+test("OAuth state lease: release returns it, an armed unknown attempt must be reconciled first", async (context) => {
+  let now = 1_800_000_000_000;
+  context.mock.method(Date, "now", () => now);
+  const { store } = makeStore();
+  assert.equal(await putState(store, "request"), 204);
+
+  const first = await stateJson(store, "/reserve");
+  assert.deepEqual(await stateJson(store, "/attempt", { leaseId: first.leaseId, uid: "firebase-user", reconciled: [] }), { outcome: "armed" });
+  assert.equal((await store.fetch(stateRequest("/release", { leaseId: first.leaseId, outcome: "unknown" }))).status, 204);
+
+  const second = await stateJson(store, "/reserve");
+  assert.equal(second.outcome, "reserved");
+  assert.notEqual(second.correlationId, first.correlationId);
+  assert.deepEqual(second.reconcile, [{ uid: "firebase-user", correlationId: first.correlationId }]);
+  assert.deepEqual(
+    await stateJson(store, "/attempt", { leaseId: second.leaseId, uid: "firebase-user", reconciled: [] }),
+    { outcome: "unreconciled" },
+    "no new credential request while an earlier one is unproven",
+  );
+  assert.deepEqual(
+    await stateJson(store, "/attempt", { leaseId: second.leaseId, uid: "other-user", reconciled: [first.correlationId] }),
+    { outcome: "armed" },
+  );
+
+  // An armed lease abandoned past its TTL is surrendered to the next holder.
+  now += 60_000;
+  const third = await stateJson(store, "/reserve");
+  assert.equal(third.outcome, "reserved");
+  assert.deepEqual(third.reconcile, [{ uid: "other-user", correlationId: second.correlationId }]);
+  assert.deepEqual(await stateJson(store, "/commit", { leaseId: second.leaseId }), { outcome: "lease_lost" });
+  assert.equal((await store.fetch(stateRequest("/release", { leaseId: second.leaseId, outcome: "unknown" }))).status, 204);
+  assert.deepEqual(
+    (await stateJson(store, "/attempt", { leaseId: third.leaseId, uid: "firebase-user", reconciled: [] })).outcome,
+    "unreconciled",
+    "a stale holder's release cannot clear or add attempts",
+  );
+});
+
+test("OAuth state attempts are bounded and arming after the lease TTL is refused", async (context) => {
+  let now = 1_800_000_000_000;
+  context.mock.method(Date, "now", () => now);
+  const { store } = makeStore();
+  assert.equal(await putState(store, "request"), 204);
+
+  const late = await stateJson(store, "/reserve");
+  now += 60_000;
+  assert.deepEqual(
+    await stateJson(store, "/attempt", { leaseId: late.leaseId, uid: "firebase-user", reconciled: [] }),
+    { outcome: "lease_lost" },
+  );
+  for (let attempt = 2; attempt <= 5; attempt += 1) {
+    const lease = await stateJson(store, "/reserve");
+    assert.equal(lease.attempt, attempt);
+    assert.equal((await store.fetch(stateRequest("/release", { leaseId: lease.leaseId, outcome: "clean" }))).status, 204);
+  }
+  assert.deepEqual(await stateJson(store, "/reserve"), { outcome: "exhausted" });
+});
+
+test("OAuth state arms an attempt only with 30 s of state lifetime left", async (context) => {
+  let now = 1_800_000_000_000;
+  context.mock.method(Date, "now", () => now);
+  const arm = async (remainingMs: number) => {
+    const { store } = makeStore();
+    now = 1_800_000_000_000;
+    assert.equal(await putState(store, "request"), 204);
+    now += 10 * 60_000 - remainingMs;
+    const lease = await stateJson(store, "/reserve");
+    return stateJson(store, "/attempt", { leaseId: lease.leaseId, uid: "firebase-user", reconciled: [] });
+  };
+  assert.deepEqual(await arm(30_000), { outcome: "armed" });
+  assert.deepEqual(await arm(29_999), { outcome: "expired" });
 });
 
 test("OAuth state rejects replacement and expires through its alarm", async (context) => {
   let now = 1_800_000_000_000;
   context.mock.method(Date, "now", () => now);
-  const { store } = makeStore();
-  const request = (body: string) => new Request("https://oauth-state.internal/state", {
-    method: "PUT",
-    body,
-  });
+  const { store, state } = makeStore();
 
-  assert.equal((await store.fetch(request("first"))).status, 204);
-  assert.equal((await store.fetch(request("replacement"))).status, 409);
+  assert.equal(await putState(store, "first"), 204);
+  assert.equal(await putState(store, "replacement"), 409);
 
   await store.alarm();
-  assert.equal(
-    (await store.fetch(new Request("https://oauth-state.internal/consume", { method: "POST" }))).status,
-    200,
-    "an early alarm must not shorten the stored envelope TTL",
-  );
+  const early = await stateJson(store, "/reserve");
+  assert.equal(early.outcome, "reserved", "an early alarm must not shorten the stored state TTL");
+  assert.equal(early.payload, "first");
+  assert.equal((await store.fetch(stateRequest("/release", { leaseId: early.leaseId, outcome: "clean" }))).status, 204);
 
-  assert.equal((await store.fetch(request("second"))).status, 204);
   now += 600_000;
   await store.alarm();
-  assert.equal(
-    (await store.fetch(new Request("https://oauth-state.internal/consume", { method: "POST" }))).status,
-    404,
-  );
+  assert.equal(state.storage.values.size, 0, "an expired state with nothing to reconcile is deleted");
+  assert.deepEqual(await stateJson(store, "/reserve"), { outcome: "missing" });
+  assert.equal(await putState(store, "second"), 204);
 });
 
 test("OAuth state enforces its TTL when the alarm is delayed, including the exact boundary", async (context) => {
@@ -199,53 +303,84 @@ test("OAuth state enforces its TTL when the alarm is delayed, including the exac
   context.mock.method(Date, "now", () => now);
 
   const beforeBoundary = makeStore();
-  assert.equal((await beforeBoundary.store.fetch(new Request(
-    "https://oauth-state.internal/state",
-    { method: "PUT", body: "before-boundary" },
-  ))).status, 204);
+  assert.equal(await putState(beforeBoundary.store, "before-boundary"), 204);
   assert.deepEqual(beforeBoundary.state.storage.values.get("oauth_request"), {
-    version: 1,
+    version: 2,
+    status: "pending",
     payload: "before-boundary",
     expiresAtMs: t0 + 600_000,
+    attempts: 0,
+    unreconciled: [],
   });
   now = t0 + 599_999;
-  const accepted = await beforeBoundary.store.fetch(new Request(
-    "https://oauth-state.internal/consume",
-    { method: "POST" },
-  ));
-  assert.equal(accepted.status, 200);
-  assert.equal(await accepted.text(), "before-boundary");
+  const accepted = await stateJson(beforeBoundary.store, "/reserve");
+  assert.equal(accepted.outcome, "reserved");
+  assert.equal(accepted.payload, "before-boundary");
 
   now = t0;
   const atBoundary = makeStore();
-  assert.equal((await atBoundary.store.fetch(new Request(
-    "https://oauth-state.internal/state",
-    { method: "PUT", body: "at-boundary" },
-  ))).status, 204);
+  assert.equal(await putState(atBoundary.store, "at-boundary"), 204);
   now = t0 + 600_000;
-  const expired = await atBoundary.store.fetch(new Request(
-    "https://oauth-state.internal/consume",
-    { method: "POST" },
-  ));
-  assert.equal(expired.status, 404, "Date.now() === expiresAtMs must be expired");
+  assert.deepEqual(
+    await stateJson(atBoundary.store, "/reserve"),
+    { outcome: "expired" },
+    "Date.now() === expiresAtMs must be expired",
+  );
   assert.equal(atBoundary.state.storage.values.size, 0);
 });
 
-test("OAuth state rejects a malformed stored envelope instead of returning attacker-shaped data", async () => {
+test("OAuth state still reads a pre-lease envelope written by an earlier Worker", async () => {
   const { store, state } = makeStore();
+  await state.storage.put("oauth_request", {
+    version: 1,
+    payload: "legacy-request",
+    expiresAtMs: Date.now() + 60_000,
+  });
+  const lease = await stateJson(store, "/reserve");
+  assert.equal(lease.outcome, "reserved");
+  assert.equal(lease.payload, "legacy-request");
+  assert.equal(lease.attempt, 1);
+});
+
+test("OAuth state rejects a malformed stored record instead of returning attacker-shaped data", async () => {
+  const { store, state } = makeStore();
+  const uuid = "00000000-0000-4000-8000-000000000000";
+  const expiresAtMs = Date.now() + 60_000;
   for (const malformed of [
     "legacy-raw-payload",
-    { version: 1, payload: "x", expiresAtMs: Date.now() + 60_000, extra: true },
+    { version: 1, payload: "x", expiresAtMs, extra: true },
     { version: 1, payload: "x", expiresAtMs: 1.5 },
-    { version: 2, payload: "x", expiresAtMs: Date.now() + 60_000 },
+    { version: 2, payload: "x", expiresAtMs },
+    { version: 2, status: "pending", payload: "x", expiresAtMs, attempts: 6, unreconciled: [] },
+    {
+      version: 2,
+      status: "pending",
+      payload: "x",
+      expiresAtMs,
+      attempts: 0,
+      unreconciled: [],
+      lease: { leaseId: uuid, correlationId: uuid, expiresAtMs },
+    },
+    { version: 2, status: "committed", payload: "x", expiresAtMs, attempts: 1, unreconciled: [], committedLeaseId: uuid },
   ]) {
     await state.storage.put("oauth_request", malformed);
-    const response = await store.fetch(new Request(
-      "https://oauth-state.internal/consume",
-      { method: "POST" },
-    ));
-    assert.equal(response.status, 404);
+    assert.deepEqual(await stateJson(store, "/reserve"), { outcome: "missing" });
     assert.equal(state.storage.values.size, 0);
+  }
+});
+
+test("OAuth state lease endpoints reject malformed bodies", async () => {
+  const { store } = makeStore();
+  assert.equal(await putState(store, "request"), 204);
+  const lease = await stateJson(store, "/reserve");
+  for (const [path, body] of [
+    ["/attempt", { leaseId: lease.leaseId, uid: "firebase-user" }],
+    ["/attempt", { leaseId: "not-a-uuid", uid: "firebase-user", reconciled: [] }],
+    ["/attempt", { leaseId: lease.leaseId, uid: "firebase-user", reconciled: ["x"] }],
+    ["/commit", { leaseId: lease.leaseId, extra: true }],
+    ["/release", { leaseId: lease.leaseId, outcome: "maybe" }],
+  ] as const) {
+    assert.equal((await store.fetch(stateRequest(path, body))).status, 400, `${path} ${JSON.stringify(body)}`);
   }
 });
 
@@ -392,6 +527,9 @@ test("cleanup survives restart, remembers partial ACKs, and retries until both a
     async revokeBackend(): Promise<boolean> {
       backendAttempts += 1;
       return backendAttempts >= 3;
+    },
+    async revokeBackendCorrelation(): Promise<boolean> {
+      throw new Error("state reconciliation is not part of token-family cleanup");
     },
   };
   const firstProcess = makeStore({ cleanupAuthorities });

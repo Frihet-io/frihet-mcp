@@ -17,6 +17,13 @@ creation, expense creation, and the product catalogue. Negative cases verify
 that payroll/HR execution, banking records, and Peppol delivery-receipt or
 regulated e-invoice submission tracking do not invoke Frihet.
 
+`npm run generate:openai-submission` maps those same cases into the portable
+plugin's `extensions.com.openai.review.test_cases`; `npm run package:openai-plugin`
+builds the uploadable ZIP. Package tests verify case parity and tool membership,
+not live outcomes. Each case still needs actual execution with the dedicated
+review account in ChatGPT web and mobile before submission; no recording URL
+is generated or invented.
+
 Load-bearing automated coverage verifies:
 
 - the exact 33 tool names, descriptions, schemas, annotations, and OAuth metadata;

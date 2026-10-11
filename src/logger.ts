@@ -246,11 +246,12 @@ export function logRetry(
   _path: string,
   retryCount: number,
   delayMs: number,
+  delaySource?: "retry_after" | "backoff",
 ): void {
   log({
     level: "warn",
     message: "MCP API retry scheduled",
     operation: "api_retry",
-    metadata: { method, retryCount: retryCount + 1, delayMs },
+    metadata: { method, retryCount: retryCount + 1, delayMs, delaySource },
   });
 }

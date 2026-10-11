@@ -32,7 +32,11 @@ import { z } from "zod/v4";
 import { correctToolAnnotations } from "./capability-truth.js";
 import { MCP_RESOURCE_COUNT } from "./resources/register-all.js";
 import { SENSITIVE_FIELD_NAMES, deepRedact, redactText } from "./redaction.js";
-import { FRIHET_CONNECTOR_SCOPE } from "./openai-review-oauth.js";
+import {
+  buildOpenAIUnauthorizedChallenge,
+  hasExactOpenAIReviewScopes,
+  OPENAI_REVIEW_OAUTH_SCOPES,
+} from "./openai-review-oauth.js";
 
 /* ------------------------------------------------------------------ */
 /*  Profile definition                                                 */
@@ -58,6 +62,14 @@ interface OpenAIProfile {
   /** Field names to redact from ALL tool outputs */
   redactOutputFields: readonly string[];
 }
+
+const REVIEWED_INVOICE_EVIDENCE_BOUNDARY =
+  " Returns internal invoice records only. Invoice status and issue date do not prove external submission or delivery. " +
+  "Do not call this tool to check Peppol delivery receipts, EN 16931 validation results, or e-invoicing transmission or acceptance status. " +
+  "If the request only concerns that unavailable evidence, explain the limitation without invoking Frihet tools. " +
+  "/ Devuelve solo registros internos de facturas. El estado y la fecha de emision no prueban la presentacion o entrega externa. " +
+  "No invoques esta herramienta para comprobar acuses de entrega Peppol, resultados de validacion EN 16931 ni estados de transmision o aceptacion de facturacion electronica. " +
+  "Si la solicitud solo trata de esas evidencias no disponibles, explica la limitacion sin invocar herramientas de Frihet.";
 
 const PROFILE: OpenAIProfile = {
   // -- OpenAI-reviewed core surface ----------------------------------------
@@ -167,10 +179,28 @@ const PROFILE: OpenAIProfile = {
       "/ Obtiene un contexto conciso del espacio de trabajo sin identificadores oficiales, " +
       "direcciones precisas ni datos de declaraciones reguladas.",
 
+    list_invoices:
+      "List all invoices with optional pagination and filters. " +
+      "Returns a paginated list sorted by issue date (newest first). " +
+      "Supports filtering by status (draft/sent/paid/overdue/cancelled) and date range. " +
+      "Example: status='paid', from='2026-01-01', to='2026-03-31', limit=20 " +
+      "/ Lista facturas con paginacion y filtros opcionales. " +
+      "Soporta filtrado por estado y rango de fechas." +
+      REVIEWED_INVOICE_EVIDENCE_BOUNDARY,
+
     get_invoice:
       "Get one invoice by ID with its stored line items, linked-client context, dates, and status. " +
       "The response contains only stored document fields; a calculated total may be absent. " +
-      "/ Obtiene una factura por ID con sus campos almacenados; el total calculado puede no estar presente.",
+      "/ Obtiene una factura por ID con sus campos almacenados; el total calculado puede no estar presente." +
+      REVIEWED_INVOICE_EVIDENCE_BOUNDARY,
+
+    search_invoices:
+      "Search and filter invoices. Supports filtering by status and date range. " +
+      "The query parameter searches across client names and invoice content. " +
+      "Example: query='Acme', status='paid', from='2026-01-01', to='2026-03-31' " +
+      "/ Busca y filtra facturas. Soporta filtrado por estado y rango de fechas. " +
+      "El parametro query busca en nombres de clientes y contenido de facturas." +
+      REVIEWED_INVOICE_EVIDENCE_BOUNDARY,
 
     get_quote:
       "Get one quote by ID with its stored line items, linked-client context, dates, and status. " +
@@ -289,6 +319,7 @@ const PROFILE: OpenAIProfile = {
       "documentNumber",
       "poNumber",
       "operationType",
+      "fiscalTreatment",
     ],
     create_quote: [
       "clientId",
@@ -359,7 +390,7 @@ const PROFILE: OpenAIProfile = {
 
 /** OAuth requirement advertised on every reviewed business tool. */
 export const OPENAI_OAUTH_SECURITY_SCHEMES = [
-  { type: "oauth2" as const, scopes: [FRIHET_CONNECTOR_SCOPE] },
+  { type: "oauth2" as const, scopes: [...OPENAI_REVIEW_OAUTH_SCOPES] },
 ] as const;
 
 /**
@@ -492,8 +523,7 @@ function installOpenAIToolsListSecurityProjection(server: any): void {
             || !isRecord(schemes[0])
             || schemes[0].type !== "oauth2"
             || !Array.isArray(schemes[0].scopes)
-            || schemes[0].scopes.length !== 1
-            || schemes[0].scopes[0] !== FRIHET_CONNECTOR_SCOPE
+            || !hasExactOpenAIReviewScopes(schemes[0].scopes)
           ) {
             throw new Error(
               `OpenAI tool ${String(tool.name)} is missing the reviewed OAuth scope`,
@@ -502,7 +532,7 @@ function installOpenAIToolsListSecurityProjection(server: any): void {
 
           const securitySchemes = [{
             type: "oauth2",
-            scopes: [FRIHET_CONNECTOR_SCOPE],
+            scopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
           }];
           const descriptionSources = schemaDescriptions.get(tool.name);
           if (!descriptionSources) {
@@ -1608,6 +1638,15 @@ export function applyOpenAIProfile(server: any): void {
         };
       }
       const result = await handler(handlerInput);
+
+      if (
+        result.isError === true
+        && result._meta?.["io.frihet/authenticationRequired"] === true
+      ) {
+        result._meta = {
+          "mcp/www_authenticate": [buildOpenAIUnauthorizedChallenge()],
+        };
+      }
 
       // A transport/body failure, a 5xx, or an idempotency-in-progress response
       // after a write was sent is ambiguous: the backend may have committed it

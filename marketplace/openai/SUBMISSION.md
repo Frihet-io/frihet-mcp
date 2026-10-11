@@ -1,15 +1,19 @@
 # OpenAI-reviewed public contract
 
-Release `1.16.6` is the frozen candidate for this separately reviewed MCP
-surface:
+The next independently reviewed release candidate (not yet deployed from this
+source change) has this MCP contract:
 
+- Release `1.16.6`;
 - portal Identity `Business — Frihet` and Plugin Author `Frihet`, matching
   the Frihet trade name; the live website, connector privacy/support,
   submission-description, terms, and JSON-LD surfaces must preserve the legal
   ownership chain to controller and operator `VICTOR BERTHELIUS PATO`;
 - endpoint `https://openai-mcp.frihet.io/mcp`;
-- OAuth issuer/resource `https://openai-mcp.frihet.io` and sole scope
-  `frihet:workspace.manage`;
+- OAuth issuer/resource `https://openai-mcp.frihet.io` and exact scopes
+  `openid email frihet:workspace.manage`;
+- OpenID discovery plus protected UserInfo returning only `sub`, `email`, and
+  verified `email_verified: true`; the candidate does not advertise RFC 9207
+  authorization-response issuer support;
 - exactly 33 reviewed business operations with complete descriptions and no
   discovery meta-tools;
 - 0 prompts and 0 resources;
@@ -52,14 +56,41 @@ if the subsequent expense write fails. Expense updates cannot change
 the amount or linked supplier identity.
 
 The exact `tools/list` descriptor is pinned in
-`src/__tests__/fixtures/openai-review-descriptor.snapshot.json`. The uploadable
-provider form is generated, never hand-maintained:
+`src/__tests__/fixtures/openai-review-descriptor.snapshot.json`. The legacy
+provider form and portable plugin manifests are generated, never hand-maintained:
 
 ```bash
 npm run generate:openai-submission
 npm run gate:openai-review-descriptor
 npm run gate:openai-submission
+npm run package:openai-plugin
 ```
+
+The last command requires Python 3 (standard library only) and creates
+`marketplace/openai/dist/frihet-1.0.1.zip`, with an unpacked copy in
+`marketplace/openai/dist/openai-plugin/`. These outputs stay outside npm's root
+`dist/` publish surface. The ZIP contains root `plugin.json`, root `mcp.json` and
+the three existing PNG assets only. Its file order, timestamps and permissions
+are fixed. Its version `1.0.1` is independent of the hosted MCP release.
+
+Submit it as a new plugin named `frihet`: **Upload new or existing plugin**,
+verified identity **Business — Frihet**. The legacy record
+`plugin_asdk_app_69b6147ce32c81918680c89bfa7c9b36` stays unpublished and is not
+updated: its exported package has no MCP server, and adding an MCP server to an
+existing plugin without one is not supported
+(https://developers.openai.com/plugins/deploy/submission). Later updates must
+keep the package name `frihet`.
+
+The package supplies the English listing, Spanish translation, three read-only
+starter prompts, five positive and three negative review cases, release notes,
+Spain-only availability and the exact reviewed MCP endpoint. It omits
+`demo_recording_url` until a real recording exists. Credentials and reviewer
+sign-in instructions belong only in the secure dashboard form. These local
+checks validate packaging; all eight cases still require actual execution in
+ChatGPT web and mobile against the deployed review candidate before submission.
+
+Format and limits: [OpenAI plugin submission](https://developers.openai.com/plugins/deploy/submission#automatically-provide-submission-and-review-information)
+and [plugin guidelines](https://developers.openai.com/plugins/plugin-guidelines).
 
 Do not infer this capability set from the full MCP catalogue. Operational
 submission steps, reviewer credentials, CAPTCHA handling, provider
@@ -72,7 +103,7 @@ that portal option does not exist in the verified 2026-09-04 draft. A different
 Identity/author, an Individual identity, or a draft whose public owner
 evidence is not yet live is not eligible for submission.
 
-Enter the manual portal fields exactly as follows after those URLs are live:
+Confirm the selected identity and package-imported fields after those URLs are live:
 
 - Identity: `Business — Frihet`;
 - Plugin Author: `Frihet`;
@@ -88,9 +119,11 @@ Enter the manual portal fields exactly as follows after those URLs are live:
   keep customer data, credentials, tokens, and private release evidence out of
   the recording.
 
-The upload schema cannot populate these ownership, URL, contact, or recording
-fields, so schema validation of `chatgpt-app-submission.json` is not evidence
-that the portal values are complete.
+The portable ZIP populates ownership text, public URLs and contact metadata;
+the legacy `chatgpt-app-submission.json` schema does not. A real recording URL
+can be supplied through `extensions.com.openai.review.demo_recording_url` or
+the dashboard when the package omits it. Neither package validation nor upload
+proves that reviewer access, live behavior or required review materials are complete.
 
 Use the checked-in 512 px PNG assets for the portal previews; do not export or
 resize them during submission:

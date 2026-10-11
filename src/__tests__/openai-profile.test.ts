@@ -1195,6 +1195,35 @@ describe("OpenAI profile", () => {
     assert.equal(result._meta?.["io.frihet/operationMayHaveCompleted"], true);
   });
 
+  test("backend 401 emits only the sanitized OpenAI reauthorization challenge", async () => {
+    const client = new Proxy({}, {
+      get: () => async () => {
+        throw new FrihetApiError(
+          401,
+          "network_error",
+          "provider body with bearer secret-should-not-leak",
+        );
+      },
+    }) as IFrihetClient;
+    const server = new StubMcpServer();
+    applyOpenAIProfile(server);
+    registerAllTools(
+      server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
+      client,
+    );
+
+    const result = await server.tools.get("list_invoices")!.handler({});
+    assert.equal(result.isError, true);
+    assert.deepEqual(Object.keys(result._meta ?? {}), ["mcp/www_authenticate"]);
+    const challenge = result._meta?.["mcp/www_authenticate"];
+    assert.ok(Array.isArray(challenge));
+    assert.equal(challenge.length, 1);
+    assert.match(String(challenge[0]), /resource_metadata=/u);
+    assert.match(String(challenge[0]), /scope="openid email frihet:workspace\.manage"/u);
+    assert.doesNotMatch(JSON.stringify(result), /secret-should-not-leak/u);
+    assert.equal(result._meta?.["io.frihet/authenticationRequired"], undefined);
+  });
+
   test("create_expense ambiguity discloses that a separately created vendor may remain", async () => {
     const client = new Proxy({}, {
       get: (_target, prop) => async () => {

@@ -251,11 +251,66 @@ function normalizedBinding(binding) {
   }
 }
 
-export function cloudflareTopology(versionView) {
+function versionExports(resources, bindings, { durableObjectNamespacesView, workerName } = {}) {
+  const exports = resources.script_runtime?.exports ?? {};
+  if (!Object.hasOwn(resources.script ?? {}, "named_handlers")) return {
+    workerEntrypoints: Object.entries(exports).filter(([, value]) => value?.type === "worker")
+      .map(([name]) => name).sort(),
+    durableObjectExports: Object.entries(exports).filter(([, value]) => value?.type === "durable-object")
+      .map(([className, value]) => ({ className, state: value.state ?? "created", storage: value.storage ?? "" }))
+      .sort((left, right) => left.className.localeCompare(right.className)),
+    unexpectedExports: Object.entries(exports).filter(([, value]) => !["worker", "durable-object"].includes(value?.type))
+      .map(([name, value]) => ({ name, type: value?.type ?? "" })).sort((left, right) => left.name.localeCompare(right.name)),
+  };
+
+  const unexpectedExports = [];
+  const namedHandlers = Array.isArray(resources.script.named_handlers) ? resources.script.named_handlers : [];
+  if (!Array.isArray(resources.script.named_handlers)) unexpectedExports.push({ name: "named_handlers", type: "invalid" });
+  if (Object.hasOwn(resources.script_runtime ?? {}, "exports")) {
+    unexpectedExports.push({ name: "exports", type: "mixed-export-schemas" });
+  }
+  // Class handlers prove the exported classes; only the separately captured
+  // namespace API proves their actual identity and SQLite storage. A migration
+  // tag or local config is never substituted for that authenticated readback.
+  const view = durableObjectNamespacesView;
+  const complete = view?.success === true && Array.isArray(view.result) && view.result_info?.page === 1
+    && view.result_info.count === view.result.length && view.result_info.total_count === view.result.length;
+  const namespaces = complete ? view.result : [];
+  const durableBindings = bindings.filter((binding) => binding.type === "durable_object_namespace");
+  const workerNamespaces = namespaces.filter((namespace) => namespace?.script === workerName);
+  if (!complete || workerNamespaces.length !== durableBindings.length || workerNamespaces.some((namespace) =>
+    !durableBindings.some((binding) => binding.namespaceId === namespace.id && binding.className === namespace.class))) {
+    unexpectedExports.push({ name: "namespaces", type: "unverified-namespace-set" });
+  }
+  const durableObjectExports = [];
+  const seen = new Set();
+  for (const entry of namedHandlers) {
+    const className = entry?.name ?? "";
+    if (typeof className !== "string" || !className || !same(entry?.handlers, ["class"]) || seen.has(className)) {
+      unexpectedExports.push({ name: String(className), type: "invalid-named-handler" });
+      continue;
+    }
+    seen.add(className);
+    const matchingBindings = durableBindings.filter((binding) => binding.className === className && binding.scriptName === null);
+    const matchingNamespaces = matchingBindings.length === 1
+      ? namespaces.filter((namespace) => namespace?.id === matchingBindings[0].namespaceId) : [];
+    const namespace = matchingNamespaces.length === 1 && matchingNamespaces[0].script === workerName
+      && matchingNamespaces[0].class === className && NAMESPACE_PATTERN.test(matchingNamespaces[0].id)
+      ? matchingNamespaces[0] : undefined;
+    durableObjectExports.push({ className, state: namespace ? "created" : "",
+      storage: namespace?.use_sqlite === true ? "sqlite" : namespace?.use_sqlite === false ? "legacy-kv" : "" });
+  }
+  return {
+    workerEntrypoints: Array.isArray(resources.script.handlers) && resources.script.handlers.includes("fetch") ? ["default"] : [],
+    durableObjectExports: durableObjectExports.sort((left, right) => left.className.localeCompare(right.className)),
+    unexpectedExports: unexpectedExports.sort((left, right) => left.name.localeCompare(right.name)),
+  };
+}
+
+export function cloudflareTopology(versionView, options = {}) {
   const resources = versionView?.resources ?? {};
   const bindings = Array.isArray(resources.bindings) ? resources.bindings.map(normalizedBinding) : [];
   const byType = (type) => bindings.filter((binding) => binding.type === type);
-  const exports = resources.script_runtime?.exports ?? {};
   const publicVars = Object.fromEntries(byType("plain_text").map((binding) => [binding.binding, binding.value])
     .filter(([name]) => !["RELEASE_SOURCE_SHA", "RELEASE_VERSION"].includes(name))
     .sort(([left], [right]) => left.localeCompare(right)));
@@ -265,13 +320,7 @@ export function cloudflareTopology(versionView) {
     compatibilityFlags: [...(resources.script_runtime?.compatibility_flags ?? [])].sort(),
     migrationTag: resources.script_runtime?.migration_tag ?? "",
     handlers: [...(resources.script?.handlers ?? [])].sort(),
-    workerEntrypoints: Object.entries(exports).filter(([, value]) => value?.type === "worker")
-      .map(([name]) => name).sort(),
-    durableObjectExports: Object.entries(exports).filter(([, value]) => value?.type === "durable-object")
-      .map(([className, value]) => ({ className, state: value.state ?? "created", storage: value.storage ?? "" }))
-      .sort((left, right) => left.className.localeCompare(right.className)),
-    unexpectedExports: Object.entries(exports).filter(([, value]) => !["worker", "durable-object"].includes(value?.type))
-      .map(([name, value]) => ({ name, type: value?.type ?? "" })).sort((left, right) => left.name.localeCompare(right.name)),
+    ...versionExports(resources, bindings, options),
     durableObjects: byType("durable_object_namespace").map(({ type: _type, ...binding }) => binding)
       .sort((left, right) => left.binding.localeCompare(right.binding)),
     kvNamespaces: byType("kv_namespace").map(({ type: _type, ...binding }) => binding)
@@ -448,7 +497,7 @@ function validateNetworkSurface(contract, { zoneView, routesView, subdomainView 
 }
 
 export function validateCompatibleVersion(contract, versionView, options) {
-  const topology = cloudflareTopology(versionView);
+  const topology = cloudflareTopology(versionView, options);
   const provenance = versionProvenance(versionView);
   const deployment = deploymentProjection(options.deploymentView);
   return [...new Set([
@@ -535,7 +584,7 @@ export function createJitPrestate(
   snapshotStartedAt = new Date(),
   observedAt = new Date(),
 ) {
-  const topology = cloudflareTopology(observations.versionView);
+  const topology = cloudflareTopology(observations.versionView, observations);
   const provenance = versionProvenance(observations.versionView);
   const deployment = deploymentProjection(observations.deploymentView);
   const zone = zoneProjection(observations.zoneView);
@@ -620,7 +669,7 @@ function validateJitAgainstAnchor(contract, jit, now = new Date()) {
 
 export function validateEstablishedBaseline(contract, observations) {
   const { deploymentView, versionView, health, now = new Date() } = observations;
-  const topology = cloudflareTopology(versionView);
+  const topology = cloudflareTopology(versionView, observations);
   const provenance = versionProvenance(versionView);
   const liveZone = zoneProjection(observations.zoneView);
   const liveRoutes = routeProjection(observations.routesView, contract.workerName);
@@ -654,7 +703,7 @@ export function validateEstablishedBaseline(contract, observations) {
 }
 
 export function validateRecoveryTarget(contract, versionView, options) {
-  const topology = cloudflareTopology(versionView);
+  const topology = cloudflareTopology(versionView, options);
   const provenance = versionProvenance(versionView);
   const liveZone = zoneProjection(options.zoneView);
   const liveRoutes = routeProjection(options.routesView, contract.workerName);
@@ -740,6 +789,8 @@ function requiredJson(flag, errors) {
 
 function observationInputs(errors) {
   return {
+    durableObjectNamespacesView: arg("--durable-object-namespaces")
+      ? requiredJson("--durable-object-namespaces", errors) : undefined,
     deploymentView: requiredJson("--active-deployment", errors),
     versionView: requiredJson("--live-version", errors),
     health: requiredJson("--health", errors),
@@ -757,6 +808,8 @@ function runCli() {
   const toml = readFileSync(configPath, "utf8");
   const contract = JSON.parse(readFileSync(contractPath, "utf8"));
   const errors = validateConfigAgainstContract(toml, contract);
+  const durableObjectNamespacesView = arg("--durable-object-namespaces")
+    ? requiredJson("--durable-object-namespaces", errors) : undefined;
   const snapshotStartOutput = arg("--write-snapshot-start");
   const jitOutput = arg("--write-jit-prestate");
   const snapshotStartedAtFile = arg("--snapshot-started-at-file");
@@ -780,6 +833,7 @@ function runCli() {
   if (process.argv.includes("--require-compatible")) {
     const versionView = requiredJson("--live-version", errors);
     errors.push(...validateCompatibleVersion(contract, versionView, {
+      durableObjectNamespacesView,
       sourceSha: arg("--expected-source-sha"), sourceVersion: arg("--expected-source-version"),
       deploymentView: requiredJson("--active-deployment", errors),
       accountId: arg("--account-id"), workerName: arg("--worker-name"), environment: arg("--environment"),
@@ -788,6 +842,7 @@ function runCli() {
   if (process.argv.includes("--require-recovery-target")) {
     const versionView = requiredJson("--live-version", errors);
     errors.push(...validateRecoveryTarget(contract, versionView, {
+      durableObjectNamespacesView,
       identityView: requiredJson("--identity", errors), zoneView: requiredJson("--zone", errors),
       routesView: requiredJson("--routes", errors), subdomainView: requiredJson("--subdomain", errors),
       accountId: arg("--account-id"), workerName: arg("--worker-name"), environment: arg("--environment"),

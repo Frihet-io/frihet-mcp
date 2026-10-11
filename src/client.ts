@@ -12,6 +12,7 @@
  * is never sent on the wire. See src/__tests__/pagination-cursor-param.test.ts.
  */
 
+import { rejectRedirectResponse } from "./fetch-no-redirect.js";
 import type {
   ApiError,
   CreateWebhookInput,
@@ -22,19 +23,18 @@ import type {
 } from "./types.js";
 import { safeRequestId, sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
+import { parseRetryAfter } from "./retry-after.js";
 import { fiscalModeloQuery } from "./fiscal-period.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
-const OAUTH_CLOUD_FUNCTION_BASE_URL =
-  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api/v1";
-const OAUTH_SERVICE_TRUSTED_BASE_URLS = new Set([
-  BASE_URL,
-  OAUTH_CLOUD_FUNCTION_BASE_URL,
-]);
 
 const MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 const REQUEST_TIMEOUT_MS = 30000;
+/** Total time one logical call may spend sleeping on 429s before it is deferred to the caller. */
+const RETRY_BUDGET_MS = 30000;
+/** setTimeout fires immediately above this (32-bit signed); a larger wait must defer, never sleep. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /**
  * Hard size caps for document responses. Enforced TWICE: precheck on
@@ -397,18 +397,23 @@ export interface FrihetClientOptions {
    */
   timeoutMs?: number;
   /**
-   * Internal second factor for API keys provisioned by Frihet OAuth Workers.
-   * Ordinary dashboard/API keys must omit it. The value is sent only to the
-   * already-normalized API origin and is never included in logs or errors.
+   * Cumulative time one call may sleep across 429 retries. A server-requested
+   * wait that does not fit is never shortened: the call fails with a
+   * `rate_limit_deferred` error carrying the wait to honor. Defaults to 30000.
    */
-  oauthServiceSecret?: string;
+  retryBudgetMs?: number;
+  /** Test seams: timer and wall clock used for 429 waits. */
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
 }
 
 export class FrihetClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
-  private readonly oauthServiceSecret?: string;
+  private readonly retryBudgetMs: number;
+  private readonly sleepFn: (ms: number) => Promise<void>;
+  private readonly nowFn: () => number;
 
   constructor(apiKey: string, baseUrl?: string, options?: FrihetClientOptions) {
     if (!apiKey) {
@@ -420,22 +425,14 @@ export class FrihetClient {
     this.apiKey = apiKey;
     this.baseUrl = resolvedBaseUrl;
     this.timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
-    if (options?.oauthServiceSecret !== undefined) {
-      if (
-        new TextEncoder().encode(options.oauthServiceSecret).byteLength < 32
-        || /[\r\n\0]/u.test(options.oauthServiceSecret)
-      ) {
-        throw new Error("OAuth API-key service authentication is not configured");
-      }
-      // A dashboard/API-key caller may still use a custom API base. The
-      // internal OAuth second factor may not: pin its authority at the sink so
-      // a future caller cannot exfiltrate both credentials by changing only
-      // constructor input while leaving the approved fetch fingerprint intact.
-      if (!OAUTH_SERVICE_TRUSTED_BASE_URLS.has(resolvedBaseUrl)) {
-        throw new Error("OAuth API-key service authority is not trusted");
-      }
-      this.oauthServiceSecret = options.oauthServiceSecret;
-    }
+    const budget = options?.retryBudgetMs;
+    // NaN/negative would make every `> budget` comparison pass or fail silently.
+    this.retryBudgetMs =
+      typeof budget === "number" && Number.isFinite(budget) && budget >= 0
+        ? Math.min(budget, MAX_TIMER_MS)
+        : RETRY_BUDGET_MS;
+    this.sleepFn = options?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.nowFn = options?.now ?? Date.now;
   }
 
   // ------------------------------------------------------------------ HTTP
@@ -448,6 +445,7 @@ export class FrihetClient {
     query?: Record<string, string | number | undefined>,
     retryCount = 0,
     idempotencyKey?: string,
+    waitedMs = 0,
   ): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
 
@@ -475,9 +473,6 @@ export class FrihetClient {
       "X-Frihet-Source": SOURCE_MARKER,
       "User-Agent": SOURCE_USER_AGENT,
     };
-    if (this.oauthServiceSecret) {
-      headers["x-frihet-oauth-key"] = this.oauthServiceSecret;
-    }
 
     if (resolvedIdempotencyKey) {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
@@ -491,11 +486,11 @@ export class FrihetClient {
     try {
       response = await fetch(url.toString(), {
         method,
+        redirect: "manual",
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
-        redirect: "error",
-      });
+      }).then(rejectRedirectResponse);
     } catch (error) {
       clearTimeout(timeoutId);
       const durationMs = Math.round(Date.now() - startTime);
@@ -530,13 +525,18 @@ export class FrihetClient {
         );
       }
 
-      const retryAfter = response.headers.get("Retry-After");
-      const delayMs = retryAfter
-        ? parseInt(retryAfter, 10) * 1000
-        : DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
+      // Release the discarded 429 body before waiting so the socket is freed.
+      // (requestDocument has already drained it in readBoundedBody.)
+      await response.body?.cancel().catch(() => undefined);
 
-      logRetry(method, path, retryCount, delayMs);
-      await this.sleep(delayMs);
+      const delayMs = this.rateLimitDelayMs(
+        response.headers.get("Retry-After"),
+        retryCount,
+        waitedMs,
+        method,
+        path,
+      );
+      await this.sleepFn(delayMs);
       return this.request<T>(
         method,
         path,
@@ -544,6 +544,7 @@ export class FrihetClient {
         query,
         retryCount + 1,
         resolvedIdempotencyKey,
+        waitedMs + delayMs,
       );
     }
 
@@ -641,20 +642,17 @@ export class FrihetClient {
       "X-Frihet-Source": SOURCE_MARKER,
       "User-Agent": SOURCE_USER_AGENT,
     };
-    if (this.oauthServiceSecret) {
-      headers["x-frihet-oauth-key"] = this.oauthServiceSecret;
-    }
     if (resolvedIdempotencyKey) {
       headers["Idempotency-Key"] = resolvedIdempotencyKey;
     }
 
     return fetch(url.toString(), {
       method,
+      redirect: "manual",
       headers,
       body: body ? JSON.stringify(body) : undefined,
       signal,
-      redirect: "error",
-    });
+    }).then(rejectRedirectResponse);
   }
 
   /** Consume one response body without ever retaining more than `maxBytes`. */
@@ -740,6 +738,7 @@ export class FrihetClient {
     idempotencyKey: string | undefined,
     maxBytesForContentType: (contentType: string) => number,
     retryCount = 0,
+    waitedMs = 0,
   ): Promise<{ contentType: string; bytes: Uint8Array; sizeBytes: number; filename?: string }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -768,14 +767,15 @@ export class FrihetClient {
             "Rate limit exceeded after multiple retries. Please try again later.",
           );
         }
-        const retryAfter = response.headers.get("Retry-After");
-        const parsedRetryAfter = retryAfter ? Number.parseInt(retryAfter, 10) : Number.NaN;
-        const delayMs = Number.isFinite(parsedRetryAfter)
-          ? parsedRetryAfter * 1000
-          : DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
-        logRetry(method, path, retryCount, delayMs);
         clearTimeout(timeoutId);
-        await this.sleep(delayMs);
+        const delayMs = this.rateLimitDelayMs(
+          response.headers.get("Retry-After"),
+          retryCount,
+          waitedMs,
+          method,
+          path,
+        );
+        await this.sleepFn(delayMs);
         return this.requestDocument(
           method,
           path,
@@ -784,6 +784,7 @@ export class FrihetClient {
           idempotencyKey,
           maxBytesForContentType,
           retryCount + 1,
+          waitedMs + delayMs,
         );
       }
 
@@ -839,8 +840,32 @@ export class FrihetClient {
     }
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  /**
+   * Wait before the next 429 retry: the server's `Retry-After` when it parses
+   * (RFC 9110 §10.2.3), otherwise exponential backoff. Either wait that does
+   * not fit the remaining cumulative budget is deferred to the caller; a server
+   * wait is never shortened into an early retry.
+   */
+  private rateLimitDelayMs(
+    retryAfter: string | null,
+    retryCount: number,
+    waitedMs: number,
+    method: string,
+    path: string,
+  ): number {
+    const serverMs = parseRetryAfter(retryAfter, this.nowFn());
+    const delayMs = serverMs ?? DEFAULT_RETRY_DELAY_MS * Math.pow(2, retryCount);
+    if (waitedMs + delayMs > this.retryBudgetMs) {
+      throw new FrihetApiError(
+        429,
+        "rate_limit_deferred",
+        serverMs !== null
+          ? `Rate limited: the server asks to wait ${Math.ceil(serverMs / 1000)} seconds, which exceeds this operation's retry budget. Retry after that time; nothing was retried early.`
+          : "Rate limited: the next backoff wait exceeds this operation's retry budget. Retry later.",
+      );
+    }
+    logRetry(method, path, retryCount, delayMs, serverMs === null ? "backoff" : "retry_after");
+    return delayMs;
   }
 
   /**

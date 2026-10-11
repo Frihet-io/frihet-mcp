@@ -1,5 +1,5 @@
 {
-  "contractVersion": 6,
+  "contractVersion": 7,
   "oauth": {
     "authorizationServer": {
       "authorization_endpoint": "https://openai-mcp.frihet.io/authorize",
@@ -21,6 +21,8 @@
       ],
       "revocation_endpoint": "https://openai-mcp.frihet.io/token",
       "scopes_supported": [
+        "openid",
+        "email",
         "frihet:workspace.manage"
       ],
       "token_endpoint": "https://openai-mcp.frihet.io/token",
@@ -30,6 +32,39 @@
         "none"
       ]
     },
+    "openidConfiguration": {
+      "authorization_endpoint": "https://openai-mcp.frihet.io/authorize",
+      "code_challenge_methods_supported": [
+        "S256"
+      ],
+      "grant_types_supported": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "issuer": "https://openai-mcp.frihet.io",
+      "registration_endpoint": "https://openai-mcp.frihet.io/register",
+      "response_modes_supported": [
+        "query"
+      ],
+      "response_types_supported": [
+        "code"
+      ],
+      "scopes_supported": [
+        "openid",
+        "email",
+        "frihet:workspace.manage"
+      ],
+      "subject_types_supported": [
+        "public"
+      ],
+      "token_endpoint": "https://openai-mcp.frihet.io/token",
+      "token_endpoint_auth_methods_supported": [
+        "client_secret_basic",
+        "client_secret_post",
+        "none"
+      ],
+      "userinfo_endpoint": "https://openai-mcp.frihet.io/userinfo"
+    },
     "protectedResource": {
       "authorization_servers": [
         "https://openai-mcp.frihet.io"
@@ -38,15 +73,32 @@
         "header"
       ],
       "resource": "https://openai-mcp.frihet.io",
-      "resource_name": "Frihet ChatGPT connector",
+      "resource_name": "Frihet reviewed connector",
       "scopes_supported": [
+        "openid",
+        "email",
+        "frihet:workspace.manage"
+      ]
+    },
+    "protectedResourceMcp": {
+      "authorization_servers": [
+        "https://openai-mcp.frihet.io"
+      ],
+      "bearer_methods_supported": [
+        "header"
+      ],
+      "resource": "https://openai-mcp.frihet.io/mcp",
+      "resource_name": "Frihet reviewed connector",
+      "scopes_supported": [
+        "openid",
+        "email",
         "frihet:workspace.manage"
       ]
     },
     "providerPackageVersion": "0.3.0",
     "wwwAuthenticate": {
-      "missingTokenHeader": "Bearer realm=\"OAuth\", resource_metadata=\"https://openai-mcp.frihet.io/.well-known/oauth-protected-resource\", scope=\"frihet:workspace.manage\", error=\"invalid_token\", error_description=\"Missing or invalid access token\"",
-      "resourceMetadataUrl": "https://openai-mcp.frihet.io/.well-known/oauth-protected-resource"
+      "missingTokenHeader": "Bearer realm=\"OAuth\", resource_metadata=\"https://openai-mcp.frihet.io/.well-known/oauth-protected-resource/mcp\", scope=\"openid email frihet:workspace.manage\", error=\"invalid_token\", error_description=\"Missing or invalid access token\"",
+      "resourceMetadataUrl": "https://openai-mcp.frihet.io/.well-known/oauth-protected-resource/mcp"
     }
   },
   "prompts": [],
@@ -57,6 +109,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -142,6 +196,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -154,6 +210,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -255,6 +313,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -267,6 +327,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -333,6 +395,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -345,6 +409,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -462,6 +528,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -474,6 +542,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -673,6 +743,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -685,6 +757,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -779,6 +853,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -791,6 +867,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -992,6 +1070,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1004,6 +1084,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1082,6 +1164,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1094,6 +1178,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1160,6 +1246,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1172,6 +1260,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1238,6 +1328,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1250,6 +1342,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1361,6 +1455,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1373,6 +1469,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1666,6 +1764,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1678,6 +1778,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1738,6 +1840,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1750,6 +1854,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1823,6 +1929,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1835,6 +1943,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -1847,7 +1957,7 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Get one invoice by ID with its stored line items, linked-client context, dates, and status. The response contains only stored document fields; a calculated total may be absent. / Obtiene una factura por ID con sus campos almacenados; el total calculado puede no estar presente. [openWorldHint: false — it only reads the authenticated Frihet workspace.]",
+      "description": "Get one invoice by ID with its stored line items, linked-client context, dates, and status. The response contains only stored document fields; a calculated total may be absent. / Obtiene una factura por ID con sus campos almacenados; el total calculado puede no estar presente. Returns internal invoice records only. Invoice status and issue date do not prove external submission or delivery. Do not call this tool to check Peppol delivery receipts, EN 16931 validation results, or e-invoicing transmission or acceptance status. If the request only concerns that unavailable evidence, explain the limitation without invoking Frihet tools. / Devuelve solo registros internos de facturas. El estado y la fecha de emision no prueban la presentacion o entrega externa. No invoques esta herramienta para comprobar acuses de entrega Peppol, resultados de validacion EN 16931 ni estados de transmision o aceptacion de facturacion electronica. Si la solicitud solo trata de esas evidencias no disponibles, explica la limitacion sin invocar herramientas de Frihet. [openWorldHint: false — it only reads the authenticated Frihet workspace.]",
       "execution": {
         "taskSupport": "forbidden"
       },
@@ -1949,6 +2059,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -1961,6 +2073,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2025,6 +2139,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2037,6 +2153,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2154,6 +2272,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2166,6 +2286,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2223,6 +2345,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2235,6 +2359,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2335,6 +2461,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2347,6 +2475,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2450,6 +2580,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2462,6 +2594,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2553,6 +2687,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2565,6 +2701,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2668,6 +2806,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2680,6 +2820,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2803,6 +2945,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2815,6 +2959,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -2827,7 +2973,7 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "List all invoices with optional pagination and filters. Returns a paginated list sorted by issue date (newest first). Supports filtering by status (draft/sent/paid/overdue/cancelled) and date range. Example: status='paid', from='2026-01-01', to='2026-03-31', limit=20 / Lista facturas con paginacion y filtros opcionales. Soporta filtrado por estado y rango de fechas. [openWorldHint: false — it only reads the authenticated Frihet workspace.]",
+      "description": "List all invoices with optional pagination and filters. Returns a paginated list sorted by issue date (newest first). Supports filtering by status (draft/sent/paid/overdue/cancelled) and date range. Example: status='paid', from='2026-01-01', to='2026-03-31', limit=20 / Lista facturas con paginacion y filtros opcionales. Soporta filtrado por estado y rango de fechas. Returns internal invoice records only. Invoice status and issue date do not prove external submission or delivery. Do not call this tool to check Peppol delivery receipts, EN 16931 validation results, or e-invoicing transmission or acceptance status. If the request only concerns that unavailable evidence, explain the limitation without invoking Frihet tools. / Devuelve solo registros internos de facturas. El estado y la fecha de emision no prueban la presentacion o entrega externa. No invoques esta herramienta para comprobar acuses de entrega Peppol, resultados de validacion EN 16931 ni estados de transmision o aceptacion de facturacion electronica. Si la solicitud solo trata de esas evidencias no disponibles, explica la limitacion sin invocar herramientas de Frihet. [openWorldHint: false — it only reads the authenticated Frihet workspace.]",
       "execution": {
         "taskSupport": "forbidden"
       },
@@ -2951,6 +3097,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -2963,6 +3111,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3069,6 +3219,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3081,6 +3233,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3220,6 +3374,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3232,6 +3388,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3320,6 +3478,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3332,6 +3492,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3427,6 +3589,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3439,6 +3603,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3451,7 +3617,7 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Search and filter invoices. Supports filtering by status and date range. The query parameter searches across client names and invoice content. Example: query='Acme', status='paid', from='2026-01-01', to='2026-03-31' / Busca y filtra facturas. Soporta filtrado por estado y rango de fechas. El parametro query busca en nombres de clientes y contenido de facturas. [openWorldHint: false — it only reads the authenticated Frihet workspace.]",
+      "description": "Search and filter invoices. Supports filtering by status and date range. The query parameter searches across client names and invoice content. Example: query='Acme', status='paid', from='2026-01-01', to='2026-03-31' / Busca y filtra facturas. Soporta filtrado por estado y rango de fechas. El parametro query busca en nombres de clientes y contenido de facturas. Returns internal invoice records only. Invoice status and issue date do not prove external submission or delivery. Do not call this tool to check Peppol delivery receipts, EN 16931 validation results, or e-invoicing transmission or acceptance status. If the request only concerns that unavailable evidence, explain the limitation without invoking Frihet tools. / Devuelve solo registros internos de facturas. El estado y la fecha de emision no prueban la presentacion o entrega externa. No invoques esta herramienta para comprobar acuses de entrega Peppol, resultados de validacion EN 16931 ni estados de transmision o aceptacion de facturacion electronica. Si la solicitud solo trata de esas evidencias no disponibles, explica la limitacion sin invocar herramientas de Frihet. [openWorldHint: false — it only reads the authenticated Frihet workspace.]",
       "execution": {
         "taskSupport": "forbidden"
       },
@@ -3571,6 +3737,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3583,6 +3751,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3677,6 +3847,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3689,6 +3861,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3797,6 +3971,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3809,6 +3985,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -3909,6 +4087,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"
@@ -3921,6 +4101,8 @@
         "securitySchemes": [
           {
             "scopes": [
+              "openid",
+              "email",
               "frihet:workspace.manage"
             ],
             "type": "oauth2"
@@ -4005,6 +4187,8 @@
       "securitySchemes": [
         {
           "scopes": [
+            "openid",
+            "email",
             "frihet:workspace.manage"
           ],
           "type": "oauth2"

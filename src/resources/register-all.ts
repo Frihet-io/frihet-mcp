@@ -20,7 +20,12 @@ export const MCP_RESOURCE_COUNT = MCP_STATIC_RESOURCE_COUNT + MCP_DYNAMIC_RESOUR
 /*  Static data                                                        */
 /* ------------------------------------------------------------------ */
 
-const API_SCHEMA_SUMMARY = `Frihet ERP REST API — OpenAPI 3.1
+const API_SCHEMA_SUMMARY = `Frihet ERP REST API — Informational Reference Summary Snapshot
+=============================================================
+Notice: This resource is an informational, non-exhaustive reference snapshot
+of core REST endpoints for LLM context. The canonical, authoritative live
+contract is the OpenAPI 3.1 specification at https://api.frihet.io/v1/openapi.json.
+
 Base URL: https://api.frihet.io/v1
 Docs: https://docs.frihet.io/desarrolladores/api-reference
 
@@ -86,8 +91,18 @@ Content-Type: application/json
 Monetary values use the currency declared by each record; amounts are decimal major units.
 Dates in ISO 8601 format (YYYY-MM-DD or full datetime).`;
 
-const TAX_RATES = `Spanish Tax Rates by Fiscal Zone
-================================
+const TAX_RATES = `Spanish Tax Rates & Fiscal Zones — Informational Reference Schedule
+===================================================================
+Authority:
+  - Peninsula & Balearics (IVA): Ley 37/1992 del IVA (AEAT)
+  - Canary Islands (IGIC): Ley 20/1991 del IGIC (Agencia Tributaria Canaria)
+  - Ceuta & Melilla (IPSI): Ley 8/1991 del IPSI (Servicios Tributarios locales)
+  - Withholding (IRPF): Ley 35/2006 del IRPF (AEAT)
+  - EU Intra-community: Council Directive 2006/112/EC (Reverse Charge / OSS)
+
+Notice: This resource provides reference rate schedules and classification guidelines.
+It is NOT a dynamic tax engine. Transaction rates must be validated against the operation
+date, place of supply, and fiscal status. Server endpoints validate fiscal rules server-side.
 
 PENINSULA & BALEARIC ISLANDS — IVA (Impuesto sobre el Valor Añadido)
   General:    21%  — Most goods and services
@@ -129,8 +144,15 @@ SPECIAL REGIMES
   Simplified regime: Fixed quarterly quotas based on activity modules
   Agriculture: 12% / 10.5% flat-rate compensation`;
 
-const TAX_CALENDAR = `Spanish Quarterly Tax Calendar
-===============================
+const TAX_CALENDAR = `Spanish Tax Calendar — Statutory Filing Deadlines Reference
+===========================================================
+Authority: Calendario del Contribuyente (Agencia Tributaria AEAT / ATC)
+
+Notice: Informational reference of general quarterly and annual statutory filing
+deadlines in Spain. Deadlines shifting to next business day on weekends/holidays
+or direct-debit (domiciliación bancaria) advance deadlines (typically 5 days earlier)
+are not modeled here. Always verify filing dates with your gestoría or official
+AEAT/ATC electronic office.
 
 All deadlines apply to the corresponding fiscal quarter unless noted.
 
@@ -178,8 +200,15 @@ KEY DATES SUMMARY
   Jan 30 — Q4 filings + annual summaries (390, 180, 190)
   Apr 1–Jun 30 — Annual income tax (Modelo 100)`;
 
-const EXPENSE_CATEGORIES = `Frihet Expense Categories & Deductibility Rules
-=================================================
+const EXPENSE_CATEGORIES = `Frihet Expense Categories & Statutory Deductibility Guidelines
+==============================================================
+Authority: Statutory deductibility rules derived from Ley 35/2006 (IRPF, art. 30)
+and Ley 37/1992 (IVA, arts. 92-96).
+
+Notice: Frihet standard business category mapping with statutory deductibility rules.
+Deductibility requires valid invoices, direct correlation with business activity
+(afectación exclusiva), and accounting registration. Consult your tax advisor
+(gestoría) for specific amortizations or mixed-use deductions.
 
 1. OFFICE (oficina)
    Examples: Rent, utilities, internet, phone, office supplies, cleaning
@@ -237,12 +266,24 @@ const INVOICE_STATUSES = `Frihet Invoice Status Flow
 Statuses and transitions:
 
   DRAFT ──────► SENT ──────► PAID
-    │             │
-    │             └──────► OVERDUE ────► PAID
-    │                         │
-    │                         └────────► CANCELLED
-    │
+    │             │            ▲
+    │             ├──────► PARTIAL ────┤
+    │             │            │       │
+    │             └──────► OVERDUE ────┤
+    │                         │        │
+    │                         └────────┼───► CANCELLED
+    │                                  │
+    │                                  ▼
+    │                            REFUND / RECTIFICATIVE
     └─────────────────────────────────► CANCELLED
+
+Legal transition paths:
+  draft     -> sent | cancelled
+  sent      -> paid | partial | overdue | cancelled
+  partial   -> paid | overdue | cancelled
+  overdue   -> paid | partial | cancelled
+  paid      -> refund (via credit note / rectificative invoice)
+  partial   -> refund (via credit note / rectificative invoice)
 
 Status definitions:
 
@@ -254,32 +295,41 @@ Status definitions:
               Payment is expected. The invoice number and date become
               fiscally relevant — avoid modifications after this point.
 
-  paid      — Payment received in full. Terminal state.
+  partial   — Invoice partially paid. A partial payment has been recorded,
+              with a remaining positive balance due. Can transition to
+              paid upon full payment, overdue if dueDate passes with
+              remaining balance, or cancelled/credit note.
+
+  paid      — Payment received in full. Terminal state for settlement.
               Records the payment date. Invoice is complete.
 
-  overdue   — Payment deadline (dueDate) has passed without payment.
-              Triggers follow-up workflows. Can transition to paid
-              (late payment) or cancelled (write-off / bad debt).
+  overdue   — Payment deadline (dueDate) has passed without full payment.
+              Applies to sent or partial invoices. Triggers follow-up
+              workflows. Can transition to paid (late payment), partial,
+              or cancelled (write-off / bad debt).
 
   cancelled — Invoice voided. Requires a corrective invoice or
               credit note for fiscal compliance if previously sent.
               Terminal state. Cannot transition to other statuses.
 
 Automation rules (when configured):
-  - Auto-transition sent → overdue when dueDate passes (daily check)
-  - Webhook events: invoice.created, invoice.sent, invoice.paid,
-    invoice.overdue, invoice.cancelled
+  - Auto-transition sent/partial → overdue when dueDate passes (daily check)
+  - Webhook events: invoice.created, invoice.updated, invoice.generated,
+    invoice.one_off_created, invoice.paid, invoice.overdue, invoice.voided,
+    invoice.payment_status_updated, invoice.payment_failure
+  - A partial payment is reported via invoice.payment_status_updated;
+    cancellation is reported via invoice.voided
   - Overdue reminders can be configured per-client
 
 Best practices:
   - Always set a dueDate when creating invoices (default: 30 days)
   - Use draft status while iterating with the client
   - Once sent, create a new corrective invoice rather than editing
-  - For partial payments, keep status as sent until full payment
+  - For partial payments, invoice transitions to partial with remaining balance tracked
   - cancelled requires a reason (notes field) for audit trail`;
 
 const CURRENCIES = JSON.stringify({
-  EUR: { name: "Euro", symbol: "\u20ac", decimals: 2, format: "1.234,56 \u20ac", countries: ["ES","DE","FR","IT","NL","PT","BE","AT","IE","FI","GR","LU","SK","SI","EE","LV","LT","CY","MT"] },
+  EUR: { name: "Euro", symbol: "\u20ac", decimals: 2, format: "1.234,56 \u20ac", countries: ["ES","DE","FR","IT","NL","PT","BE","AT","IE","FI","GR","LU","SK","SI","EE","LV","LT","CY","MT","BG","HR"] },
   USD: { name: "US Dollar", symbol: "$", decimals: 2, format: "$1,234.56", countries: ["US"] },
   GBP: { name: "British Pound", symbol: "\u00a3", decimals: 2, format: "\u00a31,234.56", countries: ["GB"] },
   CHF: { name: "Swiss Franc", symbol: "CHF", decimals: 2, format: "CHF 1'234.56", countries: ["CH"] },
@@ -295,8 +345,8 @@ const CURRENCIES = JSON.stringify({
   CZK: { name: "Czech Koruna", symbol: "K\u010d", decimals: 2, format: "1 234,56 K\u010d", countries: ["CZ"] },
   HUF: { name: "Hungarian Forint", symbol: "Ft", decimals: 0, format: "1 234 Ft", countries: ["HU"] },
   RON: { name: "Romanian Leu", symbol: "lei", decimals: 2, format: "1.234,56 lei", countries: ["RO"] },
-  BGN: { name: "Bulgarian Lev", symbol: "\u043b\u0432", decimals: 2, format: "1 234,56 \u043b\u0432", countries: ["BG"] },
-  HRK: { name: "Croatian Kuna", symbol: "kn", decimals: 2, format: "1.234,56 kn", countries: ["HR"] },
+  BGN: { name: "Bulgarian Lev", symbol: "\u043b\u0432", decimals: 2, format: "1 234,56 \u043b\u0432", countries: [] },
+  HRK: { name: "Croatian Kuna", symbol: "kn", decimals: 2, format: "1.234,56 kn", countries: [] },
   ISK: { name: "Icelandic Kr\u00f3na", symbol: "kr", decimals: 0, format: "1.234 kr", countries: ["IS"] },
   TRY: { name: "Turkish Lira", symbol: "\u20ba", decimals: 2, format: "\u20ba1.234,56", countries: ["TR"] },
   ILS: { name: "Israeli Shekel", symbol: "\u20aa", decimals: 2, format: "\u20aa1,234.56", countries: ["IL"] },
@@ -334,12 +384,12 @@ const COUNTRIES = JSON.stringify([
   { name: "Portugal", code: "PT", fiscalZone: "eu", defaultTaxRate: 23, taxName: "IVA", currency: "EUR", invoicePrefix: "FT" },
   { name: "Austria", code: "AT", fiscalZone: "eu", defaultTaxRate: 20, taxName: "USt", currency: "EUR", invoicePrefix: "RE" },
   { name: "Ireland", code: "IE", fiscalZone: "eu", defaultTaxRate: 23, taxName: "VAT", currency: "EUR", invoicePrefix: "INV" },
-  { name: "Finland", code: "FI", fiscalZone: "eu", defaultTaxRate: 24, taxName: "ALV", currency: "EUR", invoicePrefix: "INV" },
+  { name: "Finland", code: "FI", fiscalZone: "eu", defaultTaxRate: 25.5, taxName: "ALV", currency: "EUR", invoicePrefix: "INV" },
   { name: "Greece", code: "GR", fiscalZone: "eu", defaultTaxRate: 24, taxName: "FPA", currency: "EUR", invoicePrefix: "TIM" },
   { name: "Luxembourg", code: "LU", fiscalZone: "eu", defaultTaxRate: 17, taxName: "TVA", currency: "EUR", invoicePrefix: "F" },
-  { name: "Slovakia", code: "SK", fiscalZone: "eu", defaultTaxRate: 20, taxName: "DPH", currency: "EUR", invoicePrefix: "F" },
+  { name: "Slovakia", code: "SK", fiscalZone: "eu", defaultTaxRate: 23, taxName: "DPH", currency: "EUR", invoicePrefix: "F" },
   { name: "Slovenia", code: "SI", fiscalZone: "eu", defaultTaxRate: 22, taxName: "DDV", currency: "EUR", invoicePrefix: "F" },
-  { name: "Estonia", code: "EE", fiscalZone: "eu", defaultTaxRate: 22, taxName: "KM", currency: "EUR", invoicePrefix: "INV" },
+  { name: "Estonia", code: "EE", fiscalZone: "eu", defaultTaxRate: 24, taxName: "KM", currency: "EUR", invoicePrefix: "INV" },
   { name: "Latvia", code: "LV", fiscalZone: "eu", defaultTaxRate: 21, taxName: "PVN", currency: "EUR", invoicePrefix: "INV" },
   { name: "Lithuania", code: "LT", fiscalZone: "eu", defaultTaxRate: 21, taxName: "PVM", currency: "EUR", invoicePrefix: "SF" },
   { name: "Cyprus", code: "CY", fiscalZone: "eu", defaultTaxRate: 19, taxName: "VAT", currency: "EUR", invoicePrefix: "INV" },
@@ -349,8 +399,8 @@ const COUNTRIES = JSON.stringify([
   { name: "Poland", code: "PL", fiscalZone: "eu", defaultTaxRate: 23, taxName: "VAT", currency: "PLN", invoicePrefix: "FV" },
   { name: "Czech Republic", code: "CZ", fiscalZone: "eu", defaultTaxRate: 21, taxName: "DPH", currency: "CZK", invoicePrefix: "F" },
   { name: "Hungary", code: "HU", fiscalZone: "eu", defaultTaxRate: 27, taxName: "\u00c1FA", currency: "HUF", invoicePrefix: "SZ" },
-  { name: "Romania", code: "RO", fiscalZone: "eu", defaultTaxRate: 19, taxName: "TVA", currency: "RON", invoicePrefix: "F" },
-  { name: "Bulgaria", code: "BG", fiscalZone: "eu", defaultTaxRate: 20, taxName: "DDS", currency: "BGN", invoicePrefix: "F" },
+  { name: "Romania", code: "RO", fiscalZone: "eu", defaultTaxRate: 21, taxName: "TVA", currency: "RON", invoicePrefix: "F" },
+  { name: "Bulgaria", code: "BG", fiscalZone: "eu", defaultTaxRate: 20, taxName: "DDS", currency: "EUR", invoicePrefix: "F" },
   { name: "Croatia", code: "HR", fiscalZone: "eu", defaultTaxRate: 25, taxName: "PDV", currency: "EUR", invoicePrefix: "R" },
   { name: "United Kingdom", code: "GB", fiscalZone: "international", defaultTaxRate: 20, taxName: "VAT", currency: "GBP", invoicePrefix: "INV" },
   { name: "United States", code: "US", fiscalZone: "international", defaultTaxRate: 0, taxName: "Sales Tax", currency: "USD", invoicePrefix: "INV" },
@@ -395,8 +445,9 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://api/schema",
     {
       description:
-        "Selected core REST endpoint summary with authentication, rate limits, pagination, and error codes. " +
-        "/ Resumen de endpoints REST principales, autenticación, límites, paginación y errores.",
+        "Informational snapshot summary of selected core REST endpoints, auth, and rate limits. " +
+        "Canonical contract: https://api.frihet.io/v1/openapi.json. " +
+        "/ Resumen informativo no exhaustivo de endpoints REST principales; el contrato canónico reside en openapi.json.",
       mimeType: "text/plain",
     },
     async () => ({
@@ -415,9 +466,9 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://tax/rates",
     {
       description:
-        "Current tax rates by Spanish fiscal zone: Peninsula IVA (21/10/4%), Canary Islands IGIC (7/3/0%), " +
-        "Ceuta IPSI, EU reverse charge, international exports, IRPF withholding, and special regimes. " +
-        "/ Tipos impositivos por zona fiscal: IVA, IGIC, IPSI, intracomunitario, exportaciones, IRPF, regímenes especiales.",
+        "Spanish statutory tax rate reference (AEAT/ATC/IPSI, IVA/IGIC/IPSI/IRPF). " +
+        "Informational reference schedule; server validates tax math per transaction. " +
+        "/ Referencia normativa de tipos impositivos por zona fiscal en España.",
       mimeType: "text/plain",
     },
     async () => ({
@@ -436,7 +487,8 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://tax/calendar",
     {
       description:
-        "Spanish quarterly tax calendar with filing deadlines for Modelo 303, 130, 390, 420 (IGIC), and annual returns. " +
+        "Spanish tax filing calendar reference (Calendario del Contribuyente AEAT/ATC). " +
+        "Informational reference for statutory filing deadlines. " +
         "/ Calendario fiscal trimestral español con plazos de presentación de modelos.",
       mimeType: "text/plain",
     },
@@ -456,8 +508,8 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://config/expense-categories",
     {
       description:
-        "The 8 expense categories in Frihet with deductibility rules, IVA treatment, and amortization periods. " +
-        "Essential for correctly categorizing business expenses. " +
+        "Frihet standard expense categories and statutory deductibility guidelines (LIRPF/LIVA). " +
+        "Informational classification guide. " +
         "/ Las 8 categorías de gastos con reglas de deducibilidad, IVA y amortización.",
       mimeType: "text/plain",
     },
@@ -520,8 +572,8 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     {
       description:
         "61 supported countries with ISO codes, fiscal zones (peninsula, canarias, ceuta, melilla, eu, international), " +
-        "default tax rates, tax names, default currencies, and invoice prefixes. " +
-        "/ 61 países soportados con zonas fiscales, tipos impositivos, divisas y prefijos de factura.",
+        "default tax rates, tax names, default currencies, and invoice prefixes. Note: default rates are onboarding suggestions only, not legal determination. " +
+        "/ 61 países soportados con zonas fiscales, tipos impositivos por defecto y prefijos de factura.",
       mimeType: "application/json",
     },
     async () => ({
@@ -593,19 +645,35 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
       "frihet://overdue-invoices",
       {
         description:
-          "Live list of all overdue invoices — invoices past their due date that haven't been paid. " +
+          "Live list of overdue invoices (first page up to 100 items by due date) — invoices past their due date that haven't been paid. " +
           "Includes client names, amounts, due dates, and days overdue. Critical for cash flow management. " +
-          "/ Lista en vivo de facturas vencidas — facturas cuya fecha de vencimiento ha pasado sin cobrar.",
+          "/ Lista en vivo de facturas vencidas (primera página hasta 100 registros por fecha de vencimiento) — facturas cuya fecha de vencimiento ha pasado sin cobrar.",
         mimeType: "application/json",
       },
       async () => {
-        const data = await client.listInvoices({ status: "overdue", limit: 100 });
+        const response = await client.listInvoices({ status: "overdue", limit: 100 });
+        const list = Array.isArray(response)
+          ? response
+          : Array.isArray((response as { data?: unknown[] }).data)
+            ? ((response as { data: Record<string, unknown>[] }).data)
+            : [];
+        const total = typeof (response as { total?: unknown }).total === "number"
+          ? ((response as { total: number }).total)
+          : list.length;
+        const result = {
+          data: list,
+          total,
+          limit: 100,
+          offset: 0,
+          hasMore: total > 100 || list.length === 100,
+          note: "First 100 overdue invoices by due date",
+        };
         return {
           contents: [
             {
               uri: "frihet://overdue-invoices",
               mimeType: "application/json",
-              text: JSON.stringify(data, null, 2),
+              text: JSON.stringify(result, null, 2),
             },
           ],
         };
@@ -617,17 +685,44 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
       "frihet://status/plan-limits",
       {
         description:
-          "Live plan limits and current usage — plan tier, invoices/month, AI messages/day, team members, " +
-          "integrations, API requests/minute, and real-time usage counters. " +
-          "/ Límites del plan y uso actual en vivo — tier, facturas/mes, mensajes IA/día, miembros, integraciones, API req/min.",
+          "Live plan tier, quotas, and usage counters (invoices, expenses, AI messages) from business context. " +
+          "/ Nivel de plan, cuotas y contadores de uso (facturas, gastos, mensajes IA) del contexto del negocio.",
         mimeType: "application/json",
       },
       async () => {
         const ctx = await client.getBusinessContext();
-        const plan = (ctx as Record<string, unknown>).plan ?? "free";
-        const limits = (ctx as Record<string, unknown>).limits ?? {};
-        const usage = (ctx as Record<string, unknown>).usage ?? {};
-        const result = { plan, limits, usage };
+        const planRaw = (ctx as Record<string, unknown>).plan;
+        let plan = "free";
+        let limits = (ctx as Record<string, unknown>).limits as Record<string, unknown> | undefined;
+        let usage = (ctx as Record<string, unknown>).usage as Record<string, unknown> | undefined;
+
+        if (typeof planRaw === "string") {
+          plan = planRaw;
+        } else if (typeof planRaw === "object" && planRaw !== null) {
+          const planObj = planRaw as Record<string, unknown>;
+          plan = typeof planObj.name === "string" ? planObj.name : "free";
+
+          if ((!limits || Object.keys(limits).length === 0) && (!usage || Object.keys(usage).length === 0)) {
+            const extractedLimits: Record<string, unknown> = {};
+            const extractedUsage: Record<string, unknown> = {};
+            for (const [key, val] of Object.entries(planObj)) {
+              if (key !== "name" && typeof val === "object" && val !== null) {
+                const item = val as Record<string, unknown>;
+                if ("limit" in item) extractedLimits[key] = item.limit;
+                if ("used" in item) extractedUsage[key] = item.used;
+              }
+            }
+            limits = extractedLimits;
+            usage = extractedUsage;
+          }
+        }
+
+        const result = {
+          plan,
+          limits: limits ?? {},
+          usage: usage ?? {},
+          ...(typeof planRaw === "object" && planRaw !== null ? { breakdown: planRaw } : {}),
+        };
         return {
           contents: [
             {

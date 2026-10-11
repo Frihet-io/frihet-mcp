@@ -12,6 +12,7 @@ import {
   type OpenAIReviewTool,
 } from "../openai-review-contract.js";
 import { OPENAI_REVIEW_CONFIRM_REQUIRED_TOOLS } from "../openai-profile.js";
+import { OPENAI_REVIEW_OAUTH_SCOPES } from "../openai-review-oauth.js";
 
 const SNAPSHOT_PATH = fileURLToPath(
   new URL(
@@ -66,13 +67,30 @@ test("package-local tools/list remains semantically identical to the reviewed de
   for (const tool of surface.tools) {
     assert.deepEqual(
       tool.securitySchemes,
-      [{ type: "oauth2", scopes: ["frihet:workspace.manage"] }],
+      [{ type: "oauth2", scopes: [...OPENAI_REVIEW_OAUTH_SCOPES] }],
       `${tool.name} must expose standard top-level OAuth securitySchemes on the Worker wire`,
     );
   }
   const actual = buildOpenAIReviewContract(surface, EXPECTED.oauth);
   assert.doesNotThrow(() => assertOpenAIReviewContract(actual, EXPECTED));
 });
+
+for (const name of ["list_invoices", "get_invoice", "search_invoices"]) {
+  test(`invoice evidence boundary: ${name} must not substitute records for external receipts`, async () => {
+    const surface = await captureOpenAIReviewMcpSurface();
+    const tool = surface.tools.find((candidate) => candidate.name === name);
+    assert.ok(tool, `reviewed surface must retain ${name}`);
+    const description = String(tool.description);
+    assert.match(description, /internal invoice records only/i);
+    assert.match(description, /status and issue date do not prove external submission or delivery/i);
+    assert.match(description, /do not call this tool to check Peppol delivery receipts/i);
+    assert.match(description, /EN 16931 validation results/i);
+    assert.match(description, /e-invoicing transmission or acceptance status/i);
+    assert.match(description, /without invoking Frihet tools/i);
+    assert.match(description, /no invoques esta herramienta para comprobar acuses de entrega Peppol/i);
+    assert.match(description, /sin invocar herramientas de Frihet/i);
+  });
+}
 
 test("OpenAI tool justifications name exactly the reviewed business surface", () => {
   const document = readFileSync(TOOL_JUSTIFICATIONS_PATH, "utf8");
@@ -137,7 +155,7 @@ test("semantic gate: legacy OAuth mirror cannot drift from the reviewed scope", 
   metadata.securitySchemes = [{ type: "oauth2", scopes: ["broader:scope"] }];
   assert.throws(
     () => assertOpenAIReviewContract(actual, EXPECTED),
-    /list_invoices\._meta\.securitySchemes must require only the reviewed connector OAuth scope/,
+    /list_invoices\._meta\.securitySchemes must require exactly the reviewed OpenAI OAuth scopes/,
   );
 });
 

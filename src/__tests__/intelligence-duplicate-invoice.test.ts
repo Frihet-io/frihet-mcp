@@ -8,7 +8,8 @@
  * failed to duplicate. Fix: allowlist-PICK only the writable create fields.
  *
  * This test asserts the body sent to createInvoice contains ONLY allowlisted
- * fields (no payments/verifactu/operationType/documentNumber/total/…).
+ * fields, including declared fiscal classification (no payments/verifactu/
+ * documentNumber/total/…).
  */
 
 import { test, describe } from "node:test";
@@ -57,12 +58,13 @@ const STORED_INVOICE = {
   clientLocation: "peninsula",
   prepayment: 0,
   seriesId: "A",
+  operationType: "service",
+  fiscalTreatment: "not_subject_location",
   // ── stored-only (must NOT be copied — would 400 the strict create schema) ──
   payments: [{ amount: 1210, date: "2026-05-10" }],
   amountPaid: 1210,
   verifactu: { hash: "abc", chained: true },
   eInvoice: { format: "facturae" },
-  operationType: "S1",
   poNumber: "PO-77",
   discountRate: 5,
   createdBy: "user_x",
@@ -73,14 +75,14 @@ const STORED_INVOICE = {
 } as const;
 
 const REJECTED_FIELDS = [
-  "payments", "amountPaid", "verifactu", "eInvoice", "operationType",
+  "payments", "amountPaid", "verifactu", "eInvoice",
   "poNumber", "discountRate", "createdBy", "sentTo", "sentAt",
   "cancelledAt", "attachments", "documentNumber", "total", "createdAt", "updatedAt", "id",
 ];
 const COPYABLE_FIELDS = [
   "clientName", "clientId", "clientAddress", "clientTaxId", "items",
   "notes", "taxRate", "irpfRate", "equivalenceSurchargeRate",
-  "clientLocation", "prepayment", "seriesId",
+  "clientLocation", "prepayment", "seriesId", "operationType", "fiscalTreatment",
 ];
 
 async function makeServerCapturing(captured: { body?: Record<string, unknown> }): Promise<StubMcpServer> {
@@ -118,6 +120,8 @@ describe("duplicate_invoice — allowlist pick", () => {
     for (const f of COPYABLE_FIELDS) {
       assert.equal(f in captured.body!, true, `create body must carry writable field "${f}"`);
     }
+    assert.equal(captured.body!.operationType, STORED_INVOICE.operationType);
+    assert.equal(captured.body!.fiscalTreatment, STORED_INVOICE.fiscalTreatment);
     assert.equal(captured.body!.status, "draft", "status forced to draft");
     assert.equal(typeof captured.body!.issueDate, "string", "issueDate set");
   });
