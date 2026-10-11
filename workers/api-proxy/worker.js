@@ -268,7 +268,7 @@ MCP: https://api.frihet.io/.well-known/mcp
 const MCP_JSON = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server with a 157-operation catalogue. The grouped remote profile serves alias and discovery names separately and reports capability truth per tool.",
+  description: "AI-native ERP MCP server with a 156-operation catalogue. The grouped remote profile serves alias and discovery names separately and reports capability truth per tool.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -279,8 +279,8 @@ const MCP_JSON = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 166,
-  catalogue_operations_count: 157,
+  tools_count: 164,
+  catalogue_operations_count: 156,
   alias_tool_names_count: 5,
   discovery_tool_names_count: 3,
   capability_metadata_key: "io.frihet/capability",
@@ -296,7 +296,7 @@ const MCP_JSON = JSON.stringify({
 const WELL_KNOWN_MCP = JSON.stringify({
   mcp_version: "2025-11-05",
   name: "Frihet ERP MCP Server",
-  description: "AI-native ERP MCP server with a 157-operation catalogue. The grouped remote profile serves alias and discovery names separately and reports capability truth per tool.",
+  description: "AI-native ERP MCP server with a 156-operation catalogue. The grouped remote profile serves alias and discovery names separately and reports capability truth per tool.",
   endpoint: "https://mcp.frihet.io/mcp",
   auth: {
     type: "oauth2",
@@ -307,8 +307,8 @@ const WELL_KNOWN_MCP = JSON.stringify({
   docs: "https://docs.frihet.io/desarrolladores/mcp-server",
   npm: "@frihet/mcp-server",
   install_local: "npx @frihet/mcp-server",
-  tools_count: 166,
-  catalogue_operations_count: 157,
+  tools_count: 164,
+  catalogue_operations_count: 156,
   alias_tool_names_count: 5,
   discovery_tool_names_count: 3,
   capability_metadata_key: "io.frihet/capability",

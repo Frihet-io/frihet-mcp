@@ -1,0 +1,351 @@
+{
+  "releaseTag": "v1.17.0",
+  "tagCommit": "64934a5aa3377534756a87692f48d42c4bd58e4f",
+  "typescript": "5.9.3",
+  "comparedJavaScriptFiles": 57,
+  "matching": 57,
+  "files": [
+    {
+      "path": "dist/tools/accountingClose.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "8a07b8e48c1717bc930dab5faa307d5f3a7afce82dc911ce50508a55825015e5",
+      "tagRebuildSha256": "8a07b8e48c1717bc930dab5faa307d5f3a7afce82dc911ce50508a55825015e5"
+    },
+    {
+      "path": "dist/agent-onboarding.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "d2b142b28257e7a4d3ba29c3d4b278b8d5eebacc5d44282ef5bca93316d70ba7",
+      "tagRebuildSha256": "d2b142b28257e7a4d3ba29c3d4b278b8d5eebacc5d44282ef5bca93316d70ba7"
+    },
+    {
+      "path": "dist/api-origin.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "d9bc4a99e55d0c8afee64d3c87a62aeef9b9b3949a03a58879eaca9e8bc76d8f",
+      "tagRebuildSha256": "d9bc4a99e55d0c8afee64d3c87a62aeef9b9b3949a03a58879eaca9e8bc76d8f"
+    },
+    {
+      "path": "dist/tools/audit_gl.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "dadb3f958243d7cf6f079364f1cdc56481caa63759aebaac3c1b2b48af2297f1",
+      "tagRebuildSha256": "dadb3f958243d7cf6f079364f1cdc56481caa63759aebaac3c1b2b48af2297f1"
+    },
+    {
+      "path": "dist/tools/backend-availability.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "2e467a974d9d61007548d7bac9a93618ea974b48b55685ce0ec6840afb6b3e1f",
+      "tagRebuildSha256": "2e467a974d9d61007548d7bac9a93618ea974b48b55685ce0ec6840afb6b3e1f"
+    },
+    {
+      "path": "dist/tools/bank_rules.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "6314f6f9d63d099ee12571306de93d625824c3cd6650742529ba1374be460a53",
+      "tagRebuildSha256": "6314f6f9d63d099ee12571306de93d625824c3cd6650742529ba1374be460a53"
+    },
+    {
+      "path": "dist/tools/banking.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "fbe278536ea9743077ab8b71deecf087d668420a0b18d7e4391e469e5452cc53",
+      "tagRebuildSha256": "fbe278536ea9743077ab8b71deecf087d668420a0b18d7e4391e469e5452cc53"
+    },
+    {
+      "path": "dist/capability-truth.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "0e53af4e2ea826afd52e342f64d655bcd726fbcf34a13e34699ddbc68880dca7",
+      "tagRebuildSha256": "0e53af4e2ea826afd52e342f64d655bcd726fbcf34a13e34699ddbc68880dca7"
+    },
+    {
+      "path": "dist/client-interface.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "d3004ca9db3eb8f2af4b60f5514424ac432a96d5744728200469c83a0266582d",
+      "tagRebuildSha256": "d3004ca9db3eb8f2af4b60f5514424ac432a96d5744728200469c83a0266582d"
+    },
+    {
+      "path": "dist/client.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "d589e619eb2f2ad9d9d57d281eeef4e41c7d1246baa9d639636dfb52dfc81dba",
+      "tagRebuildSha256": "d589e619eb2f2ad9d9d57d281eeef4e41c7d1246baa9d639636dfb52dfc81dba"
+    },
+    {
+      "path": "dist/tools/clients.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "612b6289adcb5da28e1165349acbcf5aace271dd6b8f3e41a51acf05dbd0cf0d",
+      "tagRebuildSha256": "612b6289adcb5da28e1165349acbcf5aace271dd6b8f3e41a51acf05dbd0cf0d"
+    },
+    {
+      "path": "dist/tools/crm.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "9d42a4f405c57fc65b2df5bbb010e2fad5a86cea8f2360651a38033c298d775f",
+      "tagRebuildSha256": "9d42a4f405c57fc65b2df5bbb010e2fad5a86cea8f2360651a38033c298d775f"
+    },
+    {
+      "path": "dist/demo-client.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "d4d91d398836213bb81b6a78f02c6c6fb5955ef23d87b9a43742c29f84c09116",
+      "tagRebuildSha256": "d4d91d398836213bb81b6a78f02c6c6fb5955ef23d87b9a43742c29f84c09116"
+    },
+    {
+      "path": "dist/demo-fixtures.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "c4ee3239be3d477a9761549837b5cd0f8a492f61b00ac517b6fd7112675b3600",
+      "tagRebuildSha256": "c4ee3239be3d477a9761549837b5cd0f8a492f61b00ac517b6fd7112675b3600"
+    },
+    {
+      "path": "dist/tools/deposits.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "066d1e079b290dfb175002e78bde7df6b103b04e05cbd0ff2fad96bd90e27643",
+      "tagRebuildSha256": "066d1e079b290dfb175002e78bde7df6b103b04e05cbd0ff2fad96bd90e27643"
+    },
+    {
+      "path": "dist/tools/einvoice.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "a2a05cd733c136761c7eed53c996a9cd4c87b44f48f32ee5992534d77531d9c7",
+      "tagRebuildSha256": "a2a05cd733c136761c7eed53c996a9cd4c87b44f48f32ee5992534d77531d9c7"
+    },
+    {
+      "path": "dist/tools/expenses.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "f62285c72174dd222f24b005e13c0aa365745eb3752d79296cd43bf31ec7a12b",
+      "tagRebuildSha256": "f62285c72174dd222f24b005e13c0aa365745eb3752d79296cd43bf31ec7a12b"
+    },
+    {
+      "path": "dist/fiscal-aliases.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "4cb3932c28725c3854f31dd163480a856c59e0cf35246a039035a18a5fe59e72",
+      "tagRebuildSha256": "4cb3932c28725c3854f31dd163480a856c59e0cf35246a039035a18a5fe59e72"
+    },
+    {
+      "path": "dist/tools/fiscal.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "5e3e6b7ff022a59b0d188cdb077297408176f1f5d86bf9c47bdaa9509d9ee749",
+      "tagRebuildSha256": "5e3e6b7ff022a59b0d188cdb077297408176f1f5d86bf9c47bdaa9509d9ee749"
+    },
+    {
+      "path": "dist/tools/gestoria.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "e2421f87c3dafd75c2ae5c53287fc947c17a73be5bd14d91db4b6ead5448fd28",
+      "tagRebuildSha256": "e2421f87c3dafd75c2ae5c53287fc947c17a73be5bd14d91db4b6ead5448fd28"
+    },
+    {
+      "path": "dist/tools/hr.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "b827946b8be5726e772c564a2c8c402a046959c4e26878aa780a30c50ffd4600",
+      "tagRebuildSha256": "b827946b8be5726e772c564a2c8c402a046959c4e26878aa780a30c50ffd4600"
+    },
+    {
+      "path": "dist/tools/igic.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "9eabb73c6fa126e264b143b834a84c679d237df90fcdaaefa78eddaed7f9c21f",
+      "tagRebuildSha256": "9eabb73c6fa126e264b143b834a84c679d237df90fcdaaefa78eddaed7f9c21f"
+    },
+    {
+      "path": "dist/tools/impuesto_sociedades.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "820bdf75189f8a0c612f9153dedce44607a6ac26976aa182923af018d5fc4f9a",
+      "tagRebuildSha256": "820bdf75189f8a0c612f9153dedce44607a6ac26976aa182923af018d5fc4f9a"
+    },
+    {
+      "path": "dist/index.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "d874c0dd53b4285c9bd63b3fb8863516634567f6c75d1b0ded9c7fc2c560e0cb",
+      "tagRebuildSha256": "d874c0dd53b4285c9bd63b3fb8863516634567f6c75d1b0ded9c7fc2c560e0cb"
+    },
+    {
+      "path": "dist/tools/intelligence.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "e3678ad17074a0997da22f3be3d52af0074fdd99f8847bc4433d229f5a44009c",
+      "tagRebuildSha256": "e3678ad17074a0997da22f3be3d52af0074fdd99f8847bc4433d229f5a44009c"
+    },
+    {
+      "path": "dist/tools/invoices.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "6b1ec3d4ef80426c20453c0b5b8df80214efdb50b44017c3bf42f0cdebc8fa78",
+      "tagRebuildSha256": "6b1ec3d4ef80426c20453c0b5b8df80214efdb50b44017c3bf42f0cdebc8fa78"
+    },
+    {
+      "path": "dist/tools/kitchen.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "8e574c3052648890b54ec4db7b82fb969d83b17031063c41ddd8ec8637a28ec0",
+      "tagRebuildSha256": "8e574c3052648890b54ec4db7b82fb969d83b17031063c41ddd8ec8637a28ec0"
+    },
+    {
+      "path": "dist/logger.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "7dfde0b2875235506c86d37bc6aa92a04bb51b090064364e592508b3bf07ded5",
+      "tagRebuildSha256": "7dfde0b2875235506c86d37bc6aa92a04bb51b090064364e592508b3bf07ded5"
+    },
+    {
+      "path": "dist/canary/mcp-harness.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "f3b032cc044bf4b9ff8b4f66b98cfba5d1551f5518aec37c116f07fc6076c716",
+      "tagRebuildSha256": "f3b032cc044bf4b9ff8b4f66b98cfba5d1551f5518aec37c116f07fc6076c716"
+    },
+    {
+      "path": "dist/metrics.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "e19405bf6d7443a8295029430eff3722c37eb1fb19b1b767156e6e32d705239f",
+      "tagRebuildSha256": "e19405bf6d7443a8295029430eff3722c37eb1fb19b1b767156e6e32d705239f"
+    },
+    {
+      "path": "dist/observability.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "b686e8bbfddecd5772e5d0b451c5481a6532002b309b0fbd7164072f4e8c6082",
+      "tagRebuildSha256": "b686e8bbfddecd5772e5d0b451c5481a6532002b309b0fbd7164072f4e8c6082"
+    },
+    {
+      "path": "dist/tools/onboard_vies.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "f48127267a1fee07bf971899fa821c3e983ab3e2eba59ee199a22591e7b62d01",
+      "tagRebuildSha256": "f48127267a1fee07bf971899fa821c3e983ab3e2eba59ee199a22591e7b62d01"
+    },
+    {
+      "path": "dist/tools/onboarding.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "b3b041ab7a6fad243cc4b32833978e8743c284c4d349ec092bfe918d56bc033d",
+      "tagRebuildSha256": "b3b041ab7a6fad243cc4b32833978e8743c284c4d349ec092bfe918d56bc033d"
+    },
+    {
+      "path": "dist/openai-profile.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "49cab36e7ff0992cf4a10a417f03d76387fe279cfff8109ad1cf4338812efec6",
+      "tagRebuildSha256": "49cab36e7ff0992cf4a10a417f03d76387fe279cfff8109ad1cf4338812efec6"
+    },
+    {
+      "path": "dist/openai-review-contract.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "008bbc5170fc66aca5fe1dd9d48d62cf931650c4239b2477515469d743ca437b",
+      "tagRebuildSha256": "008bbc5170fc66aca5fe1dd9d48d62cf931650c4239b2477515469d743ca437b"
+    },
+    {
+      "path": "dist/openai-review-oauth.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "941fce3b9413b5dde14a2ec4d4a0c3098430221155a30bd8dd50302ed6f3bd14",
+      "tagRebuildSha256": "941fce3b9413b5dde14a2ec4d4a0c3098430221155a30bd8dd50302ed6f3bd14"
+    },
+    {
+      "path": "dist/tools/payroll.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "83b6d33dc42306a0b6bb38a7b09c5b9d951ea4e96dfcc3a6d3649a94ef3f18d3",
+      "tagRebuildSha256": "83b6d33dc42306a0b6bb38a7b09c5b9d951ea4e96dfcc3a6d3649a94ef3f18d3"
+    },
+    {
+      "path": "dist/tools/permissions.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "ec59efbbe6de7c3b2554668727e3e58a25d8506ddc1bdd9c3027a40c98db8197",
+      "tagRebuildSha256": "ec59efbbe6de7c3b2554668727e3e58a25d8506ddc1bdd9c3027a40c98db8197"
+    },
+    {
+      "path": "dist/tools/portal_domain.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "b6ef7b67c25f08bdc508456851efbe481f913918e6e73ea4e364d43af1068e9d",
+      "tagRebuildSha256": "b6ef7b67c25f08bdc508456851efbe481f913918e6e73ea4e364d43af1068e9d"
+    },
+    {
+      "path": "dist/tools/pos.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "cd90cca19926ff7fbf8cc542a86820bec28fe6f38878170086c5a3b78670dd1e",
+      "tagRebuildSha256": "cd90cca19926ff7fbf8cc542a86820bec28fe6f38878170086c5a3b78670dd1e"
+    },
+    {
+      "path": "dist/tools/products.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "3b6a479c7d188eeb5369fd367e09be79bdadfa7b6cfe874645e66dd2cfd81259",
+      "tagRebuildSha256": "3b6a479c7d188eeb5369fd367e09be79bdadfa7b6cfe874645e66dd2cfd81259"
+    },
+    {
+      "path": "dist/public-capability-contract.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "d9ac41fa380db3e7c1f381236b74b98f711fca08711c780120b7c247ebb169f7",
+      "tagRebuildSha256": "d9ac41fa380db3e7c1f381236b74b98f711fca08711c780120b7c247ebb169f7"
+    },
+    {
+      "path": "dist/tools/quotes.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "bea8932691935e6fba9b90c927d2a47af642c3c47bc4c9aced50d24448cd82a4",
+      "tagRebuildSha256": "bea8932691935e6fba9b90c927d2a47af642c3c47bc4c9aced50d24448cd82a4"
+    },
+    {
+      "path": "dist/tools/recurring.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "ca6c48453b17cde42174edca182b5f4a16ed36871d3e434b8aea0da826ae7522",
+      "tagRebuildSha256": "ca6c48453b17cde42174edca182b5f4a16ed36871d3e434b8aea0da826ae7522"
+    },
+    {
+      "path": "dist/redaction.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "2d1a8e1b8d0cc14c948579acc64d4e30f2e4cdbf1feda01d837cf99880a3f9df",
+      "tagRebuildSha256": "2d1a8e1b8d0cc14c948579acc64d4e30f2e4cdbf1feda01d837cf99880a3f9df"
+    },
+    {
+      "path": "dist/prompts/register-all.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "a435e36b16522b07bfa57a877b28c3f98672957cd3991f58dcd6133f07346a9b",
+      "tagRebuildSha256": "a435e36b16522b07bfa57a877b28c3f98672957cd3991f58dcd6133f07346a9b"
+    },
+    {
+      "path": "dist/resources/register-all.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "d2f2c875be17c9bf6ca3ef60f25f1e3acab93d2db0343c4fefab12173671a207",
+      "tagRebuildSha256": "d2f2c875be17c9bf6ca3ef60f25f1e3acab93d2db0343c4fefab12173671a207"
+    },
+    {
+      "path": "dist/tools/register-all.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "626917dc9ee24ac9106031fe1887972a25822851a4bc7eb674abd2da04096f0f",
+      "tagRebuildSha256": "626917dc9ee24ac9106031fe1887972a25822851a4bc7eb674abd2da04096f0f"
+    },
+    {
+      "path": "dist/server-composition.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "484c73f0d13cdd508da9aa9c5de74204872f88c13141d530a66a669852148a83",
+      "tagRebuildSha256": "484c73f0d13cdd508da9aa9c5de74204872f88c13141d530a66a669852148a83"
+    },
+    {
+      "path": "dist/tools/shared.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "987e4a821beddcd2f2e3b8291fa85bb40e7fedc83288384787a726f6367e5345",
+      "tagRebuildSha256": "987e4a821beddcd2f2e3b8291fa85bb40e7fedc83288384787a726f6367e5345"
+    },
+    {
+      "path": "dist/tools/stay.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "33dff7058780e496ce4df2edc7d4c89e74883c486d833709ba8585e7def9675f",
+      "tagRebuildSha256": "33dff7058780e496ce4df2edc7d4c89e74883c486d833709ba8585e7def9675f"
+    },
+    {
+      "path": "dist/tools/team.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "26ceffd2f9b2fc55152a3b4b66f44da778bf6b6cf0b26988a86c2fb703035949",
+      "tagRebuildSha256": "26ceffd2f9b2fc55152a3b4b66f44da778bf6b6cf0b26988a86c2fb703035949"
+    },
+    {
+      "path": "dist/tools/time.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "629548a0991bb3d3ddcea258e29ca909d18d71729ad87bb8ba8c819f774e5f8c",
+      "tagRebuildSha256": "629548a0991bb3d3ddcea258e29ca909d18d71729ad87bb8ba8c819f774e5f8c"
+    },
+    {
+      "path": "dist/tool-exposure.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "911ff56eeb7ac7b824360a3c45e9d960957ae5125bade4bb0f6a845937198f1c",
+      "tagRebuildSha256": "911ff56eeb7ac7b824360a3c45e9d960957ae5125bade4bb0f6a845937198f1c"
+    },
+    {
+      "path": "dist/types.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "ec95f5d12d8aa991895a9f3d1ffab0e61598c1903828e204be0aa09ca59207d1",
+      "tagRebuildSha256": "ec95f5d12d8aa991895a9f3d1ffab0e61598c1903828e204be0aa09ca59207d1"
+    },
+    {
+      "path": "dist/tools/vendors.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "fc5366beba6b10b7241dcba698399c6af50f633326eab30529ddd59e0d2ac0c9",
+      "tagRebuildSha256": "fc5366beba6b10b7241dcba698399c6af50f633326eab30529ddd59e0d2ac0c9"
+    },
+    {
+      "path": "dist/tools/webhooks.js",
+      "matchesTagRebuild": true,
+      "npmSha256": "b60f0ececd839a23b6f1447f7a9a98a4595276f4c1bb34e71a3e2ed00f700313",
+      "tagRebuildSha256": "b60f0ececd839a23b6f1447f7a9a98a4595276f4c1bb34e71a3e2ed00f700313"
+    }
+  ]
+}

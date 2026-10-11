@@ -286,9 +286,10 @@ export interface IFrihetClient {
   exportPayroll(params: { format: "a3" | "contasol" | "sage" | "siltra"; month: string }): Promise<Record<string, unknown>>;
   getPayrollChecklist(params: { month: string }): Promise<Record<string, unknown>>;
 
-  // Onboarding endpoints (/v1/onboarding/*) — D4-B megasprint.
-  getOnboardingStatus(): Promise<Record<string, unknown>>;
-  setOnboardingPersona(data: { persona: "autonomo" | "empresa" | "agencia" | "gestoria" }): Promise<Record<string, unknown>>;
+  // (Onboarding endpoints /v1/onboarding/* withdrawn via #124 — Frihet-ERP has
+  //  no /v1/onboarding/* family. Interface methods removed alongside the tool
+  //  registrations; if the ERP family ships later, restore the methods and
+  //  the corresponding src/tools/onboarding.ts registration.)
 
   // Permissions reporting endpoints (/v1/permissions/*). These describe the
   // RBAC model and API-key scope state; they are not exhaustive authorization.

@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "51a572e915c97154ced943fa2f0540b2c69e75e6978e40067a736ed93ea1f334", // registers the provisioning-credential wire test; no new deps or emitters
+  "package.json": "c8fcc3fc70d2fc13499ffa57cdaa7aa19ee093752e3500fcb8136b44a0f5a425", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs; no new deps, lifecycle or network script
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -101,7 +101,13 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
     dependencies: { "@modelcontextprotocol/sdk": "1.31.0" },
     devDependencies: { "@types/node": "^22.0.0", ajv: "8.18.0", typescript: "^5.7.0", zod: "^3.25.1" },
     optionalDependencies: {},
-    overrides: { hono: "~4.12.34" },
+    overrides: {
+      "@ai-sdk/provider-utils": ">=4.0.33 <5",
+      hono: ">=4.13.13",
+      "ip-address": ">=10.7.3",
+      "proxy-addr": ">=2.0.8",
+      qs: ">=6.15.4",
+    },
     peerDependencies: { zod: ">=3.25.1" },
     resolutions: {},
   },
@@ -111,7 +117,7 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
       "@modelcontextprotocol/sdk": "1.31.0",
       agents: "0.7.5",
       "firebase-auth-cloudflare-workers": "^2.0.6",
-      hono: "~4.12.34",
+      hono: ">=4.13.13",
       zod: "^3.25.0",
     },
     devDependencies: {
@@ -121,8 +127,13 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
     },
     optionalDependencies: {},
     overrides: {
-      "@modelcontextprotocol/sdk": { "@hono/node-server": "2.0.12", hono: "~4.12.34" },
+      "@ai-sdk/provider-utils": ">=4.0.33 <5",
+      "@modelcontextprotocol/sdk": { "@hono/node-server": "2.0.12", hono: ">=4.13.13" },
       agents: { "@modelcontextprotocol/sdk": "1.31.0" },
+      hono: ">=4.13.13",
+      "ip-address": ">=10.7.3",
+      "proxy-addr": ">=2.0.8",
+      qs: ">=6.15.4",
       nanoid: "5.1.16",
     },
     peerDependencies: {},
@@ -255,10 +266,10 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "b7cc8a4cc73d5426720939c27c87663ad6aacaf4fa2802876c53e2da9dc881b0", // provisioning credential removed from the public API client; sinks unchanged
+  "src/client.ts": "70acc0ff78b2a0be6ecd32194ec173f8276b989288d89460d78ea5ea7f10426c", // provisioning credential removed from the public API client; sinks unchanged
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
-  "workers/api-proxy/worker.js": "163aa6859d157761709e5f8bf9dfe820f7e0569b6cf49a1d776fcac93385f0d6",
+  "workers/api-proxy/worker.js": "34f6c6e995a6c779d6a80fb954321f589cf64cd99f62c5d9c6b49e0fcaf07fd4",
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
   "workers/remote-mcp/src/auth-handler.ts": "b1da0f18536ace42052793a59d68dad5dcbdcdae0ecb0eafb149b5383c33ce87", // #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
@@ -270,8 +281,8 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/oauth-token-family.ts": "1facce53ff0b684d4f51c14390e775fe07732ac215a4747a428d90e0428693fb", // OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "11418deebf57631c1e39a2a6fea11eedd7de0dc23c26b5768ae91d5a29dfcb7b",
-  "workers/remote-mcp/package-lock.json": "c36f130ac2574f3fac913f72304e6658bef9a9c341910992bd757673d57fdaf3",
+  "package-lock.json": "62bcc09846f3544ea75d682bc53a8b944f0f525abdf64fa7e0459046fecefbab",
+  "workers/remote-mcp/package-lock.json": "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
@@ -281,14 +292,14 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner.svg": "2b32a68014580c334f8b180d8812d842c744a9a59bd2298a586bb95bd6179ebc",
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
-  "docs/agent-onboarding.json": "735624d04e33746245d08cce7e1eb6cdb2113677e4813f8cc860f03b8d662aa9",
-  "README.md": "3fc11ccc0f7dfddb5cdd7c7fb69bfccd0fabd519baf036831592585627f8b4c9", // GitHub Registry discovery links + static badge on existing img.shields.io host; no new runtime emitter or destination
+  "docs/agent-onboarding.json": "ce973f35061e589005d83fca9e5cd2013de09467d2faec1af7dfbbb87c20c30a",
+  "README.md": "610ee80753d288477b5a65ae25c8ab65b27565cf85eebc3a4739f7245334e303", // GitHub Registry discovery links + static badge on existing img.shields.io host; no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
-  ".github/workflows/ci.yml": "f39fc984aa328aa3cebae66d239d15d92eb05b3896e5365c69dd40bea09afce2",
+  ".github/workflows/ci.yml": "e77888420f0874d90c2ae001b587a07b394b5e57bdf83dbb9e90dd41908e99a0",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",
@@ -296,7 +307,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
-  "scripts/audit-mcp-refs.mjs": "06f01587aee4e12e732700a4ef47379b6271174304c1f53b2e0b76fba04a0f2b", // fix/mcp-refs-watch-locales: tool-count detector widened (qualifier words, non-ASCII noun endings, CJK), glob watch lists, --root override for hermetic fixtures, --fix kept symmetric with the detector
+  "scripts/audit-mcp-refs.mjs": "6120d98922f199b5f31ba931977cbc8ee4c99e8b969606d77d0d4775a64536b3", // MCP recovery (published-artifact SoT, bounded npm metadata + sha512-verified tarball, exit 4 on unverifiable bytes; see docs/reviews/mcp-published-recovery/pin-review.md); previously fix/mcp-refs-watch-locales: tool-count detector widened (qualifier words, non-ASCII noun endings, CJK), glob watch lists, --root override for hermetic fixtures, --fix kept symmetric with the detector
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
   "scripts/check-openai-worker-topology.mjs": "9faa435df74bda80ef9a1ecf52d322e7604f3d751c67f6ecab4213643e98172f",
   "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",
@@ -331,7 +342,7 @@ export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
   "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "00b5ce103dc0309092b2f317cab66406389f957e3e923555bd6c24a4118193e3", // Reviewed invoice reads: three description-only boundaries for unavailable external evidence; schemas, OAuth and 33-tool security schemes unchanged
-  "src/__tests__/fixtures/public-capability-contract.json": "8248f321a13b5a729e3dc2ec205328f163bfef27b5715542cab1557d37c8d05d",
+  "src/__tests__/fixtures/public-capability-contract.json": "1b0820d9b441a32bae739f7dd7f5f62054cd0e5fa3d81567f8931a4233084157",
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
 
