@@ -49,8 +49,8 @@ on:
           - npm-and-worker
       dry_run:
         description: >-
-          If true, run every gate EXCEPT the npm publish, wrangler deploy,
-          GitHub Release, and downstream cascade. Deterministic package
+          If true, run every gate EXCEPT publishing to npm, the Cloudflare
+          Worker release, the GitHub Release, and downstream cascade. Deterministic package
           evidence is still produced and asserted locally.
         required: false
         type: boolean
@@ -301,6 +301,13 @@ jobs:
 
       - name: Install (inert — no lifecycle hooks before gates)
         run: npm ci --ignore-scripts
+
+      - name: Install Worker dependencies (inert) for the topology config reader
+        # The contract test below runs scripts/check-full-worker-topology.mjs, which
+        # parses wrangler.toml with the Worker-locked Wrangler. Without this install
+        # five of its tests fail CONFIG_UNREADABLE and no release can pass `gates`.
+        # Node 22 is already set up above, the same major as the preflight job.
+        run: npm ci --prefix workers/remote-mcp --ignore-scripts
 
       - name: Release topology and Full OAuth authority contract
         run: node --test scripts/__tests__/release-workflow-contract.test.mjs

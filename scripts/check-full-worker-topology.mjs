@@ -4,10 +4,13 @@
 // the OpenAI checker is not modified. See docs/full-topology-bootstrap.md.
 //
 // The Worker config is parsed with the Worker-locked Wrangler's own offline
-// reader (`experimental_readRawConfig`), so this gate sees exactly the keys,
-// tables, migrations and bindings Wrangler sees at deploy time. The previous
-// line-based regex parse disagreed with Wrangler on indented keys, quoted keys
-// and table headers with trailing comments. The reader is resolved ONLY from
+// reader (`experimental_readRawConfig`) run on a COPY of the file in a temp dir,
+// so keys, tables, migrations and bindings are read with Wrangler's TOML and
+// raw-config semantics. That is not a proof of what Wrangler resolves at deploy
+// time: which file Wrangler reads is pinned separately (`--config wrangler.toml`
+// in the workflow plus the redirect-file test). The previous line-based regex
+// parse disagreed with Wrangler on indented keys, quoted keys and table headers
+// with trailing comments. The reader is resolved ONLY from
 // workers/remote-mcp/node_modules (never from an ancestor directory), so the
 // version that parses is the version package-lock.json pins; when it is not
 // installed the gate blocks (CONFIG_UNREADABLE), it never falls back to a parse
@@ -74,7 +77,17 @@ function parseToml(toml) {
   }
 }
 
-// Closed set of top-level tables and keys (r2_buckets, services, d1, ... are rejected).
+// Allowlist of top-level tables and keys (r2_buckets, services, d1, ... are rejected).
+// [alias], [observability] and [dev] are compared for EXACT content below: an alias
+// redirects modules inside the production bundle, so it is part of the contract.
+const EXPECTED_ALIAS = {
+  zod: "../../node_modules/zod",
+  "zod/v4": "../../node_modules/zod/v4",
+  "zod/v4-mini": "../../node_modules/zod/v4-mini",
+  "zod/v4/core": "../../node_modules/zod/v4/core",
+};
+const EXPECTED_OBSERVABILITY = { enabled: true };
+const EXPECTED_DEV = { port: 8788 };
 const ROOT_KEYS = ["compatibility_date", "compatibility_flags", "main", "name", "routes"];
 const TABLES = new Set(["alias", "assets", "dev", "durable_objects", "kv_namespaces", "migrations",
   "observability", "vars"]);
@@ -126,6 +139,9 @@ function configShapeIssues(config) {
   list(config.routes).forEach((route) => exact(keysOf(route), ["pattern", "zone_name"], "routes"));
   const assets = asTable("assets");
   if (assets) exact(keysOf(assets), ["binding", "directory"], "assets");
+  if (!same(config.alias, EXPECTED_ALIAS)) issues.push("alias:DRIFT");
+  if (!same(config.observability, EXPECTED_OBSERVABILITY)) issues.push("observability:DRIFT");
+  if (!same(config.dev, EXPECTED_DEV)) issues.push("dev:DRIFT");
   const vars = asTable("vars");
   if (vars && Object.values(vars).some((value) => typeof value !== "string")) issues.push("vars:FIELDS");
   for (const header of ["assets", "durable_objects", "vars"]) {
@@ -252,5 +268,16 @@ function runCli() {
 
 // Compare real paths: invoked through a symlink (a /var -> /private/var temp dir, a
 // linked worktree) the gate used to match nothing, run nothing and exit 0.
-const invokedPath = (() => { try { return process.argv[1] && realpathSync(process.argv[1]); } catch { return undefined; } })();
-if (invokedPath && fileURLToPath(import.meta.url) === invokedPath) runCli();
+// If argv[1] cannot be resolved the invocation cannot be matched to this file: that is a
+// BLOCK (exit 1), never a silent exit 0.
+function isMainModule() {
+  if (!process.argv[1]) return false;
+  try {
+    return fileURLToPath(import.meta.url) === realpathSync(process.argv[1]);
+  } catch {
+    console.error("Full Worker topology gate: BLOCK (INVOCATION_PATH_UNRESOLVABLE)");
+    process.exitCode = 1;
+    return false;
+  }
+}
+if (isMainModule()) runCli();
