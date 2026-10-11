@@ -807,10 +807,11 @@ test("FakeErpAuthority: oidMismatch surfaces a 403 instead of a 404 when DELETE'
   assert.equal(baseline.status, 404, "with oidMismatch off, the production default of 404 returns");
 });
 
-// #205 item 1 (review of #216): replacing the earlier grant (auth-handler.ts:793-802)
-// revokes only the OAuth grant; the ERP key bound to it is never revoked, and a failed
-// replacement is only logged, with no retry.
-test("RED #205 finding 1: the ERP key bound to a replaced grant is revoked", async (t) => {
+// #205 item 1 (review of #216): replacing the earlier grant after the commit
+// (auth-handler.ts, `Promise.allSettled` over `revokeGrant`) was inline only: a
+// transient failure was logged and the superseded grant and its ERP key stayed
+// alive. The commit must queue the replacement durably and retry it.
+test("#205: a superseded grant and its ERP key are revoked durably after a transient replacement failure", async (t) => {
   const h = await createOAuthRouteHarness(t);
   const first = await h.startLogin();
   const idToken = await mintIdToken();
@@ -818,12 +819,30 @@ test("RED #205 finding 1: the ERP key bound to a replaced grant is revoked", asy
   assert.equal(connected.status, 200, JSON.stringify(connected.body));
   const earlier = await h.redeem(first.clientId, connected.body.redirectTo);
 
+  // KV deletes fail for the whole reconnect: the inline replacement fails.
   const { stateKey } = await h.startLogin(first.clientId);
+  const kvDelete = h.kv.delete.bind(h.kv);
+  let kvDown = true;
+  h.kv.delete = async (key: string) => {
+    if (kvDown) throw new Error("injected KV delete failure");
+    return kvDelete(key);
+  };
   const reconnected = await h.callback(stateKey, idToken);
+  kvDown = false;
   assert.equal(reconnected.status, 200, JSON.stringify(reconnected.body));
+  const current = await h.redeem(first.clientId, reconnected.body.redirectTo);
+  assert.equal(h.kv.grantKeys().length, 2, "the inline replacement failed");
 
-  h.clock.offsetMs += 10 * 60_000;
-  for (const { store } of h.namespace.objects.values()) await store.alarm?.();
-  assert.equal((await h.callMcp(earlier.accessToken)).status, 401, "the superseded grant must not stay usable");
-  assert.equal(h.erp.activeKeyIds().length, 1, "only the new grant's ERP key stays active");
+  // The first hand-off to the earlier grant's token family fails as well.
+  h.namespace.fail("/token-family/supersede", "before", 1);
+  for (let round = 0; round < 6; round += 1) {
+    h.clock.offsetMs += 10_000;
+    await h.runDueAlarms();
+  }
+
+  assert.equal((await h.callMcp(earlier.accessToken)).status, 401, "the superseded grant is unusable");
+  assert.equal((await h.callMcp(current.accessToken)).status, 200, "the current grant survives");
+  assert.deepEqual(h.erp.activeKeyIds(), [current.keyId], "only the current grant's ERP key stays active");
+  assert.equal(h.kv.grantKeys().length, 1, "the superseded grant is gone from KV");
+  assertLogsAreClean(h, [idToken]);
 });

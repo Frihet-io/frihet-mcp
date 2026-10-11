@@ -724,6 +724,25 @@ export async function createOAuthRouteHarness(
     return entry.state.storage;
   }
 
+  /**
+   * Fire every Durable Object alarm that is due at the harness clock, as the
+   * runtime would: an alarm is consumed when it fires and only a handler that
+   * still has work re-arms it. Repeats until nothing is due.
+   */
+  async function runDueAlarms(maxRounds = 20): Promise<void> {
+    for (let round = 0; round < maxRounds; round += 1) {
+      const due = [...namespace.objects.values()].filter(({ state }) => (
+        state.storage.alarmAt !== null && state.storage.alarmAt <= Date.now()
+      ));
+      if (due.length === 0) return;
+      for (const { state, store } of due) {
+        state.storage.alarmAt = null;
+        await store.alarm();
+      }
+    }
+    throw new Error("Durable Object alarms did not settle");
+  }
+
   return {
     env,
     kv,
@@ -737,5 +756,6 @@ export async function createOAuthRouteHarness(
     redeem,
     callMcp,
     runStateAlarm,
+    runDueAlarms,
   };
 }

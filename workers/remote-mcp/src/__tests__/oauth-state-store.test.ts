@@ -957,48 +957,87 @@ test("rotation: a hard identity mismatch (different uid) still tombstones the fa
 // #205 findings from the independent review of #216 — pinned RED first.
 // ---------------------------------------------------------------------------
 
-test("RED #205 finding 3: a pending previous-binding revoke survives a tombstone cleanup that ends in deleteAll", async (context) => {
+test("#205: a committed state drains its grant-replacement outbox before any expiry cleanup, with partial ACKs", async (context) => {
   const t0 = 1_800_000_000_000;
   let now = t0;
   context.mock.method(Date, "now", () => now);
-  const revoked: string[] = [];
-  const cleanupAuthorities: OAuthCleanupAuthorities = {
-    async revokeGrant(): Promise<void> {},
-    async revokeBackend(_env, binding): Promise<boolean> {
-      revoked.push((binding as { keyId: string }).keyId);
+  const first = "a".repeat(16);
+  const second = "b".repeat(16);
+  const failuresLeft = new Map([[first, 2], [second, 1]]);
+  const handedOff: string[] = [];
+  const cleanupAuthorities = {
+    ...SUCCESSFUL_CLEANUP,
+    async supersedeGrant(_env: unknown, userId: string, grantId: string): Promise<boolean> {
+      const left = failuresLeft.get(grantId) ?? 0;
+      if (left > 0) {
+        failuresLeft.set(grantId, left - 1);
+        throw new Error("injected token-family outage");
+      }
+      handedOff.push(`${userId}/${grantId}`);
       return true;
     },
-    async revokeBackendCorrelation(): Promise<boolean> {
-      return true;
-    },
-  };
+  } as OAuthCleanupAuthorities;
   const { store, state } = makeStore({ cleanupAuthorities });
-  const hash = "7".repeat(64);
-  assert.equal((await store.fetch(familyRequest("/token-family", {
-    currentKind: "refresh_token",
-    currentHash: hash,
-    expiresAtMs: t0 + 60_000,
-    apiKeyBinding: OPENAI_BINDING,
-  }, "PUT"))).status, 204);
-  const begin = await familyJson(store, "/token-family/begin", { kind: "refresh_token", credentialHash: hash });
-  const rotated = await familyJson(store, "/token-family/commit", {
-    leaseId: begin.leaseId,
-    newRefreshTokenHash: "8".repeat(64),
-    apiKeyBinding: { ...OPENAI_BINDING, keyId: "Z".repeat(20) },
+
+  assert.equal(await putState(store, "{\"clientId\":\"client\"}"), 204);
+  const reserved = await stateJson(store, "/reserve");
+  assert.equal(reserved.outcome, "reserved");
+  assert.equal((await stateJson(store, "/attempt", {
+    leaseId: reserved.leaseId,
+    uid: "firebase-user",
+    reconciled: [],
+  })).outcome, "armed");
+  const committed = await stateJson(store, "/commit", {
+    leaseId: reserved.leaseId,
+    replacedGrantIds: [first, second],
   });
-  assert.equal(rotated.outcome, "committed");
-  // The family is tombstoned and then expires before the outbox ever ran.
-  await familyJson(store, "/token-family/revoke", {});
-  now = t0 + 61_000;
-  for (let i = 0; i < 6 && state.storage.values.size > 0; i += 1) await store.alarm();
-  assert.ok(
-    revoked.includes(OPENAI_BINDING.keyId),
-    `the rotated-away key must be revoked before storage is wiped (revoked: ${revoked.join(",")})`,
+  assert.equal(committed.outcome, "committed");
+  const intent = state.storage.values.get("oauth_grant_replacement") as Record<string, unknown>;
+  assert.equal(intent?.userId, "firebase-user", "the uid comes from the armed lease");
+  assert.deepEqual(intent?.grantIds, [first, second]);
+  assert.ok((state.storage.alarm ?? Infinity) <= t0 + 1_000, "the outbox is armed with the commit");
+
+  // The state expires before any hand-off succeeds. Its expiry cleanup would
+  // otherwise end in deleteAll() and drop the queued replacements.
+  now = t0 + 11 * 60_000;
+  await store.alarm();
+  assert.deepEqual(handedOff, []);
+  assert.deepEqual(
+    (state.storage.values.get("oauth_grant_replacement") as { grantIds: string[] }).grantIds,
+    [first, second],
+    "nothing acknowledged, nothing dropped",
   );
+  assert.ok((state.storage.alarm ?? 0) > now, "the next attempt is armed");
+
+  now += 5 * 60_000;
+  await store.alarm();
+  assert.deepEqual(handedOff, [`firebase-user/${second}`]);
+  assert.deepEqual(
+    (state.storage.values.get("oauth_grant_replacement") as { grantIds: string[] }).grantIds,
+    [first],
+    "an acknowledged hand-off is not repeated",
+  );
+
+  now += 5 * 60_000;
+  await store.alarm();
+  assert.deepEqual(handedOff, [`firebase-user/${second}`, `firebase-user/${first}`]);
+  assert.equal(state.storage.values.has("oauth_grant_replacement"), false);
+
+  await store.alarm();
+  assert.equal(state.storage.values.size, 0, "the drained, expired state is then cleared");
 });
 
-test("RED #205 finding 2: a commit that carries a different keyId than the family's binding tombstones the family", async () => {
-  const { store, state } = makeStore();
+test("#205: a commit carrying a different keyId than the family's binding tombstones the family and revokes the bound key", async () => {
+  const revoked: unknown[] = [];
+  const { store, state } = makeStore({
+    cleanupAuthorities: {
+      ...SUCCESSFUL_CLEANUP,
+      async revokeBackend(_env, binding): Promise<boolean> {
+        revoked.push(binding);
+        return true;
+      },
+    },
+  });
   const hash = "9".repeat(64);
   assert.equal((await store.fetch(familyRequest("/token-family", {
     currentKind: "refresh_token",
@@ -1013,5 +1052,25 @@ test("RED #205 finding 2: a commit that carries a different keyId than the famil
     apiKeyBinding: { ...OPENAI_BINDING, keyId: "Z".repeat(20) },
   });
   assert.equal(commit.outcome, "revoked", "within one family the keyId is immutable; a different one is a forged commit");
-  assert.equal((state.storage.values.get("oauth_token_family") as { status: string }).status, "revoked");
+  assert.deepEqual(commit.apiKeyBinding, OPENAI_BINDING);
+  const family = state.storage.values.get("oauth_token_family") as {
+    status: string;
+    apiKeyBinding?: unknown;
+  };
+  assert.equal(family.status, "revoked");
+  assert.deepEqual(family.apiKeyBinding, OPENAI_BINDING, "the forged binding never replaces the bound one");
+  assert.deepEqual(
+    (state.storage.values.get("oauth_token_family_cleanup") as { apiKeyBinding?: unknown }).apiKeyBinding,
+    OPENAI_BINDING,
+  );
+  assert.equal(
+    (await familyJson(store, "/token-family/begin", {
+      kind: "refresh_token",
+      credentialHash: "a".repeat(64),
+    })).outcome,
+    "revoked",
+  );
+
+  await store.alarm();
+  assert.deepEqual(revoked, [OPENAI_BINDING], "only the family's own key is revoked");
 });
