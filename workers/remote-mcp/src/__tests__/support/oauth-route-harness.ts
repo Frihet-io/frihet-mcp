@@ -756,7 +756,10 @@ export async function createOAuthRouteHarness(
   /**
    * Fire every Durable Object alarm that is due at the harness clock, as the
    * runtime would: an alarm is consumed when it fires and only a handler that
-   * still has work re-arms it. Repeats until nothing is due.
+   * still has work re-arms it. Repeats until nothing is due. The clock does not
+   * move by itself: an alarm armed for `now + 1` (a tombstone's cleanup) is due
+   * only after the test advances `clock.offsetMs`, so drive multi-hop outboxes
+   * in rounds.
    */
   async function runDueAlarms(maxRounds = 20): Promise<void> {
     for (let round = 0; round < maxRounds; round += 1) {

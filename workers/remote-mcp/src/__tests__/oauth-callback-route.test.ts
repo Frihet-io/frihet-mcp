@@ -861,8 +861,11 @@ test("#205: a fault-free reconnect revokes the superseded grant's ERP key", asyn
   const reconnected = await h.callback(stateKey, idToken);
   assert.equal(reconnected.status, 200, JSON.stringify(reconnected.body));
   const current = await h.redeem(first.clientId, reconnected.body.redirectTo);
-  h.clock.offsetMs += 10_000;
-  await h.runDueAlarms();
+  // Round 1 hands the grant to its family, round 2 runs the family's cleanup.
+  for (let round = 0; round < 3; round += 1) {
+    h.clock.offsetMs += 10_000;
+    await h.runDueAlarms();
+  }
 
   assert.equal((await h.callMcp(earlier.accessToken)).status, 401);
   assert.equal((await h.callMcp(current.accessToken)).status, 200);
