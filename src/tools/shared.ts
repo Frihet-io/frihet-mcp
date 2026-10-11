@@ -1220,7 +1220,7 @@ export const gestoriaAgingConsolidatedOutput = z.object({
  * lived here previously; the registration in register-all.ts and the file
  * src/tools/onboarding.ts are also gone. If a future Frihet-ERP release
  * ships the family, restore src/tools/onboarding.ts, re-add the export
- * symbols here, and re-import them in register-all.ts.
+ * symbols here, and re-import them in register-all.ts. */
 
 /** Leave/PTO request — backend `/v1/leaves`. */
 export const leaveRequestItemOutput = z.object({
