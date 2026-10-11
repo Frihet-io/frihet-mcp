@@ -272,6 +272,8 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "70acc0ff78b2a0be6ecd32194ec173f8276b989288d89460d78ea5ea7f10426c", // provisioning credential removed from the public API client; sinks unchanged
+  "workers/remote-mcp/src/claude-public-surface.ts": "2437e7824b6a2a8d98ca982f4631643fa522c224ec554c3c7610bd5d66f6b2e5", // isolated Claude host and authorization boundary
+  "workers/remote-mcp/src/oauth-profile.ts": "fd78139588876001b0521d5d9370b89a019f065ed783fdc76617a863c978c8a1", // isolated Claude host and authorization boundary
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "042092f9805c06719355a6a3a7d85f7c40dd88e89cb764de9d54208b6275d1c6", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
   "workers/api-proxy/worker.js": "34f6c6e995a6c779d6a80fb954321f589cf64cd99f62c5d9c6b49e0fcaf07fd4",

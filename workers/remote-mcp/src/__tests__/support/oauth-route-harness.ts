@@ -664,6 +664,9 @@ export async function createOAuthRouteHarness(
       state as unknown as DurableObjectState,
       storeEnv as never,
       {
+        // Production hand-offs (token-family supersede) stay; only the
+        // profile-bound authorities below are replaced for Node.
+        ...DEFAULT_CLEANUP_AUTHORITIES,
         // Node cannot import cloudflare:workers; use getOAuthApi from the same
         // exact SDK build already adapted by loadLockedProvider above.
         async revokeGrant(cleanupEnv, userId, grantId) {

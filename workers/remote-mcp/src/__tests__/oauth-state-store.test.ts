@@ -1025,6 +1025,7 @@ test("token family supersede: tombstones the bound family, or leaves a revoked p
     unredeemed.state.storage.values.get("oauth_token_family_cleanup"),
     {
       version: 1,
+      accessProfile: "openai",
       userId: "firebase-user",
       grantId: "g".repeat(16),
       grantRevoked: false,
