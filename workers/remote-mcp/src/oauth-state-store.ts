@@ -14,9 +14,16 @@
  * correlation proves it left no active credential: the next attempt cannot
  * arm while one is unproven, and an abandoned state is reconciled by its alarm.
  *
+ * A commit also records the earlier grants this authorization replaces. That
+ * outbox is drained by the alarm before any expiry cleanup: each grant's
+ * token family is tombstoned, and the family's own cleanup outbox revokes the
+ * grant and its backend key. A transient failure is retried with backoff until
+ * the reconcile horizon, when the replaced grants' keys have expired.
+ *
  * Rollback: a Worker that only reads the v1 envelope deletes these records,
- * including unproven attempts. Let pending states expire and their alarms
- * reconcile before rolling back.
+ * including unproven attempts. A Worker without the replacement outbox drops
+ * undrained ones when the state expires. Let pending states expire and their
+ * alarms reconcile before rolling back.
  */
 
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
@@ -37,12 +44,8 @@ const TOKEN_FAMILY_INFLIGHT_TTL_MS = 60 * 1000;
 const TOKEN_FAMILY_CLEANUP_STORAGE_KEY = "oauth_token_family_cleanup";
 const CLEANUP_INITIAL_BACKOFF_MS = 1_000;
 const CLEANUP_MAX_BACKOFF_MS = 5 * 60 * 1000;
-// One storage entry per previously-bound keyId that a rotation left behind.
-// A rotation can leave multiple keyIds behind in sequence (A→B→C), so each one
-// has its own retry counter keyed by the exact keyId the outbox must revoke.
-const PREVIOUS_BINDING_REVOKE_PREFIX = "oauth_revoke_previous_binding:";
-const PREVIOUS_BINDING_REVOKE_INITIAL_BACKOFF_MS = 1_000;
-const PREVIOUS_BINDING_REVOKE_MAX_BACKOFF_MS = 5 * 60 * 1000;
+const GRANT_REPLACEMENT_STORAGE_KEY = "oauth_grant_replacement";
+const MAX_REPLACED_GRANT_IDS = 64;
 const INTERNAL_ORIGIN = "https://oauth-state.internal";
 
 export type OAuthTokenKind = "authorization_code" | "refresh_token";
@@ -130,27 +133,27 @@ type TokenFamilyCleanupIntent = {
   attempt: number;
 };
 
-/**
- * Asks the OAuthStateStore to revoke one exact `keyId` that a rotation left
- * behind. It survives a Worker restart because the alarm is rearmed every
- * attempt before external I/O; replay is idempotent because
- * `revokeOAuthApiKey` accepts either `200` or `404` for an already-revoked key.
- */
-type PreviousBindingRevokeIntent = {
+/** Earlier grants a committed authorization replaces, not yet handed off. */
+type GrantReplacementIntent = {
   version: 1;
+  /** The armed lease's verified uid, never a request field. */
   userId: string;
-  keyId: string;
+  grantIds: string[];
   attempt: number;
+  notAfterMs: number;
 };
 
 type OAuthStateStoreEnv = {
   OAUTH_KV: KVNamespace;
+  OAUTH_STATE: DurableObjectNamespace;
   FRIHET_API_BASE: string;
   FRIHET_OAUTH_API_KEY: string;
 };
 
 export type OAuthCleanupAuthorities = {
   revokeGrant(env: OAuthStateStoreEnv, userId: string, grantId: string): Promise<void>;
+  /** True only once the grant's token family durably holds its tombstone. */
+  supersedeGrant(env: OAuthStateStoreEnv, userId: string, grantId: string): Promise<boolean>;
   revokeBackend(
     env: OAuthStateStoreEnv,
     binding: OAuthApiKeyBinding | undefined,
@@ -194,10 +197,14 @@ const CLEANUP_OAUTH_OPTIONS: OAuthProviderOptions<OAuthStateStoreEnv> = {
   defaultHandler: UNUSED_OAUTH_HANDLER,
 };
 
-const DEFAULT_CLEANUP_AUTHORITIES: OAuthCleanupAuthorities = {
+export const DEFAULT_CLEANUP_AUTHORITIES: OAuthCleanupAuthorities = {
   async revokeGrant(env, userId, grantId): Promise<void> {
     const { getOAuthApi } = await import("@cloudflare/workers-oauth-provider");
     await getOAuthApi(CLEANUP_OAUTH_OPTIONS, env).revokeGrant(grantId, userId);
+  },
+  async supersedeGrant(env, userId, grantId): Promise<boolean> {
+    const { supersedeOAuthTokenFamily } = await import("./oauth-token-family.js");
+    return supersedeOAuthTokenFamily(env.OAUTH_STATE, userId, grantId);
   },
   async revokeBackend(env, binding): Promise<boolean> {
     if (!binding) return true;
@@ -242,11 +249,9 @@ function noStoreJson(value: unknown, status = 200): Response {
 }
 
 /**
- * Emit a single structured log line for an OAuth-state lifecycle outcome.
- * The Durable Object bundle cannot share the Worker `log()` helper, but the
- * test harness captures `console.error` lines, so JSON-encoded records keep
- * the same observability story for both paths without pulling a module in
- * across the bundle boundary.
+ * Emit one structured log line for an OAuth-state lifecycle outcome. Records
+ * carry outcome, stage, reason and counts only: never a uid, grant id, key id
+ * or credential.
  */
 function logOAuthStateEvent(event: Record<string, unknown>): void {
   console.error(JSON.stringify({ component: "oauth-state-store", ...event }));
@@ -522,27 +527,24 @@ function cleanupBackoffMs(attempt: number): number {
   );
 }
 
-function previousBindingRevokeBackoffMs(attempt: number): number {
-  return Math.min(
-    PREVIOUS_BINDING_REVOKE_INITIAL_BACKOFF_MS * 2 ** Math.min(attempt, 8),
-    PREVIOUS_BINDING_REVOKE_MAX_BACKOFF_MS,
-  );
+function isReplacedGrantIds(value: unknown): value is string[] {
+  return Array.isArray(value)
+    && value.length >= 1
+    && value.length <= MAX_REPLACED_GRANT_IDS
+    && value.every(isGrantId);
 }
 
-function isPreviousBindingRevokeIntent(value: unknown): value is PreviousBindingRevokeIntent {
+function isGrantReplacementIntent(value: unknown): value is GrantReplacementIntent {
   return isRecord(value)
-    && hasOnlyKeys(value, new Set(["version", "userId", "keyId", "attempt"]))
+    && hasOnlyKeys(value, new Set(["version", "userId", "grantIds", "attempt", "notAfterMs"]))
     && value.version === 1
     && isSafeUid(value.userId)
-    && typeof value.keyId === "string"
-    && /^[A-Za-z0-9]{20}$/u.test(value.keyId)
+    && isReplacedGrantIds(value.grantIds)
     && typeof value.attempt === "number"
     && Number.isSafeInteger(value.attempt)
-    && value.attempt >= 0;
-}
-
-function previousBindingRevokeStorageKey(keyId: string): string {
-  return `${PREVIOUS_BINDING_REVOKE_PREFIX}${keyId}`;
+    && value.attempt >= 0
+    && typeof value.notAfterMs === "number"
+    && Number.isSafeInteger(value.notAfterMs);
 }
 
 export class OAuthStateStore {
@@ -641,80 +643,6 @@ export class OAuthStateStore {
       await transaction.delete(TOKEN_FAMILY_CLEANUP_STORAGE_KEY);
       await transaction.setAlarm(record.expiresAtMs);
     });
-    // A previous-binding revoke outbox for an earlier rotation (A→...→current)
-    // survives the family tombstone and still needs an alarm to fire. Always
-    // re-arm so the soonest of the two deadlines wins.
-    await this.rearmAlarmForPendingOutboxes();
-  }
-
-  /**
-   * Revoke one previously-bound keyId a rotation left behind. Separate from
-   * `processCleanup` because the family stays active — the old credential is
-   * the only thing we want gone. Same outbox discipline: the next alarm is
-   * armed before any external I/O, and the call to `revokeBackend` is
-   * idempotent at the authority (200 or 404 both mean the key is gone).
-   */
-  private async processPreviousBindingRevoke(
-    intent: PreviousBindingRevokeIntent,
-  ): Promise<void> {
-    if (!this.env) {
-      throw new Error("OAuth previous-binding revoke environment is unavailable");
-    }
-
-    const nextAttempt = Math.min(intent.attempt + 1, Number.MAX_SAFE_INTEGER);
-    const retryAtMs = Date.now() + previousBindingRevokeBackoffMs(nextAttempt);
-    await this.state.storage.transaction(async (transaction) => {
-      await transaction.put(
-        previousBindingRevokeStorageKey(intent.keyId),
-        { ...intent, attempt: nextAttempt },
-      );
-      await transaction.setAlarm(retryAtMs);
-    });
-
-    const result = await Promise.allSettled([
-      this.cleanupAuthorities.revokeBackend(this.env, {
-        uid: intent.userId,
-        keyId: intent.keyId,
-        accessProfile: "openai",
-        oauthResource: "https://openai-mcp.frihet.io",
-      }),
-    ]);
-    const fulfilled = result[0];
-    if (fulfilled.status === "fulfilled" && fulfilled.value === true) {
-      await this.state.storage.delete(previousBindingRevokeStorageKey(intent.keyId));
-      // Re-arm for any other pending outbox of the same family. If none,
-      // `alarm()` will clear or hand back to the family expiresAtMs alarm.
-      await this.rearmAlarmForPendingOutboxes();
-    }
-  }
-
-  /**
-   * Reposition the alarm so the next pending outbox fires at or before its
-   * own backoff horizon. Always re-arms with the soonest deadline; the alarm
-   * body itself re-evaluates which slot to process.
-   */
-  private async rearmAlarmForPendingOutboxes(): Promise<void> {
-    const listed = await this.state.storage.list({ prefix: PREVIOUS_BINDING_REVOKE_PREFIX });
-    let earliest = Number.POSITIVE_INFINITY;
-    for (const [key, value] of listed) {
-      if (!isPreviousBindingRevokeIntent(value)) {
-        throw new Error(`OAuth previous-binding revoke intent at ${key} is invalid`);
-      }
-      const deadline = Date.now() + previousBindingRevokeBackoffMs(value.attempt + 1);
-      if (deadline < earliest) earliest = deadline;
-    }
-    if (!Number.isFinite(earliest)) {
-      const family = await this.state.storage.get<TokenFamilyRecord>(
-        TOKEN_FAMILY_STORAGE_KEY,
-      );
-      if (family) {
-        await this.state.storage.setAlarm(family.expiresAtMs);
-      } else {
-        await this.state.storage.deleteAll();
-      }
-      return;
-    }
-    await this.state.storage.setAlarm(earliest);
   }
 
   /**
@@ -759,6 +687,62 @@ export class OAuthStateStore {
       return;
     }
     await this.state.storage.put(STATE_STORAGE_KEY, { ...armed, unreconciled: remaining });
+  }
+
+  /**
+   * Hand every replaced grant to its token family, which tombstones it and
+   * owns the revocation from there. Same outbox discipline: the next alarm is
+   * armed before any external I/O, and only unacknowledged grants are kept.
+   */
+  private async processGrantReplacement(intent: GrantReplacementIntent): Promise<void> {
+    // Replaced grants hold keys provisioned before this commit, which expire
+    // within the reconcile horizon; past it they can hold no active credential.
+    if (Date.now() >= intent.notAfterMs) {
+      logOAuthStateEvent({
+        outcome: "abandoned",
+        stage: "grant_replacement",
+        reason: "horizon_reached",
+        pendingCount: intent.grantIds.length,
+      });
+      await this.finishGrantReplacement();
+      return;
+    }
+    if (!this.env) {
+      throw new Error("OAuth grant replacement environment is unavailable");
+    }
+    const attempt = Math.min(intent.attempt + 1, Number.MAX_SAFE_INTEGER);
+    const armed: GrantReplacementIntent = { ...intent, attempt };
+    await this.state.storage.transaction(async (transaction) => {
+      await transaction.put(GRANT_REPLACEMENT_STORAGE_KEY, armed);
+      await transaction.setAlarm(Date.now() + cleanupBackoffMs(attempt));
+    });
+
+    const env = this.env;
+    const results = await Promise.allSettled(
+      intent.grantIds.map((grantId) => this.cleanupAuthorities.supersedeGrant(env, intent.userId, grantId)),
+    );
+    const remaining = intent.grantIds.filter((_, index) => {
+      const result = results[index];
+      return result?.status !== "fulfilled" || result.value !== true;
+    });
+    if (remaining.length === 0) {
+      await this.finishGrantReplacement();
+      return;
+    }
+    logOAuthStateEvent({
+      outcome: "retry",
+      stage: "grant_replacement",
+      pendingCount: remaining.length,
+    });
+    await this.state.storage.put(GRANT_REPLACEMENT_STORAGE_KEY, { ...armed, grantIds: remaining });
+  }
+
+  /** Drop the drained outbox and let `alarm()` route whatever else remains. */
+  private async finishGrantReplacement(): Promise<void> {
+    await this.state.storage.transaction(async (transaction) => {
+      await transaction.delete(GRANT_REPLACEMENT_STORAGE_KEY);
+      await transaction.setAlarm(Date.now());
+    });
   }
 
   private async readStateRecord(): Promise<OAuthStateRecord | undefined> {
@@ -898,12 +882,19 @@ export class OAuthStateStore {
       if (request.method === "POST" && pathname === "/commit") {
         const body = await readJsonBody(request);
         const leaseId = body?.leaseId;
-        if (!body || !hasOnlyKeys(body, new Set(["leaseId"])) || !isLeaseId(leaseId)) {
+        const replacedGrantIds = body?.replacedGrantIds;
+        if (
+          !body
+          || !hasOnlyKeys(body, new Set(["leaseId", "replacedGrantIds"]))
+          || !isLeaseId(leaseId)
+          || (replacedGrantIds !== undefined && !isReplacedGrantIds(replacedGrantIds))
+        ) {
           return noStoreJson({ outcome: "invalid" }, 400);
         }
         const record = await this.readStateRecord();
         if (record?.status === "committed" && record.committedLeaseId === leaseId) {
-          // Idempotent: a retried commit whose first response was lost.
+          // Idempotent: a retried commit whose first response was lost. Its
+          // replacement outbox was written with the first commit.
           return noStoreJson({ outcome: "committed" });
         }
         if (
@@ -927,7 +918,24 @@ export class OAuthStateStore {
           unreconciled: [],
           committedLeaseId: leaseId,
         };
-        await this.state.storage.put(STATE_STORAGE_KEY, committed);
+        const userId = record.lease.uid;
+        const now = Date.now();
+        await this.state.storage.transaction(async (transaction) => {
+          await transaction.put(STATE_STORAGE_KEY, committed);
+          if (replacedGrantIds !== undefined) {
+            const intent: GrantReplacementIntent = {
+              version: 1,
+              userId,
+              grantIds: [...new Set(replacedGrantIds)],
+              attempt: 0,
+              notAfterMs: now + STATE_RECONCILE_HORIZON_MS,
+            };
+            await transaction.put(GRANT_REPLACEMENT_STORAGE_KEY, intent);
+            // Pre-arm with the commit: a crash right after it can never leave
+            // the replaced grants without a future alarm.
+            await transaction.setAlarm(now + 1);
+          }
+        });
         return noStoreJson({ outcome: "committed" });
       }
 
@@ -1161,20 +1169,10 @@ export class OAuthStateStore {
         if (!record.inflight || record.inflight.leaseId !== leaseId) {
           return noStoreJson({ outcome: "invalid", apiKeyBinding: record.apiKeyBinding });
         }
-        // A binding whose uid, access profile, or resource is not the same
-        // identity the family knows is the sign of a forged commit and must
-        // tombstone the family. A different keyId against an otherwise
-        // matching identity is a legitimate rotation: the new binding
-        // replaces the old one and the OLD keyId is revoked asynchronously
-        // through the rotation outbox further down.
         if (
           apiKeyBinding
           && record.apiKeyBinding
-          && (
-            record.apiKeyBinding.uid !== apiKeyBinding.uid
-            || record.apiKeyBinding.accessProfile !== apiKeyBinding.accessProfile
-            || record.apiKeyBinding.oauthResource !== apiKeyBinding.oauthResource
-          )
+          && !sameBinding(record.apiKeyBinding, apiKeyBinding)
         ) {
           await this.tombstoneTokenFamily(record);
           return noStoreJson({ outcome: "revoked", apiKeyBinding: record.apiKeyBinding });
@@ -1184,44 +1182,11 @@ export class OAuthStateStore {
           `${TOKEN_FAMILY_SPENT_PREFIX}${record.currentHash}`,
           true,
         );
-        const previousBinding = record.apiKeyBinding;
         record.currentKind = "refresh_token";
         record.currentHash = newRefreshTokenHash;
-        // A commit that omits `apiKeyBinding` keeps the one the family already
-        // carries; only an EXPLICIT new binding can rotate. Distinguishing the
-        // two matters: only the rotation case leaves a previously-bound keyId
-        // alive on the backend that an outbox must revoke.
-        record.apiKeyBinding = apiKeyBinding ?? record.apiKeyBinding;
+        record.apiKeyBinding = record.apiKeyBinding ?? apiKeyBinding;
         delete record.inflight;
-        // Detect a rotation against the same family: a different keyId, the
-        // same uid, the same OpenAI profile. Persist the outbox to revoke the
-        // OLD keyId atomically with the new binding, and pre-arm the alarm
-        // inside the same transaction so a Worker termination between commit
-        // and alarm can never leave the outbox unattended.
-        const rotated = previousBinding
-          && apiKeyBinding
-          && previousBinding.keyId !== apiKeyBinding.keyId
-          && previousBinding.uid === apiKeyBinding.uid
-          && previousBinding.accessProfile === apiKeyBinding.accessProfile
-          && previousBinding.oauthResource === apiKeyBinding.oauthResource
-          ? previousBinding
-          : undefined;
-        await this.state.storage.transaction(async (transaction) => {
-          await transaction.put(TOKEN_FAMILY_STORAGE_KEY, record);
-          if (rotated) {
-            const intent: PreviousBindingRevokeIntent = {
-              version: 1,
-              userId: rotated.uid,
-              keyId: rotated.keyId,
-              attempt: 0,
-            };
-            await transaction.put(
-              previousBindingRevokeStorageKey(rotated.keyId),
-              intent,
-            );
-            await transaction.setAlarm(Date.now() + 1);
-          }
-        });
+        await this.state.storage.put(TOKEN_FAMILY_STORAGE_KEY, record);
         return noStoreJson({ outcome: "committed", apiKeyBinding: record.apiKeyBinding });
       }
 
@@ -1254,6 +1219,41 @@ export class OAuthStateStore {
         return noStoreJson({ outcome: "revoked", apiKeyBinding: record.apiKeyBinding });
       }
 
+      if (request.method === "POST" && pathname === "/token-family/supersede") {
+        const body = await readJsonBody(request);
+        const userId = body?.userId;
+        const grantId = body?.grantId;
+        if (
+          !body
+          || !hasOnlyKeys(body, new Set(["userId", "grantId"]))
+          || !isSafeUid(userId)
+          || !isGrantId(grantId)
+        ) {
+          return new Response(null, { status: 400 });
+        }
+        const record = await this.state.storage.get<TokenFamilyRecord>(
+          TOKEN_FAMILY_STORAGE_KEY,
+        );
+        if (record && (record.userId !== userId || record.grantId !== grantId)) {
+          return new Response(null, { status: 409 });
+        }
+        // A grant whose code was never redeemed has no family yet. Its
+        // tombstone still revokes the grant and refuses its first redemption
+        // (begin answers revoked). Its backend key is named only in the
+        // grant's encrypted props: once the grant is revoked nothing can
+        // present it, and the key lapses at its own expiry.
+        await this.tombstoneTokenFamily(record ?? {
+          version: 1,
+          status: "revoked",
+          userId,
+          grantId,
+          currentKind: "authorization_code",
+          currentHash: "0".repeat(64),
+          expiresAtMs: Date.now() + STATE_RECONCILE_HORIZON_MS,
+        });
+        return new Response(null, { status: 204 });
+      }
+
       return new Response(null, { status: 405 });
     });
   }
@@ -1271,27 +1271,15 @@ export class OAuthStateStore {
         return;
       }
 
-      // Previous-binding revokes are keyed by their keyId so multiple pending
-      // revokes can queue independently. Process the soonest-due one and let
-      // it re-arm the alarm if others are still outstanding.
-      const listed = await this.state.storage.list({
-        prefix: PREVIOUS_BINDING_REVOKE_PREFIX,
-      });
-      let soonest: { keyId: string; intent: PreviousBindingRevokeIntent } | undefined;
-      for (const [key, value] of listed) {
-        if (!isPreviousBindingRevokeIntent(value)) {
-          throw new Error(`OAuth previous-binding revoke intent at ${key} is invalid`);
+      // Drained before the state branch: every path below may end in deleteAll().
+      const replacement = await this.state.storage.get<unknown>(
+        GRANT_REPLACEMENT_STORAGE_KEY,
+      );
+      if (replacement !== undefined) {
+        if (!isGrantReplacementIntent(replacement)) {
+          throw new Error("OAuth grant replacement intent is invalid");
         }
-        if (
-          !soonest
-          || previousBindingRevokeBackoffMs(value.attempt + 1)
-            < previousBindingRevokeBackoffMs(soonest.intent.attempt + 1)
-        ) {
-          soonest = { keyId: value.keyId, intent: value };
-        }
-      }
-      if (soonest) {
-        await this.processPreviousBindingRevoke(soonest.intent);
+        await this.processGrantReplacement(replacement);
         return;
       }
 
@@ -1433,16 +1421,24 @@ export async function armOAuthStateAttempt(
   throw new Error("OAuth state store returned an invalid attempt outcome");
 }
 
+/**
+ * Commit the lease and, atomically with it, the outbox that replaces the
+ * user's earlier grants for this client. Only the first
+ * `MAX_REPLACED_GRANT_IDS` are queued; any beyond that rely on the caller's
+ * inline replacement and are listed again by the next authorization.
+ */
 export async function commitOAuthState(
   namespace: DurableObjectNamespace,
   stateKey: string,
   leaseId: string,
+  replacedGrantIds: readonly string[],
 ): Promise<OAuthStateCommitResult> {
+  const queued = replacedGrantIds.slice(0, MAX_REPLACED_GRANT_IDS);
   const body = await readStateOutcome(
     await stateStub(namespace, stateKey).fetch(`${INTERNAL_ORIGIN}/commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leaseId }),
+      body: JSON.stringify(queued.length > 0 ? { leaseId, replacedGrantIds: queued } : { leaseId }),
     }),
     "commit state",
   );

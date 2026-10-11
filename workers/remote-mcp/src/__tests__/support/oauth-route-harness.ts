@@ -29,7 +29,11 @@ import {
   OPENAI_REVIEW_ORIGIN,
 } from "../../../../../src/openai-review-oauth.ts";
 import { authHandler } from "../../auth-handler.ts";
-import { OAuthStateStore } from "../../oauth-state-store.ts";
+import {
+  DEFAULT_CLEANUP_AUTHORITIES,
+  type OAuthCleanupAuthorities,
+  OAuthStateStore,
+} from "../../oauth-state-store.ts";
 import {
   isOAuthAccessTokenFamilyActive,
   OAuthTokenFamilyExchange,
@@ -48,6 +52,9 @@ const FIREBASE_KID = "route-test-kid";
 type LockedProvider = {
   OAuthProvider: new (options: Record<string, unknown>) => {
     fetch(request: Request, env: Record<string, unknown>, ctx: unknown): Promise<Response>;
+  };
+  getOAuthApi(options: Record<string, unknown>, env: unknown): {
+    revokeGrant(grantId: string, userId: string): Promise<void>;
   };
 };
 
@@ -304,8 +311,30 @@ export class FakeDurableObjectNamespace {
   }
 }
 
+const UNUSED_HANDLER = {
+  async fetch(): Promise<Response> {
+    return new Response(null, { status: 404 });
+  },
+};
+
+/**
+ * The production cleanup authorities, except that `revokeGrant` runs on the
+ * same locked provider dist as the routes: Node cannot load the
+ * `cloudflare:workers` entry the Durable Object imports.
+ */
+const HARNESS_CLEANUP_AUTHORITIES: OAuthCleanupAuthorities = {
+  ...DEFAULT_CLEANUP_AUTHORITIES,
+  async revokeGrant(env, userId, grantId): Promise<void> {
+    const { getOAuthApi } = await loadLockedProvider();
+    await getOAuthApi(
+      { ...OAUTH_PROVIDER_REVIEW_OPTIONS, apiHandler: UNUSED_HANDLER, defaultHandler: UNUSED_HANDLER },
+      env,
+    ).revokeGrant(grantId, userId);
+  },
+};
+
 export const productionStateStore: StateStoreFactory = (state, env) =>
-  new OAuthStateStore(state as unknown as DurableObjectState, env as never);
+  new OAuthStateStore(state as unknown as DurableObjectState, env as never, HARNESS_CLEANUP_AUTHORITIES);
 
 /**
  * Regression mutant: the pre-lease contract, where the first callback to take

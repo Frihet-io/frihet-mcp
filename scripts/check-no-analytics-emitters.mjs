@@ -225,6 +225,8 @@ export const APPROVED_NETWORK_SINKS = Object.freeze({
   "workers/remote-mcp/src/oauth-token-family.ts|initializeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family`": 1,
   "workers/remote-mcp/src/oauth-token-family.ts|isOAuthAccessTokenFamilyActive|(awaittokenFamilyStub(namespace,credential.userId,credential.grantId,)).fetch|`${INTERNAL_ORIGIN}/token-family/status`": 1,
   "workers/remote-mcp/src/oauth-token-family.ts|revokeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/revoke`": 1,
+  // #205: the state outbox hands each replaced grant to its token family on the same internal Durable Object origin.
+  "workers/remote-mcp/src/oauth-token-family.ts|supersedeOAuthTokenFamily|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/supersede`": 1,
   "workers/remote-mcp/src/login-page.ts#inline-script|signIn|fetch|\"/callback\"": 1,
   "workers/remote-mcp/src/login-page.ts#inline-script|signIn|window.location.href|data.redirectTo": 1,
   "workers/remote-mcp/src/login-page.ts#inline-script|signInWithEmail|fetch|\"/callback\"": 1,
@@ -271,14 +273,14 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
   "workers/api-proxy/worker.js": "34f6c6e995a6c779d6a80fb954321f589cf64cd99f62c5d9c6b49e0fcaf07fd4",
   "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
-  "workers/remote-mcp/src/auth-handler.ts": "b1da0f18536ace42052793a59d68dad5dcbdcdae0ecb0eafb149b5383c33ce87", // #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
+  "workers/remote-mcp/src/auth-handler.ts": "d19999e6263445c9731ad2f482d5c2639ec703c6152519a482b11bbdee7ccb8e", // #205: commit carries the replaced grant ids into the durable state outbox; inline replacement kept as fast path (no new destination); #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
   "workers/remote-mcp/src/index.ts": "24e9e40ad2288eea9e5f04d618420d763b0f6f63d81ae4a11827383f284af632", // HEAD/GET metadata parity for reviewed legal pages; sinks unchanged
   "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "dd79003720debeaba12b6ae943569be6e9d286c6f9b83b24c6117639805ac938", // #203: callback reserve/commit — revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
-  "workers/remote-mcp/src/oauth-state-store.ts": "8ff9dad89538437d903e2cf7b533e146bc9442b0ac369039a4b17934dbf48c48", // #203: callback reserve/commit — rotation outbox (#205): a /commit that rotates keyId enqueues a Durable-Object-backed revoke for the OLD keyId using the same lifecycle authority — no new destination, no new network sink; the existing `revokeBackend` call is what was previously gated behind a forgotten delete
-  "workers/remote-mcp/src/oauth-token-family.ts": "1facce53ff0b684d4f51c14390e775fe07732ac215a4747a428d90e0428693fb", // OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
+  "workers/remote-mcp/src/oauth-state-store.ts": "d872eff53d99b4d6c8b95fa748d161acba8133fc8591bf5c8ee993c7985a219a", // #205: grant-replacement outbox on commit, drained by the alarm before expiry cleanup through the token family's /token-family/supersede (same internal origin); fail-closed keyId binding kept; lifecycle logs carry outcome/stage/counts only (no new destination); #203: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
+  "workers/remote-mcp/src/oauth-token-family.ts": "d8b9c747beefd3fd641068fc6d62830c080443f060b7a382b5ceeb12d39934c6", // #205: supersede tombstones a replaced grant's family on the same internal Durable Object origin; OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
   "package-lock.json": "62bcc09846f3544ea75d682bc53a8b944f0f525abdf64fa7e0459046fecefbab",
