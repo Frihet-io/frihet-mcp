@@ -47,7 +47,7 @@ export function getLoginPage(opts: {
   const consentPermissions = claudeProfile
     ? `<li>Read and manage invoices, quotes, expenses, clients, products, deposits and recurring records</li>
         <li>Read banking records and manage internal reconciliation and bank rules</li>
-        <li>Read fiscal records and use the complete e-invoicing API family, including exports, submission and status</li>
+        <li>Read fiscal records, e-invoice status/validation and stored e-invoice artifacts</li>
         <li>Read and manage team, leave, attendance and time records; export payroll records</li>
         <li>Read POS, kitchen and stay/PMS records; update kitchen tickets</li>
         <li>Manage webhooks, portal settings and supported general-ledger records</li>`
@@ -73,7 +73,8 @@ export function getLoginPage(opts: {
         <li>Gestoría, general-ledger entries and portal settings</li>`;
   const consentScopeNote = claudeProfile
     ? `This connection grants read/write access to this workspace and carries
-        no e-invoicing permission: fiscal sends (e-invoice export, FACe, TicketBAI) are not available.
+        no e-invoicing permission: e-invoice export, FACe and TicketBAI submission are not available.
+        Issuing or changing invoices and verifactu_resubmit can submit VeriFactu records to AEAT; approve each one.
         Plan entitlements and workspace permissions still apply. Writes can delete records and
         send invoices or configured notifications/webhooks.
         Review each tool and approve its actual effect before use.

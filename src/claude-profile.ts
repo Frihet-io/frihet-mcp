@@ -166,7 +166,7 @@ export const CLAUDE_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
   "face_submit": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
   "ticketbai_status": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
   "ticketbai_submit": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
-  "send_einvoice": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); fiscal sends are out of pilot scope and the backing route is unavailable.",
+  "send_einvoice": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); sending requires the einvoice scope and the ERP returns 403 for this route.",
   "ksef_submit": "No deployed backing ERP route; capability truth marks this unavailable.",
   "period_close": "The handler deliberately defers execution; capability truth marks this deferred.",
   "period_reopen": "The handler deliberately defers execution; capability truth marks this deferred.",

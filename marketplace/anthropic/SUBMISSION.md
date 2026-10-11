@@ -52,6 +52,7 @@ The retained aliases are `frihet_modelo_303_summary`,
 |---|---|
 | `ksef_submit`, `get_modelo_180_summary`, `frihet_modelo_415_summary`, `frihet_modelo_418_summary`, `frihet_modelo_425_summary`, `frihet_aiem_calculate`, `frihet_modelo_200_summary`, `frihet_modelo_202_summary` | Eight operations marked unavailable; no deployed backing ERP route in the reviewed contract. |
 | `period_close`, `period_reopen`, `gestoria_message_send`, `gestoria_messages_list`, `gestoria_template_bulk_send`, `gestoria_aging_consolidated`, `create_reservation`, `sync_channel` | Eight operations whose handlers explicitly defer execution. |
+| `einvoice_export`, `face_status`, `face_submit`, `ticketbai_status`, `ticketbai_submit`, `send_einvoice` | The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for these routes. |
 | `refund_sale` | Executes a Stripe money transfer; excluded under Anthropic Directory policy §4.A. Confirmation alone does not change this effect. |
 | `delete_client` | Linked contacts, notes and activities can remain stored but unreachable. |
 | `delete_expense` | Linked attachment metadata/object cleanup is not established. |
