@@ -64,7 +64,7 @@ notificaciones mediante Novu, además de correo, webhooks o envíos fiscales
 configurados; revisa esos efectos antes de autorizar una acción. El [contrato de
 observabilidad](https://github.com/Frihet-io/frihet-mcp/blob/main/docs/observability.md)
 limita la telemetría a metadatos operativos; no contiene entradas ni salidas de
-herramientas ni credenciales. Consulta la [privacidad](https://claude-mcp.frihet.io/privacy)
+herramientas ni credenciales. Consulta la [privacidad](https://www.frihet.io/es/privacy)
 y las [condiciones](https://www.frihet.io/es/terms) para el tratamiento del servicio.
 
 Los informes dependen de datos y páginas disponibles; señalan cobertura parcial,
