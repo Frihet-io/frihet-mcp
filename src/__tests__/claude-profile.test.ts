@@ -183,7 +183,7 @@ for (const local of [true, false]) {
         assert.equal(result.messages.length, 1);
         const text = JSON.stringify(result.messages);
         received.push(text);
-        for (const requirement of [/Paginate/i, /partial/i, /remaining unpaid balance/i, /not count full invoice totals/i, /currency/i, /not-yet-due/i, /user approval before any actions/i]) assert.match(text, requirement, name);
+        for (const requirement of [/Paginate/i, /partial/i, /without a status filter/i, /client-side/i, /remaining unpaid balance/i, /not count full invoice totals/i, /currency/i, /not-yet-due/i, /user approval before any actions/i]) assert.match(text, requirement, name);
         assert.doesNotMatch(text, /95%|80%|50%|25%|10%|€100/);
       }
       for (const { uri } of resources) {
@@ -251,4 +251,33 @@ test("actual stdio Claude flag exposes truthful candidate and rejects mixed flag
     assert.match(result.stderr, /mutually exclusive/);
     return true;
   });
+});
+
+test("Claude texts never instruct a partial status filter and the unfiltered list_invoices call validates", async () => {
+  const { client, calls, close } = await connect(true, false);
+  try {
+    const texts: string[] = [CLAUDE_CANDIDATE_INSTRUCTIONS, JSON.stringify((await client.listResources()).resources)];
+    for (const { name } of (await client.listPrompts()).prompts) texts.push(JSON.stringify((await client.getPrompt({ name })).messages));
+    for (const text of texts) {
+      assert.doesNotMatch(text, /list_invoices for sent, partial/i);
+      assert.doesNotMatch(text, /list_invoices[^.]*including (sent and )?partial/i);
+      assert.doesNotMatch(text, /list_invoices pagination including/i);
+      assert.match(text, /without a status filter/i);
+      assert.match(text, /client-side/i);
+    }
+    // The schema enum has no `partial`: the old instruction produced -32602 with 0 API calls.
+    const before = calls.length;
+    const filtered = await client.callTool({ name: "list_invoices", arguments: { status: "partial" } });
+    assert.equal(filtered.isError, true);
+    assert.match(JSON.stringify(filtered.content), /-32602|invalid/i);
+    assert.equal(calls.length, before);
+    // The call shape the prompts now instruct: no status filter, paginated.
+    const result = await client.callTool({ name: "list_invoices", arguments: { limit: 100, offset: 0 } });
+    assert.notEqual(result.isError, true);
+    assert.deepEqual((result.structuredContent as { data: unknown[] }).data, [invoice]);
+    const sent = calls.filter((call) => call.method === "listInvoices").at(-1)!.args[0] as Record<string, unknown>;
+    assert.equal(sent.status, undefined);
+    assert.equal(sent.limit, 100);
+    assert.equal(sent.offset, 0);
+  } finally { await close(); }
 });

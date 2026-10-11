@@ -225,7 +225,7 @@ export function registerAllPrompts(server: McpServer): void {
               `Help me prepare overdue invoice follow-ups for review.
 
 1. GATHER RECORDS
-   - Use list_invoices for sent, partial and overdue records. Paginate every result set using the returned pagination fields until exhausted; deduplicate by invoice ID. If a page fails or results are incomplete, disclose that limitation.
+   - Call list_invoices without a status filter (it has no partial status) and select sent, partial and overdue records client-side from each returned status. Paginate every result set using the returned pagination fields until exhausted; deduplicate by invoice ID. If a page fails or results are incomplete, disclose that limitation.
    - Use get_invoice when detail is missing. Record invoice ID/number, client, currency, due date and remaining unpaid balance after recorded payments and credits. Do not count full invoice totals as outstanding for partially paid records. If balance cannot be verified, flag it as unknown instead of assuming it.
    - Confirm the as-of date and workspace timezone. Separate not-yet-due and due-today invoices from overdue invoices. Missing or invalid due dates need review, not an invented age. Invoice status alone does not prove delivery.
 
@@ -538,7 +538,7 @@ export function registerAllPrompts(server: McpServer): void {
               `Prepare an accounts receivable aging review.
 
 1. VERIFY THE DATA
-   - Use list_invoices for sent, partial and overdue records. Paginate every result set using the returned pagination fields until exhausted; deduplicate by invoice ID. Report any failed page or incomplete coverage.
+   - Call list_invoices without a status filter (it has no partial status) and select sent, partial and overdue records client-side from each returned status. Paginate every result set using the returned pagination fields until exhausted; deduplicate by invoice ID. Report any failed page or incomplete coverage.
    - Use get_invoice when needed to verify currency, due date and remaining unpaid balance after recorded payments and credits. Do not count full invoice totals as outstanding for partially paid invoices. Mark unverifiable balances as unknown; do not invent totals.
    - Confirm the as-of date and workspace timezone. Exclude settled, draft and cancelled records from receivables. Status alone does not establish delivery or an undisputed debt.
 

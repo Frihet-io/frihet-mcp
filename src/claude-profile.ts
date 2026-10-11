@@ -212,7 +212,7 @@ export const CLAUDE_CANDIDATE_INSTRUCTIONS = `Frihet ERP — local Claude candid
 Discover available tools, resources and prompts from this session's MCP lists. In grouped mode use list_tool_groups, search_tools and describe_tool.
 Read get_business_context for workspace context, not proof of tax treatment or endpoint availability.
 Read each tool's io.frihet/capability metadata: api_dependent/runtime_checked means workspace permissions and backing endpoints still govern execution.
-Resource payloads are workspace records or formatting examples, not authoritative tax advice. The overdue-invoices resource is a status-filtered first page; paginate list_invoices including partial records for a complete balance review.
+Resource payloads are workspace records or formatting examples, not authoritative tax advice. The overdue-invoices resource is a status-filtered first page; paginate list_invoices without a status filter and select sent, partial and overdue records client-side for a complete balance review.
 Propose changes and obtain user approval before writes, email, webhooks or fiscal submission. A confirm input is a client interlock, not proof of authorization.
 Read full descriptions and inspect configured external effects before executing. Do not infer delivery from invoice status, a money transfer from an accounting entry, or production acceptance from demo data.
 On 409 IDEMPOTENCY_REQUEST_IN_PROGRESS, read the record before deciding; do not retry with a fresh key.

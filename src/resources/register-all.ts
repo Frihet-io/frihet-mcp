@@ -647,7 +647,7 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
         description:
           "Live invoice records filtered by status overdue (first page up to 100 items). " +
           "Returns stored fields and pagination bounds; does not calculate unpaid balances or days overdue. " +
-          "Use list_invoices pagination including sent and partial records for a complete receivables review. " +
+          "Paginate list_invoices without a status filter and select sent, partial and overdue records client-side for a complete receivables review. " +
           "/ Registros con estado vencida (primera página hasta 100); no calcula saldos pendientes ni días de retraso.",
         mimeType: "application/json",
       },
