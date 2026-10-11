@@ -20,8 +20,14 @@
  *   13. API error — 404 propagated as isError=true
  */
 
-import { test, describe, beforeEach } from "node:test";
+import { test, describe, beforeEach, type TestContext } from "node:test";
 import assert from "node:assert/strict";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { FrihetClient } from "../client.js";
+import { registerRecurringTools } from "../tools/recurring.js";
+import { applyPublicCapabilityTruth, CAPABILITY_META_KEY } from "../capability-truth.js";
 
 // ── Minimal McpServer stub ───────────────────────────────────────────────────
 
@@ -416,7 +422,7 @@ describe("run_recurring_now — success path", () => {
   test("returns action result with success=true and new invoice ID", async () => {
     const server = await makeServer(makeSuccessClient);
     const tool = server.tools.get("run_recurring_now")!;
-    const result = await tool.handler({ templateId: "rec_abc123" });
+    const result = await tool.handler({ templateId: "rec_abc123", confirm: true });
 
     assert.ok(!result.isError);
     const sc = result.structuredContent!;
@@ -428,21 +434,120 @@ describe("run_recurring_now — success path", () => {
   test("draftOnly=false accepted without error", async () => {
     const server = await makeServer(makeSuccessClient);
     const tool = server.tools.get("run_recurring_now")!;
-    const result = await tool.handler({ templateId: "rec_abc123", draftOnly: false });
+    const result = await tool.handler({ templateId: "rec_abc123", draftOnly: false, confirm: true });
     assert.ok(!result.isError);
   });
 
   test("content block mentions triggered", async () => {
     const server = await makeServer(makeSuccessClient);
     const tool = server.tools.get("run_recurring_now")!;
-    const result = await tool.handler({ templateId: "rec_abc123" });
+    const result = await tool.handler({ templateId: "rec_abc123", confirm: true });
     assert.ok(result.content[0]!.text.includes("triggered"));
   });
 
   test("404 propagates as isError=true", async () => {
     const server = await makeServer(make404Client);
     const tool = server.tools.get("run_recurring_now")!;
-    const result = await tool.handler({ templateId: "rec_missing" });
+    const result = await tool.handler({ templateId: "rec_missing", confirm: true });
     assert.ok(result.isError);
+  });
+});
+
+async function connectRecurring(t: TestContext): Promise<Client> {
+  const server = new McpServer({ name: "recurring-contract", version: "0.0.0" });
+  applyPublicCapabilityTruth(server);
+  registerRecurringTools(server, new FrihetClient("fri_test_recurring", "https://api.frihet.io/v1"));
+  const client = new Client({ name: "recurring-test", version: "0.0.0" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(a), client.connect(b)]);
+  t.after(async () => { await client.close(); await server.close(); });
+  return client;
+}
+
+describe("run_recurring_now — SDK and HTTP contract", () => {
+  test("publishes sent-status consequences, required confirmation and conservative effects", async (t) => {
+    const client = await connectRecurring(t);
+    const tool = (await client.listTools()).tools.find(({ name }) => name === "run_recurring_now")!;
+    assert.match(tool.description!, /draftOnly defaults to true/);
+    assert.match(tool.description!, /draftOnly=false.*status='sent'.*automatic tax submission/);
+    assert.match(tool.description!, /Both modes may deliver configured invoice-created webhooks/);
+    assert.match(tool.description!, /does not email the invoice to the client/);
+    assert.match(tool.description!, /Each new call can create another invoice/);
+    assert.deepEqual(tool.annotations, {
+      readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true,
+    });
+    assert.deepEqual(tool.inputSchema.required?.slice().sort(), ["confirm", "templateId"]);
+    assert.equal(tool.inputSchema.additionalProperties, false);
+    assert.deepEqual(tool._meta?.[CAPABILITY_META_KEY], {
+      registered: true,
+      callability: "api_dependent",
+      canonicalOperation: "run_recurring_now",
+      writesFrihet: true,
+      externalInteraction: true,
+      externalSideEffects: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
+    });
+  });
+
+  for (const draftOnly of [undefined, true, false]) {
+    test(`confirmed draftOnly=${draftOnly} reaches the API with the correct boolean and response status`, async (t) => {
+      const expected = { success: true, invoiceId: "inv_new", templateId: "rec_1", status: draftOnly === false ? "sent" : "draft" };
+      const fetchMock = t.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
+        assert.equal(url, "https://api.frihet.io/v1/recurring/invoices/rec_1/run");
+        assert.equal(init?.method, "POST");
+        assert.deepEqual(JSON.parse(String(init?.body)), { draftOnly: draftOnly ?? true });
+        return Response.json({ data: expected });
+      });
+      const client = await connectRecurring(t);
+      const result = await client.callTool({
+        name: "run_recurring_now",
+        arguments: { templateId: "rec_1", confirm: true, ...(draftOnly === undefined ? {} : { draftOnly }) },
+      });
+      assert.notEqual(result.isError, true);
+      assert.deepEqual(result.structuredContent, expected);
+      assert.equal(fetchMock.mock.callCount(), 1);
+    });
+  }
+
+  for (const [label, args] of [
+    ["missing confirmation", { templateId: "rec_1" }],
+    ["declined draft confirmation", { templateId: "rec_1", confirm: false }],
+    ["declined sent confirmation", { templateId: "rec_1", confirm: false, draftOnly: false }],
+    ["string confirmation", { templateId: "rec_1", confirm: "true" }],
+    ["missing template", { confirm: true }],
+    ["empty template", { templateId: "", confirm: true }],
+    ["invalid draftOnly", { templateId: "rec_1", confirm: true, draftOnly: "false" }],
+    ["unknown property", { templateId: "rec_1", confirm: true, recipientEmail: "test@example.com" }],
+  ] as const) {
+    test(`rejects ${label} without a backend request`, async (t) => {
+      const fetchMock = t.mock.method(globalThis, "fetch", async () => { throw new Error("Unexpected API call"); });
+      const client = await connectRecurring(t);
+      const result = await client.callTool({ name: "run_recurring_now", arguments: args });
+      assert.equal(result.isError, true);
+      assert.equal(fetchMock.mock.callCount(), 0);
+      if ("confirm" in args && args.confirm === false) {
+        assert.match(JSON.stringify(result.content), /configured webhooks/);
+        assert.match(JSON.stringify(result.content), /automatic tax submission/);
+      }
+    });
+  }
+
+  test("separate confirmed calls carry distinct keys and can create distinct invoices", async (t) => {
+    const keys: string[] = [];
+    t.mock.method(globalThis, "fetch", async (_url: string | URL | Request, init?: RequestInit) => {
+      keys.push(new Headers(init?.headers).get("Idempotency-Key")!);
+      return Response.json({ data: { success: true, invoiceId: `inv_${keys.length}`, status: "draft" } });
+    });
+    const client = await connectRecurring(t);
+    const request = { name: "run_recurring_now", arguments: { templateId: "rec_1", confirm: true } };
+    const first = await client.callTool(request);
+    const second = await client.callTool(request);
+    assert.notEqual(first.isError, true);
+    assert.notEqual(second.isError, true);
+    assert.deepEqual(first.structuredContent, { success: true, invoiceId: "inv_1", status: "draft" });
+    assert.deepEqual(second.structuredContent, { success: true, invoiceId: "inv_2", status: "draft" });
+    assert.equal(keys.length, 2);
+    assert.ok(keys[0]);
+    assert.ok(keys[1]);
+    assert.notEqual(keys[0], keys[1]);
   });
 });

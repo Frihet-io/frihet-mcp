@@ -232,43 +232,43 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
   server.registerTool(
     "refund_deposit",
     {
-      title: "Refund Deposit",
+      title: "Record Deposit Refund",
       description:
-        "Refund a deposit back to the client. Requires confirm=true. " +
-        "Transitions the deposit status to 'refunded' — a money movement that is not reversible " +
-        "from this tool. " +
-        "Example: id='dep_abc123', reason='Project cancelled', confirm=true " +
-        "/ Devuelve un deposito al cliente. Requiere confirm=true. " +
-        "Es un movimiento de dinero que no se puede revertir desde esta herramienta.",
-      annotations: UPDATE_ANNOTATIONS,
-      inputSchema: {
-        id: z.string().describe("Deposit ID / ID del deposito"),
-        reason: z.string().optional().describe("Reason for the refund / Motivo de la devolucion"),
-        notes: z.string().optional().describe("Refund notes / Notas de la devolucion"),
+        "Record a full or partial deposit refund in Frihet's bookkeeping; no money is transferred. Requires confirm=true. " +
+        "Omit amount to record a refund of the remaining balance. Only a full refund sets status='refunded'. " +
+        "A new call can record another partial refund; after an uncertain result, check get_deposit before retrying. " +
+        "Example: id='dep_abc123', amount=50, confirm=true " +
+        "/ Registra una devolución total o parcial del depósito sin transferir dinero. Requiere confirm=true. " +
+        "Omite amount para registrar la devolución del saldo restante. Solo la devolución total marca el estado 'refunded'. " +
+        "Una nueva llamada puede registrar otra devolución parcial; ante un resultado incierto, consulta get_deposit antes de repetir.",
+      annotations: { ...UPDATE_ANNOTATIONS, destructiveHint: true, idempotentHint: false },
+      inputSchema: z.object({
+        id: z.string().min(1).describe("Deposit ID / ID del depósito"),
+        amount: z.number().positive().optional().describe("Positive refund amount in the deposit currency; omit for the remaining balance / Importe positivo en la moneda del depósito; omite para el saldo restante"),
         confirm: z
           .boolean()
-          .describe("Must be true to confirm the refund / Debe ser true para confirmar la devolucion"),
-      },
+          .describe("Must be true to record the refund; no money is transferred / Debe ser true para registrar la devolución; no se transfiere dinero"),
+      }).strict(),
       outputSchema: actionResultOutput,
     },
-    async ({ id, confirm, ...data }) => withToolLogging("refund_deposit", async () => {
-      if (!confirm) {
+    async ({ id, confirm, amount }) => withToolLogging("refund_deposit", async () => {
+      if (confirm !== true) {
         return {
           content: [
             {
               type: "text" as const,
-              text: "Error: confirm=true is required to refund a deposit. " +
-                "This returns the client's money and sets the deposit to status=refunded; " +
-                "there is no un-refund tool. Set confirm=true when you are certain. / " +
-                "Se requiere confirm=true para devolver un deposito. Es un movimiento de dinero irreversible.",
+              text: "Error: confirm=true is required to record a deposit refund. " +
+                "This reduces the recorded remaining balance; no money is transferred and this tool cannot undo the entry. / " +
+                "Se requiere confirm=true para registrar la devolución y reducir el saldo contable. " +
+                "No se transfiere dinero y esta herramienta no permite deshacer el registro.",
             },
           ],
           isError: true,
         };
       }
-      const result = await client.refundDeposit(id, data);
+      const result = await client.refundDeposit(id, amount === undefined ? {} : { amount });
       return {
-        content: [mutateContent(formatRecord("Deposit refunded", result))],
+        content: [mutateContent(formatRecord("Deposit refund recorded (no money transferred)", result))],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }),

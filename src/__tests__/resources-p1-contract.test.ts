@@ -112,7 +112,8 @@ describe("MCP Resources P1 Contract (#2340)", () => {
     assert.equal(parsed.total, 250);
     assert.equal(parsed.hasMore, true);
     assert.equal(parsed.data.length, 100);
-    assert.match(parsed.note, /100 overdue invoices/i);
+    assert.match(parsed.note, /100 records with status overdue/i);
+    assert.match(parsed.note, /not a complete receivables or unpaid-balance report/i);
   });
 
   test("resources declare explicit authority and provenance headers", async () => {
@@ -205,4 +206,3 @@ describe("MCP Resources P1 Contract (#2340)", () => {
     assert.deepEqual(parsed3.usage, {});
   });
 });
-

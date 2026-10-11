@@ -289,24 +289,39 @@ export function registerRecurringTools(server: McpServer, client: IFrihetClient)
     {
       title: "Run Recurring Invoice Now",
       description:
-        "Manually trigger immediate generation of the next invoice instance from a recurring template. " +
-        "Useful for billing ahead of schedule or recovering from a missed automated run. " +
-        "The generated invoice is created as a draft; review and send separately. " +
-        "Example: templateId='rec_abc123' " +
-        "/ Genera manualmente la siguiente instancia de una factura recurrente. " +
-        "Util para facturar antes de lo programado o recuperar un ciclo perdido. " +
-        "La factura generada se crea como borrador; revisar y enviar por separado.",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-      inputSchema: {
-        templateId: z.string().describe("Recurring invoice template ID / ID de la plantilla de factura recurrente"),
+        "Generate an invoice from a recurring template and update its run count and last-run date. Requires confirm=true. " +
+        "draftOnly defaults to true. With draftOnly=false, the invoice is created with status='sent' and may trigger fiscal numbering and automatic tax submission. " +
+        "Both modes may deliver configured invoice-created webhooks and notify workspace admins/accountants; this endpoint does not email the invoice to the client. " +
+        "Each new call can create another invoice; check the template and invoices after an uncertain result before retrying. " +
+        "Example: templateId='rec_abc123', confirm=true " +
+        "/ Genera una factura recurrente y actualiza el contador y la fecha de ejecución. Requiere confirm=true. " +
+        "Por defecto crea un borrador; con draftOnly=false crea el estado 'sent' y puede activar la numeración y remisión fiscal automática. " +
+        "Ambas opciones pueden activar webhooks y avisos internos; esta operación no envía la factura por correo al cliente. " +
+        "Una nueva llamada puede crear otra factura; comprueba la plantilla y las facturas antes de repetir un resultado incierto.",
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+      inputSchema: z.object({
+        templateId: z.string().min(1).describe("Recurring invoice template ID / ID de la plantilla de factura recurrente"),
         draftOnly: z
           .boolean()
           .optional()
-          .describe("If true, create as draft only (default true). Set false to create and mark as sent immediately. / Si true, crea como borrador. Set false para crear y marcar como enviada."),
-      },
+          .describe("Default true creates a draft; false creates status='sent' and may trigger automatic fiscal submission. Neither option emails the client. / Por defecto true crea un borrador; false crea el estado 'sent' y puede activar la remisión fiscal automática. Ninguna opción envía correo al cliente."),
+        confirm: z.boolean().describe("Must be true to authorize invoice creation, configured webhooks and possible fiscal issuance / Debe ser true para autorizar la creación, los webhooks configurados y la posible emisión fiscal"),
+      }).strict(),
       outputSchema: actionResultOutput,
     },
-    async ({ templateId, draftOnly }) => withToolLogging("run_recurring_now", async () => {
+    async ({ templateId, draftOnly, confirm }) => withToolLogging("run_recurring_now", async () => {
+      if (confirm !== true) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "Error: confirm=true is required to create a recurring invoice and allow configured webhooks. " +
+              "draftOnly=false may also trigger fiscal numbering and automatic tax submission. / " +
+              "Se requiere confirm=true para crear la factura y permitir los webhooks configurados. " +
+              "draftOnly=false también puede activar la numeración y remisión fiscal automática.",
+          }],
+          isError: true,
+        };
+      }
       const result = await client.runRecurringNow(templateId, { draftOnly: draftOnly ?? true });
       return {
         content: [mutateContent(formatRecord("Recurring invoice triggered", result))],
