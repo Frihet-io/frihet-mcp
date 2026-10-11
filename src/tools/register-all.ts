@@ -40,7 +40,6 @@ import { registerImpuestoSociedadesTools } from "./impuesto_sociedades.js";
 import { registerBankRulesTools } from "./bank_rules.js";
 import { registerHrTools } from "./hr.js";
 import { registerPayrollTools } from "./payroll.js";
-import { registerOnboardingTools } from "./onboarding.js";
 import { registerPermissionsTools } from "./permissions.js";
 import { registerAccountingCloseTools } from "./accountingClose.js";
 import { registerSearchTools } from "./search.js";
@@ -48,7 +47,7 @@ import { registerSearchTools } from "./search.js";
 /**
  * Patches server.registerTool to wrap every tool callback with Langfuse tracing.
  *
- * The patch is applied once before tool registration so all 158 tools are
+ * The patch is applied once before tool registration so all 156 tools are
  * instrumented without per-tool edits. Tool call signatures are unchanged —
  * existing MCP clients continue to work identically.
  *
@@ -62,7 +61,10 @@ import { registerSearchTools } from "./search.js";
  *           attendance_clock_in, attendance_clock_out, overtime_report, anomaly_list
  *   Webhook trust (1): test_webhook (added to registerWebhookTools)
  *   Payroll (2): payroll_export, payroll_checklist
- *   Onboarding (2): onboarding_status, onboarding_persona_set
+ *   (Onboarding tools onboarding_status / onboarding_persona_set withdrawn
+ *    via #124 — Frihet-ERP /v1/onboarding/* family absent; tools were deleted,
+ *    not stubbed, to keep the catalogue honest. See src/tools/igic.ts for the
+ *    precedent of an inline NOT_DEPLOYED stub where the tool is retained.)
  *   Permissions (2): permissions_matrix, permissions_me
  *   Period close (3): period_close_status, period_close, period_reopen
  */
@@ -118,7 +120,6 @@ export function registerAllTools(server: McpServer, client: IFrihetClient): void
   registerBankRulesTools(server, client);
   registerHrTools(server, client);
   registerPayrollTools(server, client);
-  registerOnboardingTools(server, client);
   registerPermissionsTools(server, client);
   registerAccountingCloseTools(server, client);
   registerSearchTools(server, client);
