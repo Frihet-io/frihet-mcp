@@ -6,8 +6,7 @@
  *
  * Scope (this file): list_purchase_orders + get_purchase_order. The WRITE
  * surface (create draft, send, confirm, cancel, receive, reverse-receipt,
- * bill) is intentionally NOT exposed by the MCP server — see
- * docs/proposals/purchase-orders-write-tools.md.
+ * bill) is intentionally NOT exposed by the MCP server.
  *
  * Coverage:
  *   1. Tool registration — both tools registered on McpServer

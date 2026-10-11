@@ -12,10 +12,9 @@
  * one of `*`, `read`, `purchase-orders:*` or `purchase-orders:read`.
  *
  * WRITE tools (create draft, send, confirm, cancel, receive, reverse-receipt,
- * bill) are deliberately NOT exposed here. They move money or stock, so
- * they need human-authority semantics (draft → show → confirm) and are kept
- * in a separate proposal file: see
- * docs/proposals/purchase-orders-write-tools.md on this branch.
+ * bill) are deliberately NOT exposed here: they move money or stock and need
+ * human-authority semantics (draft → show → confirm) that this surface does not
+ * define. No write route is called from this file or from the client methods.
  *
  * NOT IN SCOPE for this surface (correction to a prior brief):
  *   - Physical count truth (#2355): no callable, no API route. Not designed.

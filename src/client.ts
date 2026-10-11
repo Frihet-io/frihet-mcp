@@ -1210,7 +1210,6 @@ export class FrihetClient {
   // ADR 0027 S2, server-owned lifecycle. Routes are read-only here; the
   // write surface (create draft, send, confirm, cancel, receive,
   // reverse-receipt, bill) is deliberately not exposed by the MCP server.
-  // See docs/proposals/purchase-orders-write-tools.md.
 
   async listPurchaseOrders(
     params?: { status?: string; vendorId?: string; limit?: number; offset?: number },

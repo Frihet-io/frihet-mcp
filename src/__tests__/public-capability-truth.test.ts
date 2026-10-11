@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { LOCAL_FULL_TOOLS, REMOTE_GROUPED_TOOLS } from "./helpers/surface-counts.js";
 
 import {
   CAPABILITY_META_KEY,
@@ -183,8 +184,8 @@ test("real SDK surfaces match the generated public capability contract", async (
       ]),
     ),
     {
-      localFull: { tools: 161, resources: 11, prompts: 10 },
-      remoteGrouped: { tools: 164, resources: 7, prompts: 10 },
+      localFull: { tools: LOCAL_FULL_TOOLS, resources: 11, prompts: 10 },
+      remoteGrouped: { tools: REMOTE_GROUPED_TOOLS, resources: 7, prompts: 10 },
       openaiFull: { tools: 33, resources: 0, prompts: 0 },
     },
   );

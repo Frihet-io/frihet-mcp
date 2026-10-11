@@ -20,6 +20,8 @@ import assert from "node:assert/strict";
 
 import {
   assertMcpBaseline,
+  CANONICAL_OPERATIONS_COUNT,
+  FISCAL_ALIASES_COUNT,
   runMcpBaseline,
   type McpBaselineReport,
 } from "../canary/mcp-harness.js";
@@ -30,8 +32,8 @@ describe("MCP Compatibility Lab — Mutation Proofs", () => {
   test("fixture setup: capture valid baseline", async () => {
     goldenBaseline = await runMcpBaseline();
     assert.equal(goldenBaseline.summary.overallStatus, "PASS_WITH_GAPS");
-    assert.equal(goldenBaseline.summary.totalTools, 161);
-    assert.equal(goldenBaseline.summary.canonicalOperations, 156);
+    assert.equal(goldenBaseline.summary.totalTools, CANONICAL_OPERATIONS_COUNT + FISCAL_ALIASES_COUNT);
+    assert.equal(goldenBaseline.summary.canonicalOperations, CANONICAL_OPERATIONS_COUNT);
     assert.equal(goldenBaseline.summary.resources, 11);
     assert.equal(goldenBaseline.summary.prompts, 10);
     assert.equal(goldenBaseline.summary.checks.pass, 21);

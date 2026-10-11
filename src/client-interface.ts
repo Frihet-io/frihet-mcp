@@ -66,8 +66,7 @@ export interface IFrihetClient {
 
   // Purchase orders (ADR 0027 S2, server-owned lifecycle) — read-only surface.
   // Write tools (create draft, send, confirm, cancel, receive, reverse-receipt,
-  // bill) are NOT exposed by the MCP server. See
-  // docs/proposals/purchase-orders-write-tools.md.
+  // bill) are NOT exposed by the MCP server.
   listPurchaseOrders(params?: { status?: string; vendorId?: string; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
   getPurchaseOrder(id: string): Promise<Record<string, unknown>>;
 
