@@ -25,9 +25,12 @@ topology plus a baseline status.
   recorded baseline, including the migration tag.
 
 `scripts/check-full-worker-topology.mjs` implements both checks. It also fails
-if `wrangler.toml` drifts from the reviewed target in the baseline file, but only
-for canonical-format drift: the parse is regex-based, so non-canonical TOML can
-slip past until a follow-up replaces it with Wrangler's own config reader. CI runs
+if `wrangler.toml` drifts from the reviewed target in the baseline file. The file
+is parsed with the Worker-locked Wrangler's own offline reader
+(`experimental_readRawConfig`, resolved only from `workers/remote-mcp/node_modules`),
+so indented or quoted keys, commented table headers and the like are read exactly as
+Wrangler reads them; if that Wrangler is not installed the gate blocks. Every job
+that runs the checker installs `workers/remote-mcp` first. CI runs
 `scripts/__tests__/release-workflow-contract.test.mjs`, which pins the job
 wiring (ordering, no `if:`, no `continue-on-error`) and the checker's behavior.
 

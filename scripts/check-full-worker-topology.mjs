@@ -2,12 +2,26 @@
 // Fail-closed topology gate for the full-profile Worker deploy. Sibling of
 // check-openai-worker-topology.mjs (reused for the live Cloudflare projection);
 // the OpenAI checker is not modified. See docs/full-topology-bootstrap.md.
+//
+// The Worker config is parsed with the Worker-locked Wrangler's own offline
+// reader (`experimental_readRawConfig`), so this gate sees exactly the keys,
+// tables, migrations and bindings Wrangler sees at deploy time. The previous
+// line-based regex parse disagreed with Wrangler on indented keys, quoted keys
+// and table headers with trailing comments. The reader is resolved ONLY from
+// workers/remote-mcp/node_modules (never from an ancestor directory), so the
+// version that parses is the version package-lock.json pins; when it is not
+// installed the gate blocks (CONFIG_UNREADABLE), it never falls back to a parse
+// of its own.
 
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cloudflareTopology, topologyFingerprint } from "./check-openai-worker-topology.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const WORKER_DIR = join(ROOT, "workers", "remote-mcp");
 const DEFAULT_CONFIG = `${ROOT}/workers/remote-mcp/wrangler.toml`;
 const DEFAULT_CONTRACT = `${ROOT}/workers/remote-mcp/full-topology-baseline.json`;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
@@ -21,97 +35,143 @@ const stable = (value) => {
   return value;
 };
 const same = (left, right) => JSON.stringify(stable(left)) === JSON.stringify(stable(right));
+const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const keysOf = (value) => (isObject(value) ? Object.keys(value).sort() : []);
+const list = (value) => (Array.isArray(value) ? value : []);
 
-function tables(toml, header, arrayTable = false) {
-  const marker = arrayTable ? `[[${header}]]` : `[${header}]`;
-  const lines = toml.split(/\r?\n/u);
-  const bodies = [];
-  lines.forEach((line, index) => {
-    if (line.trim() !== marker) return;
-    const end = lines.findIndex((next, cursor) => cursor > index && /^\s*\[\[?[^\]]+\]\]?\s*$/u.test(next));
-    bodies.push(lines.slice(index + 1, end < 0 ? undefined : end).join("\n"));
-  });
-  return bodies;
+let readRawConfig;
+function wranglerReader() {
+  if (readRawConfig) return readRawConfig;
+  const requireFromWorker = createRequire(join(WORKER_DIR, "package.json"));
+  let resolved;
+  try {
+    resolved = requireFromWorker.resolve("wrangler");
+  } catch {
+    throw new Error("WRANGLER_READER_UNAVAILABLE: run npm ci in workers/remote-mcp");
+  }
+  if (!resolved.startsWith(join(WORKER_DIR, "node_modules") + sep)) {
+    throw new Error("WRANGLER_READER_NOT_WORKER_LOCKED");
+  }
+  const reader = requireFromWorker("wrangler").experimental_readRawConfig;
+  if (typeof reader !== "function") throw new Error("WRANGLER_READER_UNAVAILABLE: experimental_readRawConfig missing");
+  readRawConfig = reader;
+  return readRawConfig;
 }
-const str = (body, key) => body.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"\\s*$`, "mu"))?.[1] ?? "";
-const strList = (body, key) => [...(body.match(new RegExp(`^${key}\\s*=\\s*\\[([^\\]]*)\\]`, "mu"))?.[1] ?? "")
-  .matchAll(/"([^"]+)"/gu)].map((match) => match[1]).sort();
-const inline = (value) => [...value.matchAll(/\{([^}]*)\}/gu)].map((match) => Object.fromEntries(
-  [...match[1].matchAll(/([a-z_]+)\s*=\s*"([^"]*)"/gu)].map((entry) => [entry[1], entry[2]])));
 
-const keysOf = (body) => [...body.matchAll(/^([A-Za-z_][\w.-]*)\s*=/gmu)].map((match) => match[1]).sort();
-const inlineKeys = (value) => [...value.matchAll(/\{([^}]*)\}/gu)]
-  .map((match) => [...match[1].matchAll(/([a-z_]+)\s*=/gu)].map((entry) => entry[1]).sort());
-const ROOT_KEYS = ["compatibility_date", "compatibility_flags", "main", "name", "routes"];
+// Wrangler resolves its config from a path, so the string entry points write the
+// TOML to a private temp dir and read it back through the same reader.
+function parseToml(toml) {
+  const read = wranglerReader();
+  const dir = mkdtempSync(join(tmpdir(), "full-topology-"));
+  try {
+    const path = join(dir, "wrangler.toml");
+    writeFileSync(path, toml, "utf8");
+    const { rawConfig } = read({ config: path });
+    if (!isObject(rawConfig)) throw new Error("WRANGLER_CONFIG_NOT_AN_OBJECT");
+    return rawConfig;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 // Closed set of top-level tables and keys (r2_buckets, services, d1, ... are rejected).
-// Limit: the parse is line-based regex over canonical TOML formatting. Indented keys,
-// quoted keys inside tables and table headers with trailing comments are NOT detected.
-// A follow-up issue tracks replacing it with Wrangler's own config reader.
-// [env.openai*] tables belong to the OpenAI Worker's own gate.
+const ROOT_KEYS = ["compatibility_date", "compatibility_flags", "main", "name", "routes"];
 const TABLES = new Set(["alias", "assets", "dev", "durable_objects", "kv_namespaces", "migrations",
   "observability", "vars"]);
-const ENV_TABLES = new Set(["env.openai", "env.openai.assets", "env.openai.durable_objects",
-  "env.openai.kv_namespaces", "env.openai.vars"]);
+// [env.openai*] is the OpenAI Worker's own gate; here only its table SET is closed.
+// Any other [env.*], or an unreviewed binding table inside env.openai, is drift.
+const ENV_NAMES = new Set(["openai"]);
+const ENV_OPENAI_TABLES = new Set(["assets", "durable_objects", "kv_namespaces", "vars"]);
+const ENV_OPENAI_NON_TABLE_OBJECT_KEYS = new Set(["routes"]);
 
-function configShapeIssues(toml, root) {
+function configShapeIssues(config) {
   const issues = [];
   const exact = (actual, expected, label) => {
-    if (!same(actual, [...expected].sort())) issues.push(`${label}:FIELDS`);
+    if (!same([...actual].sort(), [...expected].sort())) issues.push(`${label}:FIELDS`);
   };
-  exact(keysOf(root), ROOT_KEYS, "root");
-  if (/^\s*["']/mu.test(root)) issues.push("root:QUOTED_KEY");
-  for (const match of toml.matchAll(/^\s*\[\[?\s*([^\]\s]+)\s*\]\]?\s*$/gmu)) {
-    if (!TABLES.has(match[1]) && !ENV_TABLES.has(match[1])) issues.push(`UNEXPECTED_SECTION:${match[1]}`);
+  exact(Object.keys(config).filter((key) => !TABLES.has(key) && key !== "env"), ROOT_KEYS, "root");
+  for (const key of Object.keys(config)) {
+    if (key !== "env" && !TABLES.has(key) && !ROOT_KEYS.includes(key)) issues.push(`UNEXPECTED_SECTION:${key}`);
   }
-  tables(toml, "migrations", true).forEach((body) => exact(keysOf(body), ["new_sqlite_classes", "tag"], "migrations"));
-  tables(toml, "kv_namespaces", true).forEach((body) => exact(keysOf(body), ["binding", "id"], "kv_namespaces"));
-  tables(toml, "durable_objects").forEach((body) => {
-    exact(keysOf(body), ["bindings"], "durable_objects");
-    inlineKeys(body).forEach((keys) => exact(keys, ["class_name", "name"], "durable_objects.bindings"));
-  });
-  inlineKeys(root.match(/^routes\s*=\s*\[([^\]]*)\]/mu)?.[1] ?? "")
-    .forEach((keys) => exact(keys, ["pattern", "zone_name"], "routes"));
-  tables(toml, "assets").forEach((body) => exact(keysOf(body), ["binding", "directory"], "assets"));
+  if ("env" in config && !isObject(config.env)) issues.push("env:SHAPE");
+  for (const [name, body] of Object.entries(isObject(config.env) ? config.env : {})) {
+    if (!ENV_NAMES.has(name) || !isObject(body)) {
+      issues.push(`UNEXPECTED_SECTION:env.${name}`);
+      continue;
+    }
+    for (const [key, value] of Object.entries(body)) {
+      const tableLike = isObject(value) || list(value).some(isObject);
+      if (tableLike && !ENV_OPENAI_TABLES.has(key) && !ENV_OPENAI_NON_TABLE_OBJECT_KEYS.has(key)) {
+        issues.push(`UNEXPECTED_SECTION:env.${name}.${key}`);
+      }
+    }
+  }
+  const asTable = (key) => {
+    if (!(key in config)) return undefined;
+    if (!isObject(config[key])) { issues.push(`${key}:COUNT`); return undefined; }
+    return config[key];
+  };
+  const asArrayTable = (key) => {
+    if (!(key in config)) return [];
+    if (!Array.isArray(config[key]) || !config[key].every(isObject)) { issues.push(`${key}:SHAPE`); return []; }
+    return config[key];
+  };
+  asArrayTable("migrations").forEach((body) => exact(keysOf(body), ["new_sqlite_classes", "tag"], "migrations"));
+  asArrayTable("kv_namespaces").forEach((body) => exact(keysOf(body), ["binding", "id"], "kv_namespaces"));
+  const durable = asTable("durable_objects");
+  if (durable) {
+    exact(keysOf(durable), ["bindings"], "durable_objects");
+    list(durable.bindings).forEach((binding) => exact(keysOf(binding), ["class_name", "name"], "durable_objects.bindings"));
+  }
+  list(config.routes).forEach((route) => exact(keysOf(route), ["pattern", "zone_name"], "routes"));
+  const assets = asTable("assets");
+  if (assets) exact(keysOf(assets), ["binding", "directory"], "assets");
+  const vars = asTable("vars");
+  if (vars && Object.values(vars).some((value) => typeof value !== "string")) issues.push("vars:FIELDS");
   for (const header of ["assets", "durable_objects", "vars"]) {
-    if (tables(toml, header).length !== 1) issues.push(`${header}:COUNT`);
+    if (!(header in config)) issues.push(`${header}:COUNT`);
   }
   return issues.sort();
 }
 
 // Top-level (default environment) topology only: [env.*] tables are other Workers.
 export function deriveFullTargetTopology(toml) {
-  const firstTable = toml.search(/^\s*\[/mu);
-  const root = firstTable < 0 ? toml : toml.slice(0, firstTable);
-  const byName = (key) => (left, right) => left[key].localeCompare(right[key]);
+  const config = parseToml(toml);
+  const byName = (key) => (left, right) => String(left[key]).localeCompare(String(right[key]));
+  const text = (value) => (typeof value === "string" ? value : "");
+  const strings = (value) => list(value).filter((entry) => typeof entry === "string").sort();
   return {
-    workerName: str(root, "name"),
-    entrypoint: str(root, "main"),
-    compatibilityDate: str(root, "compatibility_date"),
-    compatibilityFlags: strList(root, "compatibility_flags"),
-    routes: inline(root.match(/^routes\s*=\s*\[([^\]]*)\]/mu)?.[1] ?? "")
-      .map((route) => ({ pattern: route.pattern ?? "", zoneName: route.zone_name ?? "" })).sort(byName("pattern")),
-    migrations: tables(toml, "migrations", true)
-      .map((body) => ({ tag: str(body, "tag"), newSqliteClasses: strList(body, "new_sqlite_classes") })),
-    durableObjects: inline(tables(toml, "durable_objects")[0] ?? "")
-      .map((entry) => ({ binding: entry.name ?? "", className: entry.class_name ?? "" })).sort(byName("binding")),
-    kvNamespaces: tables(toml, "kv_namespaces", true)
-      .map((body) => ({ binding: str(body, "binding"), namespaceId: str(body, "id") })).sort(byName("binding")),
-    assets: { binding: str(tables(toml, "assets")[0] ?? "", "binding"), directory: str(tables(toml, "assets")[0] ?? "", "directory") },
-    vars: Object.fromEntries([...(tables(toml, "vars")[0] ?? "").matchAll(/^([A-Z][A-Z0-9_]*)\s*=\s*"([^"]*)"\s*$/gmu)]
-      .map((match) => [match[1], match[2]])),
-    configShapeIssues: configShapeIssues(toml, root),
+    workerName: text(config.name),
+    entrypoint: text(config.main),
+    compatibilityDate: text(config.compatibility_date),
+    compatibilityFlags: strings(config.compatibility_flags),
+    routes: list(config.routes).filter(isObject)
+      .map((route) => ({ pattern: text(route.pattern), zoneName: text(route.zone_name) })).sort(byName("pattern")),
+    migrations: list(config.migrations).filter(isObject)
+      .map((body) => ({ tag: text(body.tag), newSqliteClasses: strings(body.new_sqlite_classes) })),
+    durableObjects: list(config.durable_objects?.bindings).filter(isObject)
+      .map((entry) => ({ binding: text(entry.name), className: text(entry.class_name) })).sort(byName("binding")),
+    kvNamespaces: list(config.kv_namespaces).filter(isObject)
+      .map((body) => ({ binding: text(body.binding), namespaceId: text(body.id) })).sort(byName("binding")),
+    assets: { binding: text(config.assets?.binding), directory: text(config.assets?.directory) },
+    vars: Object.fromEntries(Object.entries(isObject(config.vars) ? config.vars : {})
+      .filter(([, value]) => typeof value === "string")),
+    configShapeIssues: configShapeIssues(config),
   };
 }
 
 export function validateFullConfigAgainstContract(toml, contract) {
   const errors = [];
-  const { configShapeIssues: shape, ...derived } = deriveFullTargetTopology(toml);
-  errors.push(...shape);
-  if ((tables(toml, "vars")[0] ?? "") && !same(keysOf(tables(toml, "vars")[0]), Object.keys(derived.vars).sort())) {
-    errors.push("vars:FIELDS");
+  let derived;
+  try {
+    derived = deriveFullTargetTopology(toml);
+  } catch (error) {
+    return [`CONFIG_UNREADABLE:${String(error?.message ?? error).split("\n")[0]}`];
   }
+  const { configShapeIssues: shape, ...target } = derived;
+  errors.push(...shape);
   const { migrationTag: _tag, ...expected } = { workerName: contract?.workerName, ...contract?.targetTopology };
-  if (!same(derived, expected)) errors.push("TARGET_TOPOLOGY_DRIFT");
+  if (!same(target, expected)) errors.push("TARGET_TOPOLOGY_DRIFT");
   if (contract?.targetTopology?.migrationTag !== derived.migrations.at(-1)?.tag || !derived.migrations.length) {
     errors.push("TARGET_MIGRATION_TAG_DRIFT");
   }
@@ -190,4 +250,7 @@ function runCli() {
   console.log(`Full Worker topology gate: PASS (${contract.status})`);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) runCli();
+// Compare real paths: invoked through a symlink (a /var -> /private/var temp dir, a
+// linked worktree) the gate used to match nothing, run nothing and exit 0.
+const invokedPath = (() => { try { return process.argv[1] && realpathSync(process.argv[1]); } catch { return undefined; } })();
+if (invokedPath && fileURLToPath(import.meta.url) === invokedPath) runCli();

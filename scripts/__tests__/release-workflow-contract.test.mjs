@@ -34,16 +34,21 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve as resolvePath } from "node:path";
 import { test } from "node:test";
 import {
   cloudflareTopology,
@@ -3097,6 +3102,116 @@ test("Full Worker topology guard — config shape is closed (deleted classes, ex
   }
 });
 
+// Issue #204: each of these is accepted by a line-based parse but read differently by
+// Wrangler. The checker must parse with Wrangler's own reader, so all of them block.
+test("Full Worker topology guard — constructs the old line parse missed are read like Wrangler reads them", () => {
+  const base = FULL_PROBE_BASE();
+  const v2 = 'new_sqlite_classes = ["OAuthStateStore"]\n';
+  const probes = {
+    "indented deleted_classes in a migration": replaceOnce(base, v2, `${v2}  deleted_classes = ["FrihetMCP"]\n`),
+    "quoted deleted_classes key in a migration": replaceOnce(base, v2, `${v2}"deleted_classes" = ["FrihetMCP"]\n`),
+    "migration header with trailing comment after [dev]": `${base}\n[[migrations]] # v3\ntag = "v3"\ndeleted_classes = ["FrihetMCP"]\n`,
+    "r2 bucket header with trailing comment": `${base}\n[[r2_buckets]] # data\nbinding = "B"\nbucket_name = "b"\n`,
+    "quoted script_name in a DO binding": replaceOnce(base, '{ name = "MCP_OBJECT", class_name = "FrihetMCP" }',
+      '{ name = "MCP_OBJECT", class_name = "FrihetMCP", "script_name" = "other" }'),
+    "indented root-level key": replaceOnce(base, 'main = "src/index.ts"\n', 'main = "src/index.ts"\n  d1_databases = []\n'),
+    "indented table header": `${base}\n  [services]\n  binding = "S"\n`,
+    "quoted table header": `${base}\n["services"]\nbinding = "S"\n`,
+    "unreviewed binding table inside env.openai": `${base}\n[[env.openai.r2_buckets]] # data\nbinding = "B"\nbucket_name = "b"\n`,
+    "malformed TOML": `${base}\n[[migrations\n`,
+  };
+  for (const [label, toml] of Object.entries(probes)) {
+    const result = runFullTopology([], { toml });
+    assert.equal(result.status, 1, `${label} must block: ${result.stdout}`);
+    assert.match(result.stderr, /BLOCK/, label);
+  }
+  assert.equal(runFullTopology([], { toml: base }).status, 0, "the reviewed config must still pass");
+  // A comment on a legitimate header is not drift.
+  const commented = replaceOnce(base, "[[kv_namespaces]]\n", "[[kv_namespaces]] # OAuth\n");
+  assert.equal(runFullTopology([], { toml: commented }).status, 0, "a header comment alone is not a change");
+});
+
+// The reader must be the Worker-locked Wrangler: absent, or resolvable only from an
+// ancestor directory, the gate blocks instead of parsing with anything else.
+test("Full Worker topology guard — the config reader is the Worker-locked Wrangler or the gate blocks", () => {
+  const tree = mkdtempSync(join(tmpdir(), "full-topology-tree-"));
+  try {
+    mkdirSync(join(tree, "scripts"), { recursive: true });
+    mkdirSync(join(tree, "workers", "remote-mcp"), { recursive: true });
+    for (const name of ["check-full-worker-topology.mjs", "check-openai-worker-topology.mjs"]) {
+      copyFileSync(join("scripts", name), join(tree, "scripts", name));
+    }
+    copyFileSync(FULL_TOPOLOGY_BASELINE, join(tree, "workers", "remote-mcp", "full-topology-baseline.json"));
+    copyFileSync("workers/remote-mcp/wrangler.toml", join(tree, "workers", "remote-mcp", "wrangler.toml"));
+    writeFileSync(join(tree, "workers", "remote-mcp", "package.json"), "{}");
+    const run = (entry = join(tree, "scripts", "check-full-worker-topology.mjs")) =>
+      spawnSync(process.execPath, [entry], { encoding: "utf8" });
+    const missing = run();
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /CONFIG_UNREADABLE:WRANGLER_READER_UNAVAILABLE/);
+    // A look-alike in an ancestor node_modules must not be used.
+    mkdirSync(join(tree, "node_modules", "wrangler"), { recursive: true });
+    writeFileSync(join(tree, "node_modules", "wrangler", "package.json"), '{"name":"wrangler","main":"index.js"}');
+    writeFileSync(join(tree, "node_modules", "wrangler", "index.js"),
+      "exports.experimental_readRawConfig = () => ({ rawConfig: {} });\n");
+    const ancestor = run();
+    assert.equal(ancestor.status, 1);
+    assert.match(ancestor.stderr, /CONFIG_UNREADABLE:WRANGLER_READER_NOT_WORKER_LOCKED/);
+    // Invoked through a symlinked path the gate must still run (it used to run nothing and exit 0).
+    const link = `${tree}-link`;
+    symlinkSync(tree, link);
+    try {
+      const viaLink = run(join(link, "scripts", "check-full-worker-topology.mjs"));
+      assert.equal(viaLink.status, 1, `symlinked invocation must not pass silently: ${viaLink.stdout}`);
+      assert.match(viaLink.stderr, /BLOCK/);
+    } finally {
+      rmSync(link, { force: true });
+    }
+  } finally {
+    rmSync(tree, { recursive: true, force: true });
+  }
+});
+
+// The checker reads wrangler.toml with the Worker-locked Wrangler, so every job that runs
+// it must have installed workers/remote-mcp first (the preflight job installs nothing else).
+function topologyReaderInstallErrors(yaml) {
+  const errors = [];
+  const stagesAndSteps = [
+    ["preflight", FULL_PREFLIGHT_STEP, FULL_RELEASE_IF],
+    ["deploy-worker", FULL_GUARD_STEPS[0], null],
+  ];
+  for (const [id, guardName, expectedIf] of stagesAndSteps) {
+    const stage = findStage(parseWorkflowStages(yaml), id);
+    if (!stage) { errors.push(`missing-stage:${id}`); continue; }
+    const steps = executableStageBody(stage).split(/^      - name: /m).slice(1);
+    const guard = steps.findIndex((step) => step.startsWith(guardName));
+    const install = steps.findIndex((step) =>
+      /^        run: npm ci --prefix workers\/remote-mcp --ignore-scripts\s*$/m.test(step));
+    if (guard < 0) errors.push(`missing-guard:${id}`);
+    else if (install < 0 || install > guard) errors.push(`reader-not-installed-before-guard:${id}`);
+    else if (expectedIf && !steps[install].split("\n").some((line) => line === `        ${expectedIf}`)) {
+      errors.push(`reader-install-condition-drift:${id}`);
+    }
+    if (id === "preflight" && !steps.some((step, index) => index < guard && /uses: actions\/setup-node@[0-9a-f]{40}/.test(step))) {
+      errors.push("preflight-node-not-pinned");
+    }
+  }
+  return errors;
+}
+
+test("Full Worker topology guard — the Worker-locked config reader is installed before every run of the checker", () => {
+  const workflow = readFileSync(WORKFLOW, "utf8");
+  assert.deepEqual(topologyReaderInstallErrors(workflow), []);
+  const installStep = /      - name: Install Worker dependencies \(inert\) for the topology config reader\n[^\n]*\n        run: npm ci --prefix workers\/remote-mcp --ignore-scripts\n\n/;
+  assert.match(workflow, installStep);
+  assert.deepEqual(topologyReaderInstallErrors(workflow.replace(installStep, "")),
+    ["reader-not-installed-before-guard:preflight"], "a preflight without the install must be rejected");
+  assert.deepEqual(topologyReaderInstallErrors(workflow.replace(installStep, "").replace(
+    "      - name: Full Worker topology baseline must be established (preflight)",
+    "      - name: Install Worker dependencies (inert) for the topology config reader\n        run: npm ci --prefix workers/remote-mcp --ignore-scripts\n\n      - name: Full Worker topology baseline must be established (preflight)")),
+  ["reader-install-condition-drift:preflight"], "the install must carry the same release condition as the guard");
+});
+
 test("Full Worker topology guard — Wrangler cannot resolve a different config than the checker reads", () => {
   for (const redirect of [
     "workers/remote-mcp/wrangler.json",
@@ -3110,31 +3225,388 @@ test("Full Worker topology guard — Wrangler cannot resolve a different config 
   assert.match(readFileSync("scripts/check-full-worker-topology.mjs", "utf8"), /workers\/remote-mcp\/wrangler\.toml/);
 });
 
-function fullDeployMutationViolations(files) {
+// ── Full-profile Worker mutation scanner ────────────────────────────────────
+// Reports every workflow step that can mutate a Cloudflare Worker (deploy, publish,
+// rollback, delete, version upload) or that hands the job to code that can. It only
+// reads EXECUTABLE contexts: a step's `run:` text, a `uses:` reference, a package.json
+// script that a step invokes, a shell script a step runs, and (for JS) the literal
+// command given to a child_process call. A command that merely appears as data (a
+// forbidden-pattern table, an assert message, an `echo`) is not executable and is not
+// reported. Every shape below has a probe in the test that follows.
+// Limits (not detected, by design of a static scan): a command assembled at run time
+// (`$CMD`, base64, string concatenation), a child_process call whose command is not a
+// literal, code fetched from outside the repository (`curl | sh`), and package.json
+// workspaces/filters that redirect a script to another directory. Review owns those.
+const WORKER_MUTATIONS = new Set(["deploy", "publish", "rollback", "delete"]);
+const WORKER_NESTED_MUTATIONS = { versions: new Set(["deploy", "upload"]), pages: new Set(["deploy", "publish"]), triggers: new Set(["deploy"]) };
+const WRANGLER_VALUE_FLAGS = new Set(["--config", "-c", "--cwd", "--name", "-n", "--var", "--define",
+  "--message", "--tag", "--assets", "--route", "--routes", "--compatibility-date", "--compatibility-flags"]);
+const NPM_PREFIX_FLAGS = new Set(["--prefix", "-C", "--cwd", "--dir"]);
+const NPM_VALUE_FLAGS = new Set([...NPM_PREFIX_FLAGS, "--workspace", "-w", "--filter", "-F"]);
+const COMMAND_WRAPPERS = new Set(["env", "sudo", "time", "nohup", "command", "exec", "xargs", "builtin"]);
+const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
+const NPM_LIFECYCLE_ALIASES = { test: "test", t: "test", start: "start", stop: "stop", restart: "restart" };
+const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
+const JS_RUNNERS = new Set(["node", "deno", "tsx", "ts-node", "bun"]);
+const JS_RUNNER_VALUE_FLAGS = new Set(["-r", "--require", "--import", "--loader", "--experimental-loader", "--env-file"]);
+const MUTATING_SCRIPT_NAME = /^(?:deploy|publish|rollback)(?:[:._-]|$)/u;
+const CHILD_PROCESS_IMPORT = /(?:from\s*|require\s*\(\s*|import\s*\(\s*)["'](?:node:)?child_process["']/u;
+const CHILD_PROCESS_CALL = /\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)\s*\(\s*(["'`])((?:\\.|(?!\1).)*)\1(?:\s*,\s*\[([^\]]*)\])?/gu;
+const MAX_SCAN_DEPTH = 4;
+
+// Quote-aware split of shell text into statements of tokens. Separators outside quotes:
+// newline ; & | ( ) and backtick. Line comments are dropped.
+function shellStatements(text) {
+  const statements = [];
+  let current = [];
+  let token = "";
+  let started = false;
+  let quote = null;
+  const endToken = () => { if (started) current.push(token); token = ""; started = false; };
+  const endStatement = () => { endToken(); if (current.length) statements.push(current); current = []; };
+  const source = text.replace(/\\\r?\n/gu, " ");
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      if (char === quote) quote = null;
+      else if (quote === '"' && char === "\\" && index + 1 < source.length) token += source[++index];
+      else token += char;
+      continue;
+    }
+    if (char === "'" || char === '"') { quote = char; started = true; continue; }
+    if (char === "\\" && index + 1 < source.length) { token += source[++index]; started = true; continue; }
+    if (char === "#" && !started) { while (index < source.length && source[index] !== "\n") index += 1; endStatement(); continue; }
+    if (char === " " || char === "\t" || char === "\r") { endToken(); continue; }
+    if ("\n;&|()`".includes(char)) { endStatement(); continue; }
+    token += char;
+    started = true;
+  }
+  endStatement();
+  return statements;
+}
+
+const programName = (token) => token.split("/").pop().replace(/@[^/]*$/u, "");
+
+function wranglerMutation(args) {
+  const positional = [];
+  let env;
+  let dryRun = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--dry-run" || arg.startsWith("--dry-run=")) { dryRun = true; continue; }
+    if (arg.startsWith("--env=")) { env = arg.slice("--env=".length); continue; }
+    if (arg === "--env" || arg === "-e") { env = args[index + 1]; index += 1; continue; }
+    if (arg.startsWith("-")) { if (WRANGLER_VALUE_FLAGS.has(arg)) index += 1; continue; }
+    positional.push(arg);
+  }
+  const [command, nested] = positional;
+  const mutating = WORKER_MUTATIONS.has(command) || WORKER_NESTED_MUTATIONS[command]?.has(nested);
+  // `--env openai` is the OpenAI Worker, which has its own topology gate.
+  if (!mutating || dryRun || env === "openai") return null;
+  return `wrangler ${command}${WORKER_NESTED_MUTATIONS[command] ? ` ${nested}` : ""}`;
+}
+
+function firstFile(candidates, context) {
+  for (const candidate of candidates) {
+    const absolute = resolvePath(context.root, candidate);
+    if (absolute.startsWith(`${context.root}/`) && existsSync(absolute) && statSync(absolute).isFile()) return absolute;
+  }
+  return null;
+}
+
+function scanScriptFile(path, context, label) {
+  const absolute = firstFile([resolvePath(context.cwd, path), resolvePath(context.root, path)], context);
+  if (!absolute || context.visited.has(absolute) || context.depth >= MAX_SCAN_DEPTH) return null;
+  context.visited.add(absolute);
+  const body = readFileSync(absolute, "utf8");
+  const next = { ...context, depth: context.depth + 1, cwd: dirname(absolute) };
+  let reason = null;
+  if (/\.(?:[cm]?[jt]s)$/u.test(absolute)) reason = scanJavaScript(body, next);
+  else if (/\.(?:sh|bash)$/u.test(absolute) || /^#!.*\b(?:ba|z|da|k)?sh\b/u.test(body)) reason = scanShell(body, next);
+  return reason ? `${label} -> ${reason}` : null;
+}
+
+// JS is read only through its child_process calls with a literal command: a string that
+// is data (a forbidden-pattern table, an assertion) is not an execution.
+function scanJavaScript(body, context) {
+  if (!CHILD_PROCESS_IMPORT.test(body)) return null;
+  for (const [, , command, args = ""] of body.matchAll(CHILD_PROCESS_CALL)) {
+    const extra = [...args.matchAll(/(["'`])((?:\\.|(?!\1).)*)\1/gu)].map((match) => match[2]);
+    const statements = shellStatements(command);
+    if (statements.length) statements[0] = [...statements[0], ...extra];
+    for (const statement of statements) {
+      const reason = classifyStatement(statement, context);
+      if (reason) return reason;
+    }
+  }
+  return null;
+}
+
+function scanShell(text, context) {
+  for (const statement of shellStatements(text)) {
+    const reason = classifyStatement(statement, context);
+    if (reason) return reason;
+    // Command substitution inside a quoted word still executes.
+    for (const token of statement) {
+      if (!/\$\(|`/u.test(token)) continue;
+      const inner = scanShell(token.replace(/\$\(/gu, "\n"), context);
+      if (inner) return inner;
+    }
+  }
+  return null;
+}
+
+function packageScript(name, prefix, context) {
+  const directory = prefix ? resolvePath(context.cwd, prefix) : context.cwd;
+  const manifest = firstFile([join(directory, "package.json")], context);
+  if (!manifest || context.depth >= MAX_SCAN_DEPTH) return null;
+  const scripts = JSON.parse(readFileSync(manifest, "utf8")).scripts ?? {};
+  for (const candidate of [`pre${name}`, name, `post${name}`]) {
+    if (typeof scripts[candidate] !== "string") continue;
+    const reason = scanShell(scripts[candidate], { ...context, cwd: directory, depth: context.depth + 1 });
+    if (reason) return reason;
+  }
+  return null;
+}
+
+function classifyPackageManager(manager, args, context) {
+  let prefix;
+  const positional = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--") { positional.push(...args.slice(index + 1)); break; }
+    if (arg.startsWith("--prefix=")) { prefix = arg.slice("--prefix=".length); continue; }
+    if (arg.startsWith("-")) {
+      if (NPM_VALUE_FLAGS.has(arg)) {
+        if (NPM_PREFIX_FLAGS.has(arg)) prefix = args[index + 1];
+        index += 1;
+      }
+      continue;
+    }
+    positional.push(arg);
+  }
+  const [sub, ...rest] = positional;
+  if (!sub) return null;
+  if (["exec", "dlx", "x"].includes(sub)) return classifyStatement(rest, context);
+  const runsScript = ["run", "run-script", "rum", "urn"].includes(sub);
+  let name;
+  if (runsScript) name = rest[0];
+  else if (manager === "npm") name = NPM_LIFECYCLE_ALIASES[sub] ?? (sub === "deploy" ? sub : undefined); // `npm publish` is the package release, not a script
+  else name = sub;
+  if (!name) return null;
+  if (MUTATING_SCRIPT_NAME.test(name)) return `${manager} run ${name}`;
+  const inner = packageScript(name, prefix, context);
+  return inner ? `${manager} run ${name} -> ${inner}` : null;
+}
+
+function classifyStatement(tokens, context) {
+  let index = 0;
+  while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(tokens[index])) index += 1;
+  while (index < tokens.length && COMMAND_WRAPPERS.has(tokens[index])) index += 1;
+  const launcher = tokens[index] !== undefined && ["npx", "pnpx", "bunx"].includes(programName(tokens[index]));
+  if (launcher) {
+    index += 1;
+    while (index < tokens.length && tokens[index].startsWith("-")) index += ["-p", "--package", "-c", "--call"].includes(tokens[index]) ? 2 : 1;
+  }
+  if (index >= tokens.length) return null;
+  const head = programName(tokens[index]);
+  const rest = tokens.slice(index + 1);
+  if (head === "wrangler") return wranglerMutation(rest);
+  if (!launcher && PACKAGE_MANAGERS.has(head)) return classifyPackageManager(head, rest, context);
+  if (head === "eval") return scanShell(rest.join(" "), context);
+  if (SHELLS.has(head)) {
+    const at = rest.indexOf("-c");
+    if (at >= 0 && rest[at + 1] !== undefined) return scanShell(rest[at + 1], context);
+    const script = rest.find((arg) => !arg.startsWith("-"));
+    return script ? scanScriptFile(script, context, `${head} ${script}`) : null;
+  }
+  if (head === "source" || head === ".") return rest[0] ? scanScriptFile(rest[0], context, `source ${rest[0]}`) : null;
+  if (JS_RUNNERS.has(head)) {
+    const inline = rest.findIndex((arg) => ["-e", "--eval", "-p", "--print"].includes(arg));
+    if (inline >= 0 && rest[inline + 1] !== undefined) return scanJavaScript(rest[inline + 1], context);
+    // `node --test a b c` runs every file argument; otherwise the first positional is the entry.
+    const runsAll = rest.includes("--test");
+    for (let at = 0; at < rest.length; at += 1) {
+      if (rest[at].startsWith("-")) { if (JS_RUNNER_VALUE_FLAGS.has(rest[at])) at += 1; continue; }
+      // The Worker-locked CLI invoked through its JS entry is still Wrangler.
+      if (/(?:^|\/)wrangler(?:-dist\/cli)?\.m?js$/u.test(rest[at])) return wranglerMutation(rest.slice(at + 1));
+      const reason = scanScriptFile(rest[at], context, `${head} ${rest[at]}`);
+      if (reason || !runsAll) return reason;
+    }
+    return null;
+  }
+  if (tokens[index].includes("/")) return scanScriptFile(tokens[index], context, tokens[index]);
+  return null;
+}
+
+// Remote reusable workflows and known deploy actions run mutations out of band of
+// the parent workflow's gate graph; only local (`./`) references are not remote.
+function usesViolation(reference) {
+  if (/^cloudflare\/wrangler-action(?:@|$)/u.test(reference)) return "cloudflare/wrangler-action";
+  if (!reference.startsWith("./") && /\/\.github\/workflows\/[^@\s]+\.ya?ml(?:@|$)/u.test(reference)) return "remote reusable workflow";
+  return null;
+}
+
+// A local composite action (`uses: ./path`) runs its own `run:` blocks; scan them like a step's.
+function localActionViolation(reference, root) {
+  if (!reference.startsWith("./") || /\.ya?ml$/u.test(reference)) return null;
+  const manifest = firstFile(["action.yml", "action.yaml"].map((name) => join(root, reference, name)), { root });
+  if (!manifest) return null;
+  const lines = readFileSync(manifest, "utf8").split("\n");
+  for (let at = 0; at < lines.length; at += 1) {
+    const match = lines[at].match(/^(\s*)(?:-\s+)?run:\s*(.*)$/u);
+    if (!match) continue;
+    const indent = match[1].length;
+    let text = /^[|>][+-]?\d*\s*$/u.test(match[2]) ? "" : match[2];
+    for (let next = at + 1; next < lines.length && /^[|>]/u.test(match[2]); next += 1) {
+      if (lines[next].trim() !== "" && lines[next].search(/\S/u) <= indent) break;
+      text += `\n${lines[next]}`;
+    }
+    const reason = scanShell(text, { root, cwd: root, depth: 0, visited: new Set() });
+    if (reason) return `local action ${reference} -> ${reason}`;
+  }
+  return null;
+}
+
+function stepRunText(step) {
+  const lines = step.split("\n");
+  const at = lines.findIndex((line) => /^        run:/u.test(line));
+  if (at < 0) return "";
+  const first = lines[at].replace(/^        run:\s*/u, "");
+  if (!/^[|>][+-]?\d*\s*$/u.test(first)) return first.replace(/^(["'])(.*)\1$/u, "$2");
+  const body = [];
+  for (const line of lines.slice(at + 1)) {
+    if (line.trim() !== "" && !/^          /u.test(line)) break;
+    body.push(line);
+  }
+  return body.join("\n");
+}
+
+function fullDeployMutationViolations(files, root = process.cwd()) {
   const found = [];
   for (const [file, yaml] of Object.entries(files)) {
     for (const stage of parseWorkflowStages(yaml)) {
-      for (const step of executableStageBody(stage).split(/^      - name: /m).slice(1)) {
-        const title = step.split("\n")[0];
-        const text = step.replace(/\\\n\s*/g, " ");
-        const mutations = [
-          ...text.matchAll(/\bwrangler\s+(?:deploy|versions\s+(?:deploy|upload)|rollback|delete|pages\s+deploy)\b[^\n]*/g),
-          ...text.matchAll(/\bnpm (?:run )?deploy\b[^\n]*/g),
-          ...text.matchAll(/cloudflare\/wrangler-action[^\n]*/g),
-        ].map((match) => match[0]);
-        for (const mutation of mutations) {
-          if (/--dry-run\b/.test(mutation) || /--env openai\b/.test(mutation)) continue;
-          found.push({ id: `${file}:${stage.id}:${title}`, step });
-        }
+      const body = executableStageBody(stage);
+      for (const [, reference] of body.matchAll(/^\s*(?:-\s+)?uses:\s*([^\s#]+)/gmu)) {
+        const reason = usesViolation(reference) ?? localActionViolation(reference, root);
+        if (reason) found.push({ id: `${file}:${stage.id}:uses:${reference}`, reason });
+      }
+      // Steps are split on the list marker, so steps without a `name:` are covered too.
+      for (const chunk of body.split(/^      - /mu).slice(1)) {
+        const step = `        ${chunk}`;
+        const title = step.match(/^        name:\s*(.+)$/mu)?.[1].trim() ?? step.trim().split("\n")[0];
+        const workingDirectory = step.match(/^        working-directory:\s*(\S+)/mu)?.[1] ?? ".";
+        const cwd = resolvePath(root, workingDirectory);
+        const reason = scanShell(stepRunText(step), { root, cwd, depth: 0, visited: new Set() });
+        if (reason) found.push({ id: `${file}:${stage.id}:${title}`, reason });
       }
     }
   }
   return found;
 }
 
-// Covers direct `wrangler`/`npx`/`bunx` invocations and known actions in workflow steps. It does
-// not see script files, `wrangler@<ver>`, flags before the subcommand, or `npm --prefix … run deploy`.
-test("Full Worker topology guard — direct wrangler/npx/bunx and known-action Cloudflare mutations in workflow steps are only the step after both guards", () => {
+test("Full Worker mutation scanner — reads executable contexts only, and sees the indirect ones", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "mutation-scan-")));
+  try {
+    mkdirSync(join(root, "scripts"), { recursive: true });
+    mkdirSync(join(root, "worker"), { recursive: true });
+    const write = (name, text) => writeFileSync(join(root, name), text);
+    write("package.json", JSON.stringify({ scripts: { build: "tsc", ship: "npm run build && wrangler deploy", test: "node --test scripts/benign.mjs", prerelease: "echo ok" } }));
+    write("worker/package.json", JSON.stringify({ scripts: { deploy: "wrangler deploy", lint: "eslint ." } }));
+    write("scripts/sneaky.sh", "#!/usr/bin/env bash\nset -e\necho start\nnpx wrangler@4.40.0 deploy\n");
+    write("scripts/chain.sh", "#!/bin/sh\nbash scripts/sneaky.sh\n");
+    write("scripts/benign.sh", '#!/bin/sh\necho "wrangler deploy is forbidden here"\n# wrangler deploy\n');
+    // Built from parts so this file's own text is never a literal child_process call.
+    const CP = ["child", "process"].join("_");
+    const EXEC = ["exec", "Sync"].join("");
+    const SPAWN = ["spawn", "Sync"].join("");
+    write("scripts/ship.mjs", `import { ${EXEC} } from "node:${CP}";\n${EXEC}("wrangler deploy --env \\"\\"");\n`);
+    write("scripts/spawn.mjs", `import { ${SPAWN} } from "node:${CP}";\n${SPAWN}("wrangler", ["versions", "upload"]);\n`);
+    // Data, not execution: the literal sits in a table / message, with or without child_process.
+    write("scripts/tripwire.mjs", 'const FORBIDDEN = ["wrangler deploy", "npx wrangler publish"];\nexport default FORBIDDEN;\n');
+    write("scripts/table.mjs", `import { ${EXEC} } from "node:${CP}";\nconst FORBIDDEN = ["wrangler deploy"];\n${EXEC}("git status");\nexport default FORBIDDEN;\n`);
+    write("scripts/benign.mjs", 'console.log("npx wrangler deploy");\n');
+    write("worker/local.sh", "wrangler deploy\n");
+    const scan = (command, workingDirectory) => fullDeployMutationViolations({
+      "t.yml": `name: t\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - name: S\n${workingDirectory ? `        working-directory: ${workingDirectory}\n` : ""}        run: |\n${command.split("\n").map((line) => `          ${line}`).join("\n")}\n`,
+    }, root).length;
+    for (const command of [
+      "npx wrangler deploy",
+      "npx wrangler@4.40.0 deploy",
+      "npx wrangler@4.40.0 publish",
+      "npx --yes wrangler@latest versions upload",
+      "wrangler --config wrangler.toml deploy",
+      'wrangler -c wrangler.toml --env "" deploy',
+      "wrangler --env= rollback",
+      "./node_modules/.bin/wrangler delete",
+      "node node_modules/wrangler/wrangler-dist/cli.js deploy",
+      "npm --prefix worker run deploy",
+      "npm run deploy --prefix worker",
+      "npm -C worker run deploy",
+      "npm run ship",
+      "npm run deploy",
+      "yarn deploy",
+      "pnpm exec wrangler deploy",
+      "npm exec -- wrangler deploy",
+      "pnpm dlx wrangler@4 deploy",
+      "FOO=1 wrangler rollback",
+      "true && npx wrangler delete",
+      "echo ok; wrangler pages deploy dist",
+      "bash scripts/sneaky.sh",
+      "sh scripts/chain.sh",
+      "./scripts/sneaky.sh",
+      "source scripts/sneaky.sh",
+      "node scripts/ship.mjs",
+      "node scripts/spawn.mjs",
+      `node -e "require('node:${CP}').${EXEC}('wrangler deploy')"`,
+      "sh -c 'wrangler deploy'",
+      "bash -c \"echo x && npx wrangler deploy\"",
+      'eval "wrangler deploy"',
+      'echo "$(wrangler deploy)"',
+      "echo `wrangler deploy`",
+    ]) assert.equal(scan(command), 1, `must be reported: ${command}`);
+    assert.equal(scan("bash local.sh", "worker"), 1, "a script relative to the step's working-directory");
+    for (const command of [
+      "npx wrangler deploy --dry-run",
+      "npx wrangler deploy --env openai",
+      "wrangler versions upload --env=openai",
+      "wrangler deployments status --config wrangler.toml",
+      "wrangler versions view abc --json",
+      "echo wrangler deploy",
+      'echo "npx wrangler deploy"',
+      "grep -n 'wrangler deploy' docs/x.md",
+      "# wrangler deploy",
+      "npm run build",
+      "npm test",
+      "npm --prefix worker run lint",
+      "node scripts/tripwire.mjs",
+      "node scripts/table.mjs",
+      "node scripts/benign.mjs",
+      "bash scripts/benign.sh",
+      "bash scripts/missing.sh",
+    ]) assert.equal(scan(command), 0, `must NOT be reported: ${command}`);
+    // uses: references, including a nameless step and a job-level reusable workflow call.
+    const uses = (line, level = "      - ") => fullDeployMutationViolations({
+      "u.yml": `name: u\non: push\njobs:\n  j:\n${level === "job" ? `    ${line}\n` : `    runs-on: ubuntu-latest\n    steps:\n${level}${line}\n`}`,
+    }, root).length;
+    assert.equal(uses("uses: cloudflare/wrangler-action@v3"), 1);
+    assert.equal(uses("uses: other-org/infra/.github/workflows/deploy.yml@main"), 1);
+    assert.equal(uses("uses: other-org/infra/.github/workflows/deploy.yml@main", "job"), 1);
+    assert.equal(uses("run: npx wrangler deploy"), 1, "a step without a name must still be scanned");
+    assert.equal(uses("uses: ./.github/workflows/local.yml", "job"), 0);
+    mkdirSync(join(root, ".github", "actions", "ship"), { recursive: true });
+    mkdirSync(join(root, ".github", "actions", "calm"), { recursive: true });
+    write(".github/actions/ship/action.yml", "name: ship\nruns:\n  using: composite\n  steps:\n    - name: go\n      shell: bash\n      run: |\n        echo hi\n        npx wrangler@4 deploy\n");
+    write(".github/actions/calm/action.yml", "name: calm\nruns:\n  using: composite\n  steps:\n    - run: echo wrangler deploy is not run here\n      shell: bash\n");
+    assert.equal(uses("uses: ./.github/actions/ship"), 1, "a local composite action that deploys");
+    assert.equal(uses("uses: ./.github/actions/calm"), 0);
+    assert.equal(uses(`uses: actions/checkout@${"a".repeat(40)}`), 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Full Worker topology guard — mutations in workflow steps are only the step after both guards", () => {
   const files = Object.fromEntries(readdirSync(".github/workflows")
     .filter((name) => /\.ya?ml$/.test(name))
     .map((name) => [name, readFileSync(`.github/workflows/${name}`, "utf8")]));
@@ -3152,11 +3624,17 @@ test("Full Worker topology guard — direct wrangler/npx/bunx and known-action C
     "npx wrangler versions deploy abc@100% --yes",
     "npx wrangler rollback abc",
     "npm run deploy --prefix workers/remote-mcp",
+    "npm --prefix workers/remote-mcp run deploy",
+    "npx wrangler@4.40.0 deploy",
+    "npx wrangler@4.40.0 publish",
+    "wrangler --config workers/remote-mcp/wrangler.toml deploy",
     "npx wrangler deploy --env \"\"",
   ]) assert.equal(violations(extraStep(command)).length, 2, `${command} must be reported as a second mutation`);
   const action = { ...files, "ci.yml": `${files["ci.yml"]}\n` };
   action["ci.yml"] = replaceOnce(action["ci.yml"], "      - name: Checkout\n", "      - name: Action deploy\n        uses: cloudflare/wrangler-action@v3\n\n      - name: Checkout\n");
   assert.equal(violations(action).length, 2, "wrangler-action must be reported");
+  const remote = { ...files, "ci.yml": replaceOnce(files["ci.yml"], "      - name: Checkout\n", "      - name: Remote\n        uses: other-org/infra/.github/workflows/deploy.yml@main\n\n      - name: Checkout\n") };
+  assert.equal(violations(remote).length, 2, "a remote reusable workflow must be reported");
   const another = { ...files, "other.yml": "name: x\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - name: S\n        run: npx wrangler deploy\n" };
   assert.equal(violations(another).length, 2, "a new workflow that deploys must be reported");
 });
