@@ -102,7 +102,7 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
     devDependencies: { "@types/node": "^22.0.0", ajv: "8.18.0", typescript: "^5.7.0", zod: "^3.25.1" },
     optionalDependencies: {},
     overrides: {
-      "@ai-sdk/provider-utils": ">=4.0.33",
+      "@ai-sdk/provider-utils": ">=4.0.33 <5",
       hono: ">=4.13.13",
       "ip-address": ">=10.7.3",
       "proxy-addr": ">=2.0.8",
@@ -127,7 +127,7 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
     },
     optionalDependencies: {},
     overrides: {
-      "@ai-sdk/provider-utils": ">=4.0.33",
+      "@ai-sdk/provider-utils": ">=4.0.33 <5",
       "@modelcontextprotocol/sdk": { "@hono/node-server": "2.0.12", hono: ">=4.13.13" },
       agents: { "@modelcontextprotocol/sdk": "1.31.0" },
       hono: ">=4.13.13",
@@ -280,7 +280,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
   "package-lock.json": "62bcc09846f3544ea75d682bc53a8b944f0f525abdf64fa7e0459046fecefbab",
-  "workers/remote-mcp/package-lock.json": "a17f8d10b439e050754559be3f49507f92c98ada81c1cb82cb3e749da6ea9584",
+  "workers/remote-mcp/package-lock.json": "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
@@ -297,7 +297,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
-  ".github/workflows/ci.yml": "9a594e290d8ecc91a205d73077e2e269951a929dcc0791e2868575e62a3321e0",
+  ".github/workflows/ci.yml": "e77888420f0874d90c2ae001b587a07b394b5e57bdf83dbb9e90dd41908e99a0",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",
