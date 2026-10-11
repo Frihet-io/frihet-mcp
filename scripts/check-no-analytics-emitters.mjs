@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "51a572e915c97154ced943fa2f0540b2c69e75e6978e40067a736ed93ea1f334", // registers the provisioning-credential wire test; no new deps or emitters
+  "package.json": "c8fcc3fc70d2fc13499ffa57cdaa7aa19ee093752e3500fcb8136b44a0f5a425", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs; no new deps, lifecycle or network script
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -294,7 +294,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
-  "scripts/audit-mcp-refs.mjs": "06f01587aee4e12e732700a4ef47379b6271174304c1f53b2e0b76fba04a0f2b", // fix/mcp-refs-watch-locales: tool-count detector widened (qualifier words, non-ASCII noun endings, CJK), glob watch lists, --root override for hermetic fixtures, --fix kept symmetric with the detector
+  "scripts/audit-mcp-refs.mjs": "6120d98922f199b5f31ba931977cbc8ee4c99e8b969606d77d0d4775a64536b3", // MCP recovery (published-artifact SoT, bounded npm metadata + sha512-verified tarball, exit 4 on unverifiable bytes; see docs/reviews/mcp-published-recovery/pin-review.md); previously fix/mcp-refs-watch-locales: tool-count detector widened (qualifier words, non-ASCII noun endings, CJK), glob watch lists, --root override for hermetic fixtures, --fix kept symmetric with the detector
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
   "scripts/check-openai-worker-topology.mjs": "9faa435df74bda80ef9a1ecf52d322e7604f3d751c67f6ecab4213643e98172f",
   "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",
