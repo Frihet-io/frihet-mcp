@@ -14,9 +14,16 @@
  * correlation proves it left no active credential: the next attempt cannot
  * arm while one is unproven, and an abandoned state is reconciled by its alarm.
  *
+ * A commit also records the earlier grants this authorization replaces. That
+ * outbox is drained by the alarm before any expiry cleanup: each grant's
+ * token family is tombstoned, and the family's own cleanup outbox revokes the
+ * grant and its backend key. A transient failure is retried with backoff until
+ * the reconcile horizon, when the replaced grants' keys have expired.
+ *
  * Rollback: a Worker that only reads the v1 envelope deletes these records,
- * including unproven attempts. Let pending states expire and their alarms
- * reconcile before rolling back.
+ * including unproven attempts. A Worker without the replacement outbox drops
+ * undrained ones when the state expires. Let pending states expire and their
+ * alarms reconcile before rolling back.
  */
 
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
@@ -37,6 +44,8 @@ const TOKEN_FAMILY_INFLIGHT_TTL_MS = 60 * 1000;
 const TOKEN_FAMILY_CLEANUP_STORAGE_KEY = "oauth_token_family_cleanup";
 const CLEANUP_INITIAL_BACKOFF_MS = 1_000;
 const CLEANUP_MAX_BACKOFF_MS = 5 * 60 * 1000;
+const GRANT_REPLACEMENT_STORAGE_KEY = "oauth_grant_replacement";
+const MAX_REPLACED_GRANT_IDS = 64;
 const INTERNAL_ORIGIN = "https://oauth-state.internal";
 
 export type OAuthTokenKind = "authorization_code" | "refresh_token";
@@ -124,14 +133,27 @@ type TokenFamilyCleanupIntent = {
   attempt: number;
 };
 
+/** Earlier grants a committed authorization replaces, not yet handed off. */
+type GrantReplacementIntent = {
+  version: 1;
+  /** The armed lease's verified uid, never a request field. */
+  userId: string;
+  grantIds: string[];
+  attempt: number;
+  notAfterMs: number;
+};
+
 type OAuthStateStoreEnv = {
   OAUTH_KV: KVNamespace;
+  OAUTH_STATE: DurableObjectNamespace;
   FRIHET_API_BASE: string;
   FRIHET_OAUTH_API_KEY: string;
 };
 
 export type OAuthCleanupAuthorities = {
   revokeGrant(env: OAuthStateStoreEnv, userId: string, grantId: string): Promise<void>;
+  /** True only once the grant's token family durably holds its tombstone. */
+  supersedeGrant(env: OAuthStateStoreEnv, userId: string, grantId: string): Promise<boolean>;
   revokeBackend(
     env: OAuthStateStoreEnv,
     binding: OAuthApiKeyBinding | undefined,
@@ -175,10 +197,14 @@ const CLEANUP_OAUTH_OPTIONS: OAuthProviderOptions<OAuthStateStoreEnv> = {
   defaultHandler: UNUSED_OAUTH_HANDLER,
 };
 
-const DEFAULT_CLEANUP_AUTHORITIES: OAuthCleanupAuthorities = {
+export const DEFAULT_CLEANUP_AUTHORITIES: OAuthCleanupAuthorities = {
   async revokeGrant(env, userId, grantId): Promise<void> {
     const { getOAuthApi } = await import("@cloudflare/workers-oauth-provider");
     await getOAuthApi(CLEANUP_OAUTH_OPTIONS, env).revokeGrant(grantId, userId);
+  },
+  async supersedeGrant(env, userId, grantId): Promise<boolean> {
+    const { supersedeOAuthTokenFamily } = await import("./oauth-token-family.js");
+    return supersedeOAuthTokenFamily(env.OAUTH_STATE, userId, grantId);
   },
   async revokeBackend(env, binding): Promise<boolean> {
     if (!binding) return true;
@@ -220,6 +246,15 @@ function noStoreJson(value: unknown, status = 200): Response {
       "Pragma": "no-cache",
     },
   });
+}
+
+/**
+ * Emit one structured log line for an OAuth-state lifecycle outcome. Records
+ * carry outcome, stage, reason and counts only: never a uid, grant id, key id
+ * or credential.
+ */
+function logOAuthStateEvent(event: Record<string, unknown>): void {
+  console.error(JSON.stringify({ component: "oauth-state-store", ...event }));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -492,6 +527,26 @@ function cleanupBackoffMs(attempt: number): number {
   );
 }
 
+function isReplacedGrantIds(value: unknown): value is string[] {
+  return Array.isArray(value)
+    && value.length >= 1
+    && value.length <= MAX_REPLACED_GRANT_IDS
+    && value.every(isGrantId);
+}
+
+function isGrantReplacementIntent(value: unknown): value is GrantReplacementIntent {
+  return isRecord(value)
+    && hasOnlyKeys(value, new Set(["version", "userId", "grantIds", "attempt", "notAfterMs"]))
+    && value.version === 1
+    && isSafeUid(value.userId)
+    && isReplacedGrantIds(value.grantIds)
+    && typeof value.attempt === "number"
+    && Number.isSafeInteger(value.attempt)
+    && value.attempt >= 0
+    && typeof value.notAfterMs === "number"
+    && Number.isSafeInteger(value.notAfterMs);
+}
+
 export class OAuthStateStore {
   private readonly state: DurableObjectState;
   private readonly env: OAuthStateStoreEnv | undefined;
@@ -602,6 +657,12 @@ export class OAuthStateStore {
       await this.state.storage.deleteAll();
       return;
     }
+    logOAuthStateEvent({
+      outcome: "expired",
+      stage: "alarm_reconcile",
+      reason: "state_ttl_reached",
+      pendingCount: pending.length,
+    });
     if (!this.env) {
       throw new Error("OAuth state reconciliation environment is unavailable");
     }
@@ -626,6 +687,62 @@ export class OAuthStateStore {
       return;
     }
     await this.state.storage.put(STATE_STORAGE_KEY, { ...armed, unreconciled: remaining });
+  }
+
+  /**
+   * Hand every replaced grant to its token family, which tombstones it and
+   * owns the revocation from there. Same outbox discipline: the next alarm is
+   * armed before any external I/O, and only unacknowledged grants are kept.
+   */
+  private async processGrantReplacement(intent: GrantReplacementIntent): Promise<void> {
+    // Replaced grants hold keys provisioned before this commit, which expire
+    // within the reconcile horizon; past it they can hold no active credential.
+    if (Date.now() >= intent.notAfterMs) {
+      logOAuthStateEvent({
+        outcome: "abandoned",
+        stage: "grant_replacement",
+        reason: "horizon_reached",
+        pendingCount: intent.grantIds.length,
+      });
+      await this.finishGrantReplacement();
+      return;
+    }
+    if (!this.env) {
+      throw new Error("OAuth grant replacement environment is unavailable");
+    }
+    const attempt = Math.min(intent.attempt + 1, Number.MAX_SAFE_INTEGER);
+    const armed: GrantReplacementIntent = { ...intent, attempt };
+    await this.state.storage.transaction(async (transaction) => {
+      await transaction.put(GRANT_REPLACEMENT_STORAGE_KEY, armed);
+      await transaction.setAlarm(Date.now() + cleanupBackoffMs(attempt));
+    });
+
+    const env = this.env;
+    const results = await Promise.allSettled(
+      intent.grantIds.map((grantId) => this.cleanupAuthorities.supersedeGrant(env, intent.userId, grantId)),
+    );
+    const remaining = intent.grantIds.filter((_, index) => {
+      const result = results[index];
+      return result?.status !== "fulfilled" || result.value !== true;
+    });
+    if (remaining.length === 0) {
+      await this.finishGrantReplacement();
+      return;
+    }
+    logOAuthStateEvent({
+      outcome: "retry",
+      stage: "grant_replacement",
+      pendingCount: remaining.length,
+    });
+    await this.state.storage.put(GRANT_REPLACEMENT_STORAGE_KEY, { ...armed, grantIds: remaining });
+  }
+
+  /** Drop the drained outbox and let `alarm()` route whatever else remains. */
+  private async finishGrantReplacement(): Promise<void> {
+    await this.state.storage.transaction(async (transaction) => {
+      await transaction.delete(GRANT_REPLACEMENT_STORAGE_KEY);
+      await transaction.setAlarm(Date.now());
+    });
   }
 
   private async readStateRecord(): Promise<OAuthStateRecord | undefined> {
@@ -730,6 +847,7 @@ export class OAuthStateStore {
           return noStoreJson({ outcome: "lease_lost" });
         }
         if (record.expiresAtMs - now < STATE_ARM_MIN_REMAINING_MS) {
+          logOAuthStateEvent({ outcome: "expired", stage: "attempt", reason: "below_arm_min_remaining" });
           return noStoreJson({ outcome: "expired" });
         }
         if (
@@ -764,12 +882,19 @@ export class OAuthStateStore {
       if (request.method === "POST" && pathname === "/commit") {
         const body = await readJsonBody(request);
         const leaseId = body?.leaseId;
-        if (!body || !hasOnlyKeys(body, new Set(["leaseId"])) || !isLeaseId(leaseId)) {
+        const replacedGrantIds = body?.replacedGrantIds;
+        if (
+          !body
+          || !hasOnlyKeys(body, new Set(["leaseId", "replacedGrantIds"]))
+          || !isLeaseId(leaseId)
+          || (replacedGrantIds !== undefined && !isReplacedGrantIds(replacedGrantIds))
+        ) {
           return noStoreJson({ outcome: "invalid" }, 400);
         }
         const record = await this.readStateRecord();
         if (record?.status === "committed" && record.committedLeaseId === leaseId) {
-          // Idempotent: a retried commit whose first response was lost.
+          // Idempotent: a retried commit whose first response was lost. Its
+          // replacement outbox was written with the first commit.
           return noStoreJson({ outcome: "committed" });
         }
         if (
@@ -793,7 +918,24 @@ export class OAuthStateStore {
           unreconciled: [],
           committedLeaseId: leaseId,
         };
-        await this.state.storage.put(STATE_STORAGE_KEY, committed);
+        const userId = record.lease.uid;
+        const now = Date.now();
+        await this.state.storage.transaction(async (transaction) => {
+          await transaction.put(STATE_STORAGE_KEY, committed);
+          if (replacedGrantIds !== undefined) {
+            const intent: GrantReplacementIntent = {
+              version: 1,
+              userId,
+              grantIds: [...new Set(replacedGrantIds)],
+              attempt: 0,
+              notAfterMs: now + STATE_RECONCILE_HORIZON_MS,
+            };
+            await transaction.put(GRANT_REPLACEMENT_STORAGE_KEY, intent);
+            // Pre-arm with the commit: a crash right after it can never leave
+            // the replaced grants without a future alarm.
+            await transaction.setAlarm(now + 1);
+          }
+        });
         return noStoreJson({ outcome: "committed" });
       }
 
@@ -1077,6 +1219,41 @@ export class OAuthStateStore {
         return noStoreJson({ outcome: "revoked", apiKeyBinding: record.apiKeyBinding });
       }
 
+      if (request.method === "POST" && pathname === "/token-family/supersede") {
+        const body = await readJsonBody(request);
+        const userId = body?.userId;
+        const grantId = body?.grantId;
+        if (
+          !body
+          || !hasOnlyKeys(body, new Set(["userId", "grantId"]))
+          || !isSafeUid(userId)
+          || !isGrantId(grantId)
+        ) {
+          return new Response(null, { status: 400 });
+        }
+        const record = await this.state.storage.get<TokenFamilyRecord>(
+          TOKEN_FAMILY_STORAGE_KEY,
+        );
+        if (record && (record.userId !== userId || record.grantId !== grantId)) {
+          return new Response(null, { status: 409 });
+        }
+        // A grant whose code was never redeemed has no family yet. Its
+        // tombstone still revokes the grant and refuses its first redemption
+        // (begin answers revoked). Its backend key is named only in the
+        // grant's encrypted props: once the grant is revoked nothing can
+        // present it, and the key lapses at its own expiry.
+        await this.tombstoneTokenFamily(record ?? {
+          version: 1,
+          status: "revoked",
+          userId,
+          grantId,
+          currentKind: "authorization_code",
+          currentHash: "0".repeat(64),
+          expiresAtMs: Date.now() + STATE_RECONCILE_HORIZON_MS,
+        });
+        return new Response(null, { status: 204 });
+      }
+
       return new Response(null, { status: 405 });
     });
   }
@@ -1091,6 +1268,18 @@ export class OAuthStateStore {
           throw new Error("OAuth token-family cleanup intent is invalid");
         }
         await this.processCleanup(cleanup);
+        return;
+      }
+
+      // Drained before the state branch: every path below may end in deleteAll().
+      const replacement = await this.state.storage.get<unknown>(
+        GRANT_REPLACEMENT_STORAGE_KEY,
+      );
+      if (replacement !== undefined) {
+        if (!isGrantReplacementIntent(replacement)) {
+          throw new Error("OAuth grant replacement intent is invalid");
+        }
+        await this.processGrantReplacement(replacement);
         return;
       }
 
@@ -1232,16 +1421,24 @@ export async function armOAuthStateAttempt(
   throw new Error("OAuth state store returned an invalid attempt outcome");
 }
 
+/**
+ * Commit the lease and, atomically with it, the outbox that replaces the
+ * user's earlier grants for this client. Only the first
+ * `MAX_REPLACED_GRANT_IDS` are queued; any beyond that rely on the caller's
+ * inline replacement and are listed again by the next authorization.
+ */
 export async function commitOAuthState(
   namespace: DurableObjectNamespace,
   stateKey: string,
   leaseId: string,
+  replacedGrantIds: readonly string[],
 ): Promise<OAuthStateCommitResult> {
+  const queued = replacedGrantIds.slice(0, MAX_REPLACED_GRANT_IDS);
   const body = await readStateOutcome(
     await stateStub(namespace, stateKey).fetch(`${INTERNAL_ORIGIN}/commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leaseId }),
+      body: JSON.stringify(queued.length > 0 ? { leaseId, replacedGrantIds: queued } : { leaseId }),
     }),
     "commit state",
   );

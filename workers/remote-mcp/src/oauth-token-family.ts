@@ -234,6 +234,27 @@ async function revokeOAuthTokenFamily(
   return result.apiKeyBinding;
 }
 
+/**
+ * Tombstone the family of a grant that a newer authorization replaced: its
+ * tokens stop working at once and the family's cleanup outbox revokes the
+ * grant and its backend key. True only once the tombstone is durable.
+ */
+export async function supersedeOAuthTokenFamily(
+  namespace: DurableObjectNamespace,
+  userId: string,
+  grantId: string,
+): Promise<boolean> {
+  const response = await (await tokenFamilyStub(namespace, userId, grantId)).fetch(
+    `${INTERNAL_ORIGIN}/token-family/supersede`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, grantId }),
+    },
+  );
+  return response.status === 204;
+}
+
 export async function hashOAuthFamilyCredential(
   kind: OAuthTokenKind,
   rawCredential: string,

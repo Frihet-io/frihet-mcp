@@ -34,6 +34,15 @@ class FakeStorage {
     return this.values.delete(key);
   }
 
+  async list(options: { prefix?: string } = {}): Promise<Map<string, unknown>> {
+    const prefix = options.prefix ?? "";
+    const matched = new Map<string, unknown>();
+    for (const [key, value] of this.values) {
+      if (key.startsWith(prefix)) matched.set(key, structuredClone(value));
+    }
+    return matched;
+  }
+
   async transaction<T>(callback: (transaction: DurableObjectTransaction) => Promise<T>): Promise<T> {
     const snapshot = new Map(
       [...this.values].map(([key, value]) => [key, structuredClone(value)]),
@@ -90,6 +99,9 @@ const SUCCESSFUL_CLEANUP: OAuthCleanupAuthorities = {
     return true;
   },
   async revokeBackendCorrelation(): Promise<boolean> {
+    return true;
+  },
+  async supersedeGrant(): Promise<boolean> {
     return true;
   },
 };
@@ -378,6 +390,9 @@ test("OAuth state lease endpoints reject malformed bodies", async () => {
     ["/attempt", { leaseId: "not-a-uuid", uid: "firebase-user", reconciled: [] }],
     ["/attempt", { leaseId: lease.leaseId, uid: "firebase-user", reconciled: ["x"] }],
     ["/commit", { leaseId: lease.leaseId, extra: true }],
+    ["/commit", { leaseId: lease.leaseId, replacedGrantIds: [] }],
+    ["/commit", { leaseId: lease.leaseId, replacedGrantIds: ["not-a-grant-id"] }],
+    ["/commit", { leaseId: lease.leaseId, replacedGrantIds: Array(65).fill("a".repeat(16)) }],
     ["/release", { leaseId: lease.leaseId, outcome: "maybe" }],
   ] as const) {
     assert.equal((await store.fetch(stateRequest(path, body))).status, 400, `${path} ${JSON.stringify(body)}`);
@@ -666,4 +681,271 @@ test("token family bindings accept the full provider-valid Firebase UID segment"
     }, "PUT"));
     assert.equal(response.status, 204, JSON.stringify(uid));
   }
+});
+
+async function initializeWithRefreshToken(
+  store: OAuthStateStore,
+  hash: string,
+  binding: { uid: string; keyId: string } = OPENAI_BINDING,
+): Promise<void> {
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash: hash,
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: binding,
+  }, "PUT"))).status, 204);
+}
+
+test("token family: a /commit that omits apiKeyBinding keeps the family's existing binding", async () => {
+  const { store } = makeStore();
+  const refreshHash = "1".repeat(64);
+  await initializeWithRefreshToken(store, refreshHash);
+
+  const begin = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: refreshHash,
+  });
+  assert.equal(begin.outcome, "started");
+
+  const committed = await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "2".repeat(64),
+  });
+  assert.equal(committed.outcome, "committed");
+  assert.deepEqual(committed.apiKeyBinding, OPENAI_BINDING);
+});
+
+test("token family: a commit binding a different uid tombstones the family", async () => {
+  const { store, state } = makeStore();
+  const refreshHash = "1".repeat(64);
+  await initializeWithRefreshToken(store, refreshHash);
+
+  const begin = await familyJson(store, "/token-family/begin", {
+    kind: "refresh_token",
+    credentialHash: refreshHash,
+  });
+  assert.equal(begin.outcome, "started");
+
+  const outcome = await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "2".repeat(64),
+    apiKeyBinding: { ...OPENAI_BINDING, uid: "another-user" },
+  });
+  assert.equal(outcome.outcome, "revoked", "a forged binding tombstones the family");
+  assert.ok(
+    state.storage.values.has("oauth_token_family_cleanup"),
+    "the tombstone arms the cleanup outbox",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// #205 findings from the independent review of #216 — pinned RED first.
+// ---------------------------------------------------------------------------
+
+test("#205: a committed state drains its grant-replacement outbox before any expiry cleanup, with partial ACKs", async (context) => {
+  const t0 = 1_800_000_000_000;
+  let now = t0;
+  context.mock.method(Date, "now", () => now);
+  const first = "a".repeat(16);
+  const second = "b".repeat(16);
+  const failuresLeft = new Map([[first, 2], [second, 1]]);
+  const handedOff: string[] = [];
+  const cleanupAuthorities = {
+    ...SUCCESSFUL_CLEANUP,
+    async supersedeGrant(_env: unknown, userId: string, grantId: string): Promise<boolean> {
+      const left = failuresLeft.get(grantId) ?? 0;
+      if (left > 0) {
+        failuresLeft.set(grantId, left - 1);
+        throw new Error("injected token-family outage");
+      }
+      handedOff.push(`${userId}/${grantId}`);
+      return true;
+    },
+  } as OAuthCleanupAuthorities;
+  const { store, state } = makeStore({ cleanupAuthorities });
+
+  assert.equal(await putState(store, "{\"clientId\":\"client\"}"), 204);
+  const reserved = await stateJson(store, "/reserve");
+  assert.equal(reserved.outcome, "reserved");
+  assert.equal((await stateJson(store, "/attempt", {
+    leaseId: reserved.leaseId,
+    uid: "firebase-user",
+    reconciled: [],
+  })).outcome, "armed");
+  const committed = await stateJson(store, "/commit", {
+    leaseId: reserved.leaseId,
+    replacedGrantIds: [first, second],
+  });
+  assert.equal(committed.outcome, "committed");
+  const intent = state.storage.values.get("oauth_grant_replacement") as Record<string, unknown>;
+  assert.equal(intent?.userId, "firebase-user", "the uid comes from the armed lease");
+  assert.deepEqual(intent?.grantIds, [first, second]);
+  assert.ok((state.storage.alarm ?? Infinity) <= t0 + 1_000, "the outbox is armed with the commit");
+
+  // The state expires before any hand-off succeeds. Its expiry cleanup would
+  // otherwise end in deleteAll() and drop the queued replacements.
+  now = t0 + 11 * 60_000;
+  await store.alarm();
+  assert.deepEqual(handedOff, []);
+  assert.deepEqual(
+    (state.storage.values.get("oauth_grant_replacement") as { grantIds: string[] }).grantIds,
+    [first, second],
+    "nothing acknowledged, nothing dropped",
+  );
+  assert.ok((state.storage.alarm ?? 0) > now, "the next attempt is armed");
+
+  now += 5 * 60_000;
+  await store.alarm();
+  assert.deepEqual(handedOff, [`firebase-user/${second}`]);
+  assert.deepEqual(
+    (state.storage.values.get("oauth_grant_replacement") as { grantIds: string[] }).grantIds,
+    [first],
+    "an acknowledged hand-off is not repeated",
+  );
+
+  now += 5 * 60_000;
+  await store.alarm();
+  assert.deepEqual(handedOff, [`firebase-user/${second}`, `firebase-user/${first}`]);
+  assert.equal(state.storage.values.has("oauth_grant_replacement"), false);
+
+  await store.alarm();
+  assert.equal(state.storage.values.size, 0, "the drained, expired state is then cleared");
+});
+
+test("#205: a commit carrying a different keyId than the family's binding tombstones the family and revokes the bound key", async () => {
+  const revoked: unknown[] = [];
+  const { store, state } = makeStore({
+    cleanupAuthorities: {
+      ...SUCCESSFUL_CLEANUP,
+      async revokeBackend(_env, binding): Promise<boolean> {
+        revoked.push(binding);
+        return true;
+      },
+    },
+  });
+  const hash = "9".repeat(64);
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash: hash,
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: OPENAI_BINDING,
+  }, "PUT"))).status, 204);
+  const begin = await familyJson(store, "/token-family/begin", { kind: "refresh_token", credentialHash: hash });
+  const commit = await familyJson(store, "/token-family/commit", {
+    leaseId: begin.leaseId,
+    newRefreshTokenHash: "a".repeat(64),
+    apiKeyBinding: { ...OPENAI_BINDING, keyId: "Z".repeat(20) },
+  });
+  assert.equal(commit.outcome, "revoked", "within one family the keyId is immutable; a different one is a forged commit");
+  assert.deepEqual(commit.apiKeyBinding, OPENAI_BINDING);
+  const family = state.storage.values.get("oauth_token_family") as {
+    status: string;
+    apiKeyBinding?: unknown;
+  };
+  assert.equal(family.status, "revoked");
+  assert.deepEqual(family.apiKeyBinding, OPENAI_BINDING, "the forged binding never replaces the bound one");
+  assert.deepEqual(
+    (state.storage.values.get("oauth_token_family_cleanup") as { apiKeyBinding?: unknown }).apiKeyBinding,
+    OPENAI_BINDING,
+  );
+  assert.equal(
+    (await familyJson(store, "/token-family/begin", {
+      kind: "refresh_token",
+      credentialHash: "a".repeat(64),
+    })).outcome,
+    "revoked",
+  );
+
+  await store.alarm();
+  assert.deepEqual(revoked, [OPENAI_BINDING], "only the family's own key is revoked");
+});
+
+test("token family supersede: tombstones the bound family, or leaves a revoked placeholder for an unredeemed grant", async () => {
+  const supersede = { userId: "firebase-user", grantId: "g".repeat(16) };
+
+  const bound = makeStore();
+  await initializeWithRefreshToken(bound.store, "1".repeat(64));
+  assert.equal((await bound.store.fetch(familyRequest("/token-family/supersede", supersede))).status, 204);
+  assert.equal((bound.state.storage.values.get("oauth_token_family") as { status: string }).status, "revoked");
+  const intent = bound.state.storage.values.get("oauth_token_family_cleanup");
+  assert.deepEqual((intent as { apiKeyBinding?: unknown }).apiKeyBinding, OPENAI_BINDING);
+  assert.equal((await bound.store.fetch(familyRequest("/token-family/supersede", supersede))).status, 204);
+  assert.deepEqual(bound.state.storage.values.get("oauth_token_family_cleanup"), intent, "a replay keeps the outbox");
+
+  const unredeemed = makeStore();
+  assert.equal((await unredeemed.store.fetch(familyRequest("/token-family/supersede", supersede))).status, 204);
+  assert.equal((await familyJson(unredeemed.store, "/token-family/begin", {
+    kind: "authorization_code",
+    credentialHash: "0".repeat(64),
+  })).outcome, "revoked");
+  assert.equal((await unredeemed.store.fetch(familyRequest("/token-family", {
+    currentKind: "authorization_code",
+    currentHash: "1".repeat(64),
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: OPENAI_BINDING,
+  }, "PUT"))).status, 409, "a late first redemption cannot revive the grant");
+  assert.deepEqual(
+    unredeemed.state.storage.values.get("oauth_token_family_cleanup"),
+    {
+      version: 1,
+      userId: "firebase-user",
+      grantId: "g".repeat(16),
+      grantRevoked: false,
+      backendRevoked: true,
+      attempt: 0,
+    },
+  );
+});
+
+test("token family supersede rejects another identity and malformed bodies without touching the family", async () => {
+  const { store, state } = makeStore();
+  await initializeWithRefreshToken(store, "1".repeat(64));
+  for (const [body, status] of [
+    [{ userId: "another-user", grantId: "g".repeat(16) }, 409],
+    [{ userId: "firebase-user", grantId: "h".repeat(16) }, 409],
+    [{ userId: "with:colon", grantId: "g".repeat(16) }, 400],
+    [{ userId: "firebase-user", grantId: "short" }, 400],
+    [{ userId: "firebase-user", grantId: "g".repeat(16), extra: true }, 400],
+  ] as const) {
+    assert.equal((await store.fetch(familyRequest("/token-family/supersede", body))).status, status, JSON.stringify(body));
+  }
+  assert.equal((state.storage.values.get("oauth_token_family") as { status: string }).status, "active");
+  assert.equal(state.storage.values.has("oauth_token_family_cleanup"), false);
+});
+
+test("grant replacement: a retried commit keeps the outbox, and the horizon ends it without another hand-off", async (context) => {
+  const t0 = 1_800_000_000_000;
+  let now = t0;
+  context.mock.method(Date, "now", () => now);
+  let handOffs = 0;
+  const { store, state } = makeStore({
+    cleanupAuthorities: {
+      ...SUCCESSFUL_CLEANUP,
+      async supersedeGrant(): Promise<boolean> {
+        handOffs += 1;
+        return false;
+      },
+    },
+  });
+  const logged = context.mock.method(console, "error", () => {});
+  assert.equal(await putState(store, "{}"), 204);
+  const reserved = await stateJson(store, "/reserve");
+  await stateJson(store, "/attempt", { leaseId: reserved.leaseId, uid: "firebase-user", reconciled: [] });
+  const commit = { leaseId: reserved.leaseId, replacedGrantIds: ["a".repeat(16), "a".repeat(16)] };
+  assert.equal((await stateJson(store, "/commit", commit)).outcome, "committed");
+  await store.alarm();
+  const afterOneAttempt = state.storage.values.get("oauth_grant_replacement");
+  assert.deepEqual((afterOneAttempt as { grantIds: string[] }).grantIds, ["a".repeat(16)], "deduplicated");
+  assert.equal((await stateJson(store, "/commit", commit)).outcome, "committed");
+  assert.deepEqual(state.storage.values.get("oauth_grant_replacement"), afterOneAttempt);
+
+  now = t0 + 31 * 24 * 60 * 60 * 1000;
+  await store.alarm();
+  assert.equal(handOffs, 1, "no hand-off past the horizon");
+  assert.equal(state.storage.values.has("oauth_grant_replacement"), false);
+  const lines = logged.mock.calls.map((call) => String(call.arguments[0]));
+  assert.ok(lines.some((line) => line.includes("\"outcome\":\"abandoned\"")), lines.join("\n"));
+  assert.ok(lines.every((line) => !line.includes("a".repeat(16)) && !line.includes("firebase-user")));
+  await store.alarm();
+  assert.equal(state.storage.values.size, 0);
 });

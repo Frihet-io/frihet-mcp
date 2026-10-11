@@ -763,7 +763,7 @@ app.post("/callback", async (c) => {
     let committed: OAuthStateCommitResult | undefined;
     for (let round = 0; round < 2 && committed === undefined; round += 1) {
       try {
-        committed = await commitOAuthState(c.env.OAUTH_STATE, body.stateKey, lease.leaseId);
+        committed = await commitOAuthState(c.env.OAUTH_STATE, body.stateKey, lease.leaseId, replacedGrantIds);
       } catch {
         committed = undefined;
       }
@@ -790,16 +790,17 @@ app.post("/callback", async (c) => {
       };
     }
 
+    // Fast path only. The commit queued these grants (up to its cap) in the
+    // state's durable outbox, whose alarm tombstones each family and revokes
+    // its backend key; a failure here only delays a queued grant's replacement.
     const replaced = await Promise.allSettled(
       replacedGrantIds.map(async (grantId) =>
         c.env.OAUTH_PROVIDER.revokeGrant(grantId, decoded.uid)),
     );
     if (replaced.some((result) => result.status === "rejected")) {
-      // Same tolerance as the provider's own replacement: the new grant is
-      // committed; a surviving older grant only keeps its own family usable.
       log({
         level: "warn",
-        message: "OAuth callback: an earlier grant could not be replaced",
+        message: "OAuth callback: an earlier grant could not be replaced inline; the state outbox retries it",
         operation: "oauth_callback",
       });
     }

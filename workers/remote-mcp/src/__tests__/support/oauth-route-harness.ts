@@ -29,7 +29,11 @@ import {
   OPENAI_REVIEW_ORIGIN,
 } from "../../../../../src/openai-review-oauth.ts";
 import { authHandler } from "../../auth-handler.ts";
-import { OAuthStateStore } from "../../oauth-state-store.ts";
+import {
+  DEFAULT_CLEANUP_AUTHORITIES,
+  type OAuthCleanupAuthorities,
+  OAuthStateStore,
+} from "../../oauth-state-store.ts";
 import {
   isOAuthAccessTokenFamilyActive,
   OAuthTokenFamilyExchange,
@@ -48,6 +52,9 @@ const FIREBASE_KID = "route-test-kid";
 type LockedProvider = {
   OAuthProvider: new (options: Record<string, unknown>) => {
     fetch(request: Request, env: Record<string, unknown>, ctx: unknown): Promise<Response>;
+  };
+  getOAuthApi(options: Record<string, unknown>, env: unknown): {
+    revokeGrant(grantId: string, userId: string): Promise<void>;
   };
 };
 
@@ -191,8 +198,17 @@ export class FakeStorage {
     this.values.set(key, structuredClone(value));
   }
 
-  async delete(key: string): Promise<boolean> {
-    return this.values.delete(key);
+  async delete(key: string): Promise<void> {
+    this.values.delete(key);
+  }
+
+  async list(options: { prefix?: string } = {}): Promise<Map<string, unknown>> {
+    const prefix = options.prefix ?? "";
+    const matched = new Map<string, unknown>();
+    for (const [key, value] of this.values) {
+      if (key.startsWith(prefix)) matched.set(key, structuredClone(value));
+    }
+    return matched;
   }
 
   async transaction<T>(callback: (transaction: DurableObjectTransaction) => Promise<T>): Promise<T> {
@@ -295,8 +311,30 @@ export class FakeDurableObjectNamespace {
   }
 }
 
+const UNUSED_HANDLER = {
+  async fetch(): Promise<Response> {
+    return new Response(null, { status: 404 });
+  },
+};
+
+/**
+ * The production cleanup authorities, except that `revokeGrant` runs on the
+ * same locked provider dist as the routes: Node cannot load the
+ * `cloudflare:workers` entry the Durable Object imports.
+ */
+const HARNESS_CLEANUP_AUTHORITIES: OAuthCleanupAuthorities = {
+  ...DEFAULT_CLEANUP_AUTHORITIES,
+  async revokeGrant(env, userId, grantId): Promise<void> {
+    const { getOAuthApi } = await loadLockedProvider();
+    await getOAuthApi(
+      { ...OAUTH_PROVIDER_REVIEW_OPTIONS, apiHandler: UNUSED_HANDLER, defaultHandler: UNUSED_HANDLER },
+      env,
+    ).revokeGrant(grantId, userId);
+  },
+};
+
 export const productionStateStore: StateStoreFactory = (state, env) =>
-  new OAuthStateStore(state as unknown as DurableObjectState, env as never);
+  new OAuthStateStore(state as unknown as DurableObjectState, env as never, HARNESS_CLEANUP_AUTHORITIES);
 
 /**
  * Regression mutant: the pre-lease contract, where the first callback to take
@@ -366,6 +404,19 @@ export class FakeErpAuthority {
   readonly postCorrelations: string[] = [];
   readonly postFaults: PostFault[] = [];
   readonly deleteFaults: DeleteFault[] = [];
+  /**
+   * State for the rotation/cap harness extensions:
+   * - `keysPerUid`: when minting a new POST, if the uid already holds at
+   *   least this many ACTIVE keys, the oldest one is revoked before the new
+   *   one is returned.
+   * - `oidMismatch`: when DELETE carries a `correlationId` whose stored
+   *   owner uid differs from the body's `uid`, the faked authority answers
+   *   `{status}` instead of the production default of 404. Used to simulate
+   *   an identity-mismatch rejection the production authority would only
+   *   surface after a tighter contract change.
+   */
+  keysPerUid = 0;
+  oidMismatch: { status: number } | undefined;
   private hangRelease: (() => void) | undefined;
   private hangArrived: (() => void) | undefined;
   readonly hangStarted: Promise<void>;
@@ -390,15 +441,49 @@ export class FakeErpAuthority {
     this.hangRelease?.();
   }
 
+  private evictOldestActiveKeyForUid(uid: string): { keyId: string; entry: IssuedKey } | undefined {
+    if (this.keysPerUid <= 0) return undefined;
+    let evicted: { keyId: string; entry: IssuedKey } | undefined;
+    let activeCount = 0;
+    // The Map preserves insertion order: the FIRST inserted active key is the
+    // one to evict to make room for a new one under the cap.
+    for (const [keyId, candidate] of this.keys) {
+      if (candidate.uid !== uid || candidate.revoked) continue;
+      if (!evicted) {
+        evicted = { keyId, entry: candidate };
+      }
+      activeCount += 1;
+    }
+    if (evicted && activeCount >= this.keysPerUid) {
+      evicted.entry.revoked = true;
+      return evicted;
+    }
+    return undefined;
+  }
+
   private mint(uid: string, correlationId: string) {
+    const evicted = this.evictOldestActiveKeyForUid(uid);
     const keyId = randomAlnum(20);
     const apiKey = `fri_${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}`;
     this.keys.set(keyId, { uid, correlationId, apiKey, revoked: false });
+    if (evicted) {
+      // The evicted keyId already tombstoned its correlation by the same uid
+      // so a delayed POST carrying that correlation cannot mint a credential.
+      const ownedCorrelation = this.correlations.get(evicted.entry.correlationId);
+      if (ownedCorrelation && ownedCorrelation.uid === uid) {
+        this.correlations.set(evicted.entry.correlationId, {
+          uid,
+          keyId: undefined,
+          tombstoned: true,
+        });
+      }
+    }
     this.correlations.set(correlationId, { uid, keyId, tombstoned: false });
     return {
       apiKey,
       keyId,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      evictedKeyId: evicted?.keyId,
     };
   }
 
@@ -432,7 +517,12 @@ export class FakeErpAuthority {
 
   private revokeCorrelation(uid: string, correlationId: string): Response {
     const existing = this.correlations.get(correlationId);
-    if (existing && existing.uid !== uid) return json({ error: "not found" }, 404);
+    if (existing && existing.uid !== uid) {
+      if (this.oidMismatch) {
+        return json({ error: "OAuth correlation does not belong to this uid" }, this.oidMismatch.status);
+      }
+      return json({ error: "not found" }, 404);
+    }
     const key = existing?.keyId ? this.keys.get(existing.keyId) : undefined;
     const alreadyRevoked = existing?.tombstoned === true || key?.revoked === true;
     if (key) key.revoked = true;
@@ -663,6 +753,28 @@ export async function createOAuthRouteHarness(
     return entry.state.storage;
   }
 
+  /**
+   * Fire every Durable Object alarm that is due at the harness clock, as the
+   * runtime would: an alarm is consumed when it fires and only a handler that
+   * still has work re-arms it. Repeats until nothing is due. The clock does not
+   * move by itself: an alarm armed for `now + 1` (a tombstone's cleanup) is due
+   * only after the test advances `clock.offsetMs`, so drive multi-hop outboxes
+   * in rounds.
+   */
+  async function runDueAlarms(maxRounds = 20): Promise<void> {
+    for (let round = 0; round < maxRounds; round += 1) {
+      const due = [...namespace.objects.values()].filter(({ state }) => (
+        state.storage.alarmAt !== null && state.storage.alarmAt <= Date.now()
+      ));
+      if (due.length === 0) return;
+      for (const { state, store } of due) {
+        state.storage.alarmAt = null;
+        await store.alarm();
+      }
+    }
+    throw new Error("Durable Object alarms did not settle");
+  }
+
   return {
     env,
     kv,
@@ -676,5 +788,6 @@ export async function createOAuthRouteHarness(
     redeem,
     callMcp,
     runStateAlarm,
+    runDueAlarms,
   };
 }
