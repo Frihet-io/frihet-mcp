@@ -24,6 +24,7 @@ const excluded = [
   "period_close", "period_reopen", "gestoria_message_send", "gestoria_messages_list", "gestoria_template_bulk_send", "gestoria_aging_consolidated", "create_reservation", "sync_channel",
   "refund_sale", "delete_client", "delete_expense", "send_quote",
   "einvoice_export", "face_submit", "face_status", "ticketbai_submit", "ticketbai_status", "send_einvoice",
+  "get_einvoice_status", "validate_einvoice_xml", "export_datev",
 ].sort();
 const allowedAliases = Object.entries(FISCAL_MODELO_ALIASES).filter(([, canonical]) => !excluded.includes(canonical));
 const deniedAliases = Object.entries(FISCAL_MODELO_ALIASES).filter(([, canonical]) => excluded.includes(canonical)).map(([alias]) => alias);
@@ -68,8 +69,8 @@ async function denied(client: Client, name: string) {
 
 test("Claude candidate exactly matches the regenerated SDK descriptor and inventory arithmetic", async () => {
   assert.equal(fullNames.length - Object.keys(FISCAL_MODELO_ALIASES).length, 156);
-  assert.equal(canonical.length, 130);
-  assert.equal(excluded.length, 26);
+  assert.equal(canonical.length, 127);
+  assert.equal(excluded.length, 29);
   assert.equal(allowedAliases.length, 4);
   assert.deepEqual([...CLAUDE_CANDIDATE_TOOLS].sort(), canonical);
   assert.deepEqual(Object.keys(CLAUDE_EXCLUDED_TOOLS).sort(), excluded);
@@ -129,11 +130,11 @@ for (const local of [true, false]) for (const grouped of [false, true]) {
       for (const name of [...excluded, ...deniedAliases, "future_unknown_tool", "execute_tool"]) await denied(client, name);
       if (grouped) {
         const groups = (await client.callTool({ name: "list_tool_groups", arguments: {} })).structuredContent as { totalTools: number; groups: Array<{ group: string; toolCount: number; blurb: string }> };
-        assert.equal(groups.totalTools, 130);
-        assert.equal(groups.groups.reduce((sum, group) => sum + group.toolCount, 0), 130);
+        assert.equal(groups.totalTools, 127);
+        assert.equal(groups.groups.reduce((sum, group) => sum + group.toolCount, 0), 127);
         assert.doesNotMatch(JSON.stringify(groups), /refunds|KSeF|channel sync|onboarding|200\/202|period close,/);
         const searched = (await client.callTool({ name: "search_tools", arguments: { limit: 1000 } })).structuredContent as { count: number; tools: Array<{ name: string }> };
-        assert.equal(searched.count, 130);
+        assert.equal(searched.count, 127);
         assert.deepEqual(searched.tools.map((tool) => tool.name).sort(), canonical);
         for (const group of groups.groups) {
           const result = (await client.callTool({ name: "search_tools", arguments: { group: group.group, limit: 1000 } })).structuredContent as { count: number };
@@ -240,7 +241,7 @@ test("actual stdio Claude flag exposes truthful candidate and rejects mixed flag
     await client.connect(transport);
     assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name).sort(), expectedNames);
     assert.equal(client.getInstructions(), CLAUDE_CANDIDATE_INSTRUCTIONS);
-    assert.match(client.getServerVersion()?.description ?? "", /130 canonical operations/);
+    assert.match(client.getServerVersion()?.description ?? "", /127 canonical operations/);
     assert.doesNotMatch(client.getServerVersion()?.description ?? "", /158|11 resources|full Spanish tax compliance/);
   } finally { await client.close(); }
   await assert.rejects(promisify(execFile)(process.execPath, [entry], {

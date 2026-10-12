@@ -22,6 +22,12 @@ test("remote preview is a small self-contained export of the local plugin skills
   assert.equal(manifest.author.name, "Frihet");
   assert.equal(manifest.author.email, "hola@frihet.io");
   assert.equal(manifest.privacyPolicyUrl, "https://www.frihet.io/es/privacy");
+  // Directory listing fields (code.claude.com/docs/en/plugins-reference#directory-listing-fields).
+  assert.equal(manifest.icon, "./.claude-plugin/icon.png");
+  assert.ok(files.includes(manifest.icon.slice(2)), "icon must ship inside the plugin");
+  assert.equal(manifest.documentationUrl, "https://docs.frihet.io/desarrolladores/mcp-server");
+  assert.equal(manifest.supportUrl, "https://claude-mcp.frihet.io/support");
+  assert.equal(manifest.termsOfServiceUrl, "https://www.frihet.io/es/terms");
   assert.deepEqual(JSON.parse(readFileSync(join(plugin, ".mcp.json"), "utf8")), {
     mcpServers: { frihet: { type: "http", url: "https://claude-mcp.frihet.io/mcp" } },
   });

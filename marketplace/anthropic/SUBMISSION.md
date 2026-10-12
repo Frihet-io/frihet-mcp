@@ -24,19 +24,20 @@ Demo fixtures do not establish live acceptance. Setting both `FRIHET_CLAUDE_MODE
 `FRIHET_OPENAI_MODE=true` fails before registration.
 
 The explicit candidate inventory starts with 156 canonical operations at source
-`176de12`: **156 − 8 unavailable − 8 deferred − 10 other exclusions = 130**. The 6 added exclusions
+`176de12`: **156 − 8 unavailable − 8 deferred − 13 other exclusions = 127**. The 6 added exclusions
 (`einvoice_export`, `face_*`, `ticketbai_*`) need an einvoice scope that the Claude pilot
-credential does not carry (M2, ERP #2477); `send_einvoice` has no ERP route (404).
+credential does not carry (M2, ERP #2477); `send_einvoice`, `get_einvoice_status`,
+`validate_einvoice_xml` and `export_datev` call `/einvoice/*` paths that have no ERP route (404).
 It retains tax, invoice email, payroll and banking families, subject
 to each operation's workspace/API availability and declared external effects.
 A profile is not evidence that every endpoint works for every tenant.
 
 | Composition | Canonical operations | Fiscal aliases | Discovery names | Total tool names | Resources | Prompts |
 |---|---:|---:|---:|---:|---:|---:|
-| Local full candidate | 130 | 4 | 0 | 134 | 5 | 2 |
-| Local grouped candidate | 130 | 4 | 3 | 137 | 5 | 2 |
-| Reusable remote full composition | 130 | 4 | 0 | 134 | 1 | 2 |
-| Reusable remote grouped composition | 130 | 4 | 3 | 137 | 1 | 2 |
+| Local full candidate | 127 | 4 | 0 | 131 | 5 | 2 |
+| Local grouped candidate | 127 | 4 | 3 | 134 | 5 | 2 |
+| Reusable remote full composition | 127 | 4 | 0 | 131 | 1 | 2 |
+| Reusable remote grouped composition | 127 | 4 | 3 | 134 | 1 | 2 |
 
 Remote rows describe SDK composition tests, **not a deployed Claude endpoint**.
 Filtering happens before SDK registration and discovery indexing; future
@@ -54,6 +55,7 @@ The retained aliases are `frihet_modelo_303_summary`,
 | `period_close`, `period_reopen`, `gestoria_message_send`, `gestoria_messages_list`, `gestoria_template_bulk_send`, `gestoria_aging_consolidated`, `create_reservation`, `sync_channel` | Eight operations whose handlers explicitly defer execution. |
 | `einvoice_export`, `face_status`, `face_submit`, `ticketbai_status`, `ticketbai_submit` | The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for these routes. |
 | `send_einvoice` | No deployed backing ERP route: `POST /einvoice/send` is unavailable in the ERP (404). |
+| `get_einvoice_status`, `validate_einvoice_xml`, `export_datev` | No deployed backing ERP route: `GET /einvoice/status/:id`, `POST /einvoice/validate` and `POST /einvoice/export-datev` are unavailable in the ERP (404). |
 | `refund_sale` | Executes a Stripe money transfer; excluded under Anthropic Directory policy §4.A. Confirmation alone does not change this effect. |
 | `delete_client` | Linked contacts, notes and activities can remain stored but unreachable. |
 | `delete_expense` | Linked attachment metadata/object cleanup is not established. |

@@ -4,7 +4,7 @@
   "inventorySource": "176de12",
   "instructions": "Frihet ERP — Claude candidate profile; Directory acceptance requires separate evidence.\nDiscover available tools, resources and prompts from this session's MCP lists. In grouped mode use list_tool_groups, search_tools and describe_tool.\nRead get_business_context for workspace context, not proof of tax treatment or endpoint availability.\nRead each tool's io.frihet/capability metadata: api_dependent/runtime_checked means workspace permissions and backing endpoints still govern execution.\nResource payloads are workspace records or formatting examples, not authoritative tax advice. The overdue-invoices resource is a status-filtered first page; paginate list_invoices without a status filter and select sent, partial and overdue records client-side for a complete balance review.\nPropose changes and obtain user approval before writes, email, webhooks or fiscal submission. A confirm input is a client interlock, not proof of authorization.\nRead full descriptions and inspect configured external effects before executing. Do not infer delivery from invoice status, a money transfer from an accounting entry, or production acceptance from demo data.\nOn 409 IDEMPOTENCY_REQUEST_IN_PROGRESS, read the record before deciding; do not retry with a fresh key.\nFRIHET_DEMO=1 is fixture-only and cannot verify live operations. Hosting, OAuth, API availability and Directory acceptance require independent verification.",
   "catalogue": {
-    "canonicalOperations": 130,
+    "canonicalOperations": 127,
     "aliases": {
       "frihet_modelo_303_summary": "get_modelo_303_summary",
       "frihet_modelo_130_summary": "get_modelo_130_summary",
@@ -39,6 +39,9 @@
       "ticketbai_status": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
       "ticketbai_submit": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
       "send_einvoice": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); no deployed backing ERP route: POST /einvoice/send is unavailable in the ERP (404).",
+      "get_einvoice_status": "No deployed backing ERP route: GET /einvoice/status/:id is unavailable in the ERP (404).",
+      "validate_einvoice_xml": "No deployed backing ERP route: POST /einvoice/validate is unavailable in the ERP (404).",
+      "export_datev": "No deployed backing ERP route: POST /einvoice/export-datev is unavailable in the ERP (404).",
       "ksef_submit": "No deployed backing ERP route; capability truth marks this unavailable.",
       "period_close": "The handler deliberately defers execution; capability truth marks this deferred.",
       "period_reopen": "The handler deliberately defers execution; capability truth marks this deferred.",
@@ -3215,93 +3218,6 @@
         }
       },
       {
-        "name": "export_datev",
-        "title": "Export DATEV",
-        "description": "Export accounting data in DATEV EXTF format for import into DATEV Kanzlei-Rechnungswesen or compatible systems. Returns a signed download URL valid for 24 hours. \n\nSupported EXTF formats:\n  • extf-buchungsstapel — Journal entries (Buchungsstapel) — most common, use for P&L/tax\n  • extf-debitoren — Accounts receivable master data (Debitoren-/Kreditorenstamm AR)\n  • extf-kreditoren — Accounts payable master data (Debitoren-/Kreditorenstamm AP)\n\nOutput encoding is always CP1252 per DATEV EXTF specification. Date range: both periodStart and periodEnd must be ISO 8601 dates (YYYY-MM-DD). \n\nIf the DATEV export backend is not deployed for this workspace, returns an honest 'unavailable' response — never a fabricated file URL. / Exporta datos contables en formato DATEV EXTF para importacion en DATEV o sistemas compatibles.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "periodStart": {
-              "description": "Start of the export period (ISO 8601 YYYY-MM-DD). Inclusive. / Inicio del periodo de exportacion (YYYY-MM-DD). Inclusivo.",
-              "type": "string"
-            },
-            "periodEnd": {
-              "description": "End of the export period (ISO 8601 YYYY-MM-DD). Inclusive. / Fin del periodo de exportacion (YYYY-MM-DD). Inclusivo.",
-              "type": "string"
-            },
-            "format": {
-              "description": "DATEV EXTF export format: extf-buchungsstapel (journal entries), extf-debitoren (AR master), extf-kreditoren (AP master) / Formato EXTF de DATEV.",
-              "type": "string",
-              "enum": [
-                "extf-buchungsstapel",
-                "extf-debitoren",
-                "extf-kreditoren"
-              ]
-            }
-          },
-          "required": [
-            "periodStart",
-            "periodEnd",
-            "format"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": {
-          "type": "object",
-          "properties": {
-            "fileUrl": {
-              "description": "Signed URL to download the DATEV EXTF file",
-              "type": "string"
-            },
-            "filename": {
-              "description": "Suggested filename (e.g. EXTF_Buchungsstapel_2026-01.csv)",
-              "type": "string"
-            },
-            "rowCount": {
-              "description": "Number of accounting rows in the export",
-              "type": "number"
-            },
-            "fiscalPeriod": {
-              "description": "Fiscal period covered (e.g. '2026-01' or '2026-Q1')",
-              "type": "string"
-            },
-            "encoding": {
-              "description": "File encoding — always CP1252 per DATEV EXTF spec",
-              "type": "string",
-              "const": "cp1252"
-            }
-          },
-          "required": [
-            "fileUrl",
-            "filename",
-            "rowCount",
-            "fiscalPeriod",
-            "encoding"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": {}
-        },
-        "annotations": {
-          "readOnlyHint": true,
-          "destructiveHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "_meta": {
-          "io.frihet/capability": {
-            "registered": true,
-            "callability": "runtime_checked",
-            "canonicalOperation": "export_datev",
-            "writesFrihet": false,
-            "externalInteraction": false,
-            "externalSideEffects": []
-          }
-        }
-      },
-      {
         "name": "frihet_bank_rule_create",
         "title": "Create Bank Categorization Rule",
         "description": "Create a new bank auto-categorization rule. Rules apply automatically to matching incoming transactions. The ERP new-engine vocabulary: `bankConditions` (AND logic) + a single `action` (`categorize_expense` | `match_invoice` | `match_client` | `ignore` | `create_expense` | `flag_review`) and its `actionConfig` payload. Required actionConfig per action: categorize_expense→{category}, match_client→{clientId}, create_expense→{expenseDefaults:{vendor,category,…}}, flag_review→{flag}; match_invoice and ignore require no config. Example: name='Mercadona groceries', bankConditions=[{field:'description', operator:'contains', value:'MERCADONA'}], action='categorize_expense', actionConfig={category:'groceries'}. / Crea una nueva regla de categorizacion automatica de transacciones bancarias. El nuevo motor ERP espera `bankConditions` (logica AND) y un unico `action` con su `actionConfig`.",
@@ -5475,84 +5391,6 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_deposit",
-            "writesFrihet": false,
-            "externalInteraction": false,
-            "externalSideEffects": []
-          }
-        }
-      },
-      {
-        "name": "get_einvoice_status",
-        "title": "Get E-Invoice Status",
-        "description": "Poll the status of an e-invoice dispatch workflow. Returns current step, ack ID (network confirmation), and download URLs once complete. Poll every 5–10 seconds until status is 'succeeded', 'failed', or 'cancelled'. \n\nIf the status backend is not deployed for this workspace, returns an honest 'unavailable' response — never a fabricated status. / Consulta el estado de un flujo de envio de factura electronica.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "workflowRunId": {
-              "description": "Hatchet workflow run ID returned by send_einvoice / ID del run de workflow",
-              "type": "string"
-            }
-          },
-          "required": [
-            "workflowRunId"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": {
-          "type": "object",
-          "properties": {
-            "status": {
-              "type": "string",
-              "enum": [
-                "queued",
-                "running",
-                "succeeded",
-                "failed",
-                "cancelled"
-              ]
-            },
-            "step": {
-              "description": "Current or last workflow step name",
-              "type": "string"
-            },
-            "error": {
-              "description": "Error message if status is 'failed'",
-              "type": "string"
-            },
-            "ackId": {
-              "description": "Network acknowledgement ID (PEPPOL SBDH / SDI protocol ID / etc.)",
-              "type": "string"
-            },
-            "pdfA3Url": {
-              "description": "Signed URL to download the PDF/A-3 envelope (Factur-X only)",
-              "type": "string"
-            },
-            "xmlUrl": {
-              "description": "Signed URL to download the raw XML file",
-              "type": "string"
-            }
-          },
-          "required": [
-            "status",
-            "step"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": {}
-        },
-        "annotations": {
-          "readOnlyHint": true,
-          "destructiveHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "_meta": {
-          "io.frihet/capability": {
-            "registered": true,
-            "callability": "runtime_checked",
-            "canonicalOperation": "get_einvoice_status",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
@@ -17650,124 +17488,6 @@
         }
       },
       {
-        "name": "validate_einvoice_xml",
-        "title": "Validate E-Invoice XML",
-        "description": "Validate an e-invoice XML document against the specified format's schema and schematron rules. Returns a list of errors with severity, XPath location, message, and rule ID. Runs KOSIT validator (XRechnung), Mustang (EN16931), XSD, or Schematron depending on format. \n\nUse before dispatch to catch errors early without incurring network transmission costs. A valid=true response means the document passes all schema + business rule checks. \n\nIf the validation backend is not deployed for this workspace, returns an honest 'unavailable' response — never a fabricated valid=true. / Valida un documento XML de factura electronica contra el esquema y reglas schematron del formato especificado.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "xml": {
-              "description": "Raw XML string of the e-invoice document to validate / Contenido XML de la factura electronica",
-              "type": "string"
-            },
-            "format": {
-              "description": "Format to validate against. Determines which validator and ruleset to apply. / Formato a validar. Determina el validador y conjunto de reglas a aplicar.",
-              "type": "string",
-              "enum": [
-                "xrechnung-cii",
-                "xrechnung-ubl",
-                "facturx-en16931",
-                "facturx-extended",
-                "facturx-basic",
-                "facturx-minimum",
-                "fatturapa",
-                "ubl",
-                "cii",
-                "peppol-bis-3",
-                "facturae"
-              ]
-            }
-          },
-          "required": [
-            "xml",
-            "format"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": {
-          "type": "object",
-          "properties": {
-            "valid": {
-              "description": "Whether the XML passes all validation rules",
-              "type": "boolean"
-            },
-            "errors": {
-              "description": "List of validation findings (empty if valid)",
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "severity": {
-                    "description": "'error' | 'warning' | 'info'",
-                    "type": "string"
-                  },
-                  "location": {
-                    "description": "XPath or element path where the issue was found",
-                    "type": "string"
-                  },
-                  "message": {
-                    "description": "Human-readable validation message",
-                    "type": "string"
-                  },
-                  "rule": {
-                    "description": "Rule ID (e.g. 'BR-01', 'PEPPOL-EN16931-R001')",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "severity",
-                  "location",
-                  "message",
-                  "rule"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "validator": {
-              "description": "Validation engine used",
-              "type": "string",
-              "enum": [
-                "kosit",
-                "mustang",
-                "xsd",
-                "schematron"
-              ]
-            },
-            "durationMs": {
-              "description": "Validation duration in milliseconds",
-              "type": "number"
-            }
-          },
-          "required": [
-            "valid",
-            "errors",
-            "validator",
-            "durationMs"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": {}
-        },
-        "annotations": {
-          "readOnlyHint": true,
-          "destructiveHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "_meta": {
-          "io.frihet/capability": {
-            "registered": true,
-            "callability": "runtime_checked",
-            "canonicalOperation": "validate_einvoice_xml",
-            "writesFrihet": false,
-            "externalInteraction": false,
-            "externalSideEffects": []
-          }
-        }
-      },
-      {
         "name": "verifactu_resubmit",
         "title": "Re-submit VeriFactu Submission",
         "description": "TRUST AREA — COMPLIANCE. Re-submit a failed or rejected VeriFactu submission to AEAT. Idempotent: uses the same hash chain; AEAT deduplicates by hash. Creates an audit trail entry for every resubmission attempt. Requires confirm=true. Only use on invoices with status='failed'. / AREA DE CONFIANZA — COMPLIANCE. Reenvio de una factura VeriFactu fallida a AEAT. Idempotente: misma cadena hash. Registra entrada de auditoria en cada intento. Requiere confirm=true. Solo para facturas con status='failed'.",
@@ -21190,93 +20910,6 @@
         }
       },
       {
-        "name": "export_datev",
-        "title": "Export DATEV",
-        "description": "[fiscal] Export accounting data in DATEV EXTF format for import into DATEV Kanzlei-Rechnungswesen or compatible systems. — full description and input fields via describe_tool('export_datev'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "periodStart": {
-              "description": "Start of the export period (ISO 8601 YYYY-MM-DD). Inclusive. / Inicio del periodo de exportacion (YYYY-MM-DD). Inclusivo.",
-              "type": "string"
-            },
-            "periodEnd": {
-              "description": "End of the export period (ISO 8601 YYYY-MM-DD). Inclusive. / Fin del periodo de exportacion (YYYY-MM-DD). Inclusivo.",
-              "type": "string"
-            },
-            "format": {
-              "description": "DATEV EXTF export format: extf-buchungsstapel (journal entries), extf-debitoren (AR master), extf-kreditoren (AP master) / Formato EXTF de DATEV.",
-              "type": "string",
-              "enum": [
-                "extf-buchungsstapel",
-                "extf-debitoren",
-                "extf-kreditoren"
-              ]
-            }
-          },
-          "required": [
-            "periodStart",
-            "periodEnd",
-            "format"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": {
-          "type": "object",
-          "properties": {
-            "fileUrl": {
-              "description": "Signed URL to download the DATEV EXTF file",
-              "type": "string"
-            },
-            "filename": {
-              "description": "Suggested filename (e.g. EXTF_Buchungsstapel_2026-01.csv)",
-              "type": "string"
-            },
-            "rowCount": {
-              "description": "Number of accounting rows in the export",
-              "type": "number"
-            },
-            "fiscalPeriod": {
-              "description": "Fiscal period covered (e.g. '2026-01' or '2026-Q1')",
-              "type": "string"
-            },
-            "encoding": {
-              "description": "File encoding — always CP1252 per DATEV EXTF spec",
-              "type": "string",
-              "const": "cp1252"
-            }
-          },
-          "required": [
-            "fileUrl",
-            "filename",
-            "rowCount",
-            "fiscalPeriod",
-            "encoding"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": {}
-        },
-        "annotations": {
-          "readOnlyHint": true,
-          "destructiveHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "_meta": {
-          "io.frihet/capability": {
-            "registered": true,
-            "callability": "runtime_checked",
-            "canonicalOperation": "export_datev",
-            "writesFrihet": false,
-            "externalInteraction": false,
-            "externalSideEffects": []
-          }
-        }
-      },
-      {
         "name": "frihet_bank_rule_create",
         "title": "Create Bank Categorization Rule",
         "description": "[banking] Create a new bank auto-categorization rule. — full description and input fields via describe_tool('frihet_bank_rule_create'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
@@ -23450,84 +23083,6 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_deposit",
-            "writesFrihet": false,
-            "externalInteraction": false,
-            "externalSideEffects": []
-          }
-        }
-      },
-      {
-        "name": "get_einvoice_status",
-        "title": "Get E-Invoice Status",
-        "description": "[fiscal] Poll the status of an e-invoice dispatch workflow. — full description and input fields via describe_tool('get_einvoice_status'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "workflowRunId": {
-              "description": "Hatchet workflow run ID returned by send_einvoice / ID del run de workflow",
-              "type": "string"
-            }
-          },
-          "required": [
-            "workflowRunId"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": {
-          "type": "object",
-          "properties": {
-            "status": {
-              "type": "string",
-              "enum": [
-                "queued",
-                "running",
-                "succeeded",
-                "failed",
-                "cancelled"
-              ]
-            },
-            "step": {
-              "description": "Current or last workflow step name",
-              "type": "string"
-            },
-            "error": {
-              "description": "Error message if status is 'failed'",
-              "type": "string"
-            },
-            "ackId": {
-              "description": "Network acknowledgement ID (PEPPOL SBDH / SDI protocol ID / etc.)",
-              "type": "string"
-            },
-            "pdfA3Url": {
-              "description": "Signed URL to download the PDF/A-3 envelope (Factur-X only)",
-              "type": "string"
-            },
-            "xmlUrl": {
-              "description": "Signed URL to download the raw XML file",
-              "type": "string"
-            }
-          },
-          "required": [
-            "status",
-            "step"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": {}
-        },
-        "annotations": {
-          "readOnlyHint": true,
-          "destructiveHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "_meta": {
-          "io.frihet/capability": {
-            "registered": true,
-            "callability": "runtime_checked",
-            "canonicalOperation": "get_einvoice_status",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
@@ -35725,124 +35280,6 @@
         }
       },
       {
-        "name": "validate_einvoice_xml",
-        "title": "Validate E-Invoice XML",
-        "description": "[fiscal] Validate an e-invoice XML document against the specified format's schema and schematron rules. — full description and input fields via describe_tool('validate_einvoice_xml'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "xml": {
-              "description": "Raw XML string of the e-invoice document to validate / Contenido XML de la factura electronica",
-              "type": "string"
-            },
-            "format": {
-              "description": "Format to validate against. Determines which validator and ruleset to apply. / Formato a validar. Determina el validador y conjunto de reglas a aplicar.",
-              "type": "string",
-              "enum": [
-                "xrechnung-cii",
-                "xrechnung-ubl",
-                "facturx-en16931",
-                "facturx-extended",
-                "facturx-basic",
-                "facturx-minimum",
-                "fatturapa",
-                "ubl",
-                "cii",
-                "peppol-bis-3",
-                "facturae"
-              ]
-            }
-          },
-          "required": [
-            "xml",
-            "format"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
-        },
-        "outputSchema": {
-          "type": "object",
-          "properties": {
-            "valid": {
-              "description": "Whether the XML passes all validation rules",
-              "type": "boolean"
-            },
-            "errors": {
-              "description": "List of validation findings (empty if valid)",
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "severity": {
-                    "description": "'error' | 'warning' | 'info'",
-                    "type": "string"
-                  },
-                  "location": {
-                    "description": "XPath or element path where the issue was found",
-                    "type": "string"
-                  },
-                  "message": {
-                    "description": "Human-readable validation message",
-                    "type": "string"
-                  },
-                  "rule": {
-                    "description": "Rule ID (e.g. 'BR-01', 'PEPPOL-EN16931-R001')",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "severity",
-                  "location",
-                  "message",
-                  "rule"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "validator": {
-              "description": "Validation engine used",
-              "type": "string",
-              "enum": [
-                "kosit",
-                "mustang",
-                "xsd",
-                "schematron"
-              ]
-            },
-            "durationMs": {
-              "description": "Validation duration in milliseconds",
-              "type": "number"
-            }
-          },
-          "required": [
-            "valid",
-            "errors",
-            "validator",
-            "durationMs"
-          ],
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "additionalProperties": {}
-        },
-        "annotations": {
-          "readOnlyHint": true,
-          "destructiveHint": false,
-          "idempotentHint": true,
-          "openWorldHint": false
-        },
-        "execution": {
-          "taskSupport": "forbidden"
-        },
-        "_meta": {
-          "io.frihet/capability": {
-            "registered": true,
-            "callability": "runtime_checked",
-            "canonicalOperation": "validate_einvoice_xml",
-            "writesFrihet": false,
-            "externalInteraction": false,
-            "externalSideEffects": []
-          }
-        }
-      },
-      {
         "name": "verifactu_resubmit",
         "title": "Re-submit VeriFactu Submission",
         "description": "[fiscal] TRUST AREA — COMPLIANCE. Requires confirm=true. — full description and input fields via describe_tool('verifactu_resubmit'). [openWorldHint: true — may interact with an external endpoint disclosed in describe_tool.]",
@@ -36184,7 +35621,7 @@
         "group": "fiscal",
         "label": "Fiscal & compliance / Fiscal y cumplimiento",
         "blurb": "Modelo 303/130/390/347, VeriFactu, GL audit, period-close status and VIES; backing endpoints govern availability.",
-        "toolCount": 15
+        "toolCount": 12
       },
       {
         "group": "banking",
@@ -36236,29 +35673,29 @@
       }
     ],
     "totalGroups": 11,
-    "totalTools": 130,
+    "totalTools": 127,
     "next": "search_tools(query) to find tools; describe_tool(name) for full description and input fields."
   },
   "surfaces": {
     "localFull": {
       "tools": "full",
       "resources": "local",
-      "toolNames": 134
+      "toolNames": 131
     },
     "localGrouped": {
       "tools": "grouped",
       "resources": "local",
-      "toolNames": 137
+      "toolNames": 134
     },
     "remoteFull": {
       "tools": "full",
       "resources": "remote",
-      "toolNames": 134
+      "toolNames": 131
     },
     "remoteGrouped": {
       "tools": "grouped",
       "resources": "remote",
-      "toolNames": 137
+      "toolNames": 134
     }
   }
 }

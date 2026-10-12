@@ -10,7 +10,11 @@
     "url": "https://frihet.io"
   },
   "homepage": "https://frihet.io",
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://docs.frihet.io/desarrolladores/mcp-server",
+  "supportUrl": "https://claude-mcp.frihet.io/support",
   "privacyPolicyUrl": "https://www.frihet.io/es/privacy",
+  "termsOfServiceUrl": "https://www.frihet.io/es/terms",
   "repository": "https://github.com/Frihet-io/frihet-mcp",
   "license": "MIT",
   "keywords": [
