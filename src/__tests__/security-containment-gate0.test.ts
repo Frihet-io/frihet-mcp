@@ -4,6 +4,10 @@ import type { AddressInfo } from "node:net";
 import { describe, test } from "node:test";
 
 import { normalizePublicApiBaseUrl } from "../api-origin.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
 import { FrihetClient } from "../client.js";
 import { log } from "../logger.js";
 import {
@@ -12,6 +16,7 @@ import {
   normalizeLangfuseBaseUrl,
   traceMCPTool,
 } from "../observability.js";
+import { registerCrmTools } from "../tools/crm.js";
 
 const BUSINESS_DATA = {
   customerName: "Ada Lovelace",
@@ -399,5 +404,109 @@ describe("public API origin boundary", () => {
     }
 
     assert.deepEqual(sinkRequests, [], "redirect target must receive zero requests and zero credentials");
+  });
+});
+
+describe("public API path segments", () => {
+  const INVALID_SEGMENTS = ["..", ".", ""];
+
+  async function withRecordingApi(run: (client: FrihetClient, sent: string[]) => Promise<void>): Promise<void> {
+    const sent: string[] = [];
+    const api = createServer((req, res) => {
+      sent.push(`${req.method} ${req.url}`);
+      req.resume();
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ data: {} }));
+    });
+    await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", resolve));
+    try {
+      const port = (api.address() as AddressInfo).port;
+      await run(new FrihetClient("fri_test_key", `http://127.0.0.1:${port}/v1`, { retryBudgetMs: 0 }), sent);
+    } finally {
+      await new Promise<void>((resolve, reject) => api.close((error) => error ? reject(error) : resolve()));
+    }
+  }
+
+  test("rejects dot segments in path ids", async () => {
+    await withRecordingApi(async (frihet, sent) => {
+      const server = new McpServer({ name: "path-segment-test", version: "0.0.0" });
+      registerCrmTools(server, frihet);
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: "path-segment-test-client", version: "0.0.0" });
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      try {
+        for (const value of [".", ".."]) {
+          for (const call of [
+            { name: "delete_client_contact", arguments: { clientId: "client-1", contactId: value } },
+            { name: "delete_client_note", arguments: { clientId: "client-1", noteId: value } },
+          ]) {
+            const result = await client.callTool(call);
+            assert.equal(result.isError, true, `${call.name} with ${JSON.stringify(value)}`);
+          }
+        }
+        assert.deepEqual(sent, []);
+
+        await client.callTool({ name: "delete_client_contact", arguments: { clientId: "client-1", contactId: "contact-1" } });
+        await client.callTool({ name: "delete_client_note", arguments: { clientId: "client-1", noteId: "note-1" } });
+        assert.deepEqual(sent, [
+          "DELETE /v1/clients/client-1/contacts/contact-1",
+          "DELETE /v1/clients/client-1/notes/note-1",
+        ]);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+  });
+
+  test("every client method that builds a path from an id never sends a dot or empty segment", async () => {
+    const methods = Object.getOwnPropertyNames(FrihetClient.prototype)
+      .filter((name) => name !== "constructor")
+      .map((name) => [name, (FrihetClient.prototype as unknown as Record<string, unknown>)[name]] as const)
+      .filter((entry): entry is readonly [string, (...args: unknown[]) => Promise<unknown>] => typeof entry[1] === "function");
+    const builders = methods.filter(([, method]) => method.toString().includes("pathSegment("));
+
+    assert.deepEqual(
+      methods.filter(([, method]) => method.toString().includes("encodeURIComponent(")).map(([name]) => name),
+      [],
+      "path ids are encoded only through the shared segment check",
+    );
+    assert.deepEqual(
+      methods.filter(([, method]) => /`\/[^`]*\$\{(?!pathSegment\()/u.test(method.toString())).map(([name]) => name),
+      [],
+      "every value interpolated into a path goes through the shared segment check",
+    );
+    assert.ok(builders.length > 0);
+
+    // Fields that must be valid for the call to reach its path.
+    const validFields: Record<string, Record<string, string>> = {
+      exportEInvoice: { format: "ubl" },
+    };
+
+    await withRecordingApi(async (frihet, sent) => {
+      for (const [name, method] of builders) {
+        for (const value of INVALID_SEGMENTS) {
+          // Reads as `value` both as a positional id and as any field of a params object.
+          const fields = validFields[name] ?? {};
+          const id = new Proxy({}, {
+            get: (_target, key) => key === Symbol.toPrimitive
+              ? () => value
+              : typeof key === "string" && key !== "then" ? (Object.hasOwn(fields, key) ? fields[key] : value) : undefined,
+          });
+          const before = sent.length;
+          const error = await method.apply(frihet, [id, id, id, id]).then(() => undefined, (caught: unknown) => caught);
+          const requests = sent.slice(before);
+          const label = `${name} with ${JSON.stringify(value)}`;
+          if (value === "") {
+            // An empty optional id may select another route; it must never leave an empty segment.
+            for (const request of requests) assert.doesNotMatch(request, /\/\/|\/(\?|$)/u, label);
+          } else {
+            assert.equal((error as { errorCode?: unknown } | undefined)?.errorCode, "invalid_path_segment", label);
+            assert.deepEqual(requests, [], label);
+          }
+        }
+      }
+    });
   });
 });
