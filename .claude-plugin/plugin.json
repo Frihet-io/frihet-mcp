@@ -2,26 +2,24 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "frihet-erp",
   "displayName": "Frihet ERP",
-  "version": "1.16.6",
-  "description": "Manage invoices, expenses, clients, quotes and Spanish/EU tax compliance from natural language. The Frihet MCP catalogue contains 157 canonical operations; runtime capability metadata distinguishes API-dependent, checked, deferred and unavailable operations.",
+  "version": "1.18.0-preview.2",
+  "description": "Review receivables, prepare invoices and quotes, and review monthly business records in Frihet. Uses the connected MCP schemas, verifies partial payments and currencies, and respects approval before changes.",
   "author": {
     "name": "Frihet",
     "email": "hola@frihet.io",
     "url": "https://frihet.io"
   },
   "homepage": "https://frihet.io",
+  "privacyPolicyUrl": "https://www.frihet.io/es/privacy",
   "repository": "https://github.com/Frihet-io/frihet-mcp",
   "license": "MIT",
   "keywords": [
     "erp",
     "invoicing",
+    "quotes",
     "expenses",
-    "tax-compliance",
-    "verifactu",
-    "spain",
-    "ai-agent",
+    "receivables",
     "mcp",
-    "mcp-server",
-    "claude-plugin"
+    "business-management"
   ]
 }

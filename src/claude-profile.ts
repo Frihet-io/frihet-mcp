@@ -6,7 +6,7 @@ import { GROUPS, type GroupMeta, type ToolGroupId } from "./tool-exposure.js";
 
 export const CLAUDE_GROUP_METADATA: Partial<Record<ToolGroupId, GroupMeta>> = {
   invoicing: { ...GROUPS.invoicing, blurb: "Invoice records and delivery, credit notes, quotes, recurring invoices and deposit bookkeeping; API availability and configured effects must be checked." },
-  fiscal: { ...GROUPS.fiscal, blurb: "Modelo 303/130/390/347, VeriFactu, TicketBAI, Facturae/FACe e-invoicing, GL audit, period-close status and VIES; backing endpoints govern availability." },
+  fiscal: { ...GROUPS.fiscal, blurb: "Modelo 303/130/390/347, VeriFactu, GL audit, period-close status and VIES; backing endpoints govern availability." },
   hr: { ...GROUPS.hr, blurb: "Leave, attendance, overtime, time tracking, payroll export, team and permissions." },
   stay: { ...GROUPS.stay, blurb: "Read vacation-rental reservations and properties." },
   pos: { ...GROUPS.pos, blurb: "Read terminals, sales and kitchen records; update kitchen ticket status." },
@@ -44,10 +44,7 @@ export const CLAUDE_CANDIDATE_TOOLS: ReadonlySet<string> = new Set([
   "delete_vendor",
   "delete_webhook",
   "duplicate_invoice",
-  "einvoice_export",
   "export_datev",
-  "face_status",
-  "face_submit",
   "frihet_bank_rule_create",
   "frihet_bank_rules_list",
   "frihet_gl_entry_approve",
@@ -130,11 +127,8 @@ export const CLAUDE_CANDIDATE_TOOLS: ReadonlySet<string> = new Set([
   "resume_recurring_invoice",
   "run_recurring_now",
   "search_invoices",
-  "send_einvoice",
   "send_invoice",
   "test_webhook",
-  "ticketbai_status",
-  "ticketbai_submit",
   "update_client",
   "update_deposit",
   "update_expense",
@@ -167,6 +161,12 @@ export const CLAUDE_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
   "gestoria_messages_list": "The handler deliberately defers execution; capability truth marks this deferred.",
   "gestoria_template_bulk_send": "The handler deliberately defers execution; capability truth marks this deferred.",
   "get_modelo_180_summary": "No deployed backing ERP route; capability truth marks this unavailable.",
+  "einvoice_export": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
+  "face_status": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
+  "face_submit": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
+  "ticketbai_status": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
+  "ticketbai_submit": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for this route.",
+  "send_einvoice": "The Claude pilot credential carries no einvoice scope (M2, ERP #2477); no deployed backing ERP route: POST /einvoice/send is unavailable in the ERP (404).",
   "ksef_submit": "No deployed backing ERP route; capability truth marks this unavailable.",
   "period_close": "The handler deliberately defers execution; capability truth marks this deferred.",
   "period_reopen": "The handler deliberately defers execution; capability truth marks this deferred.",
@@ -208,7 +208,7 @@ export const CLAUDE_EXCLUDED_PROMPTS: Readonly<Record<string, string>> = {
   "expense-batch": "Depends on deferred expense-categories and blanket deductibility/receipt thresholds.",
 };
 
-export const CLAUDE_CANDIDATE_INSTRUCTIONS = `Frihet ERP — local Claude candidate profile, not a published Directory connector.
+export const CLAUDE_CANDIDATE_INSTRUCTIONS = `Frihet ERP — Claude candidate profile; Directory acceptance requires separate evidence.
 Discover available tools, resources and prompts from this session's MCP lists. In grouped mode use list_tool_groups, search_tools and describe_tool.
 Read get_business_context for workspace context, not proof of tax treatment or endpoint availability.
 Read each tool's io.frihet/capability metadata: api_dependent/runtime_checked means workspace permissions and backing endpoints still govern execution.
@@ -216,7 +216,7 @@ Resource payloads are workspace records or formatting examples, not authoritativ
 Propose changes and obtain user approval before writes, email, webhooks or fiscal submission. A confirm input is a client interlock, not proof of authorization.
 Read full descriptions and inspect configured external effects before executing. Do not infer delivery from invoice status, a money transfer from an accounting entry, or production acceptance from demo data.
 On 409 IDEMPOTENCY_REQUEST_IN_PROGRESS, read the record before deciding; do not retry with a fresh key.
-FRIHET_DEMO=1 is fixture-only and cannot verify live operations. No hosted Claude-profile endpoint is established by this package.`;
+FRIHET_DEMO=1 is fixture-only and cannot verify live operations. Hosting, OAuth, API availability and Directory acceptance require independent verification.`;
 
 /** Install after discovery interception, before registration: denied names never
  * enter the SDK registry or the grouped catalog. Mirrors the OpenAI interceptor.

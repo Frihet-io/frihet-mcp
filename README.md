@@ -127,6 +127,13 @@ Marketplace availability is pending. Use the local plugin command above or the C
 
 Skill invocation: `/frihet-erp:frihet-mcp`. The bundled `.mcp.json` launches `@frihet/mcp-server` via `npx` — set `FRIHET_API_KEY` in your environment (get one at [app.frihet.io](https://app.frihet.io) → Settings → API keys).
 
+The [portable Claude plugin preview](plugins/claude/frihet-erp/README.md) bundles
+real receivables, document-drafting and monthly-review skills with the existing
+public remote MCP. Load `plugins/claude/frihet-erp` in Claude Code or upload a ZIP
+of that folder in chat/Cowork. Its skills guide behavior; they do not filter the
+hosted catalogue or establish Directory approval. The root local MCP setup above
+keeps its existing API-key configuration.
+
 ### Claude Code — one command
 
 ```bash
@@ -787,7 +794,7 @@ Beyond raw MCP tools, this repo includes a **Claude Code skill** that adds busin
 
 ```bash
 git clone https://github.com/Frihet-io/frihet-mcp.git
-ln -s "$(pwd)/frihet-mcp/skill" ~/.claude/skills/frihet
+ln -s "$(pwd)/frihet-mcp/skills/frihet-mcp" ~/.claude/skills/frihet-mcp
 ```
 
 Or with the universal installer:
@@ -796,20 +803,7 @@ Or with the universal installer:
 npx skills add Frihet-io/frihet-mcp
 ```
 
-### Commands
-
-| Command | What it does |
-|---------|-------------|
-| `/frihet status` | Account overview, recent activity, pending payments |
-| `/frihet invoice` | Create, list, search invoices |
-| `/frihet expense` | Log and query expenses |
-| `/frihet clients` | Manage client database |
-| `/frihet quote` | Create and manage quotes |
-| `/frihet report` | Financial summaries (P&L, quarterly, overdue) |
-| `/frihet webhooks` | Configure automation triggers |
-| `/frihet setup` | Guided setup and connection test |
-
-The skill knows about IVA rates, IRPF retention, Modelo 303 prep, expense deductibility rules, and VeriFactu compliance.
+The skill routes requests to the Frihet MCP tools (invoices, quotes, expenses, clients, monthly review) and tells the agent when to ask for confirmation before writes. It does not add standalone `/frihet` subcommands, and it does not ship VAT rates or deductibility rules: tax figures come from your Frihet data, not from the skill.
 
 Full documentation: [docs.frihet.io/desarrolladores/skill-claude-code](https://docs.frihet.io/desarrolladores/skill-claude-code)
 

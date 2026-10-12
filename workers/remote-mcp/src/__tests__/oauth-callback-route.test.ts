@@ -602,7 +602,7 @@ test("the state alarm firing mid-attempt fences the armed holder", async (t) => 
   assert.equal((await h.callback(stateKey, idToken)).status, 400);
 });
 
-test("a profile the provisioning leaf refuses is rejected before the attempt is armed", async (t) => {
+test("cross-profile authorization state is rejected before the attempt is armed", async (t) => {
   const h = await createOAuthRouteHarness(t);
   const { clientId, stateKey } = await h.startLogin();
   const idToken = await mintIdToken();
@@ -610,8 +610,8 @@ test("a profile the provisioning leaf refuses is rejected before the attempt is 
   h.namespace.fail("/release", "before");
 
   const refused = await h.callback(stateKey, idToken);
-  assert.equal(refused.status, 502);
-  assert.deepEqual(refused.body, { error: "Failed to provision API key" });
+  assert.equal(refused.status, 503);
+  assert.deepEqual(refused.body, { error: "Authorization state is temporarily unavailable" });
   assert.equal(h.events.includes("do:/attempt"), false);
   assert.equal(h.erp.postCorrelations.length, 0);
 

@@ -174,6 +174,8 @@ before(async () => {
     res.end(JSON.stringify({ error: "not_found" }));
   });
 
+  // Under heavy load undici can reuse a socket the default 5 s idle timeout is closing.
+  server.keepAliveTimeout = 60_000;
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${port}`;

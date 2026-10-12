@@ -12,7 +12,7 @@ export function getLoginPage(opts: {
   stateKey: string;
   clientId: string;
   firebaseProjectId: string;
-  accessProfile?: "full" | "openai";
+  accessProfile?: "full" | "openai" | "claude";
   clientName?: string;
   redirectUri?: string;
 }): string {
@@ -23,6 +23,7 @@ export function getLoginPage(opts: {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
   const openAIProfile = opts.accessProfile === "openai";
+  const claudeProfile = opts.accessProfile === "claude";
   const clientLabel = escapeHtml(opts.clientName?.trim() || "OAuth application");
   let redirectOrigin = "the registered callback";
   try {
@@ -32,14 +33,25 @@ export function getLoginPage(opts: {
     // future provider version changes that contract.
   }
   const safeRedirectOrigin = escapeHtml(redirectOrigin);
-  const consentSummary = openAIProfile
+  const consentSummary = claudeProfile
+    ? `The self-declared OAuth client <strong>${clientLabel}</strong> wants access to the
+      Frihet tools listed below and will receive the authorization response at
+      <code>${safeRedirectOrigin}</code>. Verify that callback origin before continuing.`
+    : openAIProfile
     ? `The self-declared OAuth client <strong>${clientLabel}</strong> wants access to the reviewed
       Frihet business-management tools listed below and will receive the authorization response at
       <code>${safeRedirectOrigin}</code>. Verify that callback origin before continuing; sensitive and
       regulated areas remain excluded.`
     : `An application wants full access to manage your Frihet account
       via AI. This grants broad read and write access — review below.`;
-  const consentPermissions = openAIProfile
+  const consentPermissions = claudeProfile
+    ? `<li>Read and manage invoices, quotes, expenses, clients, products, deposits and recurring records</li>
+        <li>Read banking records and manage internal reconciliation and bank rules</li>
+        <li>Read fiscal records, e-invoice status/validation and stored e-invoice artifacts</li>
+        <li>Read and manage team, leave, attendance and time records; export payroll records</li>
+        <li>Read POS, kitchen and stay/PMS records; update kitchen tickets</li>
+        <li>Manage webhooks, portal settings and supported general-ledger records</li>`
+    : openAIProfile
     ? `<li>Read invoices and prepare numbered invoice drafts</li>
         <li>Expenses and vendors</li>
         <li>Clients, contacts, notes and activity</li>
@@ -59,7 +71,18 @@ export function getLoginPage(opts: {
         <li>HR, payroll, time tracking and your team</li>
         <li>POS, kitchen and stay/PMS operations</li>
         <li>Gestoría, general-ledger entries and portal settings</li>`;
-  const consentScopeNote = openAIProfile
+  const consentScopeNote = claudeProfile
+    ? `This connection grants read/write access to this workspace and carries
+        no e-invoicing permission: e-invoice export, FACe and TicketBAI submission are not available.
+        Issuing or changing invoices and verifactu_resubmit can submit VeriFactu records to AEAT; approve each one.
+        Plan entitlements and workspace permissions still apply. Writes can delete records and
+        send invoices or configured notifications/webhooks.
+        Review each tool and approve its actual effect before use.
+        Payment transfers, deferred operations and unsafe deletion/delivery workflows are excluded.
+        Deposit refunds are bookkeeping entries, not payment transfers. OAuth credentials expire
+        within 30 days; reconnect if the underlying credential expires. Disconnect revokes the grant
+        and schedules cleanup of its backend credential.`
+    : openAIProfile
     ? `This reviewed connector has no dedicated fields for government or banking identifiers
         and does not expose payroll or HR, POS, Kitchen, Stay/PMS, webhook secrets,
         quote-email delivery, raw invoice PDFs, e-invoicing, regulated filing, or fiscal export workflows.
@@ -301,9 +324,9 @@ export function getLoginPage(opts: {
     </div>
 
     <div class="footer">
-      <a href="${openAIProfile ? "https://openai-mcp.frihet.io/privacy" : "https://www.frihet.io/es/privacy"}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+      <a href="${claudeProfile ? "https://claude-mcp.frihet.io/privacy" : openAIProfile ? "https://openai-mcp.frihet.io/privacy" : "https://www.frihet.io/es/privacy"}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
       &middot;
-      <a href="${openAIProfile ? "https://openai-mcp.frihet.io/support" : "https://docs.frihet.io"}" target="_blank" rel="noopener noreferrer">Documentation</a>
+      <a href="${claudeProfile ? "https://claude-mcp.frihet.io/support" : openAIProfile ? "https://openai-mcp.frihet.io/support" : "https://docs.frihet.io"}" target="_blank" rel="noopener noreferrer">Documentation</a>
     </div>
   </div>
 
