@@ -472,24 +472,37 @@ describe("public API path segments", () => {
       [],
       "path ids are encoded only through the shared segment check",
     );
+    assert.deepEqual(
+      methods.filter(([, method]) => /`\/[^`]*\$\{(?!pathSegment\()/u.test(method.toString())).map(([name]) => name),
+      [],
+      "every value interpolated into a path goes through the shared segment check",
+    );
     assert.ok(builders.length > 0);
+
+    // Fields that must be valid for the call to reach its path.
+    const validFields: Record<string, Record<string, string>> = {
+      exportEInvoice: { format: "ubl" },
+    };
 
     await withRecordingApi(async (frihet, sent) => {
       for (const [name, method] of builders) {
         for (const value of INVALID_SEGMENTS) {
           // Reads as `value` both as a positional id and as any field of a params object.
+          const fields = validFields[name] ?? {};
           const id = new Proxy({}, {
-            get: (_target, key) => key === Symbol.toPrimitive ? () => value : typeof key === "string" && key !== "then" ? value : undefined,
+            get: (_target, key) => key === Symbol.toPrimitive
+              ? () => value
+              : typeof key === "string" && key !== "then" ? (Object.hasOwn(fields, key) ? fields[key] : value) : undefined,
           });
           const before = sent.length;
-          const rejected = await method.apply(frihet, [id, id, id, id]).then(() => false, () => true);
+          const error = await method.apply(frihet, [id, id, id, id]).then(() => undefined, (caught: unknown) => caught);
           const requests = sent.slice(before);
           const label = `${name} with ${JSON.stringify(value)}`;
           if (value === "") {
             // An empty optional id may select another route; it must never leave an empty segment.
             for (const request of requests) assert.doesNotMatch(request, /\/\/|\/(\?|$)/u, label);
           } else {
-            assert.equal(rejected, true, label);
+            assert.equal((error as { errorCode?: unknown } | undefined)?.errorCode, "invalid_path_segment", label);
             assert.deepEqual(requests, [], label);
           }
         }
