@@ -320,7 +320,6 @@ test("OAuth state enforces its TTL when the alarm is delayed, including the exac
   assert.equal(await putState(beforeBoundary.store, "before-boundary"), 204);
   assert.deepEqual(beforeBoundary.state.storage.values.get("oauth_request"), {
     version: 2,
-    accessProfile: "openai",
     status: "pending",
     payload: "before-boundary",
     expiresAtMs: t0 + 600_000,
@@ -381,6 +380,49 @@ test("each Worker accepts only its exact profile/resource pair in token-family b
       newRefreshTokenHash: "b".repeat(64),
       apiKeyBinding: { ...binding, oauthResource: "https://mcp.frihet.io" },
     }))).status, 400);
+  }
+});
+
+test("only the Claude Worker stamps its profile on records; the existing Worker keeps the earlier record shape", async () => {
+  for (const [env, binding] of [[{}, OPENAI_BINDING], [CLAUDE_ENV, CLAUDE_BINDING]] as const) {
+    const written: Record<string, unknown>[] = [];
+    const record = (state: FakeState) => {
+      const put = state.storage.put.bind(state.storage);
+      state.storage.put = async (key: string, value: unknown) => {
+        written.push(value as Record<string, unknown>);
+        await put(key, value);
+      };
+    };
+
+    const { store, state } = makeStore({ env });
+    record(state);
+    assert.equal(await putState(store, "authorization"), 204);
+    const reserved = await stateJson(store, "/reserve");
+    await stateJson(store, "/attempt", { leaseId: reserved.leaseId, uid: "firebase-user", reconciled: [] });
+    assert.deepEqual(await stateJson(store, "/commit", { leaseId: reserved.leaseId }), { outcome: "committed" });
+    assert.equal((await store.fetch(familyRequest("/token-family", {
+      currentKind: "authorization_code",
+      currentHash: "a".repeat(64),
+      expiresAtMs: Date.now() + 60_000,
+      apiKeyBinding: binding,
+    }, "PUT"))).status, 204);
+    await familyJson(store, "/token-family/revoke", {});
+
+    const unredeemed = makeStore({ env });
+    record(unredeemed.state);
+    assert.equal((await unredeemed.store.fetch(familyRequest("/token-family/supersede", {
+      userId: "firebase-user",
+      grantId: "g".repeat(16),
+    }))).status, 204);
+
+    const kinds = written.map((value) => [value.version, value.status ?? "intent"].join(":"));
+    for (const kind of ["2:pending", "2:committed", "1:active", "1:revoked", "1:intent"]) {
+      assert.ok(kinds.includes(kind), `${binding.accessProfile} writes ${kind}`);
+    }
+    for (const value of written) {
+      if (binding.accessProfile === "claude") assert.equal(value.accessProfile, "claude");
+      else assert.equal("accessProfile" in value, false, JSON.stringify(value));
+    }
   }
 });
 
@@ -658,7 +700,6 @@ test("replay atomically persists its tombstone and cleanup intent before respond
   assert.equal(state.storage.values.has("oauth_token_family_cleanup"), true);
   assert.deepEqual(state.storage.values.get("oauth_token_family_cleanup"), {
     version: 1,
-    accessProfile: "openai",
     userId: "firebase-user",
     grantId: "g".repeat(16),
     apiKeyBinding: OPENAI_BINDING,
@@ -1029,7 +1070,7 @@ test("token family supersede: tombstones the bound family, or leaves a revoked p
       unredeemed.state.storage.values.get("oauth_token_family_cleanup"),
       {
         version: 1,
-        accessProfile: profile,
+        ...(profile === "claude" ? { accessProfile: profile } : {}),
         userId: "firebase-user",
         grantId: "g".repeat(16),
         grantRevoked: false,

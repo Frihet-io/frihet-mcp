@@ -98,7 +98,8 @@ export const OAUTH_PROVIDER_REVIEW_OPTIONS = {
   clientRegistrationEndpoint: "/register",
   // This provider does not implement per-tool OAuth authorization. Advertise
   // one honest connector-wide scope instead of implying that `read` prevents
-  // writes. Every mutating reviewed tool still requires confirm=true.
+  // writes. Where a profile requires confirm=true, that is a client interlock,
+  // not an authorization boundary.
   scopesSupported: [...OPENAI_REVIEW_OAUTH_SCOPES],
   accessTokenTTL: 3600,
   refreshTokenTTL: 2592000,

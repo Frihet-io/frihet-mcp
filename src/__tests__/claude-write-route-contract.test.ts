@@ -3,17 +3,21 @@
  *
  * The Claude pilot credential carries the generic `write` scope. On its own the
  * ERP would honour that scope on every mutating route, including the ones this
- * profile excludes on purpose (delete_client, send_quote, refund_sale, ...): the
- * exclusion lived only in the Worker's registration interceptor. The ERP now
- * enforces a write-route ceiling for keys stored with `accessProfile: "claude"`
- * (Frihet-ERP `functions/src/publicApi/claudeWriteRoutes.ts`), and that ceiling
- * must be exactly the set of non-GET routes the Claude allowlist sends.
+ * profile excludes on purpose (delete_client, send_quote, refund_sale, ...): in
+ * this repository the exclusion lives only in the Worker's registration
+ * interceptor. The ERP-side write-route ceiling for keys stored with
+ * `accessProfile: "claude"` (Frihet-ERP `functions/src/publicApi/claudeWriteRoutes.ts`)
+ * must be exactly the set of non-GET routes the Claude allowlist sends, and the
+ * Claude Worker deploy requires an ERP release receipt showing that ceiling
+ * deployed (`scripts/check-claude-hosted-release.mjs`, `assertErpCeilingDeployed`).
  *
  * This test drives every allowlisted tool through a REAL FrihetClient against a
  * local node:http server, records method + path as they arrive, and compares
  * them with the committed fixture. `CLAUDE_WRITE_ROUTES_SHA256` is the same
- * literal the ERP mirror pins, so a change on either side fails one of the two
- * suites until both are updated.
+ * literal the ERP ceiling's test pins. The two copies are kept equal by hand: no
+ * CI job compares the two repositories, so a change on one side must be repeated
+ * on the other. The deploy check above compares the deployed ERP list with this
+ * fixture.
  *
  * Regenerate after a reviewed allowlist change:
  *   npm run build && FRIHET_UPDATE_CLAUDE_WRITE_ROUTES=1 node --test dist/__tests__/claude-write-route-contract.test.js

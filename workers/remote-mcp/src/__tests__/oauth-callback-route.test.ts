@@ -606,7 +606,10 @@ test("cross-profile authorization state is rejected before the attempt is armed"
   const h = await createOAuthRouteHarness(t);
   const { clientId, stateKey } = await h.startLogin();
   const idToken = await mintIdToken();
+  // Existing-Worker records carry no profile, so the Claude Worker is the one
+  // that must refuse them.
   h.env.FRIHET_OPENAI_MODE = "false";
+  h.env.FRIHET_CLAUDE_MODE = "true";
   h.namespace.fail("/release", "before");
 
   const refused = await h.callback(stateKey, idToken);
@@ -617,6 +620,7 @@ test("cross-profile authorization state is rejected before the attempt is armed"
 
   // The lease outlives the lost release but holds no armed attempt, so the
   // takeover has nothing to reconcile.
+  delete h.env.FRIHET_CLAUDE_MODE;
   h.env.FRIHET_OPENAI_MODE = "true";
   h.clock.offsetMs += 61_000;
   const retried = await h.callback(stateKey, idToken);

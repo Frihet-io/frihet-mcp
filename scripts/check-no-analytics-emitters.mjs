@@ -275,7 +275,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/claude-public-surface.ts": "2437e7824b6a2a8d98ca982f4631643fa522c224ec554c3c7610bd5d66f6b2e5", // isolated Claude host and authorization boundary
   "workers/remote-mcp/src/oauth-profile.ts": "fd78139588876001b0521d5d9370b89a019f065ed783fdc76617a863c978c8a1", // isolated Claude host and authorization boundary
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
-  "src/openai-review-oauth.ts": "042092f9805c06719355a6a3a7d85f7c40dd88e89cb764de9d54208b6275d1c6", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
+  "src/openai-review-oauth.ts": "bfde5584b9b37fd24c4d7b4a32b149813c08e22dc06aa46b9b4d8afae3b77d90", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink); confirm comment no longer claims every mutating tool requires it
   "workers/api-proxy/worker.js": "34f6c6e995a6c779d6a80fb954321f589cf64cd99f62c5d9c6b49e0fcaf07fd4",
   "workers/remote-mcp/src/api-url.ts": "d30673b8814eae5fc2f0cc0ea6ebdfa0885a710fab0571f2efdd8ac10d85d518",
   "workers/remote-mcp/src/auth-handler.ts": "62c5aac5cf00302757bb9a7ca63b7bb93bb40f178539819a0054bb20724acca8", // #205: commit carries the replaced grant ids into the durable state outbox; inline replacement kept as fast path (no new destination); #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
@@ -284,7 +284,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/login-page.ts": "b2db19132595c6d19a51d0538b8e144b0990d67c455fa7d98932a11af528558d", // H-1/M-1: Claude consent copy discloses VeriFactu submission via invoice writes, no stale e-invoicing claims; M2: Claude consent copy states no e-invoicing sends; directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "87ae36476e28acad049578fcb588873da899e76c63b62f5ebe816ac6762a565c", // #203: callback reserve/commit — revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
-  "workers/remote-mcp/src/oauth-state-store.ts": "4e663d2b168a11c88d3ce4e7e6e5bc111493dc3609520e5098e29381a1dbe815", // Claude supersede placeholder carries the Worker accessProfile (no new destination); #205: grant-replacement outbox on commit, drained by the alarm before expiry cleanup through the token family's /token-family/supersede (same internal origin); fail-closed keyId binding kept; lifecycle logs carry outcome/stage/counts only (no new destination); #203: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
+  "workers/remote-mcp/src/oauth-state-store.ts": "deaec8b1419c7872ba50629294cf2984bc370e164918cd6d9a1dbc48aab24bd6", // only Claude Worker records carry accessProfile; existing-Worker records keep their earlier shape (no new destination); #205: grant-replacement outbox on commit, drained by the alarm before expiry cleanup through the token family's /token-family/supersede (same internal origin); fail-closed keyId binding kept; lifecycle logs carry outcome/stage/counts only (no new destination); #203: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
   "workers/remote-mcp/src/oauth-token-family.ts": "d8b9c747beefd3fd641068fc6d62830c080443f060b7a382b5ceeb12d39934c6", // #205: supersede tombstones a replaced grant's family on the same internal Durable Object origin; OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
@@ -305,9 +305,9 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  "scripts/check-claude-hosted-release.mjs": "7b4599c7e2a5bd3730dc863d82d9fafebac3c7b7f2afc2d328d3f88bb3e2c341", // isolated Claude build and release boundary
+  "scripts/check-claude-hosted-release.mjs": "c29138db60fed098c9bd56afcbfb3eac3e090c58cf4eca7275bd1aab34d19721", // isolated Claude build and release boundary; deploy also requires an ERP release receipt for the Claude write ceiling (local git and file reads, no network)
   "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
-  "scripts/__tests__/claude-hosted-release.test.mjs": "c9ea9f8e12c1b3afb5d7e481a7ac62be6810f672654b03cfaff361992a029aac", // isolated Claude build and release boundary
+  "scripts/__tests__/claude-hosted-release.test.mjs": "580f5ca44d5ffb6857772b08be1580f2b70e0a27e19fe0c3e6289bc68e5d349a", // isolated Claude build and release boundary; ERP ceiling receipt cases
   "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata

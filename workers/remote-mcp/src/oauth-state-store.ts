@@ -448,6 +448,16 @@ function isWorkerAccessProfile(value: unknown): value is WorkerAccessProfile {
   return value === "openai" || value === "claude" || value === "full";
 }
 
+/**
+ * The profile a new record is stamped with. Only the Claude Worker stamps its
+ * records. The existing Worker keeps the record shape of its earlier builds,
+ * whose readers reject unknown keys, so a rollback of that Worker never reads a
+ * record it would discard.
+ */
+function recordProfileStamp(accessProfile: WorkerAccessProfile): { accessProfile?: "claude" } {
+  return accessProfile === "claude" ? { accessProfile } : {};
+}
+
 function isGrantId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{16}$/u.test(value);
 }
@@ -630,7 +640,7 @@ export class OAuthStateStore {
       }
       const intent: TokenFamilyCleanupIntent = existing ?? {
         version: 1,
-        accessProfile: this.workerAccessProfile(),
+        ...recordProfileStamp(this.workerAccessProfile()),
         userId: tombstoned.userId,
         grantId: tombstoned.grantId,
         ...(tombstoned.apiKeyBinding ? { apiKeyBinding: tombstoned.apiKeyBinding } : {}),
@@ -816,7 +826,7 @@ export class OAuthStateStore {
         const now = Date.now();
         const record: OAuthStateRecord = {
           version: 2,
-          accessProfile,
+          ...recordProfileStamp(accessProfile),
           status: "pending",
           payload,
           expiresAtMs: now + STATE_TTL_MS,
@@ -968,7 +978,7 @@ export class OAuthStateStore {
         }
         const committed: OAuthStateRecord = {
           version: 2,
-          accessProfile,
+          ...recordProfileStamp(accessProfile),
           status: "committed",
           expiresAtMs: record.expiresAtMs,
           attempts: record.attempts,
@@ -1079,7 +1089,7 @@ export class OAuthStateStore {
 
         const record: TokenFamilyRecord = {
           version: 1,
-          accessProfile,
+          ...recordProfileStamp(accessProfile),
           status: "active",
           userId,
           grantId,
@@ -1304,7 +1314,7 @@ export class OAuthStateStore {
         // present it, and the key lapses at its own expiry.
         await this.tombstoneTokenFamily(record ?? {
           version: 1,
-          accessProfile: this.workerAccessProfile(),
+          ...recordProfileStamp(this.workerAccessProfile()),
           status: "revoked",
           userId,
           grantId,
