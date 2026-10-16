@@ -10,7 +10,10 @@ import {
   assertErpCeilingDeployed,
   erpCeilingRoutes,
   readClaudeConfiguration,
+  verifyErpCeilingDeployed,
 } from "../check-claude-hosted-release.mjs";
+
+const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 test("source config isolates Claude and refuses deployment before namespace bootstrap", () => {
   const { config, sharedNamespaceIds } = readClaudeConfiguration();
@@ -190,5 +193,142 @@ test("Claude deploy refuses runtime recipes even when the control commit contain
     assert.doesNotThrow(() => assertErpCeilingDeployed(release.receipt, release.root, CONTRACT_ROUTES));
   } finally {
     release.cleanup();
+  }
+});
+
+/** Authenticated Actions fixtures exercise the real ZIP/digest admission, without network or cloud writes. */
+function hybridRelease({ mutationChange, buildReceiptChange, routes = CONTRACT_ROUTES } = {}) {
+  const root = mkdtempSync(join(tmpdir(), "erp-claude-hybrid-"));
+  const zip = (name, files) => {
+    const stage = join(root, name);
+    mkdirSync(stage, { recursive: true });
+    for (const [path, bytes] of Object.entries(files)) {
+      mkdirSync(join(stage, path, ".."), { recursive: true });
+      writeFileSync(join(stage, path), bytes);
+    }
+    const output = join(root, `${name}.zip`);
+    execFileSync("zip", ["-q", "-X", output, "-@"], { cwd: stage, input: `${Object.keys(files).join("\n")}\n` });
+    return readFileSync(output);
+  };
+  const members = {
+    "lib/functions/src/publicApi.js": Buffer.from("compiled fixture"),
+    "lib/functions/src/publicApi.js.map": Buffer.from("{}"),
+    "lib/functions/src/publicApi/claudeWriteRoutes.js": Buffer.from("compiled route fixture"),
+    "lib/functions/src/publicApi/claudeWriteRoutes.js.map": Buffer.from("{}"),
+    "src/publicApi.ts": Buffer.from("if (isClaudeWriteRouteForbidden(apiKeyAccessProfile, req.method, pathParts)) deny();"),
+    "src/publicApi/claudeWriteRoutes.ts": Buffer.from(`export const CLAUDE_WRITE_ROUTES = Object.freeze([\n${routes.map((route) => `  '${route}',`).join("\n")}\n]);`),
+  };
+  const replacements = Object.fromEntries(Object.entries(members).map(([name, bytes]) => [name, digest(bytes)]));
+  const replacementZip = zip("replacements", members);
+  const buildSha = "d".repeat(40), buildTree = "e".repeat(40), buildControl = "c".repeat(40);
+  const baseline = { repositorySha: "b".repeat(40), repositoryTree: "f".repeat(40), sourceArchiveSha256: "1".repeat(64) };
+  const build = { repositorySha: buildSha, repositoryTree: buildTree, sourceDeltaSha256: "4".repeat(64), sourcePatch: "synthetic patch" };
+  const baselineCompiled = {
+    "lib/functions/src/publicApi.js": "456b6331f48a1668d88984d3ea4685241a9a07f374c69479de7c8f1a787fdeef",
+    "lib/functions/src/publicApi.js.map": "98909f8d64e91f0dd58c92ff1145adb1526757a3485ef4fd1a484d07f47a24dd",
+  };
+  const input = { scope: "claude-publicapi-source-20261016", baseline, build, members: Object.keys(members), baselineCompiled };
+  const buildReceiptData = { schemaVersion: 1, kind: "claude-publicapi-source-build-proof", status: "matched", deployable: false,
+    scope: input.scope, inputSha256: digest(JSON.stringify(stable(input))), controlSha: buildControl, runId: "20", runAttempt: 1,
+    sourceSha: buildSha, sourceTree: buildTree, baselineCompiled, replacements, replacementArchiveSha256: digest(replacementZip) };
+  buildReceiptChange?.(buildReceiptData);
+  const buildReceipt = Buffer.from(JSON.stringify(buildReceiptData));
+  const buildZip = zip("build-artifact", { "build-proof.json": buildReceipt, "replacements.zip": replacementZip });
+  const spec = {
+    schemaVersion: 1, kind: "claude-publicapi-source-release-spec", scope: "claude-publicapi-source-20261016", approved: true,
+    project: "gen-lang-client-0335716041", region: "europe-west1", target: "publicApi", action: "UPDATE", updateMask: "sourceArchiveUrl",
+    rollbackArchiveBucket: "frihet-prod-release-artifacts-gen-lang-client-0335716041",
+    before: { presence: "present", versionId: "131", sourceSha256: "1".repeat(64), configSha256: "2".repeat(64), iamSha256: "3".repeat(64), secretEnvironmentVariables: [] },
+    baseline, build,
+    replacements, replacementArchiveSha256: digest(replacementZip), candidateSourceSha256: "a".repeat(64),
+    proof: { controlSha: buildControl, runId: "20", runAttempt: 1, artifactId: "202", artifactDigest: `sha256:${digest(buildZip)}`, receiptSha256: digest(buildReceipt) },
+  };
+  mkdirSync(join(root, "scripts"), { recursive: true });
+  writeFileSync(join(root, "scripts/claude-publicapi-source-release.json"), JSON.stringify(spec));
+  const git = (...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  git("init", "-q"); git("add", "scripts");
+  git("-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-q", "-m", "control");
+  const sourceSha = git("rev-parse", "HEAD"), beforeArchive = { uri: `gs://${spec.rollbackArchiveBucket}/rollback/${sourceSha}/publicApi/131-${spec.before.sourceSha256}.zip`, generation: "1", sha256: spec.before.sourceSha256 };
+  const { secretEnvironmentVariables: _bindings, ...before } = spec.before;
+  const mutation = { target: "publicApi", region: "europe-west1", action: "UPDATE", before, beforeArchive,
+    candidateSourceSha256: spec.candidateSourceSha256, providerOperationState: "succeeded",
+    after: { ...before, versionId: "132", sourceSha256: spec.candidateSourceSha256 } };
+  mutationChange?.(mutation);
+  const receipt = signed({ schemaVersion: 1, kind: "frihet-claude-publicapi-source-release-receipt", scope: spec.scope,
+    project: spec.project, region: spec.region, target: spec.target, operation: "deploy", status: "deployed", stage: "completed",
+    sourceSha, workflowSha: sourceSha, specSha256: digest(JSON.stringify(stable(spec))), runId: "10", runAttempt: 1,
+    runtimeSource: { baseline: spec.baseline, build: { repositorySha: build.repositorySha, repositoryTree: build.repositoryTree, sourceDeltaSha256: build.sourceDeltaSha256 }, replacements: spec.replacements, proof: spec.proof },
+    credentialIssuance: "not_performed", rollback: null, functions: { mutations: [mutation] },
+    releaseSurfaces: { functions: "participating", firestoreRules: "not_participating", indexes: "not_participating", storage: "not_participating" },
+    prepared: { candidate: { uri: `gs://${spec.rollbackArchiveBucket}/candidates/${sourceSha}/${spec.candidateSourceSha256}.zip`, generation: "2", sha256: spec.candidateSourceSha256 }, beforeArchive },
+  });
+  const releaseZip = zip("release-artifact", { "firebase-release-output.json": Buffer.from(JSON.stringify(receipt)) });
+  const run = (id, sha, path) => ({ id, run_attempt: 1, head_sha: sha, head_branch: "main", path, event: "workflow_dispatch", status: "completed", conclusion: "success", repository: { id: 99, full_name: "berthelius/Frihet-ERP" }, head_repository: { id: 99, full_name: "berthelius/Frihet-ERP" } });
+  const releaseRun = run(10, sourceSha, ".github/workflows/deploy-firebase-production.yml"), buildRun = run(20, buildControl, ".github/workflows/build-claude-publicapi-source.yml");
+  const artifact = (id, name, bytes, origin) => ({ id, name, digest: `sha256:${digest(bytes)}`, expired: false, workflow_run: { id: origin.id, head_sha: origin.head_sha, head_branch: "main", repository_id: 99, head_repository_id: 99 } });
+  const releaseArtifact = artifact(101, "firebase-production-release-receipt", releaseZip, releaseRun);
+  const buildArtifact = artifact(202, "claude-publicapi-source-proof-20-1", buildZip, buildRun);
+  const fetchImpl = async (url, options) => {
+    const path = new URL(url).pathname;
+    if (String(url).includes(".blob.core.windows.net")) {
+      assert.equal(options.headers, undefined, "GitHub token must not reach signed storage URL");
+      return new Response(path === "/101.zip" ? releaseZip : buildZip);
+    }
+    assert.equal(options.headers.Authorization, "Bearer synthetic-token");
+    if (path.endsWith("/zip")) return new Response(null, { status: 302, headers: { location: `https://fixture.blob.core.windows.net/${path.split("/").at(-2)}.zip?sig=private-test-marker` } });
+    const data = path.endsWith("/10/attempts/1") ? releaseRun : path.endsWith("/20/attempts/1") ? buildRun
+      : path.endsWith("/10/artifacts") ? { artifacts: [releaseArtifact] } : path.endsWith("/artifacts/202") ? buildArtifact : null;
+    assert.ok(data, "unexpected evidence URL");
+    return new Response(JSON.stringify(data));
+  };
+  return { root, receipt, releaseRun, buildArtifact, fetchImpl, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test("Claude's dedicated lane requires authenticated release and build artifacts, exact bytes and routes", async () => {
+  const fixture = hybridRelease();
+  try {
+    await verifyErpCeilingDeployed(fixture.receipt, fixture.root, CONTRACT_ROUTES, { token: "synthetic-token", fetchImpl: fixture.fetchImpl });
+    const forged = signed({ ...fixture.receipt, sourceSha: "f".repeat(40), workflowSha: "f".repeat(40) });
+    await assert.rejects(verifyErpCeilingDeployed(forged, fixture.root, CONTRACT_ROUTES, { token: "synthetic-token", fetchImpl: fixture.fetchImpl }));
+    fixture.releaseRun.event = "pull_request";
+    await assert.rejects(verifyErpCeilingDeployed(fixture.receipt, fixture.root, CONTRACT_ROUTES, { token: "synthetic-token", fetchImpl: fixture.fetchImpl }));
+    fixture.releaseRun.event = "workflow_dispatch";
+    fixture.buildArtifact.digest = `sha256:${"0".repeat(64)}`;
+    await assert.rejects(verifyErpCeilingDeployed(fixture.receipt, fixture.root, CONTRACT_ROUTES, { token: "synthetic-token", fetchImpl: fixture.fetchImpl }));
+    await assert.rejects(verifyErpCeilingDeployed(fixture.receipt, fixture.root, CONTRACT_ROUTES, {
+      token: "synthetic-token", fetchImpl: async () => { throw new Error("private-test-marker"); },
+    }), (error) => error.message === "Claude ERP source release evidence did not verify; Worker deployment refused.");
+  } finally { fixture.cleanup(); }
+});
+
+test("an authenticated artifact cannot admit changed config, secret bindings, or route authority", async () => {
+  for (const options of [
+    { mutationChange: (m) => { m.after.configSha256 = "9".repeat(64); } },
+    { mutationChange: (m) => { m.secretBindingChange = {}; } },
+    { routes: [...CONTRACT_ROUTES, "DELETE /clients/:id"] },
+  ]) {
+    const fixture = hybridRelease(options);
+    try { await assert.rejects(verifyErpCeilingDeployed(fixture.receipt, fixture.root, CONTRACT_ROUTES, { token: "synthetic-token", fetchImpl: fixture.fetchImpl })); }
+    finally { fixture.cleanup(); }
+  }
+});
+
+test("authenticated and re-signed build artifacts must prove the exact historical input and build identity", async () => {
+  for (const buildReceiptChange of [
+    (r) => { r.inputSha256 = "9".repeat(64); },
+    (r) => { r.baselineCompiled = { ...r.baselineCompiled, "lib/functions/src/publicApi.js": "9".repeat(64) }; },
+    (r) => { r.controlSha = "9".repeat(40); },
+    (r) => { r.runId = "21"; },
+    (r) => { r.runAttempt = 2; },
+    (r) => { r.schemaVersion = 2; },
+    (r) => { r.kind = "other-build-proof"; },
+    (r) => { delete r.inputSha256; },
+  ]) {
+    const fixture = hybridRelease({ buildReceiptChange });
+    try {
+      await assert.rejects(verifyErpCeilingDeployed(fixture.receipt, fixture.root, CONTRACT_ROUTES, {
+        token: "synthetic-token", fetchImpl: fixture.fetchImpl,
+      }));
+    } finally { fixture.cleanup(); }
   }
 });

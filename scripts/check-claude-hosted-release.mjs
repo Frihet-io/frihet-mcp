@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { unstable_readConfig } from "../workers/remote-mcp/node_modules/wrangler/wrangler-dist/cli.js";
+import { CLAUDE_ERP_RECEIPT_KIND, verifyClaudeErpSourceRelease } from "./verify-claude-erp-source-release.mjs";
 
 const configPath = fileURLToPath(new URL("../workers/remote-mcp/wrangler.claude.toml", import.meta.url));
 const sharedPath = fileURLToPath(new URL("../workers/remote-mcp/wrangler.toml", import.meta.url));
@@ -122,6 +123,17 @@ export function assertErpCeilingDeployed(receipt, erpRoot, contractRoutes) {
   );
 }
 
+/** Authenticate the dedicated hybrid lane; other runtime recipes remain refused. */
+export async function verifyErpCeilingDeployed(receipt, erpRoot, contractRoutes, options) {
+  if (receipt?.kind !== CLAUDE_ERP_RECEIPT_KIND) {
+    assertErpCeilingDeployed(receipt, erpRoot, contractRoutes);
+    return;
+  }
+  const source = await verifyClaudeErpSourceRelease(receipt, erpRoot, options);
+  assert.ok(source.publicApiSource.includes("isClaudeWriteRouteForbidden(apiKeyAccessProfile, req.method, pathParts)"), "Rebuilt publicApi does not enforce the Claude ceiling");
+  assert.deepEqual(erpCeilingRoutes(source.ceilingSource), contractRoutes, "Rebuilt ERP ceiling routes differ from the Claude contract fixture");
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { config, sharedNamespaceIds } = readClaudeConfiguration();
   const sourceOnly = process.argv.includes("--source-only");
@@ -130,7 +142,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const { FRIHET_ERP_ROOT: erpRoot, FRIHET_ERP_RELEASE_RECEIPT: receiptPath } = process.env;
     assert.ok(erpRoot && receiptPath, "Set FRIHET_ERP_ROOT and FRIHET_ERP_RELEASE_RECEIPT: the ERP Claude ceiling must be deployed first");
     const { routes } = JSON.parse(readFileSync(WRITE_ROUTE_FIXTURE, "utf8"));
-    assertErpCeilingDeployed(JSON.parse(readFileSync(receiptPath, "utf8")), erpRoot, routes);
+    await verifyErpCeilingDeployed(JSON.parse(readFileSync(receiptPath, "utf8")), erpRoot, routes);
   }
   console.log(sourceOnly ? "Claude source topology passes; deployment and hosted acceptance are not established" : "Claude deployment target isolation and the ERP ceiling receipt pass; hosted acceptance is not established");
 }

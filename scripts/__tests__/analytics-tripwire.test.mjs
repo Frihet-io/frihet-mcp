@@ -119,6 +119,7 @@ describe("anti-defang contract", () => {
     assert.match(APPROVED_CONFIG_FILE_HASHES["workers/remote-mcp/wrangler.claude.toml"], /^[a-f0-9]{64}$/u);
     for (const path of [
       "scripts/check-claude-hosted-release.mjs",
+      "scripts/verify-claude-erp-source-release.mjs",
       "scripts/prepare-claude-oauth-provider.mjs",
       "scripts/__tests__/claude-hosted-release.test.mjs",
       "scripts/__tests__/claude-oauth-provider.test.mjs",
