@@ -55,6 +55,14 @@ API de Frihet para el negocio autorizado y devuelve resultados a Claude. El
 inicio de sesión utiliza el flujo OAuth anunciado por ese servidor. Los skills
 no piden exportar registros a otros servicios.
 
+Las respuestas del perfil Claude omiten los campos de la política de redacción
+compartida, incluidos identificadores fiscales, IBAN, secretos, `documentNumber`
+y `verifactuHash`. La redacción se aplica también a los recursos JSON y al texto
+de respuesta generado a partir de los datos saneados. Este perfil no ofrece las
+descargas de PDF ni de archivos de factura electrónica, cuyo contenido no puede
+sanearse con esa redacción de campos. Evita incluir datos sensibles en texto
+libre: la redacción por campos no es un detector universal de información personal.
+
 Anthropic recibe los parámetros y resultados MCP de tus peticiones bajo las
 condiciones de tu cuenta de Claude. Cloudflare gestiona OAuth y sesiones;
 Firebase Authentication verifica tu identidad y el backend de Google Cloud

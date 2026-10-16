@@ -3,6 +3,7 @@
  * Handlers remain in the shared registry. OpenAI's frozen profile is independent.
  */
 import { GROUPS, type GroupMeta, type ToolGroupId } from "./tool-exposure.js";
+import { claudeOutputSchema, claudeResourceResult, claudeToolResult } from "./claude-output-privacy.js";
 
 export const CLAUDE_GROUP_METADATA: Partial<Record<ToolGroupId, GroupMeta>> = {
   invoicing: { ...GROUPS.invoicing, blurb: "Invoice records and delivery, credit notes, quotes, recurring invoices and deposit bookkeeping; API availability and configured effects must be checked." },
@@ -61,8 +62,6 @@ export const CLAUDE_CANDIDATE_TOOLS: ReadonlySet<string> = new Set([
   "get_deposit",
   "get_expense",
   "get_invoice",
-  "get_invoice_einvoice",
-  "get_invoice_pdf",
   "get_kitchen_ticket",
   "get_modelo_130_summary",
   "get_modelo_303_summary",
@@ -144,6 +143,8 @@ export const CLAUDE_CANDIDATE_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 export const CLAUDE_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
+  "get_invoice_pdf": "Opaque invoice PDF bytes can contain sensitive fields and cannot be safely redacted by the Claude output boundary.",
+  "get_invoice_einvoice": "Raw e-invoice XML and Factur-X PDF artifacts can contain sensitive fields and cannot be safely redacted by the Claude output boundary.",
   "create_reservation": "The handler deliberately defers execution; capability truth marks this deferred.",
   "delete_client": "Linked contacts, notes and activities are left stored but unreachable.",
   "delete_expense": "Linked attachment metadata/object cleanup is not established.",
@@ -215,6 +216,7 @@ Read each tool's io.frihet/capability metadata: api_dependent/runtime_checked me
 Resource payloads are workspace records or formatting examples, not authoritative tax advice. The overdue-invoices resource is a status-filtered first page; paginate list_invoices without a status filter and select sent, partial and overdue records client-side for a complete balance review.
 Propose changes and obtain user approval before writes, email, webhooks or fiscal submission. A confirm input is a client interlock, not proof of authorization.
 Read full descriptions and inspect configured external effects before executing. Do not infer delivery from invoice status, a money transfer from an accounting entry, or production acceptance from demo data.
+Sensitive fields are omitted from Claude outputs under the shared redaction policy, including documentNumber and verifactuHash. Opaque invoice PDF and e-invoice downloads are unavailable in this profile.
 On 409 IDEMPOTENCY_REQUEST_IN_PROGRESS, read the record before deciding; do not retry with a fresh key.
 FRIHET_DEMO=1 is fixture-only and cannot verify live operations. Hosting, OAuth, API availability and Directory acceptance require independent verification.`;
 
@@ -225,14 +227,28 @@ FRIHET_DEMO=1 is fixture-only and cannot verify live operations. Hosting, OAuth,
 export function applyClaudeCandidateProfile(server: any): void {
   const registerTool = server.registerTool.bind(server);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  server.registerTool = (name: string, ...args: any[]) =>
-    CLAUDE_CANDIDATE_TOOLS.has(name) ? registerTool(name, ...args) : undefined;
+  server.registerTool = (name: string, config: any, handler: any) => {
+    if (!CLAUDE_CANDIDATE_TOOLS.has(name)) return undefined;
+    return registerTool(name, {
+      ...config,
+      description: `${config.description ?? ""} Claude omits sensitive output fields under the shared redaction policy.`,
+      ...(config.outputSchema ? { outputSchema: claudeOutputSchema(config.outputSchema) } : {}),
+    }, async (...args: any[]) => {
+      try { return claudeToolResult(await handler(...args)); }
+      catch {
+        return claudeToolResult({ isError: true, _meta: { "io.frihet/operationOutcomeUnknown": true } });
+      }
+    });
+  };
 
   const registerResource = server.registerResource.bind(server);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  server.registerResource = (name: string, uri: unknown, ...args: any[]) =>
+  server.registerResource = (name: string, uri: unknown, config: any, handler: any) =>
     typeof uri === "string" && CLAUDE_CANDIDATE_RESOURCES.has(uri)
-      ? registerResource(name, uri, ...args) : undefined;
+      ? registerResource(name, uri, config, async (...args: any[]) => {
+        try { return claudeResourceResult(await handler(...args), uri); }
+        catch { throw new Error("Claude resource response withheld by the privacy boundary"); }
+      }) : undefined;
 
   const registerPrompt = server.registerPrompt.bind(server);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
