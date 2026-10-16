@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "f0c6cc0a19825f9a9e67397c3946be2a3fa42b878b13709e318275ee3c2faafc", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test, the Claude write-route wire contract test; no new deps, lifecycle or network script
+  "package.json": "2020fb9e343c3eefa8880f42a5016fa19dc482161dea9733c2e07cc43b2c25df", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test, the Claude write-route wire contract test, Claude output privacy and bootstrap secret tests; no new deps, lifecycle or network script
   "workers/remote-mcp/package.json": "0248007796a87b37d4f7060566b48d767aa4dcdc7a70b9fdb5883387997d1c72", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -305,6 +305,8 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
+  "scripts/check-claude-bootstrap-secrets.mjs": "4d4700482718ea1ae88480dd215521f07dbc9e8342838775826a8846d20925e4", // local Claude bootstrap secret check; no network or raw credential output
+  "scripts/__tests__/claude-bootstrap-secrets.test.mjs": "90159f0a689cb8f5d6ffc6630871b0b596510b1e9f24e32adbdfe4dc2c779095", // local Claude bootstrap secret check; no network or raw credential output
   "scripts/check-claude-hosted-release.mjs": "c8f2d8492b6334a6acece19d2df8ba3e73fccb16143989c0d1d6c9e3a9f37bd7", // isolated Claude build and release boundary; deploy also requires an ERP release receipt for the Claude write ceiling (local git and file reads, no network)
   "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
   "scripts/__tests__/claude-hosted-release.test.mjs": "cbf9a3b309c7bb0599f7cb7c4de9115ad4712cf5e53a5a0296d2d70cc27e656e", // isolated Claude build and release boundary; ERP ceiling receipt cases
