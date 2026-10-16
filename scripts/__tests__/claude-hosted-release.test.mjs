@@ -74,15 +74,23 @@ function erpRelease({ routes = CONTRACT_ROUTES, wired = true } = {}) {
     kind: "frihet-production-firebase-release-receipt",
     status: "deployed",
     operation: "deploy",
+    project: "gen-lang-client-0335716041",
     sourceSha,
     functionsTree: git("rev-parse", "HEAD:functions"),
     functions: {
+      candidate: { sha256: "a".repeat(64) },
       mutations: [{
         target: "publicApi",
         region: "europe-west1",
         action: "UPDATE",
         candidateSourceSha256: "a".repeat(64),
-        after: { presence: "present", sourceSha256: "a".repeat(64) },
+        after: {
+          presence: "present",
+          sourceSha256: "a".repeat(64),
+          versionId: "2",
+          configSha256: "b".repeat(64),
+          iamSha256: "c".repeat(64),
+        },
       }],
     },
   });
@@ -108,13 +116,26 @@ test("Claude deploy requires a verified ERP release receipt that deployed the ma
       ["kind", (r) => signed({ ...r, kind: "other-receipt" }), /receipt kind/u],
       ["status", (r) => signed({ ...r, status: "in_progress" }), /receipt status/u],
       ["operation", (r) => signed({ ...r, operation: "rollback" }), /receipt operation/u],
+      ["project", (r) => signed({ ...r, project: "another-project" }), /receipt project/u],
       ["digest", (r) => ({ ...r, status: "deployed", sourceSha: r.sourceSha, functionsTree: "0".repeat(40) }), /receipt digest/u],
-      ["no publicApi", (r) => signed({ ...r, functions: { mutations: [{ ...r.functions.mutations[0], target: "otherFunction" }] } }), /no post-verified publicApi deploy/u],
-      ["unverified source", (r) => signed({ ...r, functions: { mutations: [{ ...r.functions.mutations[0], after: { presence: "present", sourceSha256: "b".repeat(64) } }] } }), /no post-verified publicApi deploy/u],
+      ["candidate artifact", (r) => signed({ ...r, functions: { ...r.functions, candidate: { sha256: "b".repeat(64) } } }), /no post-verified publicApi deploy/u],
+      ["missing artifact", (r) => signed({ ...r, functions: { ...r.functions, candidate: undefined } }), /candidate artifact digest/u],
+      ["invalid artifact digest", (r) => signed({ ...r, functions: { ...r.functions, candidate: { sha256: "not-a-digest" } } }), /candidate artifact digest/u],
       ["tree", (r) => signed({ ...r, functionsTree: "0".repeat(40) }), /functions tree/u],
       ["unknown commit", (r) => signed({ ...r, sourceSha: "f".repeat(40) }), /./u],
     ]) {
       assert.throws(() => assertErpCeilingDeployed(mutate(release.receipt), release.root, CONTRACT_ROUTES), pattern, label);
+    }
+    for (const [label, mutate] of [
+      ["no publicApi", (m) => { m.target = "otherFunction"; }],
+      ["wrong region", (m) => { m.region = "us-central1"; }],
+      ["missing region", (m) => { delete m.region; }],
+      ["unverified source", (m) => { m.after.sourceSha256 = "b".repeat(64); }],
+      ["resource path is not a target name", (m) => { m.target = "projects/gen-lang-client-0335716041/locations/europe-west1/functions/publicApi"; }],
+    ]) {
+      const candidate = structuredClone(release.receipt);
+      mutate(candidate.functions.mutations[0]);
+      assert.throws(() => assertErpCeilingDeployed(signed(candidate), release.root, CONTRACT_ROUTES), /no post-verified publicApi deploy/u, label);
     }
   } finally {
     release.cleanup();
@@ -130,5 +151,44 @@ test("Claude deploy requires a verified ERP release receipt that deployed the ma
     } finally {
       drifted.cleanup();
     }
+  }
+});
+
+test("Claude deploy refuses runtime recipes even when the control commit contains the ceiling", () => {
+  const release = erpRelease();
+  try {
+    const git = (...args) => execFileSync("git", ["-C", release.root, ...args], { encoding: "utf8" }).trim();
+    writeFileSync(join(release.root, "functions/src/publicApi.ts"), "// Runtime without the Claude write ceiling.\n");
+    git("add", ".");
+    git("-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-q", "-m", "other runtime");
+    const runtimeSha = git("rev-parse", "HEAD");
+    assert.notEqual(runtimeSha, release.receipt.sourceSha);
+    for (const repositorySha of [runtimeSha, release.receipt.sourceSha]) {
+      const runtimeSource = {
+        recipeSha256: "c".repeat(64),
+        baseline: { repositorySha: runtimeSha },
+        build: {
+          repositorySha,
+          repositoryTree: git("rev-parse", `${repositorySha}^{tree}`),
+          reviewedDeltaSha: release.receipt.sourceSha,
+          sourceDeltaSha256: "d".repeat(64),
+          replacementArchiveSha256: "e".repeat(64),
+        },
+      };
+      for (const variant of [
+        { scope: "p0-fiscal-source-20260930", target: "publicApi", runtimeSource },
+        { scope: "p0-fiscal-source-20260930", target: "publicApi" },
+        { runtimeSource },
+      ]) {
+        assert.throws(
+          () => assertErpCeilingDeployed(signed({ ...release.receipt, ...variant }), release.root, CONTRACT_ROUTES),
+          /runtime provenance requires a direct-source release/u,
+        );
+      }
+    }
+    // Source inspection must use the receipt commit, independent of checkout HEAD.
+    assert.doesNotThrow(() => assertErpCeilingDeployed(release.receipt, release.root, CONTRACT_ROUTES));
+  } finally {
+    release.cleanup();
   }
 });

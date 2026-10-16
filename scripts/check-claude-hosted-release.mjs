@@ -46,6 +46,8 @@ export function readClaudeConfiguration() {
 }
 
 const RELEASE_RECEIPT_KIND = "frihet-production-firebase-release-receipt";
+const ERP_PROJECT = "gen-lang-client-0335716041";
+const ERP_REGION = "europe-west1";
 const WRITE_ROUTE_FIXTURE = fileURLToPath(new URL("../src/__tests__/fixtures/claude-write-route-contract.json", import.meta.url));
 
 function stable(value) {
@@ -68,8 +70,12 @@ export function erpCeilingRoutes(source) {
  * accessProfile "claude" was deployed. `receipt` is the Frihet-ERP Firebase
  * production release receipt that deployed `publicApi`; `erpRoot` is a local
  * Frihet-ERP checkout holding its source commit. The receipt must be a finalized
- * deploy whose digest verifies, whose functions tree is the tree of its source
- * commit, and which records a post-verified publicApi deploy. At that commit,
+ * direct-source deploy whose digest verifies, whose functions tree is the tree
+ * of its source commit, and which records a post-verified publicApi deploy in
+ * the exact production project/region. Restricted releases with a runtimeSource
+ * recipe are not accepted: their sourceSha identifies control code, not the
+ * assembled deployed artifact, which requires a separate artifact verifier.
+ * At the direct-source commit,
  * publicApi.ts must reference `isClaudeWriteRouteAllowed(` (a text check) and
  * claudeWriteRoutes.ts must list exactly the routes of the committed Claude
  * contract fixture. A receipt proves that a release deployed the ceiling, not
@@ -81,14 +87,24 @@ export function assertErpCeilingDeployed(receipt, erpRoot, contractRoutes) {
   assert.equal(receipt.kind, RELEASE_RECEIPT_KIND, "ERP release receipt kind");
   assert.equal(receipt.operation, "deploy", "ERP release receipt operation");
   assert.equal(receipt.status, "deployed", "ERP release receipt status");
+  assert.equal(receipt.project, ERP_PROJECT, "ERP release receipt project");
   const { receiptSha256, ...unsigned } = receipt;
   assert.equal(receiptSha256, createHash("sha256").update(JSON.stringify(stable(unsigned))).digest("hex"), "ERP release receipt digest");
+  // receiptBase emits none of these fields for direct-source releases. The
+  // p0-fiscal-source-20260930 variant instead assembles a runtime recipe, even
+  // when its build.repositorySha happens to equal its control sourceSha.
+  assert.ok(
+    !["runtimeSource", "scope", "target"].some((key) => Object.hasOwn(receipt, key)),
+    "ERP release receipt runtime provenance requires a direct-source release; split runtime recipes are not verified",
+  );
+  assert.match(receipt.functions?.candidate?.sha256 ?? "", /^[0-9a-f]{64}$/u, "ERP release receipt candidate artifact digest");
   assert.ok(
     (receipt.functions?.mutations ?? []).some((mutation) =>
       mutation?.target === "publicApi"
+      && mutation.region === ERP_REGION
       && (mutation.action === "UPDATE" || mutation.action === "CREATE")
       && mutation.after?.presence === "present"
-      && typeof mutation.candidateSourceSha256 === "string"
+      && mutation.candidateSourceSha256 === receipt.functions.candidate.sha256
       && mutation.after.sourceSha256 === mutation.candidateSourceSha256),
     "ERP release receipt records no post-verified publicApi deploy",
   );
