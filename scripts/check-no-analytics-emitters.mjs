@@ -305,9 +305,9 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
-  "scripts/check-claude-hosted-release.mjs": "c29138db60fed098c9bd56afcbfb3eac3e090c58cf4eca7275bd1aab34d19721", // isolated Claude build and release boundary; deploy also requires an ERP release receipt for the Claude write ceiling (local git and file reads, no network)
+  "scripts/check-claude-hosted-release.mjs": "c8f2d8492b6334a6acece19d2df8ba3e73fccb16143989c0d1d6c9e3a9f37bd7", // isolated Claude build and release boundary; deploy also requires an ERP release receipt for the Claude write ceiling (local git and file reads, no network)
   "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
-  "scripts/__tests__/claude-hosted-release.test.mjs": "580f5ca44d5ffb6857772b08be1580f2b70e0a27e19fe0c3e6289bc68e5d349a", // isolated Claude build and release boundary; ERP ceiling receipt cases
+  "scripts/__tests__/claude-hosted-release.test.mjs": "cbf9a3b309c7bb0599f7cb7c4de9115ad4712cf5e53a5a0296d2d70cc27e656e", // isolated Claude build and release boundary; ERP ceiling receipt cases
   "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
