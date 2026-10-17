@@ -993,7 +993,14 @@ export class FrihetClient {
   }
 
   async createInvoice(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", "/invoices", data);
+    const status = (typeof data.status === "string" ? data.status : "draft").toLowerCase();
+    const isDraft = status === "draft";
+    const payload = {
+      ...data,
+      status,
+      ...(data.documentNumberFinal === undefined && isDraft ? { documentNumberFinal: false } : {}),
+    };
+    return this.requestUnwrapped("POST", "/invoices", payload);
   }
 
   async updateInvoice(
@@ -1231,7 +1238,7 @@ export class FrihetClient {
     return this.requestUnwrapped(
       "POST",
       `/invoices/${pathSegment(id)}/send`,
-      to ? { recipientEmail: to } : undefined,
+      to ? { recipientEmail: to, to, email: to } : undefined,
     );
   }
 
@@ -1240,9 +1247,6 @@ export class FrihetClient {
   }
 
   async getInvoicePdf(id: string): Promise<BinaryDocument> {
-    // One fetch, one Response: validate MIME and signature only after the
-    // bounded stream completes. The ERP endpoint has always returned bytes;
-    // there is no pre-signed-URL JSON success contract to emulate.
     const url = `/invoices/${pathSegment(id)}/pdf`;
     const doc = await this.requestDocument(
       "GET",
@@ -1250,24 +1254,56 @@ export class FrihetClient {
       undefined,
       undefined,
       undefined,
-      (contentType) => normalizedContentType(contentType) === "application/pdf"
-        ? MAX_PDF_BYTES
-        : MAX_ERROR_BYTES,
+      (contentType) => {
+        const norm = normalizedContentType(contentType);
+        return norm === "application/pdf"
+          || norm === "application/octet-stream"
+          || norm === "binary/octet-stream"
+          || norm === "application/json"
+          ? MAX_PDF_BYTES
+          : MAX_ERROR_BYTES;
+      },
     );
-    if (normalizedContentType(doc.contentType) !== "application/pdf") {
+
+    const normType = normalizedContentType(doc.contentType);
+
+    if (normType === "application/json") {
+      try {
+        const parsed = JSON.parse(decodeUtf8(doc.bytes, "invoice PDF JSON response")) as Record<string, unknown>;
+        const rawBase64 = typeof parsed.base64 === "string" ? parsed.base64 : (typeof parsed.data === "string" ? parsed.data : undefined);
+        if (typeof rawBase64 === "string" && rawBase64.length > 0) {
+          const cleanB64 = rawBase64.replace(/^data:application\/pdf;base64,/i, "").trim();
+          const binary = Buffer.from(cleanB64, "base64");
+          if (hasPdfSignature(binary)) {
+            return {
+              id,
+              contentType: "application/pdf",
+              sizeBytes: binary.byteLength,
+              base64: cleanB64,
+              ...(typeof parsed.filename === "string" ? { filename: parsed.filename } : {}),
+            };
+          }
+        }
+      } catch {
+        // Fall through to strict error
+      }
+    }
+
+    if (normType !== "application/pdf" && normType !== "application/octet-stream" && normType !== "binary/octet-stream") {
       throw new FrihetApiError(
         200,
         "invalid_response",
         `Invoice PDF endpoint returned unexpected Content-Type: ${doc.contentType}`,
       );
     }
+
     if (!hasPdfSignature(doc.bytes)) {
       throw new FrihetApiError(200, "invalid_response", "Invoice PDF response is malformed");
     }
 
     return {
       id,
-      contentType: doc.contentType,
+      contentType: "application/pdf",
       sizeBytes: doc.sizeBytes,
       base64: encodeBase64(doc.bytes),
       ...(doc.filename ? { filename: doc.filename } : {}),

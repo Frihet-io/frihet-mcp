@@ -18,6 +18,13 @@ const addressSchema = z
   .optional()
   .describe("Client address / Direccion del cliente");
 
+function normalizeClientRecord(clientRecord: Record<string, unknown>): Record<string, unknown> {
+  if (clientRecord && typeof clientRecord === "object" && typeof clientRecord.address === "string") {
+    return { ...clientRecord, address: { street: clientRecord.address } };
+  }
+  return clientRecord;
+}
+
 export function registerClientTools(server: McpServer, client: IFrihetClient): void {
   // -- list_clients --
 
@@ -54,9 +61,39 @@ export function registerClientTools(server: McpServer, client: IFrihetClient): v
       outputSchema: paginatedOutput(clientItemOutput, { projectable: true }),
     },
     async ({ limit, offset, q, stage, fields, after }) => withToolLogging("list_clients", async () => {
-      const result = await client.listClients({ limit, offset, after, fields, q, stage });
+      let result = await client.listClients({ limit, offset, after, fields, q, stage });
+
+      // When a concatenated / camelCase query (e.g. "CanariasBlue") yields zero total matches
+      // across the database, retry with split tokens ("Canarias Blue") using the exact same
+      // pagination parameters (limit, offset, after, fields, stage).
+      // This guarantees the search criteria remains coherent across page 1, page 2, and all pages.
+      let usedFallback = false;
+      const trimmedQ = q?.trim();
+      const splitQ = trimmedQ ? trimmedQ.replace(/([a-z0-9])([A-Z])/g, "$1 $2") : undefined;
+      const canFallback = splitQ !== undefined && splitQ !== trimmedQ;
+      const hasZeroTotalMatches = result.data.length === 0 && (result.total === 0 || result.total === undefined);
+
+      if (canFallback && hasZeroTotalMatches) {
+        try {
+          const fallbackResult = await client.listClients({ limit, offset, after, fields, q: splitQ, stage });
+          if (fallbackResult?.data && (fallbackResult.data.length > 0 || (fallbackResult.total !== undefined && fallbackResult.total > 0))) {
+            result = fallbackResult;
+            usedFallback = true;
+          }
+        } catch {
+          // Preserve original response if fallback fails
+        }
+      }
+      if (Array.isArray(result?.data)) {
+        result = {
+          ...result,
+          data: result.data.map((c) => (c && typeof c === "object" ? normalizeClientRecord(c as Record<string, unknown>) : c)),
+        };
+      }
+
+      const fallbackNote = usedFallback ? ` (criterio aplicado: "${splitQ}")` : "";
       return {
-        content: [listContent(formatPaginatedResponse("clients", result))],
+        content: [listContent(formatPaginatedResponse("clients", result) + fallbackNote)],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }),
@@ -78,7 +115,7 @@ export function registerClientTools(server: McpServer, client: IFrihetClient): v
       outputSchema: clientItemOutput,
     },
     async ({ id }) => withToolLogging("get_client", async () => {
-      const result = await client.getClient(id);
+      const result = normalizeClientRecord(await client.getClient(id));
       return {
         content: [getContent(formatRecord("Client", result))],
         structuredContent: result as unknown as Record<string, unknown>,
