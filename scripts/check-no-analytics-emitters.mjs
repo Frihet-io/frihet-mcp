@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "54152a43584f960c4c58e6d3f7c93e7e2f7e1641d89e75bac91a9060446f5170", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands; no new deps, lifecycle or network script
+  "package.json": "1cbf12dfbbf0e8beab68a368905f2e5d288038f2f3c22b2e61363e75cfe35f14", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands; no new deps, lifecycle or network script
   "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -299,6 +299,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
+  "scripts/__tests__/no-public-leak.test.mjs": "8e39d519a49cf19a88902f9038919361da664410cecbf78d594cf0350f1028cd", // synthetic credential tripwire regression; reports paths, never values
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
   ".github/workflows/ci.yml": "e77888420f0874d90c2ae001b587a07b394b5e57bdf83dbb9e90dd41908e99a0",
@@ -326,7 +327,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/generate-openai-submission.mjs": "4514b4f3099d5cb645e399367f0624c4b05d7192b004e68441295a00e56b90d7",
   "scripts/generate-public-capability-contract.mjs": "7c6f08e3a28c9bc2cd50a9e791571eaf4987b2c618f4c614ae55c9ed811cf1f2",
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
-  "scripts/no-public-leak.sh": "3d8a6ed03e1df5d82bb811f4183706fd3d173d8ae8a1d7a401f530c28ce2631c",
+  "scripts/no-public-leak.sh": "168718b79ae54ff4b37be5522c66baf064c1462ced64c466edf6a9536bfd5a5b",
   "scripts/postinstall.js": "02947d11d324048f69bc92d253d7c41f947aa338d1d6315b1579492689d462e3",
   "scripts/published-artifact-drift.mjs": "29435fd9b25625db5f6835e0b11b0528daf7345eef1421c6c826879be00b4f95",
   "scripts/sync-openapi.mjs": "3d72c61a014b53887906fade05a13631e06d47977891b4b4fdb9a337322a4f32",
