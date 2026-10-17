@@ -469,37 +469,98 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           isError: true,
         };
       }
-      let recipientEmail = to ? to.trim() : undefined;
-      if (recipientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
-        return {
-          content: [{ type: "text" as const, text: `Error: invalid recipient email address format: "${recipientEmail}".` }],
-          isError: true,
-        };
-      }
-      if (!recipientEmail) {
-        const clientId = typeof invoice["clientId"] === "string" ? invoice["clientId"] : undefined;
-        if (!clientId) {
+      const isValidRecipientEmail = (email: string): boolean =>
+        email.length <= 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+      let recipientEmail: string | undefined;
+      if (to !== undefined) {
+        const trimmedTo = to.trim();
+        if (!trimmedTo || !isValidRecipientEmail(trimmedTo)) {
           return {
-            content: [{ type: "text" as const, text: "Error: this invoice has no linked client with a saved email address." }],
+            content: [{ type: "text" as const, text: `Error: invalid recipient email address format: "${trimmedTo}".` }],
             isError: true,
           };
         }
-        const linkedClient = await client.getClient(clientId);
-        recipientEmail = typeof linkedClient["email"] === "string" && linkedClient["email"].trim()
-          ? linkedClient["email"].trim()
-          : undefined;
+        recipientEmail = trimmedTo;
+      }
+
+      if (!recipientEmail) {
+        const clientId =
+          typeof invoice["clientId"] === "string" && invoice["clientId"].trim()
+            ? invoice["clientId"].trim()
+            : undefined;
+        if (clientId) {
+          const linkedClient = await client.getClient(clientId);
+          const clientEmail =
+            typeof linkedClient["email"] === "string" && linkedClient["email"].trim()
+              ? linkedClient["email"].trim()
+              : undefined;
+          if (clientEmail) {
+            if (!isValidRecipientEmail(clientEmail)) {
+              return {
+                content: [{ type: "text" as const, text: `Error: invalid recipient email address format: "${clientEmail}".` }],
+                isError: true,
+              };
+            }
+            recipientEmail = clientEmail;
+          }
+        }
+
         if (!recipientEmail) {
+          const docFallbackEmail =
+            typeof invoice["clientEmail"] === "string" && invoice["clientEmail"].trim()
+              ? invoice["clientEmail"].trim()
+              : typeof invoice["email"] === "string" && invoice["email"].trim()
+                ? invoice["email"].trim()
+                : undefined;
+
+          if (docFallbackEmail) {
+            if (!isValidRecipientEmail(docFallbackEmail)) {
+              return {
+                content: [{ type: "text" as const, text: `Error: invalid recipient email address format: "${docFallbackEmail}".` }],
+                isError: true,
+              };
+            }
+            const fallbackMsg =
+              `Error: the linked client has no current email address; only a document-level fallback email ("${docFallbackEmail}") was found on the invoice, which may be outdated. ` +
+              `Confirm this specific recipient with the user and re-run with to="${docFallbackEmail}" and confirm=true to send. / ` +
+              `El cliente vinculado no tiene email actual; la factura conserva el correo documental "${docFallbackEmail}", que podria estar obsoleto. Confirma este destinatario concreto y vuelve a llamar con to="${docFallbackEmail}" y confirm=true.`;
+            return {
+              content: [{ type: "text" as const, text: fallbackMsg }],
+              structuredContent: {
+                success: false,
+                id,
+                message: fallbackMsg,
+                effectiveRecipient: docFallbackEmail,
+                recipientSource: "document_fallback",
+                requiresExplicitRecipientConfirmation: true,
+              },
+              isError: true,
+            };
+          }
+
           return {
-            content: [{ type: "text" as const, text: "Error: the linked client has no saved email address." }],
+            content: [
+              {
+                type: "text" as const,
+                text: clientId
+                  ? "Error: the linked client has no saved email address."
+                  : "Error: this invoice has no linked client with a saved email address.",
+              },
+            ],
             isError: true,
           };
         }
       }
 
       const result = await client.sendInvoice(id, recipientEmail);
+      const enrichedResult: Record<string, unknown> = {
+        ...(result && typeof result === "object" ? (result as Record<string, unknown>) : {}),
+        effectiveRecipient: recipientEmail,
+      };
       return {
-        content: [mutateContent(formatRecord("Invoice sent", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
+        content: [mutateContent(formatRecord("Invoice sent", enrichedResult))],
+        structuredContent: enrichedResult,
       };
     }),
   );

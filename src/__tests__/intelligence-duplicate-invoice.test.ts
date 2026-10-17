@@ -135,4 +135,107 @@ describe("duplicate_invoice — allowlist pick", () => {
     assert.equal(captured.body!.issueDate, "2026-07-01");
     assert.equal(captured.body!.dueDate, "2026-08-01");
   });
+
+  test("strips null optional fields, calculated line-item fields, structured address extras, and rejects invalid calendar newIssueDate", async () => {
+    const captured: { body?: Record<string, unknown>; calls: number } = { calls: 0 };
+    const server = new StubMcpServer();
+    const client = {
+      getInvoice: async (_id: string) => ({
+        id: "inv_nulls",
+        documentNumber: "2026-0099",
+        documentNumberFinal: true,
+        status: "sent",
+        clientName: "Nulls & Extras S.L.",
+        clientId: "",
+        clientTaxId: null,
+        notes: null,
+        seriesId: null,
+        dueDate: null,
+        taxRate: 7,
+        irpfRate: 15,
+        equivalenceSurchargeRate: 0,
+        clientLocation: "canarias",
+        operationType: "service",
+        fiscalTreatment: "not_subject_location",
+        verifactu: { hash: "deadbeef", chained: true },
+        eInvoice: { status: "submitted" },
+        payments: [{ amount: 500, date: "2026-10-01" }],
+        amountPaid: 500,
+        clientAddress: {
+          street: " Calle Real 10 ",
+          city: "Arrecife",
+          zip: "35500",
+          province: "Las Palmas",
+          countryCode: "ES",
+          extraUiField: "must_be_stripped",
+          state: null,
+        },
+        items: [
+          {
+            id: "item_1",
+            description: "Maintenance",
+            quantity: 3,
+            unitPrice: 150,
+            total: 450,
+            taxRate: 7,
+            discount: 0,
+            productId: "prod_99",
+          },
+        ],
+      }),
+      createInvoice: async (data: Record<string, unknown>) => {
+        captured.calls += 1;
+        captured.body = data;
+        return { id: "inv_dup_clean", status: "draft", notes: null, dueDate: null, ...data };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+
+    const { registerIntelligenceTools } = await import("../tools/intelligence.js");
+    registerIntelligenceTools(
+      server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
+      client,
+    );
+
+    const tool = server.tools.get("duplicate_invoice")!;
+
+    // 1. Calendar-invalid newIssueDate must fail closed before calling getInvoice / createInvoice
+    const invalidDateRes = await tool.handler({ id: "inv_nulls", newIssueDate: "2026-02-31" });
+    assert.equal(invalidDateRes.isError, true);
+    assert.equal(captured.calls, 0);
+
+    // 2. Valid call sanitizes null fields, calculated item fields, and issued VeriFactu metadata
+    const res = await tool.handler({ id: "inv_nulls", newIssueDate: "2026-10-17" });
+    assert.notEqual(res.isError, true);
+    assert.equal(captured.calls, 1);
+    const body = captured.body!;
+    assert.equal("notes" in body, false, "null notes must be omitted");
+    assert.equal("clientTaxId" in body, false, "null clientTaxId must be omitted");
+    assert.equal("seriesId" in body, false, "null seriesId must be omitted");
+    assert.equal("dueDate" in body, false, "null dueDate must be omitted");
+    assert.equal("clientId" in body, false, "empty clientId must be omitted");
+    assert.equal("documentNumber" in body, false, "documentNumber must never be copied");
+    assert.equal("documentNumberFinal" in body, false, "documentNumberFinal must never be copied");
+    assert.equal("verifactu" in body, false, "verifactu state must never be copied");
+    assert.equal("eInvoice" in body, false, "eInvoice state must never be copied");
+    assert.equal("payments" in body, false, "payments must never be copied");
+    assert.equal(body.status, "draft", "status must always be forced to draft");
+    assert.deepEqual(body.clientAddress, {
+      street: "Calle Real 10",
+      city: "Arrecife",
+      zip: "35500",
+      province: "Las Palmas",
+      countryCode: "ES",
+    });
+    assert.deepEqual(body.items, [
+      {
+        id: "item_1",
+        description: "Maintenance",
+        quantity: 3,
+        unitPrice: 150,
+      },
+    ]);
+    // Null fields echoed by createInvoice are stripped from structuredContent so invoiceItemOutput validates
+    assert.equal("notes" in (res.structuredContent ?? {}), false);
+    assert.equal("dueDate" in (res.structuredContent ?? {}), false);
+  });
 });

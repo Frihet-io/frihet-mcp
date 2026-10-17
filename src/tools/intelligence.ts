@@ -248,11 +248,36 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
       ),
     },
     async ({ id, newIssueDate, newDueDate }) => withToolLogging("duplicate_invoice", async () => {
-      // 1. Fetch the original invoice (returns the FULL raw stored document —
+      // 1. Validate caller-supplied newIssueDate before touching the API.
+      if (newIssueDate !== undefined) {
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(newIssueDate);
+        const validCalendar = (() => {
+          if (!match) return false;
+          const y = Number(match[1]);
+          const m = Number(match[2]);
+          const d = Number(match[3]);
+          if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+          const dt = new Date(Date.UTC(y, m - 1, d));
+          return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+        })();
+        if (!validCalendar) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Error: invalid newIssueDate "${newIssueDate}". Use a real calendar date in YYYY-MM-DD format.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      // 2. Fetch the original invoice (returns the FULL raw stored document —
       //    payments, verifactu, eInvoice, createdBy, etc.)
       const original = await client.getInvoice(id);
 
-      // 2. Allowlist-PICK only the fields the create endpoint actually accepts.
+      // 3. Allowlist-PICK only the fields the create endpoint actually accepts.
       //    The create POST validates against a Zod `.strict()` schema that
       //    REJECTS unknown keys (HTTP 400). Spreading the raw GET doc and only
       //    blacklisting a handful of fields left stored-only fields (payments,
@@ -281,11 +306,57 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
         "seriesId",
       ] as const;
 
-      // 3. Build the duplicate from the writable subset + new values.
+      const ALLOWED_ADDRESS_KEYS = [
+        "street",
+        "city",
+        "zip",
+        "province",
+        "country",
+        "countryCode",
+        "state",
+        "postalCode",
+      ] as const;
+
+      // 4. Build the duplicate from the writable subset + new values.
+      //    Note: Firestore documents frequently store `null` for unset optional
+      //    fields (e.g. `notes: null`, `seriesId: null`, `clientTaxId: null`), and
+      //    stored `items` often carry computed/UI keys (`total`, `taxRate`,
+      //    `discount`, `productId`) that `invoiceItemSchema.strict()` rejects.
       const today = new Date().toISOString().split("T")[0];
-      const invoiceData: Record<string, unknown> = {};
+      const invoiceData: Record<string, unknown> = {
+        clientName: typeof original.clientName === "string" ? original.clientName : "",
+        items: [],
+      };
       for (const field of COPYABLE_INVOICE_FIELDS) {
-        if (original[field] !== undefined) invoiceData[field] = original[field];
+        const val = original[field];
+        if (val === undefined || val === null || val === "") continue;
+        if (field === "items") {
+          if (Array.isArray(val)) {
+            invoiceData.items = val
+              .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+              .map((rawItem) => ({
+                ...(typeof rawItem.id === "string" && rawItem.id.trim() ? { id: rawItem.id.trim() } : {}),
+                description: typeof rawItem.description === "string" ? rawItem.description : String(rawItem.description ?? ""),
+                quantity: typeof rawItem.quantity === "number" ? rawItem.quantity : Number(rawItem.quantity ?? 0),
+                unitPrice: typeof rawItem.unitPrice === "number" ? rawItem.unitPrice : Number(rawItem.unitPrice ?? 0),
+              }));
+          }
+          continue;
+        }
+        if (field === "clientAddress" && typeof val === "object" && !Array.isArray(val)) {
+          const addrObj = val as Record<string, unknown>;
+          const cleanAddr: Record<string, string> = {};
+          for (const k of ALLOWED_ADDRESS_KEYS) {
+            if (typeof addrObj[k] === "string" && (addrObj[k] as string).trim()) {
+              cleanAddr[k] = (addrObj[k] as string).trim();
+            }
+          }
+          if (Object.keys(cleanAddr).length > 0) {
+            invoiceData.clientAddress = cleanAddr;
+          }
+          continue;
+        }
+        invoiceData[field] = val;
       }
       invoiceData.status = "draft";
       invoiceData.issueDate = newIssueDate || today;
@@ -294,8 +365,16 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
         invoiceData.dueDate = newDueDate;
       }
 
-      // 4. Create the duplicate
-      const result = await client.createInvoice(invoiceData);
+      // 5. Create the duplicate (always as draft, never issued or sent)
+      const rawResult = await client.createInvoice(invoiceData);
+      const result: Record<string, unknown> = {
+        ...(rawResult && typeof rawResult === "object" ? (rawResult as Record<string, unknown>) : {}),
+      };
+      for (const nullableField of ["clientId", "issueDate", "dueDate", "status", "notes", "createdAt", "updatedAt"] as const) {
+        if (result[nullableField] === null) {
+          delete result[nullableField];
+        }
+      }
       return {
         content: [
           mutateContent(
@@ -303,7 +382,7 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
             `\n\nDuplicated from invoice ${id}. Status set to 'draft'. / Duplicada de la factura ${id}. Estado: borrador.`,
           ),
         ],
-        structuredContent: result as unknown as Record<string, unknown>,
+        structuredContent: result,
       };
     }),
   );

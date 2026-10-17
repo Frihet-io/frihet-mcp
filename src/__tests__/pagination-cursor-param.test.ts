@@ -31,6 +31,8 @@ import type { AddressInfo } from "node:net";
 
 import { FrihetClient } from "../client.js";
 import { registerClientTools } from "../tools/clients.js";
+import { registerVendorTools } from "../tools/vendors.js";
+import { clientItemOutput, vendorItemOutput, paginatedOutput } from "../tools/shared.js";
 import type { IFrihetClient } from "../client-interface.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
@@ -139,7 +141,7 @@ describe("Product active filter wire contract", () => {
   }
 });
 
-describe("Client search fallback pagination coherence", () => {
+describe("Client & Vendor search, normalization, and listResources limitation truthfulness", () => {
   test("list_clients applies consistent search criteria on page 1 and page 2 when query has zero total matches", async () => {
     const queriedTerms: string[] = [];
     const mockClient = {
@@ -177,7 +179,6 @@ describe("Client search fallback pagination coherence", () => {
     assert.equal(page1.structuredContent.total, 35);
     assert.equal(page1.structuredContent.data.length, 1);
     assert.equal(page1.structuredContent.data[0].id, "cli_1");
-    // Verify string address is normalized to object
     assert.deepEqual(page1.structuredContent.data[0].address, { street: "Calle Mayor 1" });
 
     // Page 2: with offset=20
@@ -186,9 +187,240 @@ describe("Client search fallback pagination coherence", () => {
     assert.equal(page2.structuredContent.data.length, 1);
     assert.equal(page2.structuredContent.data[0].id, "cli_21");
 
-    // Assert that Canarias Blue fallback was invoked for BOTH page 1 and page 2
     assert.ok(queriedTerms.includes("Canarias Blue|0"), "Page 1 must query split terms");
     assert.ok(queriedTerms.includes("Canarias Blue|20"), "Page 2 must query split terms with matching offset");
+  });
+
+  test("list_clients does NOT switch search criteria when total is undefined on page 2+, when truncated=true, or when after cursor is used with q", async () => {
+    const queriedTerms: string[] = [];
+    const mockClient = {
+      listClients: async (params: { q?: string; offset?: number; limit?: number; after?: string }) => {
+        queriedTerms.push(`${params.q}|${params.offset ?? 0}|${params.after ?? ""}`);
+        if (params.q === "TruncatedCorp") {
+          return {
+            data: [],
+            total: 0,
+            limit: params.limit ?? 20,
+            offset: params.offset ?? 0,
+            truncated: true,
+            meta: { requestId: "req_1" },
+          };
+        }
+        return { data: [], total: undefined as unknown as number, limit: params.limit ?? 20, offset: params.offset ?? 0 };
+      },
+    } as unknown as IFrihetClient;
+
+    const tools = new Map<string, (args: any) => Promise<any>>();
+    const fakeServer = {
+      registerTool: (name: string, _opts: unknown, handler: (args: any) => Promise<any>) => {
+        tools.set(name, handler);
+      },
+    } as unknown as McpServer;
+
+    registerClientTools(fakeServer, mockClient);
+    const listClientsTool = tools.get("list_clients")!;
+
+    // 1. Exhausted page 2 with undefined total
+    await listClientsTool({ q: "SLCanarias", offset: 20, limit: 20 });
+    assert.deepEqual(queriedTerms, ["SLCanarias|20|"], "Must not fallback when total is undefined on page 2+");
+
+    // 2. Truncated 500-doc scan: must NOT fallback, must strip undeclared `truncated`/`meta` from structuredContent,
+    //    and must disclose `truncated=true` in human-readable content.
+    queriedTerms.length = 0;
+    const truncRes = await listClientsTool({ q: "TruncatedCorp", offset: 0, limit: 20 });
+    assert.deepEqual(queriedTerms, ["TruncatedCorp|0|"], "Must not fallback when 500-doc scan is truncated");
+    assert.equal("truncated" in truncRes.structuredContent, false, "truncated must not leak into strict paginatedOutput structuredContent");
+    assert.equal("meta" in truncRes.structuredContent, false, "meta must not leak into strict paginatedOutput structuredContent");
+    assert.equal(paginatedOutput(clientItemOutput, { projectable: true }).safeParse(truncRes.structuredContent).success, true);
+    assert.match(truncRes.content[0].text, /500-document|500 documentos/i);
+
+    // 3. Combining q with after cursor: must NOT fallback and must warn that backend search ignores `after`
+    queriedTerms.length = 0;
+    const cursorSearchRes = await listClientsTool({ q: "CanariasBlue", after: "cur_1" });
+    assert.deepEqual(queriedTerms, ["CanariasBlue|0|cur_1"], "Must not fallback when after cursor is combined with q");
+    assert.match(cursorSearchRes.content[0].text, /ignores the 'after' cursor|ignora el cursor 'after'/i);
+  });
+
+  test("client normalization preserves identity, NIF backfill, projected fields, null scalars, and ERP zip/province/countryCode addresses", async () => {
+    const mockClient = {
+      listClients: async (params: { fields?: string }) => {
+        if (params.fields === "id,name") {
+          return {
+            data: [{ id: "cli_proj", name: "Projected Client" }],
+            total: 1,
+            limit: 20,
+            offset: 0,
+          };
+        }
+        return { data: [], total: 0, limit: 20, offset: 0 };
+      },
+      getClient: async (id: string) => {
+        if (id === "null_fields_and_nif") {
+          return {
+            id,
+            name: "Legacy Fiscal Client",
+            email: null,
+            phone: null,
+            stage: null,
+            taxId: null,
+            nif: "B99887766",
+            address: null,
+            createdAt: null,
+            updatedAt: null,
+            customAttr: "preserved",
+          };
+        }
+        return {
+          id,
+          name: "ERP Canonical Address Client",
+          taxId: "B12345678",
+          address: {
+            street: "Av. Maritima 10",
+            city: "Las Palmas",
+            province: "Las Palmas",
+            zip: "35001",
+            countryCode: "ES",
+          },
+        };
+      },
+      createClient: async (input: Record<string, unknown>) => ({
+        id: "cli_created",
+        ...input,
+        address: {
+          street: "Calle Triana 5",
+          city: "Las Palmas",
+          province: "Las Palmas",
+          zip: "35002",
+          country: "ES",
+          countryCode: "ES",
+        },
+      }),
+      updateClient: async (id: string, data: Record<string, unknown>) => ({
+        id,
+        name: "Updated Client",
+        ...data,
+        address: "Calle String Legacy 42",
+      }),
+    } as unknown as IFrihetClient;
+
+    const tools = new Map<string, (args: any) => Promise<any>>();
+    const fakeServer = {
+      registerTool: (name: string, _opts: unknown, handler: (args: any) => Promise<any>) => {
+        tools.set(name, handler);
+      },
+    } as unknown as McpServer;
+
+    registerClientTools(fakeServer, mockClient);
+
+    const projected = await tools.get("list_clients")!({ fields: "id,name" });
+    assert.deepEqual(projected.structuredContent.data[0], { id: "cli_proj", name: "Projected Client" });
+    assert.equal(paginatedOutput(clientItemOutput, { projectable: true }).safeParse(projected.structuredContent).success, true);
+
+    const legacy = await tools.get("get_client")!({ id: "null_fields_and_nif" });
+    assert.equal("address" in legacy.structuredContent, false);
+    assert.equal("email" in legacy.structuredContent, false);
+    assert.equal("phone" in legacy.structuredContent, false);
+    assert.equal("stage" in legacy.structuredContent, false);
+    assert.equal(legacy.structuredContent.taxId, "B99887766");
+    assert.equal(legacy.structuredContent.nif, "B99887766");
+    assert.equal(legacy.structuredContent.customAttr, "preserved");
+    assert.equal(clientItemOutput.safeParse(legacy.structuredContent).success, true);
+
+    const canonical = await tools.get("get_client")!({ id: "erp_addr" });
+    const parsedCanonical = clientItemOutput.safeParse(canonical.structuredContent);
+    assert.equal(parsedCanonical.success, true);
+    assert.equal(parsedCanonical.data?.address?.state, "Las Palmas");
+    assert.equal(parsedCanonical.data?.address?.postalCode, "35001");
+    assert.equal(parsedCanonical.data?.address?.country, "ES");
+
+    const created = await tools.get("create_client")!({ name: "New Client" });
+    const parsedCreated = clientItemOutput.safeParse(created.structuredContent);
+    assert.equal(parsedCreated.success, true);
+    assert.equal(parsedCreated.data?.address?.postalCode, "35002");
+    assert.equal(parsedCreated.data?.address?.state, "Las Palmas");
+
+    const updated = await tools.get("update_client")!({ id: "cli_1", phone: "+34600000000" });
+    const parsedUpdated = clientItemOutput.safeParse(updated.structuredContent);
+    assert.equal(parsedUpdated.success, true);
+    assert.deepEqual(parsedUpdated.data?.address, { street: "Calle String Legacy 42" });
+  });
+
+  test("vendor tools normalize string/null/ERP-canonical addresses, backfill taxId, and honor listResources search bounds", async () => {
+    const queriedVendors: string[] = [];
+    const mockClient = {
+      listVendors: async (params: { q?: string; offset?: number; limit?: number; after?: string }) => {
+        queriedVendors.push(`${params.q ?? ""}|${params.offset ?? 0}|${params.after ?? ""}`);
+        if (params.q === "Canarias_Blue") {
+          return { data: [], total: 0, limit: 20, offset: 0 };
+        }
+        if (params.q === "Canarias Blue") {
+          return {
+            data: [{
+              id: "ven_1",
+              name: "Canarias Blue Suministros",
+              email: null,
+              taxId: null,
+              cif: "B76543210",
+              address: "Poligono Industrial 3",
+            }],
+            total: 1,
+            limit: 20,
+            offset: 0,
+            truncated: true,
+          };
+        }
+        return { data: [], total: 0, limit: 20, offset: 0 };
+      },
+      getVendor: async (id: string) => ({
+        id,
+        name: "Proveedor Canarias",
+        address: { street: "Calle 1", province: "Santa Cruz de Tenerife", zip: "38001", countryCode: "ES" },
+      }),
+      createVendor: async (input: Record<string, unknown>) => ({
+        id: "ven_new",
+        ...input,
+        address: null,
+      }),
+      updateVendor: async (id: string, data: Record<string, unknown>) => ({
+        id,
+        name: "Proveedor Editado",
+        ...data,
+        address: "Av. Canarias 12",
+      }),
+    } as unknown as IFrihetClient;
+
+    const tools = new Map<string, (args: any) => Promise<any>>();
+    const fakeServer = {
+      registerTool: (name: string, _opts: unknown, handler: (args: any) => Promise<any>) => {
+        tools.set(name, handler);
+      },
+    } as unknown as McpServer;
+
+    registerVendorTools(fakeServer, mockClient);
+
+    const listed = await tools.get("list_vendors")!({ q: "Canarias_Blue" });
+    assert.ok(queriedVendors.includes("Canarias Blue|0|"));
+    assert.deepEqual(listed.structuredContent.data[0].address, { street: "Poligono Industrial 3" });
+    assert.equal(listed.structuredContent.data[0].taxId, "B76543210");
+    assert.equal("email" in listed.structuredContent.data[0], false);
+    assert.equal("truncated" in listed.structuredContent, false);
+    assert.match(listed.content[0].text, /500-document|500 documentos/i);
+    assert.equal(vendorItemOutput.safeParse(listed.structuredContent.data[0]).success, true);
+
+    const fetched = await tools.get("get_vendor")!({ id: "ven_1" });
+    const parsedFetched = vendorItemOutput.safeParse(fetched.structuredContent);
+    assert.equal(parsedFetched.success, true);
+    assert.equal(parsedFetched.data?.address?.state, "Santa Cruz de Tenerife");
+    assert.equal(parsedFetched.data?.address?.postalCode, "38001");
+    assert.equal(parsedFetched.data?.address?.country, "ES");
+
+    const created = await tools.get("create_vendor")!({ name: "Vendor Null Addr" });
+    assert.equal("address" in created.structuredContent, false);
+    assert.equal(vendorItemOutput.safeParse(created.structuredContent).success, true);
+
+    const updated = await tools.get("update_vendor")!({ id: "ven_1", phone: "+34928000000" });
+    assert.deepEqual(updated.structuredContent.address, { street: "Av. Canarias 12" });
+    assert.equal(vendorItemOutput.safeParse(updated.structuredContent).success, true);
   });
 });
 
