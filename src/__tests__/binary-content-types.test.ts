@@ -34,7 +34,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { FrihetClient, MAX_PDF_JSON_BYTES } from "../client.js";
+import { FrihetClient } from "../client.js";
 import type { IFrihetClient } from "../client-interface.js";
 import { registerInvoiceTools } from "../tools/invoices.js";
 import { einvoiceResultOutput, handleToolError, pdfResultOutput } from "../tools/shared.js";
@@ -120,36 +120,10 @@ before(async () => {
       res.end('{"data":');
       return;
     }
-    if (url.pathname === "/invoices/json_base64_pdf/pdf" && req.method === "GET") {
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ base64: PDF_BYTES.toString("base64"), filename: "custom.pdf" }));
-      return;
-    }
     if (url.pathname === "/invoices/octet_stream_pdf/pdf" && req.method === "GET") {
       res.setHeader("Content-Type", "application/octet-stream");
       res.setHeader("Content-Length", String(PDF_BYTES.byteLength));
       res.end(PDF_BYTES);
-      return;
-    }
-    if (url.pathname === "/invoices/json_invalid_base64_pdf/pdf" && req.method === "GET") {
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ base64: "bm90X2FfcGRm", filename: "bad.pdf" }));
-      return;
-    }
-    if (url.pathname === "/invoices/json_data_prefix_pdf/pdf" && req.method === "GET") {
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ base64: "data:application/octet-stream;base64," + PDF_BYTES.toString("base64"), filename: "prefixed.pdf" }));
-      return;
-    }
-    if (url.pathname === "/invoices/json_data_uri_generic_mime/pdf" && req.method === "GET") {
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ base64: "data:binary/octet-stream;base64," + PDF_BYTES.toString("base64") }));
-      return;
-    }
-    if (url.pathname === "/invoices/json_wire_oversize/pdf" && req.method === "GET") {
-      res.setHeader("Content-Type", "application/json");
-      res.setHeader("Content-Length", String(MAX_PDF_JSON_BYTES + 1));
-      res.end();
       return;
     }
 
@@ -536,17 +510,6 @@ describe("client.ts document responses (PDF / XML) — content-type aware", () =
     }
   });
 
-  test("JSON base64 PDF response decodes properly, respects 25 MiB cap, and satisfies pdfResultOutput", async () => {
-    const client = new FrihetClient("test_key", baseUrl);
-    const doc = await client.getInvoicePdf("json_base64_pdf");
-    assert.equal(doc.id, "json_base64_pdf");
-    assert.equal(doc.contentType, "application/pdf");
-    assert.equal(doc.sizeBytes, PDF_BYTES.byteLength);
-    assert.equal(doc.base64, PDF_BYTES.toString("base64"));
-    assert.equal(doc.filename, "custom.pdf");
-    assert.equal(pdfResultOutput.safeParse(doc).success, true);
-  });
-
   test("application/octet-stream response with %PDF- header is accepted and satisfies pdfResultOutput", async () => {
     const client = new FrihetClient("test_key", baseUrl);
     const doc = await client.getInvoicePdf("octet_stream_pdf");
@@ -554,47 +517,5 @@ describe("client.ts document responses (PDF / XML) — content-type aware", () =
     assert.equal(doc.contentType, "application/pdf");
     assert.equal(doc.sizeBytes, PDF_BYTES.byteLength);
     assert.equal(pdfResultOutput.safeParse(doc).success, true);
-  });
-
-  test("JSON response with invalid base64 (not a PDF) is rejected fail-closed", async () => {
-    const client = new FrihetClient("test_key", baseUrl);
-    await assert.rejects(
-      async () => client.getInvoicePdf("json_invalid_base64_pdf"),
-      (err: unknown) => {
-        assert.ok(err instanceof Error);
-        return true;
-      },
-    );
-  });
-
-  test("JSON response with data: URI prefix (any MIME) decodes to pure base64 without prefix", async () => {
-    const client = new FrihetClient("test_key", baseUrl);
-    const doc = await client.getInvoicePdf("json_data_prefix_pdf");
-    assert.equal(doc.id, "json_data_prefix_pdf");
-    assert.equal(doc.contentType, "application/pdf");
-    assert.equal(doc.sizeBytes, PDF_BYTES.byteLength);
-    // Crucial: base64 field must be PURE base64 without any data: prefix
-    assert.equal(doc.base64, PDF_BYTES.toString("base64"));
-    assert.equal(doc.base64.startsWith("data:"), false);
-    assert.equal(doc.filename, "prefixed.pdf");
-    assert.equal(pdfResultOutput.safeParse(doc).success, true);
-
-    // Also test generic binary/octet-stream MIME in data URI
-    const docGeneric = await client.getInvoicePdf("json_data_uri_generic_mime");
-    assert.equal(docGeneric.base64, PDF_BYTES.toString("base64"));
-    assert.equal(docGeneric.base64.startsWith("data:"), false);
-    assert.equal(pdfResultOutput.safeParse(docGeneric).success, true);
-  });
-
-  test("JSON response exceeding MAX_PDF_JSON_BYTES wire limit is rejected with 413 payload_too_large", async () => {
-    const client = new FrihetClient("test_key", baseUrl);
-    await assert.rejects(
-      async () => client.getInvoicePdf("json_wire_oversize"),
-      (err: Error & { statusCode?: number; errorCode?: string }) => {
-        assert.equal(err.statusCode, 413);
-        assert.equal(err.errorCode, "payload_too_large");
-        return true;
-      },
-    );
   });
 });

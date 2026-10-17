@@ -51,8 +51,6 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
  * — the user sees a clean error, the worker doesn't OOM.
  */
 export const MAX_PDF_BYTES = 25 * 1024 * 1024;
-/** Wire budget for JSON-wrapped base64 PDF responses (ceil(25 MiB * 4 / 3) + JSON envelope margin). */
-export const MAX_PDF_JSON_BYTES = Math.ceil((MAX_PDF_BYTES * 4) / 3) + 64 * 1024;
 export const MAX_XML_BYTES = 5 * 1024 * 1024;
 const MAX_ERROR_BYTES = 64 * 1024;
 
@@ -314,40 +312,6 @@ function encodeBase64(bytes: Uint8Array): string {
     encoded += hasThird ? BASE64_ALPHABET[chunk & 0x3f] : "=";
   }
   return encoded;
-}
-
-/** Decode base64 bytes without relying on Node's Buffer in browser/Worker runtimes. */
-function decodeBase64(base64: string): Uint8Array {
-  const clean = base64.replace(/^data:[^;,]*;?base64,/i, "").replace(/[\s\r\n]+/g, "");
-  if (typeof atob === "function") {
-    const binary = atob(clean);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes;
-  }
-  const lookup = new Uint8Array(256);
-  for (let i = 0; i < BASE64_ALPHABET.length; i++) {
-    lookup[BASE64_ALPHABET.charCodeAt(i)] = i;
-  }
-  const len = clean.length;
-  let placeholders = 0;
-  if (len > 0 && clean.charAt(len - 1) === "=") placeholders++;
-  if (len > 1 && clean.charAt(len - 2) === "=") placeholders++;
-  const byteLen = Math.max(0, Math.floor((len * 3) / 4) - placeholders);
-  const bytes = new Uint8Array(byteLen);
-  let cur = 0;
-  for (let i = 0; i < len; i += 4) {
-    const a = lookup[clean.charCodeAt(i)] ?? 0;
-    const b = lookup[clean.charCodeAt(i + 1)] ?? 0;
-    const c = lookup[clean.charCodeAt(i + 2)] ?? 0;
-    const d = lookup[clean.charCodeAt(i + 3)] ?? 0;
-    bytes[cur++] = (a << 2) | (b >> 4);
-    if (cur < byteLen) bytes[cur++] = ((b & 15) << 4) | (c >> 2);
-    if (cur < byteLen) bytes[cur++] = ((c & 3) << 6) | (d & 63);
-  }
-  return bytes;
 }
 
 export class FrihetApiError extends Error {
@@ -1276,6 +1240,10 @@ export class FrihetClient {
   }
 
   async getInvoicePdf(id: string): Promise<BinaryDocument> {
+    // One fetch, one Response: validate MIME and signature only after the
+    // bounded stream completes. The ERP endpoint has always returned raw bytes
+    // (functions/src/publicApi.ts:6149-6167); there is no pre-signed-URL or JSON
+    // success contract to emulate.
     const url = `/invoices/${pathSegment(id)}/pdf`;
     const doc = await this.requestDocument(
       "GET",
@@ -1289,46 +1257,11 @@ export class FrihetClient {
           || norm === "application/octet-stream"
           || norm === "binary/octet-stream"
           ? MAX_PDF_BYTES
-          : norm === "application/json"
-          ? MAX_PDF_JSON_BYTES
           : MAX_ERROR_BYTES;
       },
     );
 
     const normType = normalizedContentType(doc.contentType);
-
-    if (normType === "application/json") {
-      try {
-        const parsed = JSON.parse(decodeUtf8(doc.bytes, "invoice PDF JSON response")) as Record<string, unknown>;
-        const rawBase64 = typeof parsed.base64 === "string" ? parsed.base64 : (typeof parsed.data === "string" ? parsed.data : undefined);
-        if (typeof rawBase64 === "string" && rawBase64.length > 0) {
-          const cleanB64 = rawBase64.replace(/^data:[^;,]*;?base64,/i, "").replace(/[\s\r\n]+/g, "");
-          const binary = decodeBase64(cleanB64);
-          if (binary.byteLength > MAX_PDF_BYTES) {
-            throw new FrihetApiError(
-              413,
-              "payload_too_large",
-              `Decoded PDF document exceeds maximum allowed size of ${MAX_PDF_BYTES} bytes`,
-            );
-          }
-          if (hasPdfSignature(binary)) {
-            return {
-              id,
-              contentType: "application/pdf",
-              sizeBytes: binary.byteLength,
-              base64: cleanB64,
-              ...(typeof parsed.filename === "string" ? { filename: parsed.filename } : {}),
-            };
-          }
-        }
-      } catch (err) {
-        if (err instanceof FrihetApiError && err.statusCode === 413) {
-          throw err;
-        }
-        // Fall through to strict error
-      }
-    }
-
     if (normType !== "application/pdf" && normType !== "application/octet-stream" && normType !== "binary/octet-stream") {
       throw new FrihetApiError(
         200,

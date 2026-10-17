@@ -392,6 +392,22 @@ describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoi
     autoSend: z.boolean().default(false),
   }).strict();
 
+  function isRealCalendarDate(str: string): boolean {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+    if (!match) return false;
+    const y = Number(match[1]);
+    const m = Number(match[2]);
+    const d = Number(match[3]);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  }
+
+  const erpIsoDateOnlySchema = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use ISO date format YYYY-MM-DD")
+    .refine((s) => isRealCalendarDate(s), { message: "Not a valid calendar date" });
+
   // Verbatim resourceSchemas.invoices from publicApi.ts:910-960
   const erpInvoiceCreateSchema = z.object({
     clientName: z.string().max(10000),
@@ -401,7 +417,7 @@ describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoi
     documentNumber: z.string().max(50).optional(),
     documentNature: z.literal("complete").optional(),
     items: z.array(erpInvoiceItemSchema),
-    issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    issueDate: erpIsoDateOnlySchema.optional(),
     dueDate: z.string().max(10000).optional(),
     status: z.enum(["draft", "sent", "partial", "paid", "overdue", "cancelled"]).optional(),
     notes: z.string().max(10000).optional(),
@@ -468,6 +484,11 @@ describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoi
 
     const invalidBodyWithCurrency = { ...VALID_SYNTHETIC_INVOICE, currency: "EUR" };
     assert.equal(erpInvoiceCreateSchema.safeParse(invalidBodyWithCurrency).success, false);
+  });
+
+  test("createInvoice with calendar-invalid issueDate (e.g. 2026-02-31) is REJECTED by strict ERP schema", () => {
+    const invalidDateBody = { ...VALID_SYNTHETIC_INVOICE, issueDate: "2026-02-31" };
+    assert.equal(erpInvoiceCreateSchema.safeParse(invalidDateBody).success, false, "ERP schema must reject calendar-invalid dates");
   });
 
   test("sendInvoice sends ONLY recipientEmail without prohibited aliases (to, email)", async () => {
