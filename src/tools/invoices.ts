@@ -490,9 +490,21 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
             ? invoice["clientId"].trim()
             : undefined;
         if (clientId) {
-          const linkedClient = await client.getClient(clientId);
+          let linkedClient: Record<string, unknown> | undefined;
+          try {
+            linkedClient = await client.getClient(clientId);
+          } catch (err) {
+            const isNotFound =
+              typeof err === "object" &&
+              err !== null &&
+              "statusCode" in err &&
+              (err as { statusCode?: unknown }).statusCode === 404;
+            if (!isNotFound) {
+              throw err;
+            }
+          }
           const clientEmail =
-            typeof linkedClient["email"] === "string" && linkedClient["email"].trim()
+            linkedClient && typeof linkedClient["email"] === "string" && linkedClient["email"].trim()
               ? linkedClient["email"].trim()
               : undefined;
           if (clientEmail) {

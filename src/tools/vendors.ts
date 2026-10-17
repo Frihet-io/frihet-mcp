@@ -76,23 +76,57 @@ function normalizeVendorRecord(vendorRecord: Record<string, unknown>): Record<st
   }
 
   const rawAddress = out.address;
+  const rootStreet = typeof out.street === "string" && out.street.trim() ? out.street.trim() : undefined;
+  const rootCity = typeof out.city === "string" && out.city.trim() ? out.city.trim() : undefined;
+  const rootState =
+    typeof out.state === "string" && out.state.trim()
+      ? out.state.trim()
+      : typeof out.province === "string" && out.province.trim()
+        ? out.province.trim()
+        : undefined;
+  const rootPostalCode =
+    typeof out.postalCode === "string" && out.postalCode.trim()
+      ? out.postalCode.trim()
+      : typeof out.zip === "string" && out.zip.trim()
+        ? out.zip.trim()
+        : undefined;
+  const rootCountry =
+    typeof out.country === "string" && out.country.trim()
+      ? out.country.trim()
+      : typeof out.countryCode === "string" && out.countryCode.trim()
+        ? out.countryCode.trim()
+        : undefined;
 
-  if (rawAddress === undefined) {
-    return out;
-  }
+  const buildFlatAddress = (streetOverride?: string): Record<string, string> | undefined => {
+    const built: Record<string, string> = {};
+    const st = streetOverride ?? rootStreet;
+    if (st !== undefined) built.street = st;
+    if (rootCity !== undefined) built.city = rootCity;
+    if (rootState !== undefined) built.state = rootState;
+    if (rootPostalCode !== undefined) built.postalCode = rootPostalCode;
+    if (rootCountry !== undefined) built.country = rootCountry;
+    return Object.keys(built).length > 0 ? built : undefined;
+  };
 
-  if (rawAddress === null) {
-    delete out.address;
+  if (rawAddress === undefined || rawAddress === null) {
+    if (rawAddress === null) {
+      delete out.address;
+    }
+    const flatAddr = buildFlatAddress();
+    if (flatAddr) {
+      out.address = flatAddr;
+    }
     return out;
   }
 
   if (typeof rawAddress === "string") {
     const trimmed = rawAddress.trim();
-    if (!trimmed) {
+    const flatAddr = buildFlatAddress(trimmed || undefined);
+    if (!flatAddr) {
       delete out.address;
       return out;
     }
-    out.address = { street: trimmed };
+    out.address = flatAddr;
     return out;
   }
 
@@ -106,26 +140,32 @@ function normalizeVendorRecord(vendorRecord: Record<string, unknown>): Record<st
       }
     }
 
-    const street = typeof addrObj.street === "string" ? addrObj.street.trim() : undefined;
-    const city = typeof addrObj.city === "string" ? addrObj.city.trim() : undefined;
+    const street =
+      typeof addrObj.street === "string" && addrObj.street.trim()
+        ? addrObj.street.trim()
+        : rootStreet;
+    const city =
+      typeof addrObj.city === "string" && addrObj.city.trim()
+        ? addrObj.city.trim()
+        : rootCity;
     const state =
       typeof addrObj.state === "string" && addrObj.state.trim()
         ? addrObj.state.trim()
         : typeof addrObj.province === "string" && addrObj.province.trim()
           ? addrObj.province.trim()
-          : undefined;
+          : rootState;
     const postalCode =
       typeof addrObj.postalCode === "string" && addrObj.postalCode.trim()
         ? addrObj.postalCode.trim()
         : typeof addrObj.zip === "string" && addrObj.zip.trim()
           ? addrObj.zip.trim()
-          : undefined;
+          : rootPostalCode;
     const country =
       typeof addrObj.country === "string" && addrObj.country.trim()
         ? addrObj.country.trim()
         : typeof addrObj.countryCode === "string" && addrObj.countryCode.trim()
           ? addrObj.countryCode.trim()
-          : undefined;
+          : rootCountry;
 
     if (street !== undefined) normalizedAddress.street = street;
     else delete normalizedAddress.street;
@@ -177,10 +217,30 @@ export function registerVendorTools(server: McpServer, client: IFrihetClient): v
       outputSchema: paginatedOutput(vendorItemOutput, { projectable: true }),
     },
     async ({ q, limit, offset, after, fields }) => withToolLogging("list_vendors", async () => {
+      const trimmedQ = q?.trim();
+      const trimmedAfter = after?.trim();
+
+      // Limitation in Frihet-ERP `listResources` (publicApi.ts L8158-8268):
+      // When `search` (`q`) is provided, the backend slices results by `offset`/`limit`
+      // and returns before evaluating `cursorParam` (`after`). Protected profiles
+      // (Claude `claudeToolResult` and OpenAI `applyOpenAIProfile`) rebuild `content`
+      // from `structuredContent` while `paginatedOutput` is frozen, so fail closed
+      // (`isError: true` without `structuredContent`).
+      if (trimmedQ && trimmedAfter) {
+        return {
+          content: [{
+            type: "text" as const,
+            text:
+              "Error: text search ('q') cannot be combined with cursor pagination ('after') because the ERP backend slices search results by 'offset'/'limit' and ignores 'after'. Use 'offset' and 'limit' when searching with 'q', or omit 'q' when paginating with 'after'. / " +
+              "Error: la busqueda textual ('q') no se puede combinar con el cursor 'after' porque el backend pagina las busquedas mediante 'offset'/'limit' e ignora 'after'. Usa 'offset' y 'limit' con 'q', u omite 'q' al paginar con 'after'.",
+          }],
+          isError: true,
+        };
+      }
+
       let result = await client.listVendors({ q, limit, offset, after, fields });
 
       let usedFallback = false;
-      const trimmedQ = q?.trim();
       const splitQ = trimmedQ ? splitCompoundQuery(trimmedQ) : undefined;
       const isSubsequentPage = (offset !== undefined && offset > 0) || Boolean(after);
       const initialTruncated = (result as unknown as Record<string, unknown>)?.truncated === true;
@@ -193,7 +253,11 @@ export function registerVendorTools(server: McpServer, client: IFrihetClient): v
       if (canFallback && hasZeroTotalMatches) {
         try {
           const fallbackResult = await client.listVendors({ q: splitQ, limit, offset, after, fields });
-          if (fallbackResult?.data && (fallbackResult.data.length > 0 || (fallbackResult.total !== undefined && fallbackResult.total > 0))) {
+          const fallbackTruncated = (fallbackResult as unknown as Record<string, unknown>)?.truncated === true;
+          if (
+            fallbackTruncated ||
+            (fallbackResult?.data && (fallbackResult.data.length > 0 || (fallbackResult.total !== undefined && fallbackResult.total > 0)))
+          ) {
             result = fallbackResult;
             usedFallback = true;
           }
@@ -207,6 +271,25 @@ export function registerVendorTools(server: McpServer, client: IFrihetClient): v
       const normalizedData = Array.isArray(result?.data)
         ? result.data.map((v) => (v && typeof v === "object" ? normalizeVendorRecord(v as Record<string, unknown>) : v))
         : [];
+
+      // Conservative refusal when the ERP 500-document scan cap was saturated (`truncated: true`).
+      // Because `paginatedOutput` is a frozen schema contract and both Claude (`claudeToolResult`)
+      // and OpenAI (`applyOpenAIProfile`) overwrite `content` whenever `structuredContent` is
+      // present, returning `structuredContent` here would hide the truncation warning and present
+      // an incomplete 500-doc scan as exhaustive.
+      if (isTruncated) {
+        const partialCount = typeof result?.total === "number" ? result.total : normalizedData.length;
+        return {
+          content: [{
+            type: "text" as const,
+            text:
+              `Error: vendor search hit the ERP 500-document scan cap (truncated=true; ${partialCount} match(es) within the first 500 scanned records) and cannot be returned as an exhaustive result across protected profiles. Narrow 'q' or paginate without 'q' using 'after'. / ` +
+              `Error: la busqueda de proveedores alcanzo el limite de escaneo de 500 documentos del ERP (truncated=true; ${partialCount} coincidencia(s) en los primeros 500 registros) y no puede devolverse como resultado exhaustivo. Acota 'q' o pagina sin 'q' usando 'after'.`,
+          }],
+          isError: true,
+        };
+      }
+
       const cleanEnvelope: typeof result = {
         data: normalizedData,
         total: typeof result?.total === "number" ? result.total : normalizedData.length,
@@ -218,18 +301,6 @@ export function registerVendorTools(server: McpServer, client: IFrihetClient): v
       const notes: string[] = [];
       if (usedFallback) {
         notes.push(` (criterio aplicado: "${splitQ}")`);
-      }
-      if (isTruncated) {
-        notes.push(
-          "\nNote: Search scan reached the 500-document backend cap (truncated=true); results and total reflect only the first 500 records scanned. / " +
-          "Nota: La busqueda alcanzo el limite de escaneo de 500 documentos (truncated=true); total y resultados reflejan solo los primeros 500 registros.",
-        );
-      }
-      if (trimmedQ && after) {
-        notes.push(
-          "\nNote: Backend text search (q) slices by offset/limit and ignores the 'after' cursor parameter. Use offset for search pagination. / " +
-          "Nota: La busqueda textual (q) pagina mediante offset/limit e ignora el cursor 'after'.",
-        );
       }
 
       return {

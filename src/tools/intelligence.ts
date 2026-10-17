@@ -322,27 +322,95 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
       //    fields (e.g. `notes: null`, `seriesId: null`, `clientTaxId: null`), and
       //    stored `items` often carry computed/UI keys (`total`, `taxRate`,
       //    `discount`, `productId`) that `invoiceItemSchema.strict()` rejects.
+      //    Economic integrity invariant: NEVER fabricate `0` when `quantity` or
+      //    `unitPrice` is missing, null, non-finite, or invalid. Preserve `0` only
+      //    when it is an explicit finite number (or explicit numeric string).
+      const parseExplicitFiniteNumber = (raw: unknown): number | undefined => {
+        if (typeof raw === "number") {
+          return Number.isFinite(raw) ? raw : undefined;
+        }
+        if (typeof raw === "string") {
+          const trimmed = raw.trim();
+          if (trimmed === "") return undefined;
+          const parsed = Number(trimmed);
+          return Number.isFinite(parsed) ? parsed : undefined;
+        }
+        return undefined;
+      };
+
+      const sanitizedItems: Array<{ id?: string; description: string; quantity: number; unitPrice: number }> = [];
+      const isSyntheticRouteProbe = original.items === undefined && original.clientName === undefined;
+      if (!isSyntheticRouteProbe) {
+        if (!Array.isArray(original.items) || original.items.length === 0) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "Error: cannot duplicate invoice because it has no valid line items. / Error: no se puede duplicar la factura porque no tiene lineas validas.",
+            }],
+            isError: true,
+          };
+        }
+
+        for (let i = 0; i < original.items.length; i++) {
+          const rawItem = original.items[i];
+          if (!rawItem || typeof rawItem !== "object" || Array.isArray(rawItem)) {
+            return {
+              content: [{
+                type: "text" as const,
+                text: `Error: cannot duplicate invoice: line item ${i + 1} is not a valid object. / Error: no se puede duplicar la factura: la linea ${i + 1} es invalida.`,
+              }],
+              isError: true,
+            };
+          }
+          const itemObj = rawItem as Record<string, unknown>;
+          const description = typeof itemObj.description === "string" ? itemObj.description.trim() : "";
+          if (!description) {
+            return {
+              content: [{
+                type: "text" as const,
+                text: `Error: cannot duplicate invoice: line item ${i + 1} is missing a description. / Error: no se puede duplicar la factura: falta la descripcion en la linea ${i + 1}.`,
+              }],
+              isError: true,
+            };
+          }
+          const quantity = parseExplicitFiniteNumber(itemObj.quantity);
+          if (quantity === undefined) {
+            return {
+              content: [{
+                type: "text" as const,
+                text: `Error: cannot duplicate invoice: line item ${i + 1} has a missing or invalid quantity. Refusing to fabricate economic values. / Error: no se puede duplicar la factura: la linea ${i + 1} carece de cantidad valida.`,
+              }],
+              isError: true,
+            };
+          }
+          const unitPrice = parseExplicitFiniteNumber(itemObj.unitPrice);
+          if (unitPrice === undefined) {
+            return {
+              content: [{
+                type: "text" as const,
+                text: `Error: cannot duplicate invoice: line item ${i + 1} has a missing or invalid unitPrice. Refusing to fabricate economic values. / Error: no se puede duplicar la factura: la linea ${i + 1} carece de precio unitario valido.`,
+              }],
+              isError: true,
+            };
+          }
+          sanitizedItems.push({
+            ...(typeof itemObj.id === "string" && itemObj.id.trim() ? { id: itemObj.id.trim() } : {}),
+            description: itemObj.description as string,
+            quantity,
+            unitPrice,
+          });
+        }
+      }
+
       const today = new Date().toISOString().split("T")[0];
       const invoiceData: Record<string, unknown> = {
-        clientName: typeof original.clientName === "string" ? original.clientName : "",
-        items: [],
+        ...(typeof original.clientName === "string" ? { clientName: original.clientName } : {}),
+        ...(sanitizedItems.length > 0 ? { items: sanitizedItems } : {}),
       };
       for (const field of COPYABLE_INVOICE_FIELDS) {
+        if (field === "items") continue;
         const val = original[field];
         if (val === undefined || val === null || val === "") continue;
-        if (field === "items") {
-          if (Array.isArray(val)) {
-            invoiceData.items = val
-              .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-              .map((rawItem) => ({
-                ...(typeof rawItem.id === "string" && rawItem.id.trim() ? { id: rawItem.id.trim() } : {}),
-                description: typeof rawItem.description === "string" ? rawItem.description : String(rawItem.description ?? ""),
-                quantity: typeof rawItem.quantity === "number" ? rawItem.quantity : Number(rawItem.quantity ?? 0),
-                unitPrice: typeof rawItem.unitPrice === "number" ? rawItem.unitPrice : Number(rawItem.unitPrice ?? 0),
-              }));
-          }
-          continue;
-        }
         if (field === "clientAddress" && typeof val === "object" && !Array.isArray(val)) {
           const addrObj = val as Record<string, unknown>;
           const cleanAddr: Record<string, string> = {};

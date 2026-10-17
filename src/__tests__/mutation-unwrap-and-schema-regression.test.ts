@@ -36,7 +36,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { FrihetClient } from "../client.js";
+import { FrihetApiError, FrihetClient } from "../client.js";
 import { registerInvoiceTools } from "../tools/invoices.js";
 import { registerQuoteTools } from "../tools/quotes.js";
 import { registerIntelligenceTools } from "../tools/intelligence.js";
@@ -623,6 +623,82 @@ describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoi
     } finally {
       await Promise.allSettled([mcpClient.close(), claudeServer.close()]);
     }
+
+    // 7. When linked clientId returns HTTP 404 (deleted client), send_invoice and send_quote
+    //    safely fall through to the document-level fallback email and demand explicit recipient
+    //    confirmation; whereas HTTP 403 / 5xx / network errors are NOT treated as a missing client.
+    let clientLookupMode: "404" | "403" | "503" = "404";
+    const statusMockClient = {
+      getInvoice: async (id: string) => ({
+        id,
+        status: "draft",
+        clientId: "cli_deleted_or_forbidden",
+        clientEmail: "deleted-client-invoice@acme.example",
+      }),
+      getQuote: async (id: string) => ({
+        id,
+        status: "draft",
+        clientId: "cli_deleted_or_forbidden",
+        clientEmail: "deleted-client-quote@acme.example",
+      }),
+      getClient: async (_id: string) => {
+        if (clientLookupMode === "404") {
+          throw new FrihetApiError(404, "NOT_FOUND", "Client not found");
+        }
+        if (clientLookupMode === "403") {
+          throw new FrihetApiError(403, "FORBIDDEN", "Insufficient scope to read clients");
+        }
+        throw new FrihetApiError(503, "SERVICE_UNAVAILABLE", "Upstream timeout");
+      },
+      sendInvoice: async (id: string, to: string) => {
+        sentInvoices.push({ id, to });
+        return { success: true, id, sentTo: to };
+      },
+      sendQuote: async (id: string, to?: string) => {
+        sentQuotes.push({ id, to: to ?? "" });
+        return { success: true, id, sentTo: to };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+
+    const statusTools = new Map<string, (args: any) => Promise<any>>();
+    const statusServer = {
+      registerTool: (name: string, _opts: unknown, handler: (args: any) => Promise<any>) => {
+        statusTools.set(name, handler);
+      },
+    } as unknown as McpServer;
+    registerInvoiceTools(statusServer, statusMockClient);
+    registerQuoteTools(statusServer, statusMockClient);
+
+    // 7a. 404 on getClient -> recovers document fallback email and refuses auto-send with effectiveRecipient
+    clientLookupMode = "404";
+    const inv404Fallback = await statusTools.get("send_invoice")!({ id: "inv_404_cli", confirm: true });
+    assert.equal(inv404Fallback.isError, true);
+    assert.equal(inv404Fallback.structuredContent?.effectiveRecipient, "deleted-client-invoice@acme.example");
+    assert.equal(inv404Fallback.structuredContent?.recipientSource, "document_fallback");
+    assert.equal(inv404Fallback.structuredContent?.requiresExplicitRecipientConfirmation, true);
+
+    const quo404Fallback = await statusTools.get("send_quote")!({ id: "quo_404_cli", confirm: true });
+    assert.equal(quo404Fallback.isError, true);
+    assert.equal(quo404Fallback.structuredContent?.effectiveRecipient, "deleted-client-quote@acme.example");
+    assert.equal(quo404Fallback.structuredContent?.recipientSource, "document_fallback");
+    assert.equal(quo404Fallback.structuredContent?.requiresExplicitRecipientConfirmation, true);
+
+    // 7b. 403 on getClient -> must NOT fall back to document email; surfaces permission error
+    clientLookupMode = "403";
+    const inv403 = await statusTools.get("send_invoice")!({ id: "inv_403_cli", confirm: true });
+    assert.equal(inv403.isError, true);
+    assert.equal(inv403.structuredContent, undefined, "403 must not trigger document_fallback structuredContent");
+    assert.match(inv403.content[0].text, /403|FORBIDDEN|access/i);
+
+    const quo403 = await statusTools.get("send_quote")!({ id: "quo_403_cli", confirm: true });
+    assert.equal(quo403.isError, true);
+    assert.equal(quo403.structuredContent, undefined, "403 must not trigger document_fallback structuredContent");
+
+    // 7c. 503 on getClient -> must NOT fall back to document email; surfaces server error
+    clientLookupMode = "503";
+    const inv503 = await statusTools.get("send_invoice")!({ id: "inv_503_cli", confirm: true });
+    assert.equal(inv503.isError, true);
+    assert.equal(inv503.structuredContent, undefined, "503 must not trigger document_fallback structuredContent");
   });
 });
 

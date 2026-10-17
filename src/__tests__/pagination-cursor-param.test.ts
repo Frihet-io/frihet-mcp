@@ -29,12 +29,16 @@ import assert from "node:assert/strict";
 import { createServer, type Server, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { FrihetClient } from "../client.js";
+import { applyClaudeCandidateProfile } from "../claude-profile.js";
+import { applyOpenAIProfile } from "../openai-profile.js";
 import { registerClientTools } from "../tools/clients.js";
 import { registerVendorTools } from "../tools/vendors.js";
 import { clientItemOutput, vendorItemOutput, paginatedOutput } from "../tools/shared.js";
 import type { IFrihetClient } from "../client-interface.js";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 interface CapturedRequest {
   method: string;
@@ -191,15 +195,15 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
     assert.ok(queriedTerms.includes("Canarias Blue|20"), "Page 2 must query split terms with matching offset");
   });
 
-  test("list_clients does NOT switch search criteria when total is undefined on page 2+, when truncated=true, or when after cursor is used with q", async () => {
+  test("list_clients and list_vendors apply a conservative refusal (isError: true, no structuredContent) on truncated=true or q+after across Standard, Claude, and OpenAI profiles", async () => {
     const queriedTerms: string[] = [];
     const mockClient = {
       listClients: async (params: { q?: string; offset?: number; limit?: number; after?: string }) => {
-        queriedTerms.push(`${params.q}|${params.offset ?? 0}|${params.after ?? ""}`);
-        if (params.q === "TruncatedCorp") {
+        queriedTerms.push(`${params.q ?? ""}|${params.offset ?? 0}|${params.after ?? ""}`);
+        if (params.q === "TruncatedCorp" || params.after === "force_truncated_scan") {
           return {
-            data: [],
-            total: 0,
+            data: [{ id: "cli_t1", name: "Truncated Corp 1" }],
+            total: 1,
             limit: params.limit ?? 20,
             offset: params.offset ?? 0,
             truncated: true,
@@ -207,6 +211,18 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
           };
         }
         return { data: [], total: undefined as unknown as number, limit: params.limit ?? 20, offset: params.offset ?? 0 };
+      },
+      listVendors: async (params: { q?: string; offset?: number; limit?: number; after?: string }) => {
+        if (params.q === "TruncatedVendor" || params.after === "force_truncated_scan") {
+          return {
+            data: [{ id: "ven_t1", name: "Truncated Vendor 1" }],
+            total: 1,
+            limit: params.limit ?? 20,
+            offset: params.offset ?? 0,
+            truncated: true,
+          };
+        }
+        return { data: [], total: 0, limit: params.limit ?? 20, offset: params.offset ?? 0 };
       },
     } as unknown as IFrihetClient;
 
@@ -218,30 +234,106 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
     } as unknown as McpServer;
 
     registerClientTools(fakeServer, mockClient);
+    registerVendorTools(fakeServer, mockClient);
     const listClientsTool = tools.get("list_clients")!;
+    const listVendorsTool = tools.get("list_vendors")!;
 
-    // 1. Exhausted page 2 with undefined total
+    // 1. Exhausted page 2 with undefined total: does not fallback and returns clean empty page
     await listClientsTool({ q: "SLCanarias", offset: 20, limit: 20 });
     assert.deepEqual(queriedTerms, ["SLCanarias|20|"], "Must not fallback when total is undefined on page 2+");
 
-    // 2. Truncated 500-doc scan: must NOT fallback, must strip undeclared `truncated`/`meta` from structuredContent,
-    //    and must disclose `truncated=true` in human-readable content.
+    // 2. Direct handler: truncated 500-doc scan refuses conservatively (isError=true, no structuredContent)
     queriedTerms.length = 0;
     const truncRes = await listClientsTool({ q: "TruncatedCorp", offset: 0, limit: 20 });
     assert.deepEqual(queriedTerms, ["TruncatedCorp|0|"], "Must not fallback when 500-doc scan is truncated");
-    assert.equal("truncated" in truncRes.structuredContent, false, "truncated must not leak into strict paginatedOutput structuredContent");
-    assert.equal("meta" in truncRes.structuredContent, false, "meta must not leak into strict paginatedOutput structuredContent");
-    assert.equal(paginatedOutput(clientItemOutput, { projectable: true }).safeParse(truncRes.structuredContent).success, true);
+    assert.equal(truncRes.isError, true, "Truncated 500-doc scan must return isError=true");
+    assert.equal(truncRes.structuredContent, undefined, "Truncated scan must NOT emit structuredContent that protected profiles would render as exhaustive");
     assert.match(truncRes.content[0].text, /500-document|500 documentos/i);
 
-    // 3. Combining q with after cursor: must NOT fallback and must warn that backend search ignores `after`
+    // 3. Direct handler: combining q with after cursor refuses conservatively without calling backend
     queriedTerms.length = 0;
     const cursorSearchRes = await listClientsTool({ q: "CanariasBlue", after: "cur_1" });
-    assert.deepEqual(queriedTerms, ["CanariasBlue|0|cur_1"], "Must not fallback when after cursor is combined with q");
-    assert.match(cursorSearchRes.content[0].text, /ignores the 'after' cursor|ignora el cursor 'after'/i);
+    assert.deepEqual(queriedTerms, [], "Must fail closed before calling backend when q and after are combined");
+    assert.equal(cursorSearchRes.isError, true);
+    assert.equal(cursorSearchRes.structuredContent, undefined);
+    assert.match(cursorSearchRes.content[0].text, /ignores 'after'|ignora 'after'/i);
+
+    const vendorCursorSearchRes = await listVendorsTool({ q: "VendorBlue", after: "cur_1" });
+    assert.equal(vendorCursorSearchRes.isError, true);
+    assert.equal(vendorCursorSearchRes.structuredContent, undefined);
+
+    // 4. Real MCP SDK + Claude Candidate Profile (`applyClaudeCandidateProfile`):
+    //    Verify neither truncated=true nor q+after is ever presented as an exhaustive list.
+    const claudeServer = new McpServer({ name: "claude-trunc-test", version: "1.0.0" });
+    applyClaudeCandidateProfile(claudeServer);
+    registerClientTools(claudeServer, mockClient);
+    registerVendorTools(claudeServer, mockClient);
+    const claudeClient = new Client({ name: "claude-trunc-client", version: "1.0.0" });
+    const [claudeCt, claudeSt] = InMemoryTransport.createLinkedPair();
+    await Promise.all([claudeClient.connect(claudeCt), claudeServer.connect(claudeSt)]);
+    try {
+      const claudeTruncClients = await claudeClient.callTool({
+        name: "list_clients",
+        arguments: { q: "TruncatedCorp" },
+      });
+      assert.equal(claudeTruncClients.isError, true, "Claude profile must receive isError=true on truncated client search");
+      assert.equal(claudeTruncClients.structuredContent, undefined, "Claude profile must NOT receive structuredContent on truncated client search");
+
+      const claudeTruncVendors = await claudeClient.callTool({
+        name: "list_vendors",
+        arguments: { q: "TruncatedVendor" },
+      });
+      assert.equal(claudeTruncVendors.isError, true, "Claude profile must receive isError=true on truncated vendor search");
+      assert.equal(claudeTruncVendors.structuredContent, undefined, "Claude profile must NOT receive structuredContent on truncated vendor search");
+
+      const claudeQAfter = await claudeClient.callTool({
+        name: "list_clients",
+        arguments: { q: "CanariasBlue", after: "cur_1" },
+      });
+      assert.equal(claudeQAfter.isError, true, "Claude profile must receive isError=true when q and after are combined");
+      assert.equal(claudeQAfter.structuredContent, undefined);
+    } finally {
+      await Promise.allSettled([claudeClient.close(), claudeServer.close()]);
+    }
+
+    // 5. Real MCP SDK + OpenAI Reviewed Profile (`applyOpenAIProfile`):
+    //    Verify that:
+    //    (a) passing `q` (or `q + after`) is rejected by the strict reviewed input contract, and
+    //    (b) if the backend ever returns `truncated=true` on a list call, OpenAI receives `isError=true`
+    //        with the refusal text intact and NEVER replaces it with "Frihet returned N reviewed summary record(s)".
+    const openaiServer = new McpServer({ name: "openai-trunc-test", version: "1.0.0" });
+    applyOpenAIProfile(openaiServer);
+    registerClientTools(openaiServer, mockClient);
+    registerVendorTools(openaiServer, mockClient);
+    const openaiClient = new Client({ name: "openai-trunc-client", version: "1.0.0" });
+    const [openaiCt, openaiSt] = InMemoryTransport.createLinkedPair();
+    await Promise.all([openaiClient.connect(openaiCt), openaiServer.connect(openaiSt)]);
+    try {
+      const openaiTruncClients = await openaiClient.callTool({
+        name: "list_clients",
+        arguments: { after: "force_truncated_scan" },
+      });
+      assert.equal(openaiTruncClients.isError, true, "OpenAI profile must receive isError=true on truncated client scan");
+      assert.equal(openaiTruncClients.structuredContent, undefined, "OpenAI profile must NOT receive structuredContent on truncated client scan");
+      const openaiClientText = (openaiTruncClients.content as Array<{ type: string; text: string }>)[0]!.text;
+      assert.match(openaiClientText, /500-document|500 documentos/i);
+      assert.doesNotMatch(openaiClientText, /reviewed summary record/i);
+
+      const openaiTruncVendors = await openaiClient.callTool({
+        name: "list_vendors",
+        arguments: { after: "force_truncated_scan" },
+      });
+      assert.equal(openaiTruncVendors.isError, true, "OpenAI profile must receive isError=true on truncated vendor scan");
+      assert.equal(openaiTruncVendors.structuredContent, undefined);
+      const openaiVendorText = (openaiTruncVendors.content as Array<{ type: string; text: string }>)[0]!.text;
+      assert.match(openaiVendorText, /500-document|500 documentos/i);
+      assert.doesNotMatch(openaiVendorText, /reviewed summary record/i);
+    } finally {
+      await Promise.allSettled([openaiClient.close(), openaiServer.close()]);
+    }
   });
 
-  test("client normalization preserves identity, NIF backfill, projected fields, null scalars, and ERP zip/province/countryCode addresses", async () => {
+  test("client normalization preserves identity, NIF backfill, projected fields, null scalars, flat root address fields, and ERP zip/province/countryCode addresses", async () => {
     const mockClient = {
       listClients: async (params: { fields?: string }) => {
         if (params.fields === "id,name") {
@@ -268,6 +360,17 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
             createdAt: null,
             updatedAt: null,
             customAttr: "preserved",
+          };
+        }
+        if (id === "flat_root_address") {
+          return {
+            id,
+            name: "Flat Root Address Client",
+            street: "Calle León y Castillo 20",
+            city: "Las Palmas",
+            province: "Las Palmas",
+            zip: "35004",
+            countryCode: "ES",
           };
         }
         return {
@@ -326,6 +429,17 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
     assert.equal(legacy.structuredContent.customAttr, "preserved");
     assert.equal(clientItemOutput.safeParse(legacy.structuredContent).success, true);
 
+    const flatRoot = await tools.get("get_client")!({ id: "flat_root_address" });
+    const parsedFlatRoot = clientItemOutput.safeParse(flatRoot.structuredContent);
+    assert.equal(parsedFlatRoot.success, true);
+    assert.deepEqual(parsedFlatRoot.data?.address, {
+      street: "Calle León y Castillo 20",
+      city: "Las Palmas",
+      state: "Las Palmas",
+      postalCode: "35004",
+      country: "ES",
+    });
+
     const canonical = await tools.get("get_client")!({ id: "erp_addr" });
     const parsedCanonical = clientItemOutput.safeParse(canonical.structuredContent);
     assert.equal(parsedCanonical.success, true);
@@ -345,7 +459,7 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
     assert.deepEqual(parsedUpdated.data?.address, { street: "Calle String Legacy 42" });
   });
 
-  test("vendor tools normalize string/null/ERP-canonical addresses, backfill taxId, and honor listResources search bounds", async () => {
+  test("vendor tools normalize string/null/flat/ERP-canonical addresses, backfill taxId, and honor listResources search bounds", async () => {
     const queriedVendors: string[] = [];
     const mockClient = {
       listVendors: async (params: { q?: string; offset?: number; limit?: number; after?: string }) => {
@@ -362,8 +476,23 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
               taxId: null,
               cif: "B76543210",
               address: "Poligono Industrial 3",
+              city: "Telde",
+              province: "Las Palmas",
+              zip: "35200",
+              countryCode: "ES",
             }],
             total: 1,
+            limit: 20,
+            offset: 0,
+          };
+        }
+        if (params.q === "Truncated_Vendor") {
+          return { data: [], total: 0, limit: 20, offset: 0 };
+        }
+        if (params.q === "Truncated Vendor") {
+          return {
+            data: [],
+            total: 0,
             limit: 20,
             offset: 0,
             truncated: true,
@@ -371,11 +500,24 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
         }
         return { data: [], total: 0, limit: 20, offset: 0 };
       },
-      getVendor: async (id: string) => ({
-        id,
-        name: "Proveedor Canarias",
-        address: { street: "Calle 1", province: "Santa Cruz de Tenerife", zip: "38001", countryCode: "ES" },
-      }),
+      getVendor: async (id: string) => {
+        if (id === "ven_flat") {
+          return {
+            id,
+            name: "Proveedor Raiz Plana",
+            street: "Calle Mayor 7",
+            city: "La Laguna",
+            province: "Santa Cruz de Tenerife",
+            zip: "38201",
+            countryCode: "ES",
+          };
+        }
+        return {
+          id,
+          name: "Proveedor Canarias",
+          address: { street: "Calle 1", province: "Santa Cruz de Tenerife", zip: "38001", countryCode: "ES" },
+        };
+      },
       createVendor: async (input: Record<string, unknown>) => ({
         id: "ven_new",
         ...input,
@@ -400,12 +542,22 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
 
     const listed = await tools.get("list_vendors")!({ q: "Canarias_Blue" });
     assert.ok(queriedVendors.includes("Canarias Blue|0|"));
-    assert.deepEqual(listed.structuredContent.data[0].address, { street: "Poligono Industrial 3" });
+    assert.deepEqual(listed.structuredContent.data[0].address, {
+      street: "Poligono Industrial 3",
+      city: "Telde",
+      state: "Las Palmas",
+      postalCode: "35200",
+      country: "ES",
+    });
     assert.equal(listed.structuredContent.data[0].taxId, "B76543210");
     assert.equal("email" in listed.structuredContent.data[0], false);
-    assert.equal("truncated" in listed.structuredContent, false);
-    assert.match(listed.content[0].text, /500-document|500 documentos/i);
     assert.equal(vendorItemOutput.safeParse(listed.structuredContent.data[0]).success, true);
+
+    // Truncated fallback scan on vendor must also refuse conservatively
+    const truncFallback = await tools.get("list_vendors")!({ q: "Truncated_Vendor" });
+    assert.equal(truncFallback.isError, true);
+    assert.equal(truncFallback.structuredContent, undefined);
+    assert.match(truncFallback.content[0].text, /500-document|500 documentos/i);
 
     const fetched = await tools.get("get_vendor")!({ id: "ven_1" });
     const parsedFetched = vendorItemOutput.safeParse(fetched.structuredContent);
@@ -413,6 +565,17 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
     assert.equal(parsedFetched.data?.address?.state, "Santa Cruz de Tenerife");
     assert.equal(parsedFetched.data?.address?.postalCode, "38001");
     assert.equal(parsedFetched.data?.address?.country, "ES");
+
+    const fetchedFlat = await tools.get("get_vendor")!({ id: "ven_flat" });
+    const parsedFlat = vendorItemOutput.safeParse(fetchedFlat.structuredContent);
+    assert.equal(parsedFlat.success, true);
+    assert.deepEqual(parsedFlat.data?.address, {
+      street: "Calle Mayor 7",
+      city: "La Laguna",
+      state: "Santa Cruz de Tenerife",
+      postalCode: "38201",
+      country: "ES",
+    });
 
     const created = await tools.get("create_vendor")!({ name: "Vendor Null Addr" });
     assert.equal("address" in created.structuredContent, false);

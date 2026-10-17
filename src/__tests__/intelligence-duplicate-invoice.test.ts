@@ -238,4 +238,69 @@ describe("duplicate_invoice — allowlist pick", () => {
     assert.equal("notes" in (res.structuredContent ?? {}), false);
     assert.equal("dueDate" in (res.structuredContent ?? {}), false);
   });
+
+  test("rejects line items with missing, null, non-finite, or invalid quantity/unitPrice/description without calling createInvoice, and preserves explicit zeros", async () => {
+    const writes: Record<string, unknown>[] = [];
+    let currentItems: unknown = [];
+
+    const server = new StubMcpServer();
+    const client = {
+      getInvoice: async (_id: string) => ({
+        id: "inv_econ",
+        clientName: "Economic Integrity S.L.",
+        items: currentItems,
+      }),
+      createInvoice: async (data: Record<string, unknown>) => {
+        writes.push(data);
+        return { id: "inv_dup_econ", status: "draft", ...data };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+
+    const { registerIntelligenceTools } = await import("../tools/intelligence.js");
+    registerIntelligenceTools(
+      server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
+      client,
+    );
+    const tool = server.tools.get("duplicate_invoice")!;
+
+    const invalidCases: Array<{ label: string; items: unknown }> = [
+      { label: "undefined items", items: undefined },
+      { label: "null items", items: null },
+      { label: "empty items array", items: [] },
+      { label: "missing quantity", items: [{ description: "Item", unitPrice: 100 }] },
+      { label: "null quantity", items: [{ description: "Item", quantity: null, unitPrice: 100 }] },
+      { label: "empty string quantity", items: [{ description: "Item", quantity: "   ", unitPrice: 100 }] },
+      { label: "NaN quantity", items: [{ description: "Item", quantity: Number.NaN, unitPrice: 100 }] },
+      { label: "Infinity quantity", items: [{ description: "Item", quantity: Number.POSITIVE_INFINITY, unitPrice: 100 }] },
+      { label: "non-numeric string quantity", items: [{ description: "Item", quantity: "two", unitPrice: 100 }] },
+      { label: "boolean quantity", items: [{ description: "Item", quantity: false, unitPrice: 100 }] },
+      { label: "missing unitPrice", items: [{ description: "Item", quantity: 2 }] },
+      { label: "null unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: null }] },
+      { label: "empty string unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: "" }] },
+      { label: "NaN unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: Number.NaN }] },
+      { label: "Infinity unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: Number.NEGATIVE_INFINITY }] },
+      { label: "non-numeric string unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: "free" }] },
+      { label: "missing description", items: [{ description: "   ", quantity: 2, unitPrice: 50 }] },
+    ];
+
+    for (const tc of invalidCases) {
+      currentItems = tc.items;
+      const res = await tool.handler({ id: "inv_econ" });
+      assert.equal(res.isError, true, `Must reject ${tc.label}`);
+      assert.equal(writes.length, 0, `Must perform ZERO writes on ${tc.label}`);
+    }
+
+    // Explicit legitimate zero values (numeric 0 or string "0") MUST be preserved
+    currentItems = [
+      { id: "line_free", description: "Complimentary onboarding", quantity: 1, unitPrice: 0 },
+      { id: "line_zero_qty", description: "Placeholder line", quantity: 0, unitPrice: "0" },
+    ];
+    const validZeroRes = await tool.handler({ id: "inv_econ" });
+    assert.notEqual(validZeroRes.isError, true, "Explicit zero values must be allowed");
+    assert.equal(writes.length, 1, "Explicit zero values should call createInvoice once");
+    assert.deepEqual(writes[0]!.items, [
+      { id: "line_free", description: "Complimentary onboarding", quantity: 1, unitPrice: 0 },
+      { id: "line_zero_qty", description: "Placeholder line", quantity: 0, unitPrice: 0 },
+    ]);
+  });
 });
