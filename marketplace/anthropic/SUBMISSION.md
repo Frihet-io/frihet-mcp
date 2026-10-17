@@ -24,17 +24,20 @@ Demo fixtures do not establish live acceptance. Setting both `FRIHET_CLAUDE_MODE
 `FRIHET_OPENAI_MODE=true` fails before registration.
 
 The explicit candidate inventory starts with 156 canonical operations at source
-`176de12`: **156 − 8 unavailable − 8 deferred − 4 other exclusions = 136**.
-It retains tax/e-invoicing, invoice email, payroll and banking families, subject
+`176de12`: **156 − 8 unavailable − 8 deferred − 15 other exclusions = 125**. Five exclusions
+(`einvoice_export`, `face_*`, `ticketbai_*`) need an einvoice scope that the Claude pilot
+credential does not carry (M2, ERP #2477); `send_einvoice`, `get_einvoice_status`,
+`validate_einvoice_xml` and `export_datev` call `/einvoice/*` paths that have no ERP route (404).
+It retains tax, invoice email, payroll and banking families, subject
 to each operation's workspace/API availability and declared external effects.
 A profile is not evidence that every endpoint works for every tenant.
 
 | Composition | Canonical operations | Fiscal aliases | Discovery names | Total tool names | Resources | Prompts |
 |---|---:|---:|---:|---:|---:|---:|
-| Local full candidate | 136 | 4 | 0 | 140 | 5 | 2 |
-| Local grouped candidate | 136 | 4 | 3 | 143 | 5 | 2 |
-| Reusable remote full composition | 136 | 4 | 0 | 140 | 1 | 2 |
-| Reusable remote grouped composition | 136 | 4 | 3 | 143 | 1 | 2 |
+| Local full candidate | 125 | 4 | 0 | 129 | 5 | 2 |
+| Local grouped candidate | 125 | 4 | 3 | 132 | 5 | 2 |
+| Reusable remote full composition | 125 | 4 | 0 | 129 | 1 | 2 |
+| Reusable remote grouped composition | 125 | 4 | 3 | 132 | 1 | 2 |
 
 Remote rows describe SDK composition tests, **not a deployed Claude endpoint**.
 Filtering happens before SDK registration and discovery indexing; future
@@ -50,10 +53,14 @@ The retained aliases are `frihet_modelo_303_summary`,
 |---|---|
 | `ksef_submit`, `get_modelo_180_summary`, `frihet_modelo_415_summary`, `frihet_modelo_418_summary`, `frihet_modelo_425_summary`, `frihet_aiem_calculate`, `frihet_modelo_200_summary`, `frihet_modelo_202_summary` | Eight operations marked unavailable; no deployed backing ERP route in the reviewed contract. |
 | `period_close`, `period_reopen`, `gestoria_message_send`, `gestoria_messages_list`, `gestoria_template_bulk_send`, `gestoria_aging_consolidated`, `create_reservation`, `sync_channel` | Eight operations whose handlers explicitly defer execution. |
+| `einvoice_export`, `face_status`, `face_submit`, `ticketbai_status`, `ticketbai_submit` | The Claude pilot credential carries no einvoice scope (M2, ERP #2477); the ERP returns 403 for these routes. |
+| `send_einvoice` | No deployed backing ERP route: `POST /einvoice/send` is unavailable in the ERP (404). |
+| `get_einvoice_status`, `validate_einvoice_xml`, `export_datev` | No deployed backing ERP route: `GET /einvoice/status/:id`, `POST /einvoice/validate` and `POST /einvoice/export-datev` are unavailable in the ERP (404). |
 | `refund_sale` | Executes a Stripe money transfer; excluded under Anthropic Directory policy §4.A. Confirmation alone does not change this effect. |
 | `delete_client` | Linked contacts, notes and activities can remain stored but unreachable. |
 | `delete_expense` | Linked attachment metadata/object cleanup is not established. |
 | `send_quote` | Previewed recipient is not atomically bound; delivery is not retry-safe. |
+| `get_invoice_pdf`, `get_invoice_einvoice` | Raw invoice PDF, e-invoice XML and Factur-X PDF artifacts can contain sensitive values; the Claude field-redaction boundary cannot safely sanitize these documents. |
 
 `refund_deposit` is retained after correcting its contract: optional amount-only
 bookkeeping, with no transfer of money. Its backend read/update concurrency and
@@ -103,12 +110,20 @@ These are content defects/dependencies, not policy bans on those workflows.
 
 ## Source and hosted status
 
-This source includes reusable remote composition, but no hosted Claude-profile
-endpoint is established. The current provisioning contract supports the OpenAI
-candidate binding only. Existing full-host discovery does not establish a fresh
-OAuth login or live acceptance of the Claude selection. No Worker flag, host,
-namespace, OAuth binding or deployment has been added by this local candidate.
+This source includes reusable remote composition and a dedicated Claude Worker
+configuration with Claude mode. It requires isolated storage, separate OAuth
+authority, QA-only authorization and a verified ERP write-ceiling release receipt.
+No deployed Claude-profile endpoint or live acceptance is established here.
+Existing full-host discovery does not establish a fresh Claude OAuth login.
 The OpenAI profile and its frozen descriptor remain separate and unchanged.
+
+The Claude output boundary removes shared sensitive-field categories from
+structured results, output schemas and JSON resources, and rebuilds display text
+from the sanitized data. This includes `documentNumber` and `verifactuHash`;
+they must not be advertised as retained. Opaque content blocks and arbitrary
+response metadata are withheld; known authentication/outcome/retry flags remain.
+The boundary does not classify every identifier embedded in arbitrary free text.
+It does not change tool inputs, confirmation requirements or write retry behavior.
 
 The local stdio package is not a hosted Directory listing. Provider review and
 publication are not established by the SDK checks or demo fixtures.
@@ -120,6 +135,7 @@ npm run gate:claude-candidate
 npm run gate:public-capability-truth
 npm run gate:agent-onboarding
 npm run gate:openai-review-descriptor
+node --test dist/__tests__/claude-output-privacy.test.js
 ```
 
 Regenerate intentional changes with `npm run generate:claude-candidate`,

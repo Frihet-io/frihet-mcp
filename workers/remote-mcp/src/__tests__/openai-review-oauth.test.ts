@@ -453,12 +453,14 @@ test("reviewed provider cannot resolve direct API keys or cross host/scope/auth 
   assert.ok(options);
   assert.doesNotMatch(options, /resolveExternalToken/u);
   assert.match(options, /validateReviewedTokenExchange\(options\)/u);
-  assert.match(workerSource, /reviewedProps\?\.accessProfile !== "openai"/u);
-  assert.match(workerSource, /reviewedProps\.oauthResource !== OPENAI_REVIEW_ORIGIN/u);
+  assert.match(workerSource, /profile: "openai" \| "claude" = "openai"/u);
+  assert.match(workerSource, /const boundaryProfile = boundOAuthProfile\(profile\)/u);
+  assert.match(workerSource, /reviewedProps\?\.accessProfile !== profile/u);
+  assert.match(workerSource, /reviewedProps\.oauthResource !== boundaryProfile\.origin/u);
   assert.match(workerSource, /reviewedProps\.oauthScope !== FRIHET_CONNECTOR_SCOPE/u);
   assert.match(workerSource, /!hasExactOpenAIReviewScopes\(reviewedProps\.oauthScopes\)/u);
-  assert.match(workerSource, /reviewedProps\.oauthIssuer !== OPENAI_REVIEW_ORIGIN/u);
-  assert.match(workerSource, /!OPENAI_REVIEW_OAUTH_RESOURCES\.includes\(reviewedProps\.oauthAudience\)/u);
+  assert.match(workerSource, /reviewedProps\.oauthIssuer !== boundaryProfile\.origin/u);
+  assert.match(workerSource, /!boundaryProfile\.acceptedResources\.includes\(reviewedProps\.oauthAudience\)/u);
   assert.match(workerSource, /reviewedProps\.authMethod !== "oauth"/u);
   assert.match(workerSource, /reviewedProps\.apiKeyExpiresAt/u);
   assert.match(workerSource, /refreshTokenTTL: credentialTtlSeconds/u);
@@ -489,7 +491,7 @@ test("reviewed authorize/callback source enforces exact state, PKCE, client look
   assert.ok(provisionIndex < completeIndex && completeIndex < commitIndex);
   assert.doesNotMatch(authSource, /consumeOAuthState/u);
   assert.match(authSource, /!isVerifiedOpenAIIdentity\(verifiedIdentity\)/u);
-  assert.match(authSource, /oauthIssuer: OPENAI_REVIEW_ORIGIN/u);
+  assert.match(authSource, /oauthIssuer: boundaryProfile\.origin/u);
   assert.match(authSource, /oauthAudience: oauthReq\.resource/u);
 });
 
@@ -507,7 +509,7 @@ test("OAuth secrets are non-cacheable and Bearer challenge is limited to the MCP
   assert.equal(
     (
       workerSource.match(
-        /headers\.set\("WWW-Authenticate", buildOpenAIUnauthorizedChallenge\(\)\)/gu,
+        /headers\.set\("WWW-Authenticate", buildOpenAIUnauthorizedChallenge\(boundaryProfile!\.origin\)\)/gu,
       ) ?? []
     ).length,
     1,
@@ -520,11 +522,11 @@ test("reviewed Worker serves OIDC discovery and protects UserInfo", () => {
   const headIndex = workerSource.indexOf('if (request.method === "HEAD"');
   const providerIndex = workerSource.indexOf("selectedProvider.fetch(providerRequest, env, ctx)");
   assert.ok(discoveryIndex > 0 && discoveryIndex < headIndex && headIndex < providerIndex);
-  assert.match(workerSource, /buildOpenAIReviewOAuthContract\(\)\.openidConfiguration/u);
+  assert.match(workerSource, /buildOpenAIReviewOAuthContract\(boundaryProfile!\.origin\)\.openidConfiguration/u);
   assert.match(authSource, /app\.get\("\/userinfo"/u);
   assert.match(authSource, /OAUTH_PROVIDER\.unwrapToken\(token\)/u);
   assert.match(authSource, /buildOpenAIUserInfo/u);
-  assert.match(authSource, /"WWW-Authenticate": buildOpenAIUnauthorizedChallenge\(\)/u);
+  assert.match(authSource, /"WWW-Authenticate": buildOpenAIUnauthorizedChallenge\(boundOAuthProfile\(accessProfile\)\.origin\)/u);
   assert.doesNotMatch(authSource, /authorization_response_iss_parameter_supported/u);
 });
 
@@ -538,13 +540,13 @@ test("OAuth state Durable Object is bound in both environments and migrated once
 
 test("every reviewed boundary call site accepts exactly the shared resource set", () => {
   const boundaryCalls = [
-    ...authSource.matchAll(/validateOAuthBoundary\(\s*\{[\s\S]*?\},\s*([A-Z_]+),\s*\)/gu),
-    ...workerSource.matchAll(/validateOAuthBoundary\(\s*\{[\s\S]*?\},\s*([A-Z_]+),\s*\)/gu),
+    ...authSource.matchAll(/validateOAuthBoundary\(\s*\{[\s\S]*?\},\s*([\w!.]+),\s*\)/gu),
+    ...workerSource.matchAll(/validateOAuthBoundary\(\s*\{[\s\S]*?\},\s*([\w!.]+),\s*\)/gu),
   ].map((match) => match[1]);
   assert.deepEqual(boundaryCalls, [
-    "OPENAI_REVIEW_OAUTH_RESOURCES",
-    "OPENAI_REVIEW_OAUTH_RESOURCES",
-    "OPENAI_REVIEW_OAUTH_RESOURCES",
+    "boundaryProfile.acceptedResources",
+    "boundaryProfile.acceptedResources",
+    "boundaryProfile!.acceptedResources",
   ]);
 });
 
@@ -617,24 +619,24 @@ test("every runtime line that reads a resource or audience field is inventoried"
   assert.match(tokenFamilySource, /!this\.acceptedResources\.includes\(this\.grantResource\)/u);
   assert.match(
     workerSource,
-    /OAuthTokenFamilyExchange\.fromForm\(\s*reviewedTokenForm,\s*env\.OAUTH_STATE,\s*env\.OAUTH_KV,\s*OPENAI_REVIEW_OAUTH_RESOURCES,\s*\)/u,
+    /OAuthTokenFamilyExchange\.fromForm\(\s*reviewedTokenForm,\s*env\.OAUTH_STATE,\s*env\.OAUTH_KV,\s*boundaryProfile!\.acceptedResources,\s*\)/u,
   );
 });
 
 test("reviewed Worker serves the path-inserted protected-resource metadata before the provider", () => {
   const route = workerSource.match(
-    /if \(openai && url\.pathname === OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH\) \{[\s\S]*?\n {4}\}\n/u,
+    /if \(reviewed && url\.pathname === OPENAI_REVIEW_MCP_RESOURCE_METADATA_PATH\) \{[\s\S]*?\n {4}\}\n/u,
   )?.[0];
   assert.ok(route, "index.ts must route the path-inserted metadata on the reviewed host");
   assert.match(
     route,
-    /reviewedMcpProtectedResourceMetadataResponse\(\s*request,\s*buildReviewedMcpProtectedResourceMetadata\(\),?\s*\)/u,
+    /reviewedMcpProtectedResourceMetadataResponse\(\s*request,\s*buildReviewedMcpProtectedResourceMetadata\(boundaryProfile!\.origin\),?\s*\)/u,
   );
   assert.match(route, /withSecurityHeaders\(/u);
   const routeIndex = workerSource.indexOf(route);
   const providerIndex = workerSource.indexOf("selectedProvider.fetch(providerRequest, env, ctx)");
   const genericHeadIndex = workerSource.indexOf(
-    'if (request.method === "HEAD" && !(openai && url.pathname === "/userinfo")) {',
+    'if (request.method === "HEAD" && !(reviewed && url.pathname === "/userinfo")) {',
   );
   assert.ok(routeIndex > 0 && routeIndex < providerIndex);
   assert.ok(

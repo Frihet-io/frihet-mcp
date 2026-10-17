@@ -48,10 +48,11 @@ The existing [full MCP service](https://mcp.frihet.io/) and
 live distribution surfaces. Full-host discovery has been queried; fresh OAuth
 login and every backing operation are not established by that observation.
 
-A **local Claude candidate** now selects 136 of the 156 source operations,
+A **local Claude candidate** now selects 125 of the 156 source operations,
 with four fiscal aliases, two corrected prompts, five local resources (one
 shared static resource for remote composition), and optional grouped discovery.
-The 20 canonical exclusions and all resource/prompt reasons are recorded in
+The grouped descriptor has 132 tool names: 125 operations, four aliases and three
+discovery tools. The 31 canonical exclusions and all resource/prompt reasons are recorded in
 [Anthropic SUBMISSION.md](../marketplace/anthropic/SUBMISSION.md#excluded-operations-and-reasons).
 The two-argument full/OpenAI composition and frozen 33-tool OpenAI descriptor
 remain compatible; the OpenAI hosted profile is separate from this candidate.
@@ -61,11 +62,13 @@ Run `npm run gate:claude-candidate`, `npm run gate:public-capability-truth`,
 verify the source candidate and compatibility. This is local functionality,
 not publication. A local stdio package alone is not a hosted Directory listing.
 
-The current source provisioning contract supports only the OpenAI candidate
-binding. The Claude selection has no enabled Worker flag or established hosted
-endpoint. This source limitation does not establish whether fresh OAuth on the
-existing full service works. Local checks do not establish hosted authorization,
-live backing API behavior, provider review or publication.
+The source includes a dedicated Claude Worker configuration and Claude mode,
+with separate OAuth authority and QA-only authorization requirements. The release
+guard requires isolated storage and a verified ERP write-ceiling release receipt.
+These source controls do not establish a deployed endpoint, fresh OAuth or live
+acceptance. Claude outputs redact the shared sensitive-field categories; opaque
+invoice PDF and e-invoice XML/PDF downloads are excluded. Local checks do not
+establish hosted authorization, live backing API behavior, provider review or publication.
 
 ## References
 

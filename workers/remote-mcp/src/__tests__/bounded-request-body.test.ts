@@ -94,7 +94,7 @@ test("MCP, token, callback, and registration routes all use bounded streaming re
   );
   assert.match(
     indexSource,
-    /openai && request\.method === "POST" && url\.pathname === "\/mcp"[\s\S]*?readBoundedTextRequest\(request, OPENAI_MCP_MAX_BODY_BYTES\)/u,
+    /reviewed && request\.method === "POST" && url\.pathname === "\/mcp"[\s\S]*?readBoundedTextRequest\(request, OPENAI_MCP_MAX_BODY_BYTES\)/u,
   );
   assert.equal(
     [...authSource.matchAll(/await readBoundedTextRequest\(/gu)].length,

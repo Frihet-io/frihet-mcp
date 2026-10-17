@@ -602,21 +602,25 @@ test("the state alarm firing mid-attempt fences the armed holder", async (t) => 
   assert.equal((await h.callback(stateKey, idToken)).status, 400);
 });
 
-test("a profile the provisioning leaf refuses is rejected before the attempt is armed", async (t) => {
+test("cross-profile authorization state is rejected before the attempt is armed", async (t) => {
   const h = await createOAuthRouteHarness(t);
   const { clientId, stateKey } = await h.startLogin();
   const idToken = await mintIdToken();
+  // Existing-Worker records carry no profile, so the Claude Worker is the one
+  // that must refuse them.
   h.env.FRIHET_OPENAI_MODE = "false";
+  h.env.FRIHET_CLAUDE_MODE = "true";
   h.namespace.fail("/release", "before");
 
   const refused = await h.callback(stateKey, idToken);
-  assert.equal(refused.status, 502);
-  assert.deepEqual(refused.body, { error: "Failed to provision API key" });
+  assert.equal(refused.status, 503);
+  assert.deepEqual(refused.body, { error: "Authorization state is temporarily unavailable" });
   assert.equal(h.events.includes("do:/attempt"), false);
   assert.equal(h.erp.postCorrelations.length, 0);
 
   // The lease outlives the lost release but holds no armed attempt, so the
   // takeover has nothing to reconcile.
+  delete h.env.FRIHET_CLAUDE_MODE;
   h.env.FRIHET_OPENAI_MODE = "true";
   h.clock.offsetMs += 61_000;
   const retried = await h.callback(stateKey, idToken);

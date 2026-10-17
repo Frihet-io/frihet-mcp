@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
+import { boundOAuthProfile, resolveWorkerAccessProfile } from "../oauth-profile.ts";
+import { claudePublicSurface } from "../claude-public-surface.ts";
+import { resolveToolMode } from "../../../../src/tool-exposure.ts";
 
 // index.ts cannot be imported here — it pulls Cloudflare/OAuth/DO bindings the
 // node test runner can't resolve (see discovery-legal-truth.test.mjs for the
@@ -50,7 +53,7 @@ const publicWorkerSource = ts.transpileModule(`
   (${workerExpression.getText(indexSource)})
 `, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 
-function publicWorkerRequest(pathname, method, mode = "true", origin = "https://openai-mcp.frihet.io") {
+function publicWorkerRequest(pathname, method, mode = "true", origin = "https://openai-mcp.frihet.io", claudeMode) {
   const worker = vm.runInNewContext(publicWorkerSource, {
     URL, Request, Response, Headers,
     OPENAI_REVIEW_ORIGIN: "https://openai-mcp.frihet.io",
@@ -60,13 +63,11 @@ function publicWorkerRequest(pathname, method, mode = "true", origin = "https://
     OPENAI_PRIVACY_HTML: "<main>reviewed privacy fixture</main>",
     isMcpRouteConfusion: () => false,
     isOpenApiLookalikePath: () => false,
-    resolveFrihetAccessProfile: (value) => {
-      if (value === "true") return "openai";
-      if (value === "false") return "full";
-      throw new Error("access profile is not configured");
-    },
+    resolveWorkerAccessProfile, boundOAuthProfile, claudePublicSurface, resolveToolMode,
   }, { timeout: 1000 });
-  return worker.fetch(new Request(`${origin}${pathname}`, { method }), { FRIHET_OPENAI_MODE: mode }, {});
+  return worker.fetch(new Request(`${origin}${pathname}`, { method }), {
+    FRIHET_OPENAI_MODE: mode, FRIHET_CLAUDE_MODE: claudeMode, FRIHET_TOOL_MODE: "grouped",
+  }, {});
 }
 
 for (const page of ["privacy", "support"]) {
@@ -181,11 +182,7 @@ function evalRootHandler(openaiMode) {
       env: { FRIHET_OPENAI_MODE: openaiMode },
       json: (value, status = 200) => ({ body: value, status }),
     },
-    resolveFrihetAccessProfile: (value) => {
-      if (value === "true") return "openai";
-      if (value === "false") return "full";
-      throw new Error("FRIHET_OPENAI_MODE must be explicitly set to true or false");
-    },
+    resolveWorkerAccessProfile,
     MCP_SERVER_VERSION: "test-version",
     FULL_MCP_ORIGIN: "https://mcp.frihet.io",
     FULL_REMOTE_TOOL_COUNT: 166,
@@ -222,4 +219,41 @@ test("the reviewed profile is refused, not answered with the full descriptor", (
   assert.equal(text.includes("mcp.frihet.io"), false, "must never leak the full host's endpoint");
   assert.equal(text.includes("openapi"), false, "must never leak the full REST/OpenAPI surface");
   assert.equal(Object.hasOwn(body ?? {}, "tools"), false);
+});
+
+test("Claude public routes use their own descriptor and fail closed before provider fallback", async () => {
+  const request = (path, method = "GET", origin = "https://claude-mcp.frihet.io") =>
+    publicWorkerRequest(path, method, "false", origin, "true");
+  const root = await request("/");
+  const descriptor = await root.json();
+  assert.equal(root.status, 200);
+  assert.equal(descriptor.mcp, "https://claude-mcp.frihet.io/mcp");
+  assert.equal(descriptor.tools, 132);
+  assert.equal(descriptor.catalogueOperations, 125);
+  assert.equal(descriptor.aliasNames, 4);
+  assert.equal(descriptor.resources, 1);
+  assert.equal(descriptor.prompts, 2);
+  for (const path of ["/mcp.json", "/.well-known/mcp"]) {
+    assert.deepEqual(await (await request(path)).json(), descriptor);
+  }
+  for (const path of ["/privacy", "/support", "/llms.txt", "/robots.txt", "/sitemap.xml", "/health"]) {
+    const get = await request(path);
+    const head = await request(path, "HEAD");
+    assert.equal(get.status, 200, path);
+    assert.equal(head.status, 200, path);
+    assert.deepEqual([...head.headers], [...get.headers], path);
+    assert.equal(head.body, null, path);
+    assert.equal((await request(path, "OPTIONS")).status, 204, path);
+    assert.equal((await request(path, "POST")).status, 405, path);
+  }
+  assert.match(await (await request("/privacy")).text(), /Anthropic receives the MCP tool inputs and results/u);
+  for (const path of ["/openapi.json", "/agents.json", "/llms-full.txt", "/releases.json", "/favicon.ico", "/privacy/other", "/api/v1/invoices"]) {
+    for (const method of ["GET", "HEAD", "OPTIONS", "POST"]) {
+      assert.equal((await request(path, method)).status, 404, `${method} ${path}`);
+    }
+  }
+  for (const origin of ["https://mcp.frihet.io", "https://openai-mcp.frihet.io"]) {
+    assert.equal((await request("/", "GET", origin)).status, 421);
+  }
+  assert.equal((await publicWorkerRequest("/", "GET", "true", "https://claude-mcp.frihet.io", "true")).status, 503);
 });

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "frihet": {
+      "type": "http",
+      "url": "https://claude-mcp.frihet.io/mcp"
+    }
+  }
+}
