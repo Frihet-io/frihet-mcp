@@ -125,10 +125,8 @@ export class DemoFrihetClient implements IFrihetClient {
     const subtotal = Math.round(items.reduce((s, i) => s + (i.quantity || 0) * (i.unitPrice || 0), 0) * 100) / 100;
     const taxRate = typeof data.taxRate === "number" ? data.taxRate : 21;
     const taxAmount = Math.round(subtotal * (taxRate / 100) * 100) / 100;
-    const isDraft = (data.status ?? "draft") === "draft";
     return simulateWrite("demo_inv", data, {
       status: data.status ?? "draft",
-      documentNumberFinal: isDraft ? false : Boolean(data.documentNumberFinal),
       subtotal,
       taxAmount,
       total: Math.round((subtotal + taxAmount) * 100) / 100,
@@ -806,14 +804,6 @@ export class DemoFrihetClient implements IFrihetClient {
       summary: { total: 0, ready: 0, notReady: 0, reviewedThisMonth: 0 },
       ...READ_STAMP,
     };
-  }
-
-  // ---------------------------------------------------------------- Onboarding
-  async getOnboardingStatus(): Promise<Rec> {
-    return { workspaceId: "demo_ws_001", persona: "autonomo", completedSteps: ["profile"], pendingSteps: ["bank", "invoice"], percentComplete: 33, startedAt: DEMO_NOW, ...READ_STAMP };
-  }
-  async setOnboardingPersona(data: { persona: "autonomo" | "empresa" | "agencia" | "gestoria" }): Promise<Rec> {
-    return { workspaceId: "demo_ws_001", persona: data.persona, updatedAt: DEMO_NOW, ...READ_STAMP };
   }
 
   // ---------------------------------------------------------------- Permissions

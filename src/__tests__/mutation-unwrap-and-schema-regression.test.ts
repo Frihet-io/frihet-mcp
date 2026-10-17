@@ -34,6 +34,7 @@ import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 
 import { FrihetClient } from "../client.js";
 import { registerInvoiceTools } from "../tools/invoices.js";
@@ -117,6 +118,11 @@ before(async () => {
         success: true,
         creditNote: { id: "cn_1", documentNumber: "CN-FRI-0001", originalInvoiceId: "inv_new", reason: "error", fullCredit: true },
       }));
+    }
+    // send invoice (POST action) — receives recipientEmail
+    if (url.pathname === "/invoices/inv_new/send" && req.method === "POST") {
+      invoiceWrites.push({ method: req.method, body });
+      return send(200, envelope({ success: true, message: "Invoice sent" }));
     }
     // create client (201) — sibling-resource envelope (proves the fix is systemic)
     if (url.pathname === "/clients" && req.method === "POST") {
@@ -348,3 +354,51 @@ describe("BUG-2 — output schemas tolerate projections, drafts, and action shap
     assert.equal(invoiceItemOutput.safeParse({ data: FULL_INVOICE, meta: {} }).success, false);
   });
 });
+
+describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoice strict schema validation", () => {
+  // Exact Zod schema from Frihet ERP functions/src/publicApi.ts:6201-6213
+  const erpSendSchema = z.object({
+    recipientEmail: z.string().email().max(255),
+    recipientName: z.string().max(200).optional(),
+    customMessage: z.string().max(5000).optional(),
+    locale: z.enum(["es", "en"]).optional(),
+  }).strict();
+
+  // Exact Zod schema invariant from Frihet ERP functions/src/publicApi.ts:910-948 (resourceSchemas.invoices.strict())
+  const erpInvoiceCreateSchema = z.object({
+    clientName: z.string().optional(),
+    clientId: z.string().optional(),
+    items: z.array(z.any()).optional(),
+    status: z.string().optional(),
+    taxRate: z.number().optional(),
+  }).strict();
+
+  test("createInvoice does NOT inject documentNumberFinal and passes strict ERP invoice create schema", async () => {
+    invoiceWrites.length = 0;
+    const client = makeClient();
+    await client.createInvoice({ clientName: "Acme Corp", status: "draft" });
+    assert.equal(invoiceWrites.length, 1);
+    const sentBody = invoiceWrites[0]!.body;
+    assert.equal("documentNumberFinal" in sentBody, false, "documentNumberFinal must NOT be sent to ERP backend");
+    assert.equal(erpInvoiceCreateSchema.safeParse(sentBody).success, true, "Body must satisfy strict ERP schema");
+  });
+
+  test("sendInvoice sends ONLY recipientEmail without prohibited aliases (to, email)", async () => {
+    invoiceWrites.length = 0;
+    const client = makeClient();
+    await client.sendInvoice("inv_new", "billing@acme.example");
+    assert.equal(invoiceWrites.length, 1);
+    const sentBody = invoiceWrites[0]!.body;
+    assert.equal("to" in sentBody, false, "prohibited 'to' alias must NOT be sent");
+    assert.equal("email" in sentBody, false, "prohibited 'email' alias must NOT be sent");
+    assert.equal(sentBody.recipientEmail, "billing@acme.example");
+    assert.equal(erpSendSchema.safeParse(sentBody).success, true, "Body must satisfy strict ERP sendSchema");
+  });
+
+  test("sendInvoice with forbidden extra keys is REJECTED by strict ERP schema (proves regression guard)", () => {
+    const invalidBody = { recipientEmail: "billing@acme.example", to: "billing@acme.example", email: "billing@acme.example" };
+    const result = erpSendSchema.safeParse(invalidBody);
+    assert.equal(result.success, false, "Strict ERP schema must reject extraneous keys");
+  });
+});
+

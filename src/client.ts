@@ -314,6 +314,40 @@ function encodeBase64(bytes: Uint8Array): string {
   return encoded;
 }
 
+/** Decode base64 bytes without relying on Node's Buffer in browser/Worker runtimes. */
+function decodeBase64(base64: string): Uint8Array {
+  const clean = base64.replace(/^data:[^;]+;base64,/i, "").replace(/[\s\r\n]+/g, "");
+  if (typeof atob === "function") {
+    const binary = atob(clean);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+  const lookup = new Uint8Array(256);
+  for (let i = 0; i < BASE64_ALPHABET.length; i++) {
+    lookup[BASE64_ALPHABET.charCodeAt(i)] = i;
+  }
+  const len = clean.length;
+  let placeholders = 0;
+  if (len > 0 && clean.charAt(len - 1) === "=") placeholders++;
+  if (len > 1 && clean.charAt(len - 2) === "=") placeholders++;
+  const byteLen = Math.max(0, Math.floor((len * 3) / 4) - placeholders);
+  const bytes = new Uint8Array(byteLen);
+  let cur = 0;
+  for (let i = 0; i < len; i += 4) {
+    const a = lookup[clean.charCodeAt(i)] ?? 0;
+    const b = lookup[clean.charCodeAt(i + 1)] ?? 0;
+    const c = lookup[clean.charCodeAt(i + 2)] ?? 0;
+    const d = lookup[clean.charCodeAt(i + 3)] ?? 0;
+    bytes[cur++] = (a << 2) | (b >> 4);
+    if (cur < byteLen) bytes[cur++] = ((b & 15) << 4) | (c >> 2);
+    if (cur < byteLen) bytes[cur++] = ((c & 3) << 6) | (d & 63);
+  }
+  return bytes;
+}
+
 export class FrihetApiError extends Error {
   constructor(
     public readonly statusCode: number,
@@ -993,14 +1027,7 @@ export class FrihetClient {
   }
 
   async createInvoice(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const status = (typeof data.status === "string" ? data.status : "draft").toLowerCase();
-    const isDraft = status === "draft";
-    const payload = {
-      ...data,
-      status,
-      ...(data.documentNumberFinal === undefined && isDraft ? { documentNumberFinal: false } : {}),
-    };
-    return this.requestUnwrapped("POST", "/invoices", payload);
+    return this.requestUnwrapped("POST", "/invoices", data);
   }
 
   async updateInvoice(
@@ -1238,7 +1265,7 @@ export class FrihetClient {
     return this.requestUnwrapped(
       "POST",
       `/invoices/${pathSegment(id)}/send`,
-      to ? { recipientEmail: to, to, email: to } : undefined,
+      to ? { recipientEmail: to } : undefined,
     );
   }
 
@@ -1273,7 +1300,7 @@ export class FrihetClient {
         const rawBase64 = typeof parsed.base64 === "string" ? parsed.base64 : (typeof parsed.data === "string" ? parsed.data : undefined);
         if (typeof rawBase64 === "string" && rawBase64.length > 0) {
           const cleanB64 = rawBase64.replace(/^data:application\/pdf;base64,/i, "").trim();
-          const binary = Buffer.from(cleanB64, "base64");
+          const binary = decodeBase64(cleanB64);
           if (hasPdfSignature(binary)) {
             return {
               id,

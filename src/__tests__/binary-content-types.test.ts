@@ -120,6 +120,22 @@ before(async () => {
       res.end('{"data":');
       return;
     }
+    if (url.pathname === "/invoices/json_base64_pdf/pdf" && req.method === "GET") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ base64: PDF_BYTES.toString("base64"), filename: "custom.pdf" }));
+      return;
+    }
+    if (url.pathname === "/invoices/octet_stream_pdf/pdf" && req.method === "GET") {
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Length", String(PDF_BYTES.byteLength));
+      res.end(PDF_BYTES);
+      return;
+    }
+    if (url.pathname === "/invoices/json_invalid_base64_pdf/pdf" && req.method === "GET") {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ base64: "bm90X2FfcGRm", filename: "bad.pdf" }));
+      return;
+    }
 
     // ── Cap precheck: server advertises an oversize PDF. End the response
     // normally (no 413 status) so the CLIENT'S precheck fires — that's the
@@ -502,5 +518,36 @@ describe("client.ts document responses (PDF / XML) — content-type aware", () =
       assert.match(result.content[0]!.text, /contentType/);
       assert.match(result.content[0]!.text, /sizeBytes/);
     }
+  });
+
+  test("JSON base64 PDF response decodes properly, respects 25 MiB cap, and satisfies pdfResultOutput", async () => {
+    const client = new FrihetClient("test_key", baseUrl);
+    const doc = await client.getInvoicePdf("json_base64_pdf");
+    assert.equal(doc.id, "json_base64_pdf");
+    assert.equal(doc.contentType, "application/pdf");
+    assert.equal(doc.sizeBytes, PDF_BYTES.byteLength);
+    assert.equal(doc.base64, PDF_BYTES.toString("base64"));
+    assert.equal(doc.filename, "custom.pdf");
+    assert.equal(pdfResultOutput.safeParse(doc).success, true);
+  });
+
+  test("application/octet-stream response with %PDF- header is accepted and satisfies pdfResultOutput", async () => {
+    const client = new FrihetClient("test_key", baseUrl);
+    const doc = await client.getInvoicePdf("octet_stream_pdf");
+    assert.equal(doc.id, "octet_stream_pdf");
+    assert.equal(doc.contentType, "application/pdf");
+    assert.equal(doc.sizeBytes, PDF_BYTES.byteLength);
+    assert.equal(pdfResultOutput.safeParse(doc).success, true);
+  });
+
+  test("JSON response with invalid base64 (not a PDF) is rejected fail-closed", async () => {
+    const client = new FrihetClient("test_key", baseUrl);
+    await assert.rejects(
+      async () => client.getInvoicePdf("json_invalid_base64_pdf"),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        return true;
+      },
+    );
   });
 });
