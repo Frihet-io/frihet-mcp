@@ -364,23 +364,47 @@ describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoi
     locale: z.enum(["es", "en"]).optional(),
   }).strict();
 
-  // Exact Zod schema invariant from Frihet ERP functions/src/publicApi.ts:910-948 (resourceSchemas.invoices.strict())
-  const erpInvoiceCreateSchema = z.object({
-    clientName: z.string().optional(),
-    clientId: z.string().optional(),
-    items: z.array(z.any()).optional(),
-    status: z.string().optional(),
-    taxRate: z.number().optional(),
+  // Faithful representation of Frihet ERP functions/src/publicApi.ts:910-960 (resourceSchemas.invoices.strict())
+  const erpInvoiceItemSchema = z.object({
+    description: z.string().min(1).max(500),
+    quantity: z.number().positive(),
+    unitPrice: z.number().nonnegative(),
+    taxRate: z.number().min(0).max(100).optional(),
+    discount: z.number().min(0).max(100).optional(),
   }).strict();
+
+  const erpInvoiceCreateSchema = z.object({
+    clientName: z.string().min(1).max(200),
+    clientId: z.string().optional(),
+    items: z.array(erpInvoiceItemSchema).min(1),
+    status: z.enum(["draft", "sent", "paid", "cancelled"]).optional(),
+    taxRate: z.number().min(0).max(100).optional(),
+    date: z.string().optional(),
+    dueDate: z.string().optional(),
+    notes: z.string().max(2000).optional(),
+    currency: z.string().length(3).optional(),
+  }).strict();
+
+  const VALID_SYNTHETIC_INVOICE = {
+    clientName: "Acme Corp",
+    items: [{ description: "Consulting services", quantity: 1, unitPrice: 100 }],
+    status: "draft" as const,
+  };
 
   test("createInvoice does NOT inject documentNumberFinal and passes strict ERP invoice create schema", async () => {
     invoiceWrites.length = 0;
     const client = makeClient();
-    await client.createInvoice({ clientName: "Acme Corp", status: "draft" });
+    await client.createInvoice(VALID_SYNTHETIC_INVOICE);
     assert.equal(invoiceWrites.length, 1);
     const sentBody = invoiceWrites[0]!.body;
     assert.equal("documentNumberFinal" in sentBody, false, "documentNumberFinal must NOT be sent to ERP backend");
     assert.equal(erpInvoiceCreateSchema.safeParse(sentBody).success, true, "Body must satisfy strict ERP schema");
+  });
+
+  test("createInvoice with documentNumberFinal is REJECTED by strict ERP schema (proves regression guard)", () => {
+    const invalidBody = { ...VALID_SYNTHETIC_INVOICE, documentNumberFinal: false };
+    const result = erpInvoiceCreateSchema.safeParse(invalidBody);
+    assert.equal(result.success, false, "Strict ERP schema must reject documentNumberFinal");
   });
 
   test("sendInvoice sends ONLY recipientEmail without prohibited aliases (to, email)", async () => {
