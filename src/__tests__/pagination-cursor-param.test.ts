@@ -264,6 +264,10 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
 
     // 4. Real MCP SDK + Claude Candidate Profile (`applyClaudeCandidateProfile`):
     //    Verify neither truncated=true nor q+after is ever presented as an exhaustive list.
+    //    Note: `claudeToolResult` (`src/claude-output-privacy.ts`) replaces unstructured error text
+    //    with a generic privacy-redacted message ("Frihet could not complete or confirm this request..."),
+    //    so Claude receives `isError=true` and `structuredContent=undefined`, never the partial list,
+    //    while preserving the frozen Claude privacy filter contract.
     const claudeServer = new McpServer({ name: "claude-trunc-test", version: "1.0.0" });
     applyClaudeCandidateProfile(claudeServer);
     registerClientTools(claudeServer, mockClient);
@@ -278,6 +282,11 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
       });
       assert.equal(claudeTruncClients.isError, true, "Claude profile must receive isError=true on truncated client search");
       assert.equal(claudeTruncClients.structuredContent, undefined, "Claude profile must NOT receive structuredContent on truncated client search");
+      const claudeTruncClientText = (claudeTruncClients.content as Array<{ type: string; text: string }>)[0]!.text;
+      assert.equal(
+        claudeTruncClientText,
+        "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry.",
+      );
 
       const claudeTruncVendors = await claudeClient.callTool({
         name: "list_vendors",

@@ -303,4 +303,41 @@ describe("duplicate_invoice — allowlist pick", () => {
       { id: "line_zero_qty", description: "Placeholder line", quantity: 0, unitPrice: 0 },
     ]);
   });
+
+  test("rejects incomplete invoices missing both items and clientName (or missing clientName alone) with zero createInvoice calls", async () => {
+    const writes: Record<string, unknown>[] = [];
+    let currentOriginal: Record<string, unknown> = {};
+
+    const server = new StubMcpServer();
+    const client = {
+      getInvoice: async (_id: string) => currentOriginal,
+      createInvoice: async (data: Record<string, unknown>) => {
+        writes.push(data);
+        return { id: "inv_should_not_happen", status: "draft", ...data };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+
+    const { registerIntelligenceTools } = await import("../tools/intelligence.js");
+    registerIntelligenceTools(
+      server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
+      client,
+    );
+    const tool = server.tools.get("duplicate_invoice")!;
+
+    // 1. Both items and clientName missing simultaneously (no synthetic route bypass)
+    currentOriginal = { id: "inv_bare", clientId: "cli_1", email: "a@example.com", status: "draft" };
+    const bareRes = await tool.handler({ id: "inv_bare" });
+    assert.equal(bareRes.isError, true, "Must reject invoice missing both clientName and items");
+    assert.equal(writes.length, 0, "Must perform ZERO writes when both clientName and items are missing");
+
+    // 2. Valid items present, but clientName is missing or whitespace-only
+    currentOriginal = {
+      id: "inv_no_client_name",
+      clientName: "   ",
+      items: [{ description: "Valid item", quantity: 1, unitPrice: 100 }],
+    };
+    const noNameRes = await tool.handler({ id: "inv_no_client_name" });
+    assert.equal(noNameRes.isError, true, "Must reject invoice with empty clientName");
+    assert.equal(writes.length, 0, "Must perform ZERO writes when clientName is empty");
+  });
 });
