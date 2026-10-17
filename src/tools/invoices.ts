@@ -242,7 +242,12 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
       outputSchema: invoiceItemOutput,
     },
     async (input) => withToolLogging("create_invoice", async () => {
-      const result = await client.createInvoice(input);
+      const status = input.status ?? "draft";
+      const payload: Record<string, unknown> = {
+        ...input,
+        status,
+      };
+      const result = await client.createInvoice(payload);
       const hints = enrichResponse("invoices", "create", result);
       return {
         content: [mutateContent(formatRecord("Invoice created", result) + hints)],
@@ -456,6 +461,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           isError: true,
         };
       }
+
       const invoice = await client.getInvoice(id);
       if (invoice["status"] === "cancelled") {
         return {
@@ -463,7 +469,13 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           isError: true,
         };
       }
-      let recipientEmail = to;
+      let recipientEmail = to ? to.trim() : undefined;
+      if (recipientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+        return {
+          content: [{ type: "text" as const, text: `Error: invalid recipient email address format: "${recipientEmail}".` }],
+          isError: true,
+        };
+      }
       if (!recipientEmail) {
         const clientId = typeof invoice["clientId"] === "string" ? invoice["clientId"] : undefined;
         if (!clientId) {
@@ -483,6 +495,7 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
           };
         }
       }
+
       const result = await client.sendInvoice(id, recipientEmail);
       return {
         content: [mutateContent(formatRecord("Invoice sent", result))],

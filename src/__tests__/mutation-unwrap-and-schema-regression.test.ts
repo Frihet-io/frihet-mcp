@@ -34,6 +34,7 @@ import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 
 import { FrihetClient } from "../client.js";
 import { registerInvoiceTools } from "../tools/invoices.js";
@@ -117,6 +118,11 @@ before(async () => {
         success: true,
         creditNote: { id: "cn_1", documentNumber: "CN-FRI-0001", originalInvoiceId: "inv_new", reason: "error", fullCredit: true },
       }));
+    }
+    // send invoice (POST action) — receives recipientEmail
+    if (url.pathname === "/invoices/inv_new/send" && req.method === "POST") {
+      invoiceWrites.push({ method: req.method, body });
+      return send(200, envelope({ success: true, message: "Invoice sent" }));
     }
     // create client (201) — sibling-resource envelope (proves the fix is systemic)
     if (url.pathname === "/clients" && req.method === "POST") {
@@ -348,3 +354,159 @@ describe("BUG-2 — output schemas tolerate projections, drafts, and action shap
     assert.equal(invoiceItemOutput.safeParse({ data: FULL_INVOICE, meta: {} }).success, false);
   });
 });
+
+describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoice strict schema validation", () => {
+  // Verbatim Zod schemas transcribed directly from Frihet ERP backend
+  // Source: berthelius/Frihet-ERP functions/src/publicApi.ts:835-960 and 6201-6213
+  const erpSendSchema = z.object({
+    recipientEmail: z.string().email().max(255),
+    recipientName: z.string().max(200).optional(),
+    customMessage: z.string().max(5000).optional(),
+    locale: z.enum(["es", "en"]).optional(),
+  }).strict();
+
+  const erpInvoiceItemSchema = z.object({
+    id: z.string().max(128).optional(),
+    description: z.string().max(10000),
+    quantity: z.number(),
+    unitPrice: z.number(),
+  }).strict();
+
+  const erpAddressSchema = z.object({
+    street: z.string().max(10000).optional(),
+    city: z.string().max(10000).optional(),
+    zip: z.string().max(10000).optional(),
+    province: z.string().max(10000).optional(),
+    country: z.string().max(10000).optional(),
+    countryCode: z.string().max(10).optional(),
+    state: z.string().max(10000).optional(),
+    postalCode: z.string().max(10000).optional(),
+  }).strict();
+
+  const erpInvoiceRecurringSchema = z.object({
+    enabled: z.boolean(),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "quarterly", "yearly"]),
+    nextDate: z.string(),
+    endDate: z.string().optional(),
+    maxOccurrences: z.number().int().min(1).optional(),
+    autoSend: z.boolean().default(false),
+  }).strict();
+
+  function isRealCalendarDate(str: string): boolean {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+    if (!match) return false;
+    const y = Number(match[1]);
+    const m = Number(match[2]);
+    const d = Number(match[3]);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  }
+
+  const erpIsoDateOnlySchema = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use ISO date format YYYY-MM-DD")
+    .refine((s) => isRealCalendarDate(s), { message: "Not a valid calendar date" });
+
+  // Verbatim resourceSchemas.invoices from publicApi.ts:910-960
+  const erpInvoiceCreateSchema = z.object({
+    clientName: z.string().max(10000),
+    clientId: z.string().max(10000).optional(),
+    clientAddress: z.union([z.string().max(10000), erpAddressSchema]).optional(),
+    clientTaxId: z.string().max(10000).optional(),
+    documentNumber: z.string().max(50).optional(),
+    documentNature: z.literal("complete").optional(),
+    items: z.array(erpInvoiceItemSchema),
+    issueDate: erpIsoDateOnlySchema.optional(),
+    dueDate: z.string().max(10000).optional(),
+    status: z.enum(["draft", "sent", "partial", "paid", "overdue", "cancelled"]).optional(),
+    notes: z.string().max(10000).optional(),
+    taxRate: z.number().min(0).max(100).optional(),
+    irpfRate: z.number().min(0).max(100).optional(),
+    equivalenceSurchargeRate: z.number().min(0).max(100).optional(),
+    clientLocation: z.enum(["peninsula", "canarias", "ceuta_melilla", "eu", "world"]).optional(),
+    prepayment: z.number().min(0).optional(),
+    seriesId: z.string().max(10000).optional(),
+    discountRate: z.number().min(0).max(100).optional(),
+    poNumber: z.string().max(10000).optional(),
+    operationType: z.enum(["service", "goods"]).optional(),
+    fiscalTreatment: z.enum(["not_subject_location", "export_exempt"]).optional(),
+    recurring: erpInvoiceRecurringSchema.optional(),
+  }).strict();
+
+  const VALID_SYNTHETIC_INVOICE = {
+    clientName: "Acme Corp",
+    items: [{ description: "Consulting services", quantity: 1, unitPrice: 100 }],
+    status: "draft" as const,
+  };
+
+  const VALID_DETAILED_INVOICE = {
+    clientName: "Cliente Canarias S.L.",
+    clientTaxId: "B12345678",
+    items: [{ description: "Servicios profesionales", quantity: 2, unitPrice: 50 }],
+    status: "draft" as const,
+    issueDate: "2026-10-17",
+    taxRate: 7,
+    clientLocation: "canarias" as const,
+    notes: "Factura proforma en borrador",
+  };
+
+  test("createInvoice does NOT inject documentNumberFinal and passes strict ERP invoice create schema", async () => {
+    invoiceWrites.length = 0;
+    const client = makeClient();
+    await client.createInvoice(VALID_SYNTHETIC_INVOICE);
+    assert.equal(invoiceWrites.length, 1);
+    const sentBody = invoiceWrites[0]!.body;
+    assert.equal("documentNumberFinal" in sentBody, false, "documentNumberFinal must NOT be sent to ERP backend");
+    assert.equal(erpInvoiceCreateSchema.safeParse(sentBody).success, true, "Body must satisfy verbatim ERP schema");
+  });
+
+  test("createInvoice with detailed fiscal fields satisfies verbatim ERP schema", async () => {
+    invoiceWrites.length = 0;
+    const client = makeClient();
+    await client.createInvoice(VALID_DETAILED_INVOICE);
+    assert.equal(invoiceWrites.length, 1);
+    const sentBody = invoiceWrites[0]!.body;
+    assert.equal("documentNumberFinal" in sentBody, false);
+    assert.equal(erpInvoiceCreateSchema.safeParse(sentBody).success, true);
+  });
+
+  test("createInvoice with documentNumberFinal is REJECTED by strict ERP schema (proves regression guard)", () => {
+    const invalidBody = { ...VALID_SYNTHETIC_INVOICE, documentNumberFinal: false };
+    const result = erpInvoiceCreateSchema.safeParse(invalidBody);
+    assert.equal(result.success, false, "Strict ERP schema must reject documentNumberFinal");
+  });
+
+  test("createInvoice with unrecognized extra keys (e.g. date, currency) is REJECTED by strict ERP schema", () => {
+    // Neither 'date' nor 'currency' are accepted by publicApi.ts resourceSchemas.invoices.strict()
+    const invalidBodyWithDate = { ...VALID_SYNTHETIC_INVOICE, date: "2026-10-17" };
+    assert.equal(erpInvoiceCreateSchema.safeParse(invalidBodyWithDate).success, false);
+
+    const invalidBodyWithCurrency = { ...VALID_SYNTHETIC_INVOICE, currency: "EUR" };
+    assert.equal(erpInvoiceCreateSchema.safeParse(invalidBodyWithCurrency).success, false);
+  });
+
+  test("createInvoice with calendar-invalid issueDate (e.g. 2026-02-31) is REJECTED by strict ERP schema", () => {
+    const invalidDateBody = { ...VALID_SYNTHETIC_INVOICE, issueDate: "2026-02-31" };
+    assert.equal(erpInvoiceCreateSchema.safeParse(invalidDateBody).success, false, "ERP schema must reject calendar-invalid dates");
+  });
+
+  test("sendInvoice sends ONLY recipientEmail without prohibited aliases (to, email)", async () => {
+    invoiceWrites.length = 0;
+    const client = makeClient();
+    await client.sendInvoice("inv_new", "billing@acme.example");
+    assert.equal(invoiceWrites.length, 1);
+    const sentBody = invoiceWrites[0]!.body;
+    assert.equal("to" in sentBody, false, "prohibited 'to' alias must NOT be sent");
+    assert.equal("email" in sentBody, false, "prohibited 'email' alias must NOT be sent");
+    assert.equal(sentBody.recipientEmail, "billing@acme.example");
+    assert.equal(erpSendSchema.safeParse(sentBody).success, true, "Body must satisfy verbatim ERP sendSchema");
+  });
+
+  test("sendInvoice with forbidden extra keys is REJECTED by strict ERP schema (proves regression guard)", () => {
+    const invalidBody = { recipientEmail: "billing@acme.example", to: "billing@acme.example", email: "billing@acme.example" };
+    const result = erpSendSchema.safeParse(invalidBody);
+    assert.equal(result.success, false, "Strict ERP schema must reject extraneous keys");
+  });
+});
+

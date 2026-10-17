@@ -1241,8 +1241,9 @@ export class FrihetClient {
 
   async getInvoicePdf(id: string): Promise<BinaryDocument> {
     // One fetch, one Response: validate MIME and signature only after the
-    // bounded stream completes. The ERP endpoint has always returned bytes;
-    // there is no pre-signed-URL JSON success contract to emulate.
+    // bounded stream completes. The ERP endpoint has always returned raw bytes
+    // (functions/src/publicApi.ts:6149-6167); there is no pre-signed-URL or JSON
+    // success contract to emulate.
     const url = `/invoices/${pathSegment(id)}/pdf`;
     const doc = await this.requestDocument(
       "GET",
@@ -1250,24 +1251,40 @@ export class FrihetClient {
       undefined,
       undefined,
       undefined,
-      (contentType) => normalizedContentType(contentType) === "application/pdf"
-        ? MAX_PDF_BYTES
-        : MAX_ERROR_BYTES,
+      (contentType) => {
+        const norm = normalizedContentType(contentType);
+        return norm === "application/pdf"
+          || norm === "application/octet-stream"
+          || norm === "binary/octet-stream"
+          ? MAX_PDF_BYTES
+          : MAX_ERROR_BYTES;
+      },
     );
-    if (normalizedContentType(doc.contentType) !== "application/pdf") {
+
+    const normType = normalizedContentType(doc.contentType);
+    if (normType !== "application/pdf" && normType !== "application/octet-stream" && normType !== "binary/octet-stream") {
       throw new FrihetApiError(
         200,
         "invalid_response",
         `Invoice PDF endpoint returned unexpected Content-Type: ${doc.contentType}`,
       );
     }
+
     if (!hasPdfSignature(doc.bytes)) {
       throw new FrihetApiError(200, "invalid_response", "Invoice PDF response is malformed");
     }
 
+    if (doc.sizeBytes > MAX_PDF_BYTES) {
+      throw new FrihetApiError(
+        413,
+        "payload_too_large",
+        `Invoice PDF exceeds maximum allowed size of ${MAX_PDF_BYTES} bytes`,
+      );
+    }
+
     return {
       id,
-      contentType: doc.contentType,
+      contentType: "application/pdf",
       sizeBytes: doc.sizeBytes,
       base64: encodeBase64(doc.bytes),
       ...(doc.filename ? { filename: doc.filename } : {}),
