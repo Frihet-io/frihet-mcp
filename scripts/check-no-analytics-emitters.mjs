@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "2020fb9e343c3eefa8880f42a5016fa19dc482161dea9733c2e07cc43b2c25df", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test, the Claude write-route wire contract test, Claude output privacy and bootstrap secret tests; no new deps, lifecycle or network script
+  "package.json": "d2609485c46d533635b882203d7b3b49f810075c3c94bace50f6285c2a0dc1b0", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test, the Claude write-route wire contract test, Claude output privacy and bootstrap secret tests; no new deps, lifecycle or network script
   "workers/remote-mcp/package.json": "0248007796a87b37d4f7060566b48d767aa4dcdc7a70b9fdb5883387997d1c72", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -271,7 +271,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "277e1bcd705fc165137010a7b1320facac2e53f02c373d79ee80e30d5dcb3357", // path ids go through one segment check that refuses "", "." and ".." before any request; sinks unchanged
+  "src/client.ts": "fe4b2932d3c21b29533d420a6e1306a8b1c0f3738bfee0f13e98e0265587c039", // path ids go through one segment check that refuses "", "." and ".." before any request; sinks unchanged
   "workers/remote-mcp/src/claude-public-surface.ts": "2437e7824b6a2a8d98ca982f4631643fa522c224ec554c3c7610bd5d66f6b2e5", // isolated Claude host and authorization boundary
   "workers/remote-mcp/src/oauth-profile.ts": "fd78139588876001b0521d5d9370b89a019f065ed783fdc76617a863c978c8a1", // isolated Claude host and authorization boundary
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
@@ -305,6 +305,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
+  "scripts/__tests__/no-public-leak.test.mjs": "8e39d519a49cf19a88902f9038919361da664410cecbf78d594cf0350f1028cd", // synthetic credential tripwire regression; reports paths, never values
   "scripts/verify-claude-erp-source-release.mjs": "48e6919a9e7bc87158ecb356aeaf38d8d8055fc74075269af45ac8ca4d9138a3", // authenticated read-only GitHub release/build artifacts; no telemetry or cloud mutation
   "scripts/check-claude-bootstrap-secrets.mjs": "4d4700482718ea1ae88480dd215521f07dbc9e8342838775826a8846d20925e4", // local Claude bootstrap secret check; no network or raw credential output
   "scripts/__tests__/claude-bootstrap-secrets.test.mjs": "90159f0a689cb8f5d6ffc6630871b0b596510b1e9f24e32adbdfe4dc2c779095", // local Claude bootstrap secret check; no network or raw credential output
@@ -339,7 +340,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/generate-openai-submission.mjs": "4514b4f3099d5cb645e399367f0624c4b05d7192b004e68441295a00e56b90d7",
   "scripts/generate-public-capability-contract.mjs": "7c6f08e3a28c9bc2cd50a9e791571eaf4987b2c618f4c614ae55c9ed811cf1f2",
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
-  "scripts/no-public-leak.sh": "b1f545a1bce2fc8f3e227f9bff41e737ea398ef5f15001403e4b8c7bfc684855",
+  "scripts/no-public-leak.sh": "168718b79ae54ff4b37be5522c66baf064c1462ced64c466edf6a9536bfd5a5b",
   "scripts/postinstall.js": "02947d11d324048f69bc92d253d7c41f947aa338d1d6315b1579492689d462e3",
   "scripts/published-artifact-drift.mjs": "29435fd9b25625db5f6835e0b11b0528daf7345eef1421c6c826879be00b4f95",
   "scripts/sync-openapi.mjs": "3d72c61a014b53887906fade05a13631e06d47977891b4b4fdb9a337322a4f32",

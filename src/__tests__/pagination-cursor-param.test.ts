@@ -30,6 +30,9 @@ import { createServer, type Server, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import { FrihetClient } from "../client.js";
+import { registerClientTools } from "../tools/clients.js";
+import type { IFrihetClient } from "../client-interface.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 interface CapturedRequest {
   method: string;
@@ -135,3 +138,57 @@ describe("Product active filter wire contract", () => {
     });
   }
 });
+
+describe("Client search fallback pagination coherence", () => {
+  test("list_clients applies consistent search criteria on page 1 and page 2 when query has zero total matches", async () => {
+    const queriedTerms: string[] = [];
+    const mockClient = {
+      listClients: async (params: { q?: string; offset?: number; limit?: number }) => {
+        queriedTerms.push(`${params.q}|${params.offset ?? 0}`);
+        if (params.q === "CanariasBlue") {
+          return { data: [], total: 0, limit: params.limit ?? 20, offset: params.offset ?? 0 };
+        }
+        if (params.q === "Canarias Blue") {
+          const start = params.offset ?? 0;
+          return {
+            data: [{ id: `cli_${start + 1}`, name: "Canarias Blue S.L.", address: "Calle Mayor 1" }],
+            total: 35,
+            limit: params.limit ?? 20,
+            offset: start,
+          };
+        }
+        return { data: [], total: 0, limit: 20, offset: 0 };
+      },
+      getClient: async () => ({ id: "cli_1", name: "Canarias Blue S.L." }),
+    } as unknown as IFrihetClient;
+
+    const tools = new Map<string, (args: any) => Promise<any>>();
+    const fakeServer = {
+      registerTool: (name: string, _opts: unknown, handler: (args: any) => Promise<any>) => {
+        tools.set(name, handler);
+      },
+    } as unknown as McpServer;
+
+    registerClientTools(fakeServer, mockClient);
+    const listClientsTool = tools.get("list_clients")!;
+
+    // Page 1
+    const page1 = await listClientsTool({ q: "CanariasBlue", offset: 0, limit: 20 });
+    assert.equal(page1.structuredContent.total, 35);
+    assert.equal(page1.structuredContent.data.length, 1);
+    assert.equal(page1.structuredContent.data[0].id, "cli_1");
+    // Verify string address is normalized to object
+    assert.deepEqual(page1.structuredContent.data[0].address, { street: "Calle Mayor 1" });
+
+    // Page 2: with offset=20
+    const page2 = await listClientsTool({ q: "CanariasBlue", offset: 20, limit: 20 });
+    assert.equal(page2.structuredContent.total, 35);
+    assert.equal(page2.structuredContent.data.length, 1);
+    assert.equal(page2.structuredContent.data[0].id, "cli_21");
+
+    // Assert that Canarias Blue fallback was invoked for BOTH page 1 and page 2
+    assert.ok(queriedTerms.includes("Canarias Blue|0"), "Page 1 must query split terms");
+    assert.ok(queriedTerms.includes("Canarias Blue|20"), "Page 2 must query split terms with matching offset");
+  });
+});
+
