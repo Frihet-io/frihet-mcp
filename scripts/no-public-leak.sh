@@ -85,7 +85,8 @@ if git ls-files | grep -iE "(^|/)\.env(\..+)?$" | grep -v "\.env\.example" 2>/de
   note ".env credential file tracked in git repository — remove immediately."
 fi
 
-if git grep -inE "BEGIN (RSA|EC|OPENSSH|DSA|PGP) PRIVATE KEY|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82}" \
+# Only filenames may reach CI logs; matching lines can contain live credentials.
+if git grep -ilE "BEGIN (RSA|EC|OPENSSH|DSA|PGP) PRIVATE KEY|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82}" \
      -- ":!node_modules" ":!dist" ":!scripts/no-public-leak.sh" ":!src/__tests__/fixtures" 2>/dev/null; then
   note "High-entropy secret or private key pattern found in tracked files."
 fi
