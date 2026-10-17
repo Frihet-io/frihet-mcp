@@ -51,6 +51,8 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
  * — the user sees a clean error, the worker doesn't OOM.
  */
 export const MAX_PDF_BYTES = 25 * 1024 * 1024;
+/** Wire budget for JSON-wrapped base64 PDF responses (ceil(25 MiB * 4 / 3) + JSON envelope margin). */
+export const MAX_PDF_JSON_BYTES = Math.ceil((MAX_PDF_BYTES * 4) / 3) + 64 * 1024;
 export const MAX_XML_BYTES = 5 * 1024 * 1024;
 const MAX_ERROR_BYTES = 64 * 1024;
 
@@ -316,7 +318,7 @@ function encodeBase64(bytes: Uint8Array): string {
 
 /** Decode base64 bytes without relying on Node's Buffer in browser/Worker runtimes. */
 function decodeBase64(base64: string): Uint8Array {
-  const clean = base64.replace(/^data:[^;]+;base64,/i, "").replace(/[\s\r\n]+/g, "");
+  const clean = base64.replace(/^data:[^;,]*;?base64,/i, "").replace(/[\s\r\n]+/g, "");
   if (typeof atob === "function") {
     const binary = atob(clean);
     const bytes = new Uint8Array(binary.length);
@@ -1286,8 +1288,9 @@ export class FrihetClient {
         return norm === "application/pdf"
           || norm === "application/octet-stream"
           || norm === "binary/octet-stream"
-          || norm === "application/json"
           ? MAX_PDF_BYTES
+          : norm === "application/json"
+          ? MAX_PDF_JSON_BYTES
           : MAX_ERROR_BYTES;
       },
     );
@@ -1299,8 +1302,15 @@ export class FrihetClient {
         const parsed = JSON.parse(decodeUtf8(doc.bytes, "invoice PDF JSON response")) as Record<string, unknown>;
         const rawBase64 = typeof parsed.base64 === "string" ? parsed.base64 : (typeof parsed.data === "string" ? parsed.data : undefined);
         if (typeof rawBase64 === "string" && rawBase64.length > 0) {
-          const cleanB64 = rawBase64.replace(/^data:application\/pdf;base64,/i, "").trim();
+          const cleanB64 = rawBase64.replace(/^data:[^;,]*;?base64,/i, "").replace(/[\s\r\n]+/g, "");
           const binary = decodeBase64(cleanB64);
+          if (binary.byteLength > MAX_PDF_BYTES) {
+            throw new FrihetApiError(
+              413,
+              "payload_too_large",
+              `Decoded PDF document exceeds maximum allowed size of ${MAX_PDF_BYTES} bytes`,
+            );
+          }
           if (hasPdfSignature(binary)) {
             return {
               id,
@@ -1311,7 +1321,10 @@ export class FrihetClient {
             };
           }
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof FrihetApiError && err.statusCode === 413) {
+          throw err;
+        }
         // Fall through to strict error
       }
     }
@@ -1326,6 +1339,14 @@ export class FrihetClient {
 
     if (!hasPdfSignature(doc.bytes)) {
       throw new FrihetApiError(200, "invalid_response", "Invoice PDF response is malformed");
+    }
+
+    if (doc.sizeBytes > MAX_PDF_BYTES) {
+      throw new FrihetApiError(
+        413,
+        "payload_too_large",
+        `Invoice PDF exceeds maximum allowed size of ${MAX_PDF_BYTES} bytes`,
+      );
     }
 
     return {
