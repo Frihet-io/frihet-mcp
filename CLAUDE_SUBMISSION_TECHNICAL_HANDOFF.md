@@ -55,17 +55,17 @@
   - `@frihet/mcp-server` package version: `1.18.0`
   - `@frihet/remote-mcp-server` Worker version: `1.1.0`
   - Claude Plugin (`plugins/claude/frihet-erp/.claude-plugin/plugin.json`) name & version: `frihet-erp` · `1.18.0-preview.2`
-  - Base `frihet-mcp` `main` commit SHA: `02cd0b95494dc73193475139f3dae1340b702583`
+  - Merged `frihet-mcp` `main` commit SHA (combining `#227` and `#229`): `ac4215dc5d4348241d5e161670b204195419d259`
   - Current `berthelius/Frihet-ERP` `main` commit SHA: `3d30fc7339ba32c3e6fdaf533f9b6550210c61bf` (includes `#2654` / `9093fcd53` and `#2655`)
-  - ERP Contract Hardening PR (approved, ready to merge): [PR #227](https://github.com/Frihet-io/frihet-mcp/pull/227) (`40e7f30afedbf054bef841a9e6089aa9363c5204`)
-  - Claude P0 Readiness & `#221` OAuth Follow-ups PR (`Refs #221`): [PR #229](https://github.com/Frihet-io/frihet-mcp/pull/229) (`fix/claude-p0-hosted-and-plugin-readiness`)
+  - ERP Contract Hardening PR (merged into `main`): [PR #227](https://github.com/Frihet-io/frihet-mcp/pull/227) (`40e7f30afedbf054bef841a9e6089aa9363c5204` -> merge commit `31f53d21e7708f0b593839115376be6b46792cb1`)
+  - Claude P0 Readiness & `#221` OAuth Follow-ups PR (`Refs #221`, merged into `main`): [PR #229](https://github.com/Frihet-io/frihet-mcp/pull/229) (`fc48c8a9acc01963021ff591575313157ee465fb` -> merge commit `ac4215dc5d4348241d5e161670b204195419d259`)
 
 ---
 
 ## 3. OAuth, Open-Issue Reconciliation (`#204`, `#205`, `#221`), & Hosted Worker Evidence
 
 ### 3.1 Verified in Local Route & SDK Integration (`probado`)
-All 260 tests in `workers/remote-mcp` (`npm test --prefix workers/remote-mcp`) and all 1,215 server tests (`npm test`) pass, including:
+All 260 tests in `workers/remote-mcp` (`npm test --prefix workers/remote-mcp`) and all 1,222 server tests (`npm test`) pass on `main`, including:
 - **`workers/remote-mcp/src/__tests__/claude-oauth-route.test.ts`:**
   - Full end-to-end route execution (`/register -> /authorize -> /callback -> claudeOAuthApiKeyProvisioning -> completeAuthorization -> /token -> /mcp`) using the locked `@cloudflare/workers-oauth-provider@0.3.0` bundle with the audited Claude localhost patch.
   - Verifies fail-closed rejection (HTTP `403`, zero DO arming, zero ERP provisioning calls, zero KV grants) when `FRIHET_CLAUDE_QA_UIDS` is missing, malformed, empty, or does not contain the verified Firebase UID.
@@ -132,7 +132,7 @@ Codex can reference and attach the following verified repository paths and repro
 
 ## 5. Remaining Blockers & Exact Operator Actions to Close Them
 
-With **`CF-1` completed** (isolated KV namespace `274c7aaa85a04d44b4dc77f5f1dd7ca2` created in Cloudflare and bound in `workers/remote-mcp/wrangler.claude.toml`), the remaining steps before `https://claude-mcp.frihet.io/mcp` is live are:
+With **`CF-1` completed** (isolated KV namespace `274c7aaa85a04d44b4dc77f5f1dd7ca2` created in Cloudflare and bound in `workers/remote-mcp/wrangler.claude.toml`) and **[PR #227](https://github.com/Frihet-io/frihet-mcp/pull/227) (`31f53d21e7708f0b593839115376be6b46792cb1`) + [PR #229](https://github.com/Frihet-io/frihet-mcp/pull/229) (`ac4215dc5d4348241d5e161670b204195419d259`) merged into `main`** with green CI (`1,222/1,222` MCP tests, `260/260` Worker tests, and `cross-surface-authority` green), the remaining steps before `https://claude-mcp.frihet.io/mcp` is live are:
 
 ### Blocker 1 — Production Firebase Deploy of Both `publicApi` and `claudeOAuthApiKeyProvisioning` (`berthelius/Frihet-ERP`)
 - **Current state:**
@@ -144,21 +144,81 @@ With **`CF-1` completed** (isolated KV namespace `274c7aaa85a04d44b4dc77f5f1dd7c
   2. Deploy **both** `publicApi` (with the Claude write-route ceiling) and `claudeOAuthApiKeyProvisioning` from `berthelius/Frihet-ERP` to Firebase production (`gen-lang-client-0335716041`, `europe-west1`).
   3. Verify separately that `GET https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning` returns HTTP `405` (not `404`) and update `/Users/brthls/Documents/Frihet-ERP/scripts/claude-publicapi-source-release.json` with `"approved": true` and the verified `"candidateSourceSha256"` so `node scripts/verify-claude-erp-source-release.mjs` in `frihet-mcp` exits `0`.
 
-### Blocker 2 — Merge `#227` and `#229` & Certify Combined `main`
-- **Action required:**
-  1. After human review and merge of [PR #227](https://github.com/Frihet-io/frihet-mcp/pull/227) and [PR #229](https://github.com/Frihet-io/frihet-mcp/pull/229) into `main`, run the full verification suite (`npm test`, `npm test --prefix workers/remote-mcp`, `npm run gate:analytics`, `npm run gate:claude-candidate`, `npm run gate:claude-hosted-source`, `npm run gate:openai-review-descriptor`) on the combined `main` HEAD before any Worker deployment.
-
-### Blocker 3 — Controlled Single-Activation Secret & Worker Rollout (`CF-2` + `CF-3`)
-- **Why `wrangler secret put` is NOT run three times ahead of launch:** Cloudflare documents that each `wrangler secret put` immediately creates and deploys a new active Worker version. To avoid three implicit partial deployments before the backend and combined `main` are certified, `CF-2` and `CF-3` execute in a single controlled rollout while `claude-mcp.frihet.io` remains dark (`NXDOMAIN`, `workers_dev = false`, `preview_urls = false`), and the DNS record is activated last:
-  1. **Validate secrets locally without printing or persisting values:** Validate `COOKIE_ENCRYPTION_KEY`, `FRIHET_CLAUDE_OAUTH_API_KEY`, and `FRIHET_CLAUDE_QA_UIDS` in memory via `node scripts/check-claude-bootstrap-secrets.mjs`.
-  2. **Deploy Worker code while `claude-mcp.frihet.io` is still `NXDOMAIN` (zero public reachability because `workers_dev = false` and `preview_urls = false`):**
+### Blocker 2 — Controlled Dark-Bootstrap, FD-Only Secret Bulk Revision, & Route Cutover (`CF-2` + `CF-3`)
+- **Why `wrangler secret put` is NOT run three times ahead of launch:** Cloudflare documents that each `wrangler secret put` immediately creates and deploys a new active Worker version. Furthermore, `scripts/check-claude-bootstrap-secrets.mjs` explicitly forbids passing secrets via CLI arguments or environment variables (`process.env`) and requires three inherited file descriptors (`--openai-fd 3 --claude-function-fd 4 --claude-worker-fd 5`).
+- **Exact rollout sequence (executed only after Blocker 1 is complete and Cloudflare rollout is authorized):**
+  1. **Verify ERP release receipt and source gates (no secrets in `process.env`):**
      ```bash
-     npm --prefix workers/remote-mcp run deploy:claude
+     FRIHET_ERP_ROOT=/Users/brthls/Documents/Frihet-ERP \
+     FRIHET_ERP_RELEASE_RECEIPT=/Users/brthls/Documents/Frihet-ERP/scripts/claude-publicapi-source-release.json \
+       node scripts/check-claude-hosted-release.mjs
+     curl -sS -o /dev/null -w "%{http_code}\n" https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning
+     # Expected HTTP status: 405
      ```
-     (Runs `gate:analytics`, `gate:claude-candidate`, `gate:openai-review-descriptor`, `node ../../scripts/check-claude-hosted-release.mjs` against the ERP release receipt, and initializes the Worker + Durable Object migrations `v1`/`v2`.)
-  3. **Attach all three secrets in one unactivated candidate version, then activate that single version (or upload all three atomically in one bulk revision):**
-     - Upload all 3 secrets together into a single candidate version (`wrangler versions secret bulk` with an ephemeral `0600` FIFO/stdin JSON payload containing `COOKIE_ENCRYPTION_KEY`, `FRIHET_CLAUDE_OAUTH_API_KEY`, and `FRIHET_CLAUDE_QA_UIDS`), verify the candidate version ID, and promote it in a single step (`wrangler versions deploy <VERSION_ID>@100% --yes`).
-  4. **Activate public routing by creating the proxied originless DNS record in Cloudflare zone `frihet.io`:**
-     - Create `type: "AAAA"`, `name: "claude-mcp.frihet.io"`, `content: "100::"`, `proxied: true`, `ttl: 1` so `https://claude-mcp.frihet.io/mcp` becomes publicly reachable only after the Worker and all three secrets are active.
-  5. **Execute live hosted smoke verification:**
+  2. **Validate secret separation and exact runtime byte match via inherited file descriptors (`--openai-fd 3 --claude-function-fd 4 --claude-worker-fd 5`, zero secrets in `process.env` or CLI arguments, per `docs/claude-secret-bootstrap.md`):**
+     ```bash
+     set +x
+     node scripts/check-claude-bootstrap-secrets.mjs \
+       --openai-fd 3 \
+       --claude-function-fd 4 \
+       --claude-worker-fd 5 \
+       3< <(gcloud secrets versions access latest --secret=FRIHET_OAUTH_API_KEY --project=gen-lang-client-0335716041 | tr -d '\r\n') \
+       4< <(gcloud secrets versions access latest --secret=FRIHET_CLAUDE_OAUTH_API_KEY --project=gen-lang-client-0335716041 | tr -d '\r\n') \
+       5< <( <approved-worker-FRIHET_CLAUDE_OAUTH_API_KEY-byte-stream> )
+     ```
+  3. **Dark-bootstrap `frihet-claude-mcp` and Durable Object SQLite migrations (`v1`, `v2`) without public routes (`workers_dev = false`, `preview_urls = false`):**
+     ```bash
+     BOOTSTRAP_TOML="workers/remote-mcp/wrangler.claude.bootstrap.toml"
+     trap 'rm -f "$BOOTSTRAP_TOML"' EXIT
+     sed 's/^routes = /# routes = /' workers/remote-mcp/wrangler.claude.toml > "$BOOTSTRAP_TOML"
+     npx --prefix workers/remote-mcp wrangler deploy --config wrangler.claude.bootstrap.toml --cwd workers/remote-mcp
+     rm -f "$BOOTSTRAP_TOML"
+     ```
+  4. **Upload all three secrets in a single unactivated candidate version via inherited file descriptors (`3`, `4`, `5`) piped to `wrangler versions secret bulk` `stdin`, then promote that single version (`CF-2`):**
+     ```bash
+     set +x
+     node -e '
+       const { readFileSync } = require("node:fs");
+       const bufs = [3, 4, 5].map((fd) => readFileSync(fd));
+       try {
+         const [cookieKey, oauthKey, qaUidsRaw] = bufs.map((b) => b.toString("utf8"));
+         for (const [label, val] of [["COOKIE_ENCRYPTION_KEY", cookieKey], ["FRIHET_CLAUDE_OAUTH_API_KEY", oauthKey]]) {
+           if (Buffer.byteLength(val, "utf8") < 32 || /[\r\n\0]/u.test(val)) throw new Error(`Invalid ${label}`);
+         }
+         if (/[\r\n\0]/u.test(qaUidsRaw)) throw new Error("Invalid FRIHET_CLAUDE_QA_UIDS bytes");
+         const qaUids = JSON.parse(qaUidsRaw);
+         if (!Array.isArray(qaUids) || qaUids.length === 0 || qaUids.some((u) => typeof u !== "string" || !u.trim())) {
+           throw new Error("Invalid FRIHET_CLAUDE_QA_UIDS array");
+         }
+         process.stdout.write(JSON.stringify({
+           COOKIE_ENCRYPTION_KEY: cookieKey,
+           FRIHET_CLAUDE_OAUTH_API_KEY: oauthKey,
+           FRIHET_CLAUDE_QA_UIDS: JSON.stringify(qaUids),
+         }));
+       } finally {
+         for (const b of bufs) b.fill(0);
+       }
+     ' \
+       3< <( <approved-COOKIE_ENCRYPTION_KEY-byte-stream> ) \
+       4< <( <approved-worker-FRIHET_CLAUDE_OAUTH_API_KEY-byte-stream> ) \
+       5< <(gcloud secrets versions access latest --secret=FRIHET_CLAUDE_QA_UIDS --project=gen-lang-client-0335716041 | tr -d '\r\n') \
+     | npx --prefix workers/remote-mcp wrangler versions secret bulk \
+         --config wrangler.claude.toml \
+         --cwd workers/remote-mcp
+
+     npx --prefix workers/remote-mcp wrangler versions deploy "${VERSION_ID}@100%" \
+       --config wrangler.claude.toml \
+       --cwd workers/remote-mcp \
+       --yes
+     ```
+  5. **Create the proxied originless DNS record (`AAAA claude-mcp.frihet.io -> 100::`, `proxied: true`) in zone `frihet.io` and attach the `claude-mcp.frihet.io/*` Worker Route (`CF-3`):**
+     ```bash
+     # 1) Create proxied originless AAAA record in Cloudflare zone frihet.io (d68bd6e9cdf08517e451c9f90a71eef6)
+     #    type: "AAAA", name: "claude-mcp.frihet.io", content: "100::", proxied: true, ttl: 1
+     # 2) Attach the locked Worker Route claude-mcp.frihet.io/* without creating a new code version:
+     npx --prefix workers/remote-mcp wrangler triggers deploy \
+       --config wrangler.claude.toml \
+       --cwd workers/remote-mcp
+     ```
+  6. **Execute live hosted smoke verification:**
      - Verify `GET https://claude-mcp.frihet.io/`, `/.well-known/mcp`, `/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`, `/privacy`, `/support`, unauthenticated `POST /mcp` -> `401` (`WWW-Authenticate`), and one real QA OAuth login + `/mcp` tool call with the allowlisted QA account before Codex submits the connector as live.
