@@ -1497,8 +1497,9 @@ export async function armOAuthStateAttempt(
 /**
  * Commit the lease and, atomically with it, the outbox that replaces the
  * user's earlier grants for this client. Only the first
- * `MAX_REPLACED_GRANT_IDS` are queued; any beyond that rely on the caller's
- * inline replacement and are listed again by the next authorization.
+ * `MAX_REPLACED_GRANT_IDS` are queued for durable token-family and backend-key
+ * revocation; any beyond that cap are only deleted from KV by the caller's
+ * inline `revokeGrant` pass (their backend keys expire at TTL).
  */
 export async function commitOAuthState(
   namespace: DurableObjectNamespace,

@@ -716,8 +716,8 @@ app.post("/callback", async (c) => {
     // Complete OAuth authorization. The raw API key never leaves encrypted grant
     // props; its opaque keyId is retained so refresh-family replay or explicit
     // grant revocation can disable the exact backend credential later.
-    // Earlier grants for this user+client are replaced only after the commit:
-    // a holder that loses its lease must never revoke the winner's grant.
+    // Earlier grants for this user+client are replaced only by a commit: a
+    // holder that loses its lease never revokes the winner's grant.
     let redirectTo: string;
     let replacedGrantIds: string[];
     try {
@@ -788,10 +788,12 @@ app.post("/callback", async (c) => {
       }
     }
     if (committed !== "committed") {
-      // This lease no longer owns the state (taken over after its TTL, state
-      // expired, or the store is unreachable). Withhold the code: the grant it
-      // unlocks is unreachable and expires with the provider's code TTL. Its
-      // backend credential is revoked so nothing usable remains.
+      // This lease no longer owns the state (taken over after its TTL or state
+      // expired), or both commit reads failed (`commit_unavailable`). Withhold
+      // the code and revoke this attempt's backend credential so nothing usable
+      // remains; if the first commit actually landed before both responses were
+      // lost, the state outbox also replaces the earlier grants (fail-closed:
+      // zero active keys until the user reauthorizes).
       const settlement = await reconcileThisAttempt();
       log({
         level: "error",
