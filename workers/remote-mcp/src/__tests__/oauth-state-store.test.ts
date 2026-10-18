@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  commitOAuthState,
   OAuthStateStore,
   type OAuthCleanupAuthorities,
 } from "../oauth-state-store.ts";
@@ -1175,3 +1176,30 @@ test("production default backend revocation for a Claude token family uses the C
     true,
   );
 });
+
+test("#221 L3: commitOAuthState truncates replacedGrantIds to the first 64 entries before calling the DO", async () => {
+  const { store, state } = makeStore();
+  assert.equal(await putState(store, "{}"), 204);
+  const reserved = await stateJson(store, "/reserve");
+  assert.equal(reserved.outcome, "reserved");
+  assert.equal(
+    (await stateJson(store, "/attempt", { leaseId: reserved.leaseId, uid: "firebase-user", reconciled: [] })).outcome,
+    "armed",
+  );
+  const namespace = {
+    idFromName: (name: string) => ({ name }) as unknown as DurableObjectId,
+    get: () => ({
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => store.fetch(new Request(input, init)),
+    }) as unknown as DurableObjectStub,
+  } as unknown as DurableObjectNamespace;
+  const ids = Array.from({ length: 65 }, (_, i) => `grant-${String(i).padStart(10, "0")}`);
+  assert.equal(
+    await commitOAuthState(namespace, "s".repeat(64), String(reserved.leaseId), ids),
+    "committed",
+  );
+  const replacement = state.storage.values.get("oauth_grant_replacement") as { grantIds: string[] } | undefined;
+  assert.ok(replacement);
+  assert.equal(replacement.grantIds.length, 64);
+  assert.deepEqual(replacement.grantIds, ids.slice(0, 64));
+});
+
