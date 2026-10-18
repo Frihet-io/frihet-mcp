@@ -327,30 +327,109 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
           isError: true,
         };
       }
-      let recipientEmail = to;
-      if (!recipientEmail) {
-        const clientId = typeof quote["clientId"] === "string" ? quote["clientId"] : undefined;
-        if (!clientId) {
+      const isValidRecipientEmail = (email: string): boolean =>
+        email.length <= 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+      let recipientEmail: string | undefined;
+      if (to !== undefined) {
+        const trimmedTo = to.trim();
+        if (!trimmedTo || !isValidRecipientEmail(trimmedTo)) {
           return {
-            content: [{ type: "text" as const, text: "Error: this quote has no linked client with a saved email address." }],
+            content: [{ type: "text" as const, text: `Error: invalid recipient email address format: "${trimmedTo}".` }],
             isError: true,
           };
         }
-        const linkedClient = await client.getClient(clientId);
-        recipientEmail = typeof linkedClient["email"] === "string" && linkedClient["email"].trim()
-          ? linkedClient["email"].trim()
-          : undefined;
+        recipientEmail = trimmedTo;
+      }
+
+      if (!recipientEmail) {
+        const clientId =
+          typeof quote["clientId"] === "string" && quote["clientId"].trim()
+            ? quote["clientId"].trim()
+            : undefined;
+        if (clientId) {
+          let linkedClient: Record<string, unknown> | undefined;
+          try {
+            linkedClient = await client.getClient(clientId);
+          } catch (err) {
+            const isNotFound =
+              typeof err === "object" &&
+              err !== null &&
+              "statusCode" in err &&
+              (err as { statusCode?: unknown }).statusCode === 404;
+            if (!isNotFound) {
+              throw err;
+            }
+          }
+          const clientEmail =
+            linkedClient && typeof linkedClient["email"] === "string" && linkedClient["email"].trim()
+              ? linkedClient["email"].trim()
+              : undefined;
+          if (clientEmail) {
+            if (!isValidRecipientEmail(clientEmail)) {
+              return {
+                content: [{ type: "text" as const, text: `Error: invalid recipient email address format: "${clientEmail}".` }],
+                isError: true,
+              };
+            }
+            recipientEmail = clientEmail;
+          }
+        }
+
         if (!recipientEmail) {
+          const docFallbackEmail =
+            typeof quote["clientEmail"] === "string" && quote["clientEmail"].trim()
+              ? quote["clientEmail"].trim()
+              : typeof quote["email"] === "string" && quote["email"].trim()
+                ? quote["email"].trim()
+                : undefined;
+
+          if (docFallbackEmail) {
+            if (!isValidRecipientEmail(docFallbackEmail)) {
+              return {
+                content: [{ type: "text" as const, text: `Error: invalid recipient email address format: "${docFallbackEmail}".` }],
+                isError: true,
+              };
+            }
+            const fallbackMsg =
+              `Error: the linked client has no current email address; only a document-level fallback email ("${docFallbackEmail}") was found on the quote, which may be outdated. ` +
+              `Confirm this specific recipient with the user and re-run with to="${docFallbackEmail}" and confirm=true to send. / ` +
+              `El cliente vinculado no tiene email actual; el presupuesto conserva el correo documental "${docFallbackEmail}", que podria estar obsoleto. Confirma este destinatario concreto y vuelve a llamar con to="${docFallbackEmail}" y confirm=true.`;
+            return {
+              content: [{ type: "text" as const, text: fallbackMsg }],
+              structuredContent: {
+                success: false,
+                id,
+                message: fallbackMsg,
+                effectiveRecipient: docFallbackEmail,
+                recipientSource: "document_fallback",
+                requiresExplicitRecipientConfirmation: true,
+              },
+              isError: true,
+            };
+          }
+
           return {
-            content: [{ type: "text" as const, text: "Error: the linked client has no saved email address." }],
+            content: [
+              {
+                type: "text" as const,
+                text: clientId
+                  ? "Error: the linked client has no saved email address."
+                  : "Error: this quote has no linked client with a saved email address.",
+              },
+            ],
             isError: true,
           };
         }
       }
       const result = await client.sendQuote(id, recipientEmail);
+      const enrichedResult: Record<string, unknown> = {
+        ...(result && typeof result === "object" ? (result as Record<string, unknown>) : {}),
+        effectiveRecipient: recipientEmail,
+      };
       return {
-        content: [mutateContent(formatRecord("Quote sent", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
+        content: [mutateContent(formatRecord("Quote sent", enrichedResult))],
+        structuredContent: enrichedResult,
       };
     }),
   );

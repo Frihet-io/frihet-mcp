@@ -54,11 +54,20 @@ before(async () => {
     req.resume();
     res.setHeader("Content-Type", "application/json");
     if (req.method === "GET") {
-      // A record read (path ends in the synthetic id) feeds send_* tools the
-      // linked client and email they check before sending; lists are empty.
+      // A record read (path ends in the synthetic id) feeds send_* and duplicate_*
+      // tools the linked client, email, clientName, and items they validate before writing; lists are empty.
       const record = url.pathname.split("/").at(-1) === ID;
       res.end(JSON.stringify(record
-        ? { data: { id: ID, clientId: ID, email: "a@example.com", status: "draft" } }
+        ? {
+          data: {
+            id: ID,
+            clientId: ID,
+            clientName: "Synthetic Client",
+            email: "a@example.com",
+            status: "draft",
+            items: [{ description: "Synthetic item", quantity: 1, unitPrice: 100 }],
+          },
+        }
         : { data: [], total: 0, limit: 20, offset: 0 }));
       return;
     }

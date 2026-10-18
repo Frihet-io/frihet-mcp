@@ -135,4 +135,209 @@ describe("duplicate_invoice — allowlist pick", () => {
     assert.equal(captured.body!.issueDate, "2026-07-01");
     assert.equal(captured.body!.dueDate, "2026-08-01");
   });
+
+  test("strips null optional fields, calculated line-item fields, structured address extras, and rejects invalid calendar newIssueDate", async () => {
+    const captured: { body?: Record<string, unknown>; calls: number } = { calls: 0 };
+    const server = new StubMcpServer();
+    const client = {
+      getInvoice: async (_id: string) => ({
+        id: "inv_nulls",
+        documentNumber: "2026-0099",
+        documentNumberFinal: true,
+        status: "sent",
+        clientName: "Nulls & Extras S.L.",
+        clientId: "",
+        clientTaxId: null,
+        notes: null,
+        seriesId: null,
+        dueDate: null,
+        taxRate: 7,
+        irpfRate: 15,
+        equivalenceSurchargeRate: 0,
+        clientLocation: "canarias",
+        operationType: "service",
+        fiscalTreatment: "not_subject_location",
+        verifactu: { hash: "deadbeef", chained: true },
+        eInvoice: { status: "submitted" },
+        payments: [{ amount: 500, date: "2026-10-01" }],
+        amountPaid: 500,
+        clientAddress: {
+          street: " Calle Real 10 ",
+          city: "Arrecife",
+          zip: "35500",
+          province: "Las Palmas",
+          countryCode: "ES",
+          extraUiField: "must_be_stripped",
+          state: null,
+        },
+        items: [
+          {
+            id: "item_1",
+            description: "Maintenance",
+            quantity: 3,
+            unitPrice: 150,
+            total: 450,
+            taxRate: 7,
+            discount: 0,
+            productId: "prod_99",
+          },
+        ],
+      }),
+      createInvoice: async (data: Record<string, unknown>) => {
+        captured.calls += 1;
+        captured.body = data;
+        return { id: "inv_dup_clean", status: "draft", notes: null, dueDate: null, ...data };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+
+    const { registerIntelligenceTools } = await import("../tools/intelligence.js");
+    registerIntelligenceTools(
+      server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
+      client,
+    );
+
+    const tool = server.tools.get("duplicate_invoice")!;
+
+    // 1. Calendar-invalid newIssueDate must fail closed before calling getInvoice / createInvoice
+    const invalidDateRes = await tool.handler({ id: "inv_nulls", newIssueDate: "2026-02-31" });
+    assert.equal(invalidDateRes.isError, true);
+    assert.equal(captured.calls, 0);
+
+    // 2. Valid call sanitizes null fields, calculated item fields, and issued VeriFactu metadata
+    const res = await tool.handler({ id: "inv_nulls", newIssueDate: "2026-10-17" });
+    assert.notEqual(res.isError, true);
+    assert.equal(captured.calls, 1);
+    const body = captured.body!;
+    assert.equal("notes" in body, false, "null notes must be omitted");
+    assert.equal("clientTaxId" in body, false, "null clientTaxId must be omitted");
+    assert.equal("seriesId" in body, false, "null seriesId must be omitted");
+    assert.equal("dueDate" in body, false, "null dueDate must be omitted");
+    assert.equal("clientId" in body, false, "empty clientId must be omitted");
+    assert.equal("documentNumber" in body, false, "documentNumber must never be copied");
+    assert.equal("documentNumberFinal" in body, false, "documentNumberFinal must never be copied");
+    assert.equal("verifactu" in body, false, "verifactu state must never be copied");
+    assert.equal("eInvoice" in body, false, "eInvoice state must never be copied");
+    assert.equal("payments" in body, false, "payments must never be copied");
+    assert.equal(body.status, "draft", "status must always be forced to draft");
+    assert.deepEqual(body.clientAddress, {
+      street: "Calle Real 10",
+      city: "Arrecife",
+      zip: "35500",
+      province: "Las Palmas",
+      countryCode: "ES",
+    });
+    assert.deepEqual(body.items, [
+      {
+        id: "item_1",
+        description: "Maintenance",
+        quantity: 3,
+        unitPrice: 150,
+      },
+    ]);
+    // Null fields echoed by createInvoice are stripped from structuredContent so invoiceItemOutput validates
+    assert.equal("notes" in (res.structuredContent ?? {}), false);
+    assert.equal("dueDate" in (res.structuredContent ?? {}), false);
+  });
+
+  test("rejects line items with missing, null, non-finite, or invalid quantity/unitPrice/description without calling createInvoice, and preserves explicit zeros", async () => {
+    const writes: Record<string, unknown>[] = [];
+    let currentItems: unknown = [];
+
+    const server = new StubMcpServer();
+    const client = {
+      getInvoice: async (_id: string) => ({
+        id: "inv_econ",
+        clientName: "Economic Integrity S.L.",
+        items: currentItems,
+      }),
+      createInvoice: async (data: Record<string, unknown>) => {
+        writes.push(data);
+        return { id: "inv_dup_econ", status: "draft", ...data };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+
+    const { registerIntelligenceTools } = await import("../tools/intelligence.js");
+    registerIntelligenceTools(
+      server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
+      client,
+    );
+    const tool = server.tools.get("duplicate_invoice")!;
+
+    const invalidCases: Array<{ label: string; items: unknown }> = [
+      { label: "undefined items", items: undefined },
+      { label: "null items", items: null },
+      { label: "empty items array", items: [] },
+      { label: "missing quantity", items: [{ description: "Item", unitPrice: 100 }] },
+      { label: "null quantity", items: [{ description: "Item", quantity: null, unitPrice: 100 }] },
+      { label: "empty string quantity", items: [{ description: "Item", quantity: "   ", unitPrice: 100 }] },
+      { label: "NaN quantity", items: [{ description: "Item", quantity: Number.NaN, unitPrice: 100 }] },
+      { label: "Infinity quantity", items: [{ description: "Item", quantity: Number.POSITIVE_INFINITY, unitPrice: 100 }] },
+      { label: "non-numeric string quantity", items: [{ description: "Item", quantity: "two", unitPrice: 100 }] },
+      { label: "boolean quantity", items: [{ description: "Item", quantity: false, unitPrice: 100 }] },
+      { label: "missing unitPrice", items: [{ description: "Item", quantity: 2 }] },
+      { label: "null unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: null }] },
+      { label: "empty string unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: "" }] },
+      { label: "NaN unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: Number.NaN }] },
+      { label: "Infinity unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: Number.NEGATIVE_INFINITY }] },
+      { label: "non-numeric string unitPrice", items: [{ description: "Item", quantity: 2, unitPrice: "free" }] },
+      { label: "missing description", items: [{ description: "   ", quantity: 2, unitPrice: 50 }] },
+    ];
+
+    for (const tc of invalidCases) {
+      currentItems = tc.items;
+      const res = await tool.handler({ id: "inv_econ" });
+      assert.equal(res.isError, true, `Must reject ${tc.label}`);
+      assert.equal(writes.length, 0, `Must perform ZERO writes on ${tc.label}`);
+    }
+
+    // Explicit legitimate zero values (numeric 0 or string "0") MUST be preserved
+    currentItems = [
+      { id: "line_free", description: "Complimentary onboarding", quantity: 1, unitPrice: 0 },
+      { id: "line_zero_qty", description: "Placeholder line", quantity: 0, unitPrice: "0" },
+    ];
+    const validZeroRes = await tool.handler({ id: "inv_econ" });
+    assert.notEqual(validZeroRes.isError, true, "Explicit zero values must be allowed");
+    assert.equal(writes.length, 1, "Explicit zero values should call createInvoice once");
+    assert.deepEqual(writes[0]!.items, [
+      { id: "line_free", description: "Complimentary onboarding", quantity: 1, unitPrice: 0 },
+      { id: "line_zero_qty", description: "Placeholder line", quantity: 0, unitPrice: 0 },
+    ]);
+  });
+
+  test("rejects incomplete invoices missing both items and clientName (or missing clientName alone) with zero createInvoice calls", async () => {
+    const writes: Record<string, unknown>[] = [];
+    let currentOriginal: Record<string, unknown> = {};
+
+    const server = new StubMcpServer();
+    const client = {
+      getInvoice: async (_id: string) => currentOriginal,
+      createInvoice: async (data: Record<string, unknown>) => {
+        writes.push(data);
+        return { id: "inv_should_not_happen", status: "draft", ...data };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+
+    const { registerIntelligenceTools } = await import("../tools/intelligence.js");
+    registerIntelligenceTools(
+      server as unknown as import("@modelcontextprotocol/sdk/server/mcp.js").McpServer,
+      client,
+    );
+    const tool = server.tools.get("duplicate_invoice")!;
+
+    // 1. Both items and clientName missing simultaneously (no synthetic route bypass)
+    currentOriginal = { id: "inv_bare", clientId: "cli_1", email: "a@example.com", status: "draft" };
+    const bareRes = await tool.handler({ id: "inv_bare" });
+    assert.equal(bareRes.isError, true, "Must reject invoice missing both clientName and items");
+    assert.equal(writes.length, 0, "Must perform ZERO writes when both clientName and items are missing");
+
+    // 2. Valid items present, but clientName is missing or whitespace-only
+    currentOriginal = {
+      id: "inv_no_client_name",
+      clientName: "   ",
+      items: [{ description: "Valid item", quantity: 1, unitPrice: 100 }],
+    };
+    const noNameRes = await tool.handler({ id: "inv_no_client_name" });
+    assert.equal(noNameRes.isError, true, "Must reject invoice with empty clientName");
+    assert.equal(writes.length, 0, "Must perform ZERO writes when clientName is empty");
+  });
 });
