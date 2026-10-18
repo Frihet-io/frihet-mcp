@@ -292,7 +292,7 @@ export const APPROVED_LOCKFILE_HASHES = Object.freeze({
   "workers/remote-mcp/package-lock.json": "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
-  "workers/remote-mcp/wrangler.claude.toml": "854f967c138837702d24ed06ced93f65a4e8ec2500b14cd9c3216b17a6199af6", // dedicated Claude provider alias and bootstrap topology
+  "workers/remote-mcp/wrangler.claude.toml": "280c8a3dbac7e9e03421f9f22159c451b6326e05d3ab2e78708d7dbe1c643d5c", // dedicated Claude provider alias and isolated OAUTH_KV namespace 274c7aaa85a04d44b4dc77f5f1dd7ca2
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
   "workers/remote-mcp/wrangler.toml": "c04ee0033b2d0c53cebfd562ccc3da27810bd1ef5b49e52beeb5d50b218100e5",
 });
@@ -311,7 +311,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/claude-bootstrap-secrets.test.mjs": "90159f0a689cb8f5d6ffc6630871b0b596510b1e9f24e32adbdfe4dc2c779095", // local Claude bootstrap secret check; no network or raw credential output
   "scripts/check-claude-hosted-release.mjs": "25187cbc0851c2fb586f1ae336ce962167d097bde828368d0504a33b7f8469a7", // reviewed Claude ERP source-only provenance admission; no telemetry emitter
   "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
-  "scripts/__tests__/claude-hosted-release.test.mjs": "2271a744bf8ebc03e757112235cd859c4e5a123e46df0c5ecd3ca6dd6370c501", // reviewed Claude ERP source-only provenance admission; no telemetry emitter
+  "scripts/__tests__/claude-hosted-release.test.mjs": "00abfcec2f350e7c9d704ace2886e5ef345697e1a8a3f4b2acc9357c147b308d", // reviewed Claude ERP source-only provenance admission + bootstrapped KV namespace test; no telemetry emitter
   "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata

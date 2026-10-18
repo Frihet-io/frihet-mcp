@@ -1,4 +1,4 @@
-# Source candidate only. The release guard refuses the dry-run namespace below.
+# Isolated Claude remote MCP Worker configuration (frihet-claude-mcp).
 name = "frihet-claude-mcp"
 main = "src/index.ts"
 compatibility_date = "2025-12-01"
@@ -43,5 +43,5 @@ tag = "v2"
 
 [[kv_namespaces]]
 binding = "OAUTH_KV"
-# Replace only after the owner approves an isolated namespace bootstrap.
-id = "00000000000000000000000000000000"
+# Dedicated Claude KV namespace (claude-frihet-claude-oauth), isolated from full MCP and OpenAI.
+id = "274c7aaa85a04d44b4dc77f5f1dd7ca2"

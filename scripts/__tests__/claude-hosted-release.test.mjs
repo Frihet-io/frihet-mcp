@@ -8,6 +8,7 @@ import { test } from "node:test";
 import {
   assertClaudeWorkerIsolation,
   assertErpCeilingDeployed,
+  DRY_RUN_NAMESPACE,
   erpCeilingRoutes,
   readClaudeConfiguration,
   verifyErpCeilingDeployed,
@@ -15,10 +16,14 @@ import {
 
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-test("source config isolates Claude and refuses deployment before namespace bootstrap", () => {
+test("source config isolates Claude with its dedicated KV namespace and refuses dry-run placeholder on deploy", () => {
   const { config, sharedNamespaceIds } = readClaudeConfiguration();
   assert.doesNotThrow(() => assertClaudeWorkerIsolation(config, sharedNamespaceIds, true));
-  assert.throws(() => assertClaudeWorkerIsolation(config, sharedNamespaceIds), /bootstrap is pending/u);
+  assert.doesNotThrow(() => assertClaudeWorkerIsolation(config, sharedNamespaceIds, false));
+  const unbootstrapped = structuredClone(config);
+  unbootstrapped.kv_namespaces[0].id = DRY_RUN_NAMESPACE;
+  assert.doesNotThrow(() => assertClaudeWorkerIsolation(unbootstrapped, sharedNamespaceIds, true));
+  assert.throws(() => assertClaudeWorkerIsolation(unbootstrapped, sharedNamespaceIds), /bootstrap is pending/u);
   for (const mutate of [
     (c) => { c.name = "frihet-remote-mcp"; },
     (c) => { c.routes[0].pattern = "mcp.frihet.io/*"; },
