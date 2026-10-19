@@ -221,8 +221,56 @@ test("uncertain create is never retried or followed by speculative CRUD; ledger 
 test("a mismatched create response cannot authorize deleting another record", async () => {
   const f = fixture({ badCreatedProduct: true }), result = await f.run();
   assert.equal(result.status, "fail"); assert.equal(f.calls.some(call => call.options.body?.includes('"delete_product"')), false);
-  assert.equal(result.productLedger[0].unverifiedReturnedId, "offline-product-1"); assert.equal(result.productLedger[0].id, null);
+  assert.equal(result.productLedger[0].unverifiedReturnedIdSha256, hash("offline-product-1")); assert.equal(result.productLedger[0].id, null);
+  assert.equal(JSON.stringify(f.receipts).includes("offline-product-1"), false);
 });
+
+test("a candidate product ID stays hashed until independent matching readback", async () => {
+  const f = fixture(), base = f.dependencies.send; let hookCalls = 0;
+  const result = await f.run({}, { afterProductCreated: async () => { hookCalls++; }, send: async (path, options = {}) => {
+    const result = await base(path, options);
+    const request = path === "/mcp" && options.body ? JSON.parse(options.body) : undefined;
+    if (request?.params?.name === "get_product") result.data.result.structuredContent.name = "unrelated-product";
+    return result;
+  } });
+  assert.equal(result.status, "fail"); assert.equal(result.failure, "PRODUCT_READBACK_MISMATCH");
+  assert.equal(hookCalls, 0); assert.equal(f.calls.some(call => call.options.body?.includes('"delete_product"')), false);
+  assert.equal(result.productLedger[0].unverifiedReturnedIdSha256, hash("offline-product-1"));
+  assert.ok(f.receipts.every(receipt => !receipt.productLedger[0]?.id));
+  assert.equal(JSON.stringify(f.receipts).includes("offline-product-1"), false);
+});
+
+for (const reflectedKind of ["access", "previous_access", "refresh", "previous_refresh", "uid", "client", "state", "stateKey", "code", "verifier", "firebase", "session"]) {
+  for (const [matchingMarker, wrapped] of [[false, false], [false, true], [true, false], [true, true]]) {
+    test(`${wrapped ? "embedded" : "exact"} reflected ${reflectedKind} cannot enter receipt or hook with ${matchingMarker ? "matching" : "wrong"} product marker`, async () => {
+      const f = fixture(), base = f.dependencies.send; let reflected, hookCalls = 0, candidateReads = 0;
+      const result = await f.run({}, { afterProductCreated: async () => { hookCalls++; }, send: async (path, options = {}) => {
+        const request = path === "/mcp" && options.body ? JSON.parse(options.body) : undefined;
+        if (reflected && request?.params?.name === "get_product" && request.params.arguments.id === reflected) {
+          candidateReads++;
+          return response(200, { jsonrpc: "2.0", id: request.id, result: { content: [], structuredContent: { id: reflected, name: f.receipts.at(-1).productLedger[0].marker, unitPrice: 0 } } });
+        }
+        const result = await base(path, options);
+        if (request?.params?.name === "create_product") {
+          const client = f.clients.get("offline-client-1");
+          const redemption = f.calls.find(call => call.path === "/token" && new URLSearchParams(call.options.body).get("grant_type") === "authorization_code");
+          const values = { access: client.access, previous_access: "offline-access-1", refresh: client.refresh, previous_refresh: "offline-refresh-1", uid: UID, client: client.id,
+            state: client.state, stateKey: client.stateKey, code: client.code,
+            verifier: new URLSearchParams(redemption.options.body).get("code_verifier"), firebase: fakeToken(),
+            session: `v1.${"s".repeat(24)}.${"a".repeat(64)}` };
+          reflected = wrapped ? `reflected-${values[reflectedKind]}-suffix` : values[reflectedKind];
+          result.data.result.structuredContent.id = reflected;
+          if (!matchingMarker) result.data.result.structuredContent.name = "unrelated-product";
+        }
+        return result;
+      } });
+      assert.notEqual(result.status, "single_identity_protocol_pass");
+      assert.equal(JSON.stringify(f.receipts).includes(reflected), false, "Untrusted ID must never serialize a credential");
+      assert.equal(hookCalls, 0); assert.equal(candidateReads, 0, "Reflected ID must be rejected before independent readback");
+      assert.equal(f.calls.some(call => call.options.body?.includes('"delete_product"')), false);
+    });
+  }
+}
 
 test("uncertain update still cleans only the known synthetic product and revokes its grant", async () => {
   const f = fixture({ uncertainUpdate: true }), result = await f.run();
@@ -246,6 +294,89 @@ test("revoke HTTP 200 or replay 400 alone is insufficient without dead access re
     if (faults.revocationIneffective) assert.notEqual(result.checks.revoke, "pass");
     else assert.notEqual(result.checks.refresh_replay, "pass");
   }
+});
+
+for (const phase of ["revoke", "refresh_replay"]) {
+  for (const path of ["/userinfo", "/mcp"]) {
+    test(`${phase} checks earlier issued access tokens on ${path}`, async () => {
+      const f = fixture(), base = f.dependencies.send;
+      const clientId = phase === "revoke" ? "offline-client-1" : "offline-client-2";
+      const staleAccess = phase === "revoke" ? "offline-access-1" : "offline-access-3";
+      const send = async (target, options = {}) => {
+        const result = await base(target, options);
+        if (target === path && options.headers?.Authorization === `Bearer ${staleAccess}` && f.clients.get(clientId)?.active === false) {
+          return response(200, { sub: UID, email_verified: true }, { "cache-control": "no-store" });
+        }
+        return result;
+      };
+      const result = await f.run({}, { send });
+      assert.notEqual(result.status, "single_identity_protocol_pass"); assert.notEqual(result.checks[phase], "pass");
+      assert.equal((await send(path, { headers: { Authorization: `Bearer ${staleAccess}` } })).status, 200);
+      assert.equal(JSON.stringify(f.receipts).includes(staleAccess), false);
+    });
+  }
+}
+
+test("revocation and replay probe every issued access and refresh token without persisting credentials", async () => {
+  const f = fixture(), result = await f.run(); assert.equal(result.status, "single_identity_protocol_pass");
+  const revokeIndex = f.calls.findIndex(call => call.path === "/token" && new URLSearchParams(call.options.body).has("token"));
+  const primaryAfterRevoke = f.calls.slice(revokeIndex + 1);
+  for (const serial of [1, 2]) {
+    for (const path of ["/userinfo", "/mcp"]) assert.ok(primaryAfterRevoke.some(call => call.path === path && call.options.headers?.Authorization === `Bearer offline-access-${serial}`));
+    assert.ok(primaryAfterRevoke.some(call => call.path === "/token" && new URLSearchParams(call.options.body).get("refresh_token") === `offline-refresh-${serial}`));
+  }
+  const replayIndex = f.calls.map((call, index) => ({ call, index }))
+    .filter(({ call }) => call.path === "/token" && new URLSearchParams(call.options.body).get("refresh_token") === "offline-refresh-3")[1].index;
+  const negativeAfterReplay = f.calls.slice(replayIndex);
+  for (const serial of [3, 4]) {
+    for (const path of ["/userinfo", "/mcp"]) assert.ok(negativeAfterReplay.some(call => call.path === path && call.options.headers?.Authorization === `Bearer offline-access-${serial}`));
+    assert.ok(negativeAfterReplay.some(call => call.path === "/token" && new URLSearchParams(call.options.body).get("refresh_token") === `offline-refresh-${serial}`));
+  }
+  assert.equal(JSON.stringify(f.receipts).includes("offline-access-"), false);
+  assert.equal(JSON.stringify(f.receipts).includes("offline-refresh-"), false);
+});
+
+test("unexpected tokens issued by accepted code replay are tracked and revoked before returning failure", async () => {
+  const f = fixture({ codeReplayAccepted: true }), result = await f.run();
+  assert.equal(result.status, "fail"); assert.equal(result.failure, "INVALID_GRANT_NOT_ENFORCED");
+  assert.equal(result.grants[0].phase, "revoked"); assert.equal(f.clients.get("offline-client-1").active, false);
+  for (const serial of [1, 2]) {
+    for (const path of ["/userinfo", "/mcp"]) assert.ok(f.calls.some(call => call.path === path && call.options.headers?.Authorization === `Bearer offline-access-${serial}`));
+  }
+  assert.equal(JSON.stringify(f.receipts).includes("offline-access-"), false);
+  assert.equal(JSON.stringify(f.receipts).includes("offline-refresh-"), false);
+});
+
+test("tokens in an invalid initial response remain eligible for one cleanup revocation", async () => {
+  const f = fixture(), base = f.dependencies.send;
+  const result = await f.run({}, { send: async (path, options = {}) => {
+    const result = await base(path, options);
+    const form = path === "/token" && options.body ? new URLSearchParams(options.body) : undefined;
+    if (form?.get("grant_type") === "authorization_code" && result.data?.access_token) result.data.resource = ORIGIN;
+    return result;
+  } });
+  assert.equal(result.status, "fail"); assert.equal(result.failure, "TOKEN_RESPONSE_INVALID");
+  assert.equal(result.grants[0].phase, "revoked"); assert.equal(f.clients.get("offline-client-1").active, false);
+  assert.equal(f.calls.filter(call => call.path === "/token" && new URLSearchParams(call.options.body).has("token")).length, 1);
+});
+
+test("a lost revoke response checkpoints uncertainty and never sends a second revocation POST", async () => {
+  const f = fixture(), base = f.dependencies.send; let revokePosts = 0, phaseBeforeWrite;
+  const result = await f.run({}, { send: async (path, options = {}) => {
+    const form = path === "/token" && options.body ? new URLSearchParams(options.body) : undefined;
+    if (form?.has("token") && !form.has("grant_type")) {
+      revokePosts++;
+      phaseBeforeWrite = f.receipts.at(-1).grants[0].phase;
+      const result = await base(path, options);
+      if (revokePosts === 1) throw new Error("offline accepted revoke but response lost");
+      return result;
+    }
+    return base(path, options);
+  } });
+  assert.equal(revokePosts, 1); assert.equal(phaseBeforeWrite, "revocation_pending");
+  assert.notEqual(result.status, "single_identity_protocol_pass");
+  assert.equal(result.grants[0].phase, "reconciliation_required");
+  assert.equal(result.grants[0].cleanup, "reconciliation_required"); assert.notEqual(result.checks.revoke, "pass");
 });
 
 test("foreign synthetic exact-ID denial accepts only sanitized not-found or forbidden responses", async () => {

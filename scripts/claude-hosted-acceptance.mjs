@@ -162,6 +162,7 @@ export function validateFirebaseInput(token, expectedUidHash, nowMs) {
     && Number.isSafeInteger(claims.exp) && Number.isSafeInteger(claims.iat)
     && claims.iat <= now + 60 && claims.iat >= now - 300 && claims.exp >= now + 60
     && claims.exp > claims.iat && claims.exp - claims.iat <= 3600, "FIREBASE_IDENTITY_OR_FRESHNESS_MISMATCH");
+  return claims.sub;
 }
 
 /** Atomic 0600 checkpoints; never overwrite another file or follow a symlink. */
@@ -238,8 +239,9 @@ export async function runAcceptance(options = {}, {
   if (typeof persist !== "function") {
     receipt.status = "fail"; receipt.failure = "HOSTED_PRIVATE_RECEIPT_REQUIRED"; return receipt;
   }
-  const grants = [];
+  const grants = [], credentials = new Set();
   let current = "deployment_guard", token, contract, validator, session, productOwned = false, cleanupAttempted = false;
+  const remember = (...values) => { for (const value of values) if (typeof value === "string" && value) credentials.add(value); };
   const save = () => persist(receipt);
   const pass = row => { receipt.checks[row] = "pass"; save(); };
   const jsonRequest = (path, body) => send(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -254,6 +256,17 @@ export async function runAcceptance(options = {}, {
       && Number.isSafeInteger(data.expires_in) && data.expires_in > 0 && data.expires_in <= 86400, "TOKEN_RESPONSE_INVALID");
     return { access: data.access_token, refresh: data.refresh_token };
   };
+  async function tokenRequest(grant, body) {
+    const response = await formRequest(body);
+    // Even an invalid/replayed response may have issued credentials. Keep every
+    // one only in memory so cleanup and reflection checks cannot miss it.
+    for (const [field, issued] of [["access_token", grant.accessTokens], ["refresh_token", grant.refreshTokens]]) {
+      const value = response.data?.[field];
+      if (typeof value === "string" && value) { issued.add(value); remember(value); }
+    }
+    if (opaque(response.data?.refresh_token)) grant.cleanupRefresh = response.data.refresh_token;
+    return response;
+  }
   async function userinfo(grant) {
     const result = await send("/userinfo", { headers: bearer(grant.access) });
     requireThat(result.status === 200 && sha256(String(result.data?.sub)) === options.expectedUidHash
@@ -264,10 +277,12 @@ export async function runAcceptance(options = {}, {
     const registered = await jsonRequest("/register", { redirect_uris: [redirectUri], token_endpoint_auth_method: "none",
       grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], client_name: `Frihet synthetic QA ${runId}` });
     requireThat(registered.status === 201 && opaque(registered.data?.client_id, 512), "REGISTRATION_INVALID");
-    const grant = { clientId: registered.data.client_id };
+    const grant = { clientId: registered.data.client_id, accessTokens: new Set(), refreshTokens: new Set(), revocationAttempted: false };
+    remember(grant.clientId);
     const ledger = { clientIdSha256: sha256(grant.clientId), phase: "registered", cleanup: "not_established" };
     grant.ledger = ledger; grants.push(grant); receipt.grants.push(ledger); save();
     const state = entropy(32).toString("base64url"), verifier = entropy(48).toString("base64url");
+    remember(state, verifier);
     const query = new URLSearchParams({ response_type: "code", client_id: grant.clientId, redirect_uri: redirectUri,
       scope: SCOPES.join(" "), state, code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       code_challenge_method: "S256", resource: RESOURCE });
@@ -277,6 +292,7 @@ export async function runAcceptance(options = {}, {
     let server;
     try { server = JSON.parse(match?.[1] ?? ""); } catch { throw new PilotFailure("AUTHORIZE_STATE_INVALID"); }
     requireThat(opaque(server.stateKey, 512) && server.clientId === grant.clientId && server.firebaseProjectId === FIREBASE_PROJECT, "AUTHORIZE_STATE_INVALID");
+    remember(server.stateKey);
     ledger.phase = "callback_pending"; save();
     const completed = await jsonRequest("/callback", { stateKey: server.stateKey, idToken: token, locale: "es" });
     requireThat(completed.status === 200 && typeof completed.data?.redirectTo === "string" && completed.data.redirectTo.length < 8192, "CALLBACK_REJECTED");
@@ -287,30 +303,46 @@ export async function runAcceptance(options = {}, {
       && target.searchParams.getAll("state").length === 1 && target.searchParams.get("state") === state
       && target.searchParams.getAll("code").length === 1 && opaque(target.searchParams.get("code"), 4096)
       && [...target.searchParams.keys()].every(key => ["code", "state"].includes(key)), "CALLBACK_TARGET_INVALID");
+    remember(target.searchParams.get("code"));
     ledger.phase = "code_exchange_pending"; save();
     const redemption = { grant_type: "authorization_code", client_id: grant.clientId, code: target.searchParams.get("code"),
       redirect_uri: redirectUri, code_verifier: verifier, resource: RESOURCE };
-    Object.assign(grant, validateTokens(await formRequest(redemption))); ledger.phase = "active"; save();
+    Object.assign(grant, validateTokens(await tokenRequest(grant, redemption))); ledger.phase = "active"; save();
     return { grant, stateKey: server.stateKey, redemption };
   }
   async function refresh(grant) {
     const old = grant.refresh;
-    Object.assign(grant, validateTokens(await formRequest({ grant_type: "refresh_token", client_id: grant.clientId, refresh_token: old, resource: RESOURCE })));
+    Object.assign(grant, validateTokens(await tokenRequest(grant, { grant_type: "refresh_token", client_id: grant.clientId, refresh_token: old, resource: RESOURCE })));
     requireThat(grant.refresh !== old, "REFRESH_DID_NOT_ROTATE"); return old;
   }
   async function revoke(grant) {
-    const response = await formRequest({ token: grant.refresh, token_type_hint: "refresh_token", client_id: grant.clientId });
-    requireThat(response.status === 200, "REVOCATION_REJECTED");
-    await deadAccess(grant);
-    expectInvalidGrant(await formRequest({ grant_type: "refresh_token", client_id: grant.clientId, refresh_token: grant.refresh, resource: RESOURCE }));
-    grant.ledger.phase = "revoked"; grant.ledger.cleanup = "http_revoked_backend_unverified"; save();
+    requireThat(!grant.revocationAttempted, "REVOCATION_ALREADY_ATTEMPTED");
+    // Write intent before sending: a lost response must never cause a retry.
+    grant.revocationAttempted = true; grant.ledger.phase = "revocation_pending";
+    grant.ledger.cleanup = "reconciliation_required"; save();
+    try {
+      const response = await tokenRequest(grant, { token: grant.cleanupRefresh, token_type_hint: "refresh_token", client_id: grant.clientId });
+      requireThat(response.status === 200, "REVOCATION_REJECTED");
+      await deadAccess(grant); await deadRefresh(grant);
+      grant.ledger.phase = "revoked"; grant.ledger.cleanup = "http_revoked_backend_unverified"; save();
+    } catch (error) {
+      grant.ledger.phase = "reconciliation_required"; grant.ledger.cleanup = "reconciliation_required"; save();
+      throw error;
+    }
   }
   async function deadAccess(grant) {
-    requireThat((await send("/userinfo", { headers: bearer(grant.access) })).status === 401, "REVOKED_ACCESS_STILL_USABLE");
-    const mcp = await send("/mcp", { method: "POST", headers: { ...bearer(grant.access), "Content-Type": "application/json",
-      ...(session?.grant === grant && session.id ? { "Mcp-Session-Id": session.id, "MCP-Protocol-Version": session.protocol } : {}) },
-      body: JSON.stringify({ jsonrpc: "2.0", id: "revoked-probe", method: "tools/list", params: {} }), rpcId: "revoked-probe" });
-    requireThat(mcp.status === 401, "REVOKED_MCP_ACCESS_STILL_USABLE");
+    for (const access of grant.accessTokens) {
+      requireThat((await send("/userinfo", { headers: bearer(access) })).status === 401, "REVOKED_ACCESS_STILL_USABLE");
+      const mcp = await send("/mcp", { method: "POST", headers: { ...bearer(access), "Content-Type": "application/json",
+        ...(session?.grant === grant && session.id ? { "Mcp-Session-Id": session.id, "MCP-Protocol-Version": session.protocol } : {}) },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "revoked-probe", method: "tools/list", params: {} }), rpcId: "revoked-probe" });
+      requireThat(mcp.status === 401, "REVOKED_MCP_ACCESS_STILL_USABLE");
+    }
+  }
+  async function deadRefresh(grant) {
+    for (const refreshToken of grant.refreshTokens) {
+      expectInvalidGrant(await tokenRequest(grant, { grant_type: "refresh_token", client_id: grant.clientId, refresh_token: refreshToken, resource: RESOURCE }));
+    }
   }
   let rpcSequence = 0;
   async function rpc(method, params, notification = false) {
@@ -328,6 +360,7 @@ export async function runAcceptance(options = {}, {
       requireThat(typeof sid === "string" && /^v1\.[A-Za-z0-9_-]{16,128}\.[a-f0-9]{64}$/u.test(sid), "MCP_SESSION_INVALID");
       requireThat(["2025-03-26", "2025-06-18", "2025-11-25"].includes(response.data.result?.protocolVersion), "MCP_PROTOCOL_INVALID");
       session.id = sid; session.protocol = response.data.result.protocolVersion;
+      remember(sid);
       receipt.sessionSha256 = sha256(sid);
     }
     return response.data.result;
@@ -350,8 +383,12 @@ export async function runAcceptance(options = {}, {
   }
   function ownProduct(product, id) {
     const ledger = receipt.productLedger[0];
-    return product && typeof product.id === "string" && /^[A-Za-z0-9_-]{1,256}$/u.test(product.id) && product.name === ledger.marker && product.unitPrice === 0
+    return product && safeProductId(product.id) && product.name === ledger.marker && product.unitPrice === 0
       && (id === undefined || product.id === id);
+  }
+  function safeProductId(id) {
+    return typeof id === "string" && /^[A-Za-z0-9_-]{1,256}$/u.test(id)
+      && ![...credentials].some(credential => id.includes(credential));
   }
   async function cleanupProduct() {
     const ledger = receipt.productLedger[0];
@@ -375,12 +412,13 @@ export async function runAcceptance(options = {}, {
     await verifyAdmission(); pass(current);
     current = "public_release"; await publicPreflight(send, options.expectedSha); pass(current);
     contract = contractLoader(); validator = new Ajv({ strict: false, validateFormats: false });
-    current = "firebase_input"; token = await readToken(options.tokenFd ?? 0); validateFirebaseInput(token, options.expectedUidHash, clock()); pass(current);
+    current = "firebase_input"; token = await readToken(options.tokenFd ?? 0);
+    const uid = validateFirebaseInput(token, options.expectedUidHash, clock()); remember(token, uid); pass(current);
     current = "oauth"; const primary = await grantNew(); pass(current);
     current = "userinfo"; await userinfo(primary.grant); pass(current);
     current = "callback_replay";
     requireThat((await jsonRequest("/callback", { stateKey: primary.stateKey, idToken: token, locale: "es" })).status === 400, "CALLBACK_REPLAY_ACCEPTED"); pass(current);
-    current = "code_replay"; expectInvalidGrant(await formRequest(primary.redemption)); pass(current);
+    current = "code_replay"; expectInvalidGrant(await tokenRequest(primary.grant, primary.redemption)); pass(current);
     current = "refresh"; await refresh(primary.grant); await userinfo(primary.grant); pass(current);
     current = "mcp_catalogs"; session = { grant: primary.grant };
     await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "frihet-synthetic-qa", version: "1.0.0" } });
@@ -406,12 +444,11 @@ export async function runAcceptance(options = {}, {
     current = "product_crud";
     const ledger = { marker: `FRIHET-QA-${runId}`, id: null, phase: "create_pending" }; receipt.productLedger.push(ledger); save();
     const product = await tool("create_product", { name: ledger.marker, unitPrice: 0, description: `Synthetic Claude acceptance ${runId}; remove after test` });
-    if (typeof product.id === "string" && /^[A-Za-z0-9_-]{1,256}$/u.test(product.id)) {
-      ledger.unverifiedReturnedId = product.id; save();
-    }
+    requireThat(safeProductId(product.id), "PRODUCT_ID_INVALID_OR_REFLECTED");
+    ledger.unverifiedReturnedIdSha256 = sha256(product.id); save();
     requireThat(ownProduct(product), "CREATED_PRODUCT_IDENTITY_MISMATCH");
-    ledger.id = product.id; delete ledger.unverifiedReturnedId; ledger.phase = "created"; productOwned = true; save();
-    requireThat(ownProduct(await tool("get_product", { id: ledger.id }), ledger.id), "PRODUCT_READBACK_MISMATCH");
+    requireThat(ownProduct(await tool("get_product", { id: product.id }), product.id), "PRODUCT_READBACK_MISMATCH");
+    ledger.id = product.id; delete ledger.unverifiedReturnedIdSha256; ledger.phase = "created"; productOwned = true; save();
     if (afterProductCreated) {
       ledger.phase = "awaiting_owner_counterpart"; save();
       // Only synthetic identifiers cross the hook; all credentials stay here.
@@ -427,9 +464,8 @@ export async function runAcceptance(options = {}, {
     current = "revoke"; await revoke(primary.grant); pass(current);
     current = "reconnect"; const negative = await grantNew(); await userinfo(negative.grant); pass(current);
     current = "refresh_replay"; const oldRefresh = await refresh(negative.grant); await userinfo(negative.grant);
-    expectInvalidGrant(await formRequest({ grant_type: "refresh_token", client_id: negative.grant.clientId, refresh_token: oldRefresh, resource: RESOURCE }));
-    await deadAccess(negative.grant);
-    expectInvalidGrant(await formRequest({ grant_type: "refresh_token", client_id: negative.grant.clientId, refresh_token: negative.grant.refresh, resource: RESOURCE }));
+    expectInvalidGrant(await tokenRequest(negative.grant, { grant_type: "refresh_token", client_id: negative.grant.clientId, refresh_token: oldRefresh, resource: RESOURCE }));
+    await deadAccess(negative.grant); await deadRefresh(negative.grant);
     negative.grant.ledger.phase = "replay_invalidated"; negative.grant.ledger.cleanup = "http_invalidated_backend_unverified"; pass(current);
     receipt.status = "single_identity_protocol_pass";
   } catch (error) {
@@ -440,10 +476,15 @@ export async function runAcceptance(options = {}, {
     try { await cleanupProduct(); }
     catch (error) { receipt.status = "fail"; receipt.cleanupFailure = error instanceof PilotFailure ? error.code : "CLEANUP_FAILED"; }
     for (const grant of grants) {
-      if (!grant.refresh || ["revoked", "replay_invalidated"].includes(grant.ledger.phase)) continue;
+      if (!grant.cleanupRefresh || grant.revocationAttempted || ["revoked", "replay_invalidated"].includes(grant.ledger.phase)) continue;
       try { await revoke(grant); }
       catch { receipt.status = "fail"; grant.ledger.cleanup = "reconciliation_required"; }
     }
+    for (const grant of grants) {
+      grant.accessTokens.clear(); grant.refreshTokens.clear();
+      grant.access = undefined; grant.refresh = undefined; grant.cleanupRefresh = undefined;
+    }
+    credentials.clear();
     token = undefined;
     receipt.finishedAt = new Date(clock()).toISOString();
     save();
