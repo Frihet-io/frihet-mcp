@@ -710,10 +710,10 @@ for (const name of [
 
 // #221 M1 (S2): when a commit lands in the Durable Object (arming the grant-
 // replacement outbox) but both commit responses are lost, the callback fails
-// closed: the new ERP key is revoked by correlation, the code is withheld with
-// 503, and the outbox supersedes the earlier grant so zero active keys remain
-// until the user reauthorizes.
-test("#221 M1: a commit that lands in storage whose responses are lost twice fails closed", async (t) => {
+// closed on the new attempt (503, new ERP key and unredeemed grant revoked),
+// and `/release` disarms the replacement outbox so the user's earlier working
+// grant and bound ERP key remain active.
+test("#221 M1: a commit that lands in storage whose responses are lost twice revokes the new key and preserves the earlier working grant", async (t) => {
   const h = await createOAuthRouteHarness(t);
   const idToken = await mintIdToken();
   const first = await h.startLogin();
@@ -731,16 +731,17 @@ test("#221 M1: a commit that lands in storage whose responses are lost twice fai
     await h.runDueAlarms();
   }
 
-  assert.equal((await h.callMcp(earlier.accessToken)).status, 401, "the superseded grant is revoked by the outbox");
-  assert.deepEqual(h.erp.activeKeyIds(), [], "fail-closed: neither the new nor the superseded ERP key remains active");
+  assert.equal((await h.callMcp(earlier.accessToken)).status, 200, "the earlier working grant survives");
+  assert.deepEqual(h.erp.activeKeyIds(), [earlier.keyId], "only the earlier working ERP key remains active");
+  assert.equal(h.kv.grantKeys().length, 1, "the aborted reconnect grant is removed from KV");
   assertLogsAreClean(h, [idToken]);
 });
 
 // #221 L1 (S1): two concurrent /callback flows for the same user and client
 // that both list grants before either completes authorization leave two live
-// grants and two bound ERP keys (neither is orphaned; both are replaced on the
-// next sequential reconnect).
-test("#221 L1: two concurrent callbacks that list grants before either completes keep both live grants and their bound ERP keys", async (t) => {
+// grants and two bound ERP keys (neither is orphaned; both are replaced and
+// revoked on the next sequential reconnect).
+test("#221 L1: two concurrent callbacks that list grants before either completes keep both bound grants and converge to 1 on the next reconnect", async (t) => {
   const h = await createOAuthRouteHarness(t);
   const idToken = await mintIdToken();
   const loginA = await h.startLogin();
@@ -776,6 +777,21 @@ test("#221 L1: two concurrent callbacks that list grants before either completes
   assert.equal((await h.callMcp(redeemedB.accessToken)).status, 200);
   assert.equal(h.kv.grantKeys().length, 2);
   assert.equal(h.erp.activeKeyIds().length, 2);
+
+  // Subsequent sequential reconnect replaces both concurrent grants and keys.
+  const loginC = await h.startLogin(loginA.clientId);
+  const callbackC = await h.callback(loginC.stateKey, idToken);
+  assert.equal(callbackC.status, 200);
+  const redeemedC = await h.redeem(loginA.clientId, callbackC.body.redirectTo);
+  for (let round = 0; round < 6; round += 1) {
+    h.clock.offsetMs += 10_000;
+    await h.runDueAlarms();
+  }
+  assert.equal((await h.callMcp(redeemedA.accessToken)).status, 401);
+  assert.equal((await h.callMcp(redeemedB.accessToken)).status, 401);
+  assert.equal((await h.callMcp(redeemedC.accessToken)).status, 200);
+  assert.equal(h.kv.grantKeys().length, 1);
+  assert.deepEqual(h.erp.activeKeyIds(), [redeemedC.keyId]);
   assertLogsAreClean(h, [idToken]);
 });
 
