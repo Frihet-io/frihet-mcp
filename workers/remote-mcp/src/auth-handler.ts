@@ -790,11 +790,16 @@ app.post("/callback", async (c) => {
     if (committed !== "committed") {
       // This lease no longer owns the state (taken over after its TTL or state
       // expired), or both commit reads failed (`commit_unavailable`). Withhold
-      // the code and revoke this attempt's backend credential so nothing usable
-      // remains; if the first commit actually landed before both responses were
-      // lost, the state outbox also replaces the earlier grants (fail-closed:
-      // zero active keys until the user reauthorizes).
-      const settlement = await reconcileThisAttempt();
+      // the code, revoke the unredeemed grant in KV, and revoke this attempt's
+      // backend credential; `/release` disarms the replacement outbox if the
+      // first commit landed before its responses were lost (#221 M1).
+      const abortedGrantId = new URL(redirectTo).searchParams.get("code")?.split(":")[1];
+      const [settlement] = await Promise.all([
+        reconcileThisAttempt(),
+        abortedGrantId
+          ? c.env.OAUTH_PROVIDER.revokeGrant(abortedGrantId, decoded.uid).catch(() => undefined)
+          : Promise.resolve(),
+      ]);
       log({
         level: "error",
         message: "OAuth callback: authorization state could not be committed",

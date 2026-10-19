@@ -1028,6 +1028,15 @@ export class OAuthStateStore {
           }
           delete record.lease;
           await this.state.storage.put(STATE_STORAGE_KEY, record);
+        } else if (record?.status === "committed" && record.committedLeaseId === leaseId) {
+          // #221 M1: `/commit` landed in storage, but its HTTP responses were
+          // lost (`commit_unavailable`). The holder withheld the code, revoked
+          // its new credential, and is releasing the aborted commit: disarm the
+          // replacement outbox so the user's prior working grant survives.
+          await this.state.storage.transaction(async (transaction) => {
+            await transaction.delete(GRANT_REPLACEMENT_STORAGE_KEY);
+            await transaction.setAlarm(record.expiresAtMs);
+          });
         }
         return new Response(null, { status: 204 });
       }
