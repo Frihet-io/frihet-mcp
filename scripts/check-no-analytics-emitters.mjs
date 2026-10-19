@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "d2609485c46d533635b882203d7b3b49f810075c3c94bace50f6285c2a0dc1b0", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test, the Claude write-route wire contract test, Claude output privacy and bootstrap secret tests; no new deps, lifecycle or network script
+  "package.json": "d5c85b77749778b5ad4f9fea34ee4c7a7800cb4f540b0cc016bc7cb1f474fed2", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test, the Claude write-route wire contract test, Claude output privacy, bootstrap secret and local hosted-acceptance harness tests; no new deps, lifecycle or network script
   "workers/remote-mcp/package.json": "0248007796a87b37d4f7060566b48d767aa4dcdc7a70b9fdb5883387997d1c72", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
