@@ -1,0 +1,76 @@
+{
+  "name": "send_invoice",
+  "title": "Send Invoice",
+  "description": "Send an invoice to the client via email. Requires confirm=true. Optionally override the recipient email address. The invoice must exist and should not already be cancelled. Sending reaches a third party and cannot be recalled. / Envia una factura al cliente por email. Requiere confirm=true. Opcionalmente se puede cambiar el email destinatario. El envio llega a un tercero y no se puede anular. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "description": "Invoice ID / ID de la factura",
+        "type": "string"
+      },
+      "to": {
+        "description": "Override recipient email / Email destinatario alternativo",
+        "type": "string"
+      },
+      "confirm": {
+        "description": "Must be true to confirm sending / Debe ser true para confirmar el envio",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "id",
+      "confirm"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "success": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "messageId": {
+        "type": "string"
+      },
+      "data": {
+        "not": {}
+      },
+      "meta": {
+        "not": {}
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": {}
+  },
+  "annotations": {
+    "title": "Send Invoice",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "send_invoice",
+      "writesFrihet": true,
+      "externalInteraction": true,
+      "externalSideEffects": [
+        "email_or_invitation",
+        "webhook_delivery_or_configuration",
+        "fiscal_or_einvoice_submission"
+      ]
+    }
+  }
+}

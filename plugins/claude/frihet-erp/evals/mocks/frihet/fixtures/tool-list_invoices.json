@@ -1,0 +1,187 @@
+{
+  "name": "list_invoices",
+  "title": "List Invoices",
+  "description": "List all invoices with optional pagination and filters. Returns a paginated list sorted by issue date (newest first). Supports filtering by status (draft/sent/paid/overdue/cancelled) and date range. Example: status='paid', from='2026-01-01', to='2026-03-31', limit=20 / Lista facturas con paginacion y filtros opcionales. Soporta filtrado por estado y rango de fechas. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "description": "Filter by invoice status / Filtrar por estado",
+        "type": "string",
+        "enum": [
+          "draft",
+          "sent",
+          "paid",
+          "overdue",
+          "cancelled"
+        ]
+      },
+      "clientId": {
+        "description": "Filter by client ID / Filtrar por ID de cliente",
+        "type": "string"
+      },
+      "seriesId": {
+        "description": "Filter by invoice series ID / Filtrar por ID de serie",
+        "type": "string"
+      },
+      "from": {
+        "description": "Start date filter in ISO 8601 (YYYY-MM-DD) / Fecha inicio",
+        "type": "string"
+      },
+      "to": {
+        "description": "End date filter in ISO 8601 (YYYY-MM-DD) / Fecha fin",
+        "type": "string"
+      },
+      "fields": {
+        "description": "Comma-separated field names to return (e.g. 'id,clientName,total') / Campos a devolver",
+        "type": "string"
+      },
+      "limit": {
+        "description": "Max results per page (1-100, default 50) / Resultados por pagina",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "offset": {
+        "description": "Number of results to skip / Resultados a saltar",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "after": {
+        "description": "Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor",
+        "type": "string"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "clientName": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "number"
+                  },
+                  "unitPrice": {
+                    "type": "number"
+                  },
+                  "taxRate": {
+                    "type": "number"
+                  },
+                  "discount": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "description",
+                  "quantity",
+                  "unitPrice"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "issueDate": {
+              "type": "string"
+            },
+            "dueDate": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "taxRate": {
+              "type": "number"
+            },
+            "discountRate": {
+              "type": "number"
+            },
+            "total": {
+              "type": "number"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "total": {
+        "type": "number"
+      },
+      "limit": {
+        "type": "number"
+      },
+      "offset": {
+        "type": "number"
+      },
+      "nextCursor": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "data",
+      "total",
+      "limit",
+      "offset"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false
+  },
+  "annotations": {
+    "title": "List Invoices",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "list_invoices",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}

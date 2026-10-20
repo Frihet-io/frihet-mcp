@@ -1,0 +1,73 @@
+{
+  "name": "get_bank_account",
+  "title": "Get Bank Account",
+  "description": "Get a single connected bank account by ID. Returns alias, IBAN (last 4 digits), currency, current balance, and last sync timestamp. / Obtiene una cuenta bancaria conectada por su ID. Devuelve alias, IBAN (ultimos 4 digitos), divisa, saldo actual y ultima sincronizacion. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "description": "Bank account ID / ID de la cuenta bancaria",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "alias": {
+        "type": "string"
+      },
+      "ibanLast4": {
+        "description": "Last 4 digits of IBAN (security masked)",
+        "type": "string"
+      },
+      "currency": {
+        "type": "string"
+      },
+      "balance": {
+        "type": "number"
+      },
+      "lastSyncedAt": {
+        "type": "string"
+      },
+      "createdAt": {
+        "type": "string"
+      },
+      "updatedAt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": {}
+  },
+  "annotations": {
+    "title": "Get Bank Account",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "get_bank_account",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}

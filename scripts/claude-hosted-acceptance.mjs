@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Single-identity Claude protocol pilot. Default: no network, no credentials.
- * --consultation exercises the nine-tool read-only surface. The historical
- * product lifecycle is refused before credentials when the catalog lacks CRUD.
+ * --consultation exercises only the historical nine-tool read-only surface.
+ * The product lifecycle checks one narrow synthetic CRUD flow; neither mode
+ * establishes acceptance of the complete operational catalogue.
  * Build first. Hosted execution requires the existing full deployment guard,
  * a matching public release, and a fresh real Firebase ID token on a private FD.
  * This command never signs in, retries a write, or certifies two-account/client

@@ -50,9 +50,49 @@ const RELEASE_RECEIPT_KIND = "frihet-production-firebase-release-receipt";
 const ERP_PROJECT = "gen-lang-client-0335716041";
 const ERP_REGION = "europe-west1";
 const WRITE_ROUTE_FIXTURE = fileURLToPath(new URL("../src/__tests__/fixtures/claude-write-route-contract.json", import.meta.url));
-const SERVED_ROUTE_FIXTURE = fileURLToPath(new URL("../src/__tests__/fixtures/claude-consultation-route-contract.json", import.meta.url));
 const CANDIDATE_FIXTURE = fileURLToPath(new URL("../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url));
 const CREDENTIAL_CEILING_SHA256 = "bcf2185915523c60468afc380d1e2456a5c0da5cb2ca4b4820e74886b06b928f";
+
+/** Product scope and pilot admission are separate. This proves source scope only. */
+export function assertClaudeOperationalSurface(candidate, ceiling) {
+  const names = (tools) => tools.map(({ name }) => name).sort();
+  const full = candidate.tools.full;
+  const grouped = candidate.tools.grouped;
+  const aliases = Object.keys(candidate.catalogue.aliases);
+  const canonical = full.filter(({ name }) => !aliases.includes(name));
+  assert.equal(candidate.catalogue.canonicalOperations, 125);
+  assert.equal(canonical.length, 125);
+  assert.equal(new Set(names(full)).size, full.length, "duplicate tool names");
+  assert.equal(aliases.length, 4);
+  assert.deepEqual(names(grouped), [...names(full), "describe_tool", "list_tool_groups", "search_tools"].sort());
+  assert.equal(candidate.groups.totalTools, 125);
+  assert.equal(candidate.groups.totalGroups, 11);
+  assert.equal(candidate.groups.groups.reduce((sum, group) => sum + group.toolCount, 0), 125);
+  assert.equal(Object.keys(candidate.exclusions.tools).length, 31);
+  for (const tool of grouped) {
+    assert.ok(tool.title?.trim(), `${tool.name} needs a title`);
+    for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {
+      assert.equal(typeof tool.annotations?.[hint], "boolean", `${tool.name}.${hint}`);
+    }
+    assert.ok(!(tool.name in candidate.exclusions.tools), `${tool.name} is excluded`);
+    const capability = tool._meta?.["io.frihet/capability"];
+    assert.ok(capability, `${tool.name} needs capability metadata`);
+    assert.ok(!["deferred", "unavailable"].includes(capability.callability), `${tool.name} is not callable`);
+    assert.ok(!capability.externalSideEffects.includes("money_movement"), `${tool.name} transfers funds`);
+  }
+  assert.deepEqual(full.filter((tool) => !tool.annotations.readOnlyHint).map(({ name }) => name).sort(), Object.keys(ceiling.tools).sort(), "operational writes must match the existing ERP credential ceiling");
+  for (const [alias, target] of Object.entries(candidate.catalogue.aliases)) {
+    assert.ok(canonical.some(({ name }) => name === target), `${alias} lacks its canonical operation`);
+    assert.ok(full.some(({ name }) => name === alias), `${alias} is missing`);
+  }
+  for (const kind of ["local", "remote"]) assert.deepEqual(candidate.resources[kind].map(({ uri }) => uri), ["frihet://config/currencies"]);
+  assert.deepEqual(names(candidate.prompts), ["invoice-aging-review", "overdue-followup"]);
+  assert.deepEqual(names(candidate.promptContent), names(candidate.prompts));
+  assert.equal(ceiling.sha256, CREDENTIAL_CEILING_SHA256);
+  assert.equal(createHash("sha256").update(ceiling.routes.join("\n")).digest("hex"), CREDENTIAL_CEILING_SHA256);
+}
+
+// Historical nine-tool contract: retained for old receipts and offline tests.
 const CONSULTATION_CORE = Object.freeze(["list_clients", "list_expenses", "list_invoices", "list_products", "list_quotes", "list_vendors"]);
 const CONSULTATION_DISCOVERY = Object.freeze(["describe_tool", "list_tool_groups", "search_tools"]);
 
@@ -109,8 +149,8 @@ export function erpCeilingRoutes(source) {
  * At the direct-source commit,
  * publicApi.ts must reference `isClaudeWriteRouteAllowed(` (a text check) and
  * claudeWriteRoutes.ts must list exactly the routes of the frozen credential
- * ceiling fixture. This intentionally remains broader than the separate served
- * consultation contract; it does not claim backend credential revocation.
+ * ceiling fixture. The operational Claude write set must match this existing
+ * ceiling; source scope never claims backend credential revocation.
  * A receipt proves that a release deployed the ceiling, not
  * that no later release replaced publicApi: pass the latest release that
  * deployed it.
@@ -170,8 +210,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { config, sharedNamespaceIds } = readClaudeConfiguration();
   const sourceOnly = process.argv.includes("--source-only");
   assertClaudeWorkerIsolation(config, sharedNamespaceIds, sourceOnly);
-  assertClaudeConsultationSurface(JSON.parse(readFileSync(CANDIDATE_FIXTURE, "utf8")), JSON.parse(readFileSync(SERVED_ROUTE_FIXTURE, "utf8")));
   const ceiling = JSON.parse(readFileSync(WRITE_ROUTE_FIXTURE, "utf8"));
+  assertClaudeOperationalSurface(JSON.parse(readFileSync(CANDIDATE_FIXTURE, "utf8")), ceiling);
   assert.equal(ceiling.sha256, CREDENTIAL_CEILING_SHA256, "historical ERP credential ceiling digest must remain unchanged");
   assert.equal(createHash("sha256").update(ceiling.routes.join("\n")).digest("hex"), CREDENTIAL_CEILING_SHA256, "historical ERP credential ceiling routes must remain unchanged");
   if (!sourceOnly) {

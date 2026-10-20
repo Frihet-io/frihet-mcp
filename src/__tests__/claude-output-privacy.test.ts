@@ -67,26 +67,42 @@ for (const local of [true, false]) for (const grouped of [true, false]) {
     const { client, close } = await connect(server);
     try {
       const listed = (await client.listTools()).tools;
-      for (const name of ["list_clients", "list_invoices", "list_quotes", "list_expenses", "list_vendors", "list_products"]) {
-        const tool = listed.find((entry) => entry.name === name)!;
-        assert.equal(tool.annotations?.readOnlyHint, true);
-        const result = await client.callTool({ name, arguments: {} });
+      assert.doesNotMatch(JSON.stringify(listed.find((tool) => tool.name === "payroll_export")!.outputSchema), /"iban"|"nss"/u);
+      assert.ok("secret" in listed.find((tool) => tool.name === "create_webhook")!.inputSchema.properties!);
+      for (const [name, args] of [
+        ["get_invoice", { id: "synthetic_record" }],
+        ["get_client", { id: "synthetic_record" }],
+        ["get_bank_account", { id: "synthetic_record" }],
+        ["list_invoices", {}],
+        ["get_business_context", {}],
+        ["payroll_export", { format: "a3", month: "2026-10" }],
+        ["create_webhook", { name: "Synthetic", url: "https://example.invalid/hook", events: ["invoice.created"], secret: "PRIVATE_secret_fixture" }],
+        ["create_credit_note", { invoiceId: "synthetic_record", reason: "refund", idempotencyKey: "synthetic-idempotency-key" }],
+      ] as const) {
+        const result = await client.callTool({ name, arguments: args });
         assert.notEqual(result.isError, true, `${name}: ${JSON.stringify(result)}`);
         assertPrivate(result);
         assert.equal((result.content as Array<{ text: string }>)[0].text, JSON.stringify(result.structuredContent, null, 2));
-        const structured = result.structuredContent as { data: Array<Record<string, unknown>> };
-        assert.equal(structured.data[0].total, 250);
-        assert.equal(structured.data[0].amountPaid, 100);
-        assert.deepEqual(structured.data[0].details, [{ nested: { visible: "Keep this business value" } }]);
       }
-      assert.deepEqual(calls.map((call) => call.method).sort(), ["listClients", "listExpenses", "listInvoices", "listProducts", "listQuotes", "listVendors"]);
+      assert.equal(calls.filter((call) => call.method === "createWebhook").length, 1);
+      assert.equal((calls.find((call) => call.method === "createWebhook")!.args[0] as { secret: string }).secret, "PRIVATE_secret_fixture");
+      assert.equal(calls.filter((call) => call.method === "createCreditNote").length, 1);
+      assert.equal(calls.find((call) => call.method === "createCreditNote")!.args[2], "synthetic-idempotency-key");
+      const output = await client.callTool({ name: "get_invoice", arguments: { id: "synthetic_record" } });
+      const structured = output.structuredContent as Record<string, unknown>;
+      assert.equal(structured.total, 250);
+      assert.equal(structured.amountPaid, 100);
+      assert.deepEqual(structured.details, [{ nested: { visible: "Keep this business value" } }]);
+      for (const name of ["list_clients", "list_quotes", "list_expenses", "list_vendors", "list_products"]) {
+        const result = await client.callTool({ name, arguments: {} });
+        assert.notEqual(result.isError, true);
+        assertPrivate(result);
+      }
       const beforeDenied = calls.length;
-      for (const name of ["get_invoice", "get_client", "get_invoice_pdf", "get_invoice_einvoice", "payroll_export", "create_webhook", "create_credit_note"]) {
+      for (const name of ["get_invoice_pdf", "get_invoice_einvoice"]) {
         const result = await client.callTool({ name, arguments: { id: "synthetic_record" } });
         assert.equal(result.isError, true);
       }
-      assert.equal(calls.length, beforeDenied);
-      await assert.rejects(client.readResource({ uri: "frihet://business-profile" }));
       assert.equal(calls.length, beforeDenied);
       assert.equal(record.taxId, "PRIVATE_taxId_fixture", "shared API object must not be mutated");
     } finally { await close(); }
@@ -96,7 +112,7 @@ for (const local of [true, false]) for (const grouped of [true, false]) {
 test("Claude removes required sensitive schema fields, opaque content and arbitrary metadata through real SDK", async () => {
   const server = new McpServer({ name: "privacy-blocks", version: "1.0.0" });
   applyClaudeCandidateProfile(server);
-  server.registerTool("list_invoices", {
+  server.registerTool("get_invoice", {
     outputSchema: z.object({ id: z.string(), taxId: z.string(), nested: z.array(z.object({ iban: z.string(), amount: z.number() })) }),
   }, async () => ({
     content: [
@@ -111,7 +127,7 @@ test("Claude removes required sensitive schema fields, opaque content and arbitr
   try {
     const descriptor = (await client.listTools()).tools[0];
     assert.doesNotMatch(JSON.stringify(descriptor.outputSchema), /"taxId"|"iban"/u);
-    const result = await client.callTool({ name: "list_invoices", arguments: {} });
+    const result = await client.callTool({ name: "get_invoice", arguments: {} });
     assert.notEqual(result.isError, true);
     assertPrivate(result);
     assert.deepEqual(result.structuredContent, { id: "synthetic", nested: [{ amount: 10 }] });
@@ -123,20 +139,20 @@ test("Claude removes required sensitive schema fields, opaque content and arbitr
 test("Claude error paths retain outcome flags without returning arbitrary text or exceptions", async () => {
   const server = new McpServer({ name: "privacy-errors", version: "1.0.0" });
   applyClaudeCandidateProfile(server);
-  server.registerTool("list_invoices", {}, async () => ({ isError: true, content: [{ type: "text", text: "PRIVATE_error" }],
+  server.registerTool("get_invoice", {}, async () => ({ isError: true, content: [{ type: "text", text: "PRIVATE_error" }],
     _meta: { "io.frihet/operationOutcomeUnknown": true, "io.frihet/authenticationRequired": true, "io.frihet/retryable": false, raw: "PRIVATE_meta" },
   }));
-  server.registerTool("list_clients", {}, async () => { throw new Error("PRIVATE_exception"); });
+  server.registerTool("get_client", {}, async () => { throw new Error("PRIVATE_exception"); });
   server.registerResource("currencies", "frihet://config/currencies", {}, async () => ({
     contents: [{ uri: "frihet://config/currencies", mimeType: "application/octet-stream", blob: "PRIVATE_blob" }],
   }));
   const { client, close } = await connect(server);
   try {
-    const result = await client.callTool({ name: "list_invoices", arguments: {} });
+    const result = await client.callTool({ name: "get_invoice", arguments: {} });
     assert.equal(result.isError, true);
     assertPrivate(result);
     assert.deepEqual(result._meta, { "io.frihet/authenticationRequired": true, "io.frihet/operationOutcomeUnknown": true, "io.frihet/retryable": false });
-    assertPrivate(await client.callTool({ name: "list_clients", arguments: {} }));
+    assertPrivate(await client.callTool({ name: "get_client", arguments: {} }));
     await assert.rejects(client.readResource({ uri: "frihet://config/currencies" }), (error: Error) => {
       assert.doesNotMatch(error.message, /PRIVATE_/u);
       assert.match(error.message, /withheld/u);
@@ -154,7 +170,7 @@ test("real Claude product handlers retain only typed denial flags and withhold p
     registerMcpSurface(server, clientApi, remoteMcpSurfaceComposition(false, true, true));
     const { client, close } = await connect(server);
     try {
-      const result = await client.callTool({ name: "list_products", arguments: {} });
+      const result = await client.callTool({ name: "get_product", arguments: { id: "synthetic_record" } });
       assert.equal(result.isError, true);
       assert.deepEqual(result._meta, { [`io.frihet/${flag}`]: true });
       assert.equal(result.structuredContent, undefined);
@@ -191,7 +207,7 @@ test("actual stdio uses the Claude output boundary with synthetic data", async (
     import { registerMcpSurface, localMcpSurfaceComposition } from ${JSON.stringify(composition)};
     const server = new McpServer({name:'stdio-privacy-fixture',version:'1.0.0'});
     const fixture = ${JSON.stringify(record)};
-    const api = new Proxy({}, {get:()=>async()=>({data:[fixture],total:1,limit:20,offset:0})});
+    const api = new Proxy({}, {get:()=>async()=>fixture});
     registerMcpSurface(server, api, localMcpSurfaceComposition(false, true, true));
     await server.connect(new StdioServerTransport());
   `;
@@ -199,10 +215,10 @@ test("actual stdio uses the Claude output boundary with synthetic data", async (
   const client = new Client({ name: "stdio-privacy-client", version: "1.0.0" });
   try {
     await client.connect(transport);
-    const result = await client.callTool({ name: "list_invoices", arguments: {} });
+    const result = await client.callTool({ name: "get_invoice", arguments: { id: "synthetic_record" } });
     assert.notEqual(result.isError, true);
     assertPrivate(result);
-    assert.equal((result.structuredContent as { data: Array<Record<string, unknown>> }).data[0].total, 250);
+    assert.equal((result.structuredContent as Record<string, unknown>).total, 250);
   } finally { await client.close(); }
 });
 

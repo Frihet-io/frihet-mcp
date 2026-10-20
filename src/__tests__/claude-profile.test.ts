@@ -26,17 +26,28 @@ const originalAnnotations = new Map([
   ...publicSurfaces.localFull.tools,
   ...publicSurfaces.remoteGrouped.tools,
 ].map((tool) => [tool.name, tool.annotations]));
-// The owner-approved consultation inventory is independent of runtime constants.
-const canonical = ["list_clients", "list_expenses", "list_invoices", "list_products", "list_quotes", "list_vendors"];
-const excluded = fullNames.filter((name) => !(name in FISCAL_MODELO_ALIASES) && !canonical.includes(name)).sort();
-const deniedAliases = Object.keys(FISCAL_MODELO_ALIASES);
-const expectedNames = [...canonical];
+const excluded = [
+  "ksef_submit", "get_modelo_180_summary", "frihet_modelo_415_summary", "frihet_modelo_418_summary", "frihet_modelo_425_summary", "frihet_aiem_calculate", "frihet_modelo_200_summary", "frihet_modelo_202_summary",
+  "period_close", "period_reopen", "gestoria_message_send", "gestoria_messages_list", "gestoria_template_bulk_send", "gestoria_aging_consolidated", "create_reservation", "sync_channel",
+  "refund_sale", "delete_client", "delete_expense", "send_quote",
+  "einvoice_export", "face_submit", "face_status", "ticketbai_submit", "ticketbai_status", "send_einvoice",
+  "get_einvoice_status", "validate_einvoice_xml", "export_datev", "get_invoice_pdf", "get_invoice_einvoice",
+].sort();
+const allowedAliases = Object.entries(FISCAL_MODELO_ALIASES).filter(([, canonical]) => !excluded.includes(canonical));
+const deniedAliases = Object.entries(FISCAL_MODELO_ALIASES).filter(([, canonical]) => excluded.includes(canonical)).map(([alias]) => alias);
+const canonical = fullNames.filter((name) => !(name in FISCAL_MODELO_ALIASES) && !excluded.includes(name)).sort();
+const expectedNames = [...canonical, ...allowedAliases.map(([alias]) => alias)].sort();
 const discovery = ["list_tool_groups", "search_tools", "describe_tool"];
 const invoice = { id: "inv_candidate", status: "partial", currency: "USD", total: 250, amountPaid: 100, dueDate: "2026-09-01" };
+const business = { businessName: "Candidate fixture", plan: { name: "pro", invoices: { used: 3, limit: 100 } } };
+const monthly = { month: "2026-09", currency: "USD", revenue: 150, expenses: 20 };
 
 function recordingApi(calls: Array<{ method: string; args: unknown[] }>): IFrihetClient {
   return new Proxy({}, { get: (_target, method) => async (...args: unknown[]) => {
     calls.push({ method: String(method), args });
+    if (method === "getBusinessContext") return business;
+    if (method === "getMonthlySummary") return monthly;
+    if (method === "getInvoice") return invoice;
     if (method === "listInvoices") return { data: [invoice], total: 201, limit: 100, offset: 0 };
     return {};
   } }) as IFrihetClient;
@@ -65,9 +76,9 @@ async function denied(client: Client, name: string) {
 
 test("Claude candidate exactly matches the regenerated SDK descriptor and inventory arithmetic", async () => {
   assert.equal(fullNames.length - Object.keys(FISCAL_MODELO_ALIASES).length, 156);
-  assert.equal(canonical.length, 6);
-  assert.equal(excluded.length, 150);
-  assert.equal(deniedAliases.length, Object.keys(FISCAL_MODELO_ALIASES).length);
+  assert.equal(canonical.length, 125);
+  assert.equal(excluded.length, 31);
+  assert.equal(allowedAliases.length, 4);
   assert.deepEqual([...CLAUDE_CANDIDATE_TOOLS].sort(), canonical);
   assert.deepEqual(Object.keys(CLAUDE_EXCLUDED_TOOLS).sort(), excluded);
   const actual = await captureClaudeCandidateContract();
@@ -120,16 +131,21 @@ for (const local of [true, false]) for (const grouped of [false, true]) {
         assert.ok(!["unavailable", "deferred"].includes(capability.callability), tool.name);
         assert.ok(!capability.externalSideEffects.includes("money_movement"), tool.name);
       }
-      assert.ok(tools.every((tool) => tool.annotations?.readOnlyHint === true && tool.annotations?.destructiveHint === false));
+      for (const name of ["get_quarterly_taxes", "send_invoice", "payroll_export", "list_bank_accounts", "match_transaction_to_invoice", "refund_deposit", "run_recurring_now"]) {
+        assert.ok(tools.some((tool) => tool.name === name), `${name} family retained`);
+      }
+      assert.ok(tools.find((tool) => tool.name === "run_recurring_now")!.inputSchema.required!.includes("confirm"));
+      const refund = tools.find((tool) => tool.name === "refund_deposit")!;
+      assert.equal(refund.inputSchema.additionalProperties, false);
+      assert.deepEqual(Object.keys(refund.inputSchema.properties!).sort(), ["amount", "confirm", "id"]);
       for (const name of [...excluded, ...deniedAliases, "future_unknown_tool", "execute_tool"]) await denied(client, name);
       if (grouped) {
         const groups = (await client.callTool({ name: "list_tool_groups", arguments: {} })).structuredContent as { totalTools: number; groups: Array<{ group: string; toolCount: number; blurb: string }> };
-        assert.equal(groups.totalTools, 6);
-        assert.equal(groups.groups.reduce((sum, group) => sum + group.toolCount, 0), 6);
-        assert.deepEqual(groups.groups.map((group) => [group.group, group.toolCount]).sort(), [["catalog", 1], ["crm", 1], ["expenses", 2], ["invoicing", 2]]);
-        assert.doesNotMatch(JSON.stringify(groups), /create, send, pay|KSeF|payroll|VIES|fiscal submission/);
+        assert.equal(groups.totalTools, 125);
+        assert.equal(groups.groups.reduce((sum, group) => sum + group.toolCount, 0), 125);
+        assert.doesNotMatch(JSON.stringify(groups), /refunds|KSeF|channel sync|onboarding|200\/202|period close,/);
         const searched = (await client.callTool({ name: "search_tools", arguments: { limit: 1000 } })).structuredContent as { count: number; tools: Array<{ name: string }> };
-        assert.equal(searched.count, 6);
+        assert.equal(searched.count, 125);
         assert.deepEqual(searched.tools.map((tool) => tool.name).sort(), canonical);
         for (const group of groups.groups) {
           const result = (await client.callTool({ name: "search_tools", arguments: { group: group.group, limit: 1000 } })).structuredContent as { count: number };
@@ -142,7 +158,7 @@ for (const local of [true, false]) for (const grouped of [false, true]) {
           assert.equal(typeof detail.description, "string");
           if (name === "list_clients" || name === "list_vendors") {
             assert.match(String(detail.description), /tax identifiers are omitted/);
-            assert.doesNotMatch(String(detail.description), /Returns contact info, tax IDs|Devuelve informacion de contacto, NIF\/CIF/);
+            assert.doesNotMatch(String(detail.description), /Returns contact info, tax IDs/);
           }
         }
         for (const name of [...excluded, ...deniedAliases, "future_unknown_tool"]) {
@@ -152,13 +168,20 @@ for (const local of [true, false]) for (const grouped of [false, true]) {
         }
       }
       assert.deepEqual(calls, [], "catalog and all denied calls must not touch the API");
-      const got = await client.callTool({ name: "list_invoices", arguments: { limit: 100, offset: 0 } });
+      // Permitted aliases have the exact canonical handler/schema, including schema denial.
+      for (const [alias, target] of allowedAliases) {
+        const targetTool = tools.find((tool) => tool.name === target)!;
+        const aliasTool = tools.find((tool) => tool.name === alias)!;
+        assert.deepEqual({ ...aliasTool, name: target }, targetTool);
+        assert.equal((await client.callTool({ name: alias, arguments: { period: "invalid" } })).isError, true);
+      }
+      assert.deepEqual(calls, []);
+      const got = await client.callTool({ name: "get_invoice", arguments: { id: invoice.id } });
       assert.notEqual(got.isError, true);
-      const record = got.structuredContent as { data: Array<Record<string, unknown>> };
-      assert.equal(record.data[0].id, invoice.id);
-      assert.equal(record.data[0].amountPaid, 100);
-      assert.equal(calls.length, 1);
-      assert.deepEqual(calls.map((call: { method: string }) => call.method), ["listInvoices"]);
+      const record = got.structuredContent as Record<string, unknown>;
+      assert.equal(record.id, invoice.id);
+      assert.equal(record.amountPaid, 100);
+      assert.deepEqual(calls, [{ method: "getInvoice", args: [invoice.id] }]);
     } finally { await close(); }
   });
 }
@@ -167,16 +190,41 @@ for (const local of [true, false]) {
   test(`Claude ${local ? "local" : "remote composition"}: retained prompt/resource content and excluded requests`, async () => {
     const { client, calls, close } = await connect(local, false);
     try {
-      assert.equal(client.getServerCapabilities()?.prompts, undefined);
+      const prompts = (await client.listPrompts()).prompts;
+      assert.deepEqual(prompts.map((prompt) => prompt.name).sort(), ["invoice-aging-review", "overdue-followup"]);
       const resources = (await client.listResources()).resources;
       assert.deepEqual(resources.map((resource) => resource.uri), ["frihet://config/currencies"]);
-      const result = await client.readResource({ uri: "frihet://config/currencies" });
-      assert.equal(result.contents.length, 1);
-      assert.ok("text" in result.contents[0]);
-      const currencies = JSON.parse(result.contents[0].text);
-      assert.equal(currencies.EUR.symbol, "€");
-      assert.equal(currencies.USD.decimals, 2);
-      assert.equal(currencies.JPY.decimals, 0);
+      const received: string[] = [CLAUDE_CANDIDATE_INSTRUCTIONS, JSON.stringify(resources), JSON.stringify(prompts)];
+      for (const { name } of prompts) {
+        const result = await client.getPrompt({ name });
+        assert.equal(result.messages.length, 1);
+        const text = JSON.stringify(result.messages);
+        received.push(text);
+        for (const requirement of [/Paginate/i, /partial/i, /without a status filter/i, /client-side/i, /remaining unpaid balance/i, /not count full invoice totals/i, /currency/i, /not-yet-due/i, /user approval before any actions/i]) assert.match(text, requirement, name);
+        assert.doesNotMatch(text, /95%|80%|50%|25%|10%|€100/);
+      }
+      for (const { uri } of resources) {
+        const result = await client.readResource({ uri });
+        assert.equal(result.contents.length, 1);
+        assert.equal(result.contents[0].uri, uri);
+        assert.ok("text" in result.contents[0]);
+        const text = result.contents[0].text;
+        const data = JSON.parse(text);
+        received.push(text);
+        if (uri === "frihet://config/currencies") {
+          assert.equal(data.EUR.symbol, "€");
+          assert.equal(data.USD.decimals, 2);
+          assert.equal(data.JPY.decimals, 0);
+        } else if (uri === "frihet://business-profile") assert.deepEqual(data, business);
+        else if (uri === "frihet://monthly-snapshot") assert.deepEqual(data, monthly);
+        else if (uri === "frihet://status/plan-limits") assert.deepEqual(data, { plan: "pro", limits: { invoices: 100 }, usage: { invoices: 3 }, breakdown: business.plan });
+        else {
+          assert.deepEqual(data.data, [invoice]);
+          assert.equal(data.hasMore, true);
+          assert.equal(data.total, 201);
+          assert.match(data.note, /not a complete receivables or unpaid-balance report/);
+        }
+      }
       for (const [name, reason] of Object.entries(CLAUDE_EXCLUDED_PROMPTS)) {
         assert.ok(reason.length > 10);
         await assert.rejects(client.getPrompt({ name }));
@@ -185,7 +233,8 @@ for (const local of [true, false]) {
         assert.ok(reason.length > 10);
         await assert.rejects(client.readResource({ uri }));
       }
-      assert.deepEqual(calls, [], "resources and unavailable prompts must not bypass consultation scope");
+      for (const name of [...excluded, ...Object.keys(CLAUDE_EXCLUDED_RESOURCES)]) assert.ok(!received.join("\n").includes(name), name);
+      assert.deepEqual(calls, [], "prompts and static resource must not perform API operations");
     } finally { await close(); }
   });
 }
@@ -206,7 +255,7 @@ test("actual stdio Claude flag exposes truthful candidate and rejects mixed flag
     await client.connect(transport);
     assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name).sort(), expectedNames);
     assert.equal(client.getInstructions(), CLAUDE_CANDIDATE_INSTRUCTIONS);
-    assert.match(client.getServerVersion()?.description ?? "", /6 read-only canonical operations/);
+    assert.match(client.getServerVersion()?.description ?? "", /125 canonical operations/);
     assert.doesNotMatch(client.getServerVersion()?.description ?? "", /158|11 resources|full Spanish tax compliance/);
   } finally { await client.close(); }
   await assert.rejects(promisify(execFile)(process.execPath, [entry], {
@@ -223,8 +272,9 @@ test("actual stdio Claude flag exposes truthful candidate and rejects mixed flag
 test("Claude texts never instruct a partial status filter and the unfiltered list_invoices call validates", async () => {
   const { client, calls, close } = await connect(true, false);
   try {
-    const texts: string[] = [CLAUDE_CANDIDATE_INSTRUCTIONS, JSON.stringify((await client.listResources()).resources)];
-    for (const text of [texts.join("\n")]) {
+    const texts: string[] = [CLAUDE_CANDIDATE_INSTRUCTIONS];
+    for (const { name } of (await client.listPrompts()).prompts) texts.push(JSON.stringify((await client.getPrompt({ name })).messages));
+    for (const text of texts) {
       assert.doesNotMatch(text, /list_invoices for sent, partial/i);
       assert.doesNotMatch(text, /list_invoices[^.]*including (sent and )?partial/i);
       assert.doesNotMatch(text, /list_invoices pagination including/i);

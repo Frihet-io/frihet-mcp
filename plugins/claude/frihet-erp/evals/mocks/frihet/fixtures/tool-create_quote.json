@@ -1,0 +1,240 @@
+{
+  "name": "create_quote",
+  "title": "Create Quote",
+  "description": "Create a new quote/estimate for a client. Requires client name and at least one line item. Quotes can later be converted to invoices. Defaults to draft status. Example: clientName='Acme Corp', items=[{description:'Design', quantity:1, unitPrice:3000}], validUntil='2026-04-30' / Crea un nuevo presupuesto. Requiere nombre del cliente y al menos un concepto. Los presupuestos se pueden convertir en facturas despues. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "clientName": {
+        "description": "Client name / Nombre del cliente",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "clientId": {
+        "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
+        "type": "string"
+      },
+      "clientTaxId": {
+        "description": "Client tax ID (NIF/CIF/VAT) / NIF/CIF del cliente",
+        "type": "string"
+      },
+      "clientAddress": {
+        "description": "Client billing address / Direccion fiscal del cliente",
+        "type": "string"
+      },
+      "issueDate": {
+        "description": "Issue date in ISO 8601 (YYYY-MM-DD), defaults to today / Fecha de emision",
+        "type": "string",
+        "format": "date",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+      },
+      "dueDate": {
+        "description": "Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento",
+        "type": "string",
+        "format": "date",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+      },
+      "taxRate": {
+        "description": "Tax rate % (e.g. 21 IVA, 7 IGIC) / Porcentaje de impuesto",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "irpfRate": {
+        "description": "IRPF withholding % (retencion autonomo ES) / Retencion IRPF %",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "equivalenceSurchargeRate": {
+        "description": "Recargo de equivalencia % / Recargo de equivalencia %",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "clientLocation": {
+        "description": "Fiscal zone driving IVA vs IGIC vs exempt / Zona fiscal",
+        "type": "string",
+        "enum": [
+          "peninsula",
+          "canarias",
+          "ceuta_melilla",
+          "eu",
+          "world"
+        ]
+      },
+      "items": {
+        "description": "Line items (each with description, quantity, unitPrice) / Conceptos del presupuesto",
+        "minItems": 1,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "description": "Description of the line item / Descripcion del concepto",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "quantity": {
+              "description": "Quantity / Cantidad",
+              "type": "number",
+              "minimum": 0.0001,
+              "maximum": 1000000
+            },
+            "unitPrice": {
+              "description": "Unit price in EUR / Precio unitario en EUR",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10000000
+            }
+          },
+          "required": [
+            "description",
+            "quantity",
+            "unitPrice"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "validUntil": {
+        "description": "Expiry date in ISO 8601 (YYYY-MM-DD) / Fecha de validez",
+        "type": "string",
+        "format": "date",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+      },
+      "notes": {
+        "description": "Additional notes shown on the quote / Notas adicionales",
+        "type": "string",
+        "maxLength": 10000
+      },
+      "status": {
+        "description": "Quote status (default: draft) / Estado del presupuesto",
+        "type": "string",
+        "enum": [
+          "draft",
+          "sent",
+          "accepted",
+          "rejected",
+          "expired"
+        ]
+      }
+    },
+    "required": [
+      "clientName",
+      "items"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "clientId": {
+        "type": "string"
+      },
+      "clientName": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number"
+            },
+            "unitPrice": {
+              "type": "number"
+            },
+            "taxRate": {
+              "type": "number"
+            },
+            "discount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "description",
+            "quantity",
+            "unitPrice"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "issueDate": {
+        "type": "string"
+      },
+      "dueDate": {
+        "type": "string"
+      },
+      "validUntil": {
+        "type": "string"
+      },
+      "notes": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string"
+      },
+      "total": {
+        "type": "number"
+      },
+      "taxRate": {
+        "type": "number"
+      },
+      "discountRate": {
+        "type": "number"
+      },
+      "createdAt": {
+        "type": "string"
+      },
+      "updatedAt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": {}
+  },
+  "annotations": {
+    "title": "Create Quote",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "create_quote",
+      "writesFrihet": true,
+      "externalInteraction": true,
+      "externalSideEffects": [
+        "webhook_delivery_or_configuration"
+      ]
+    }
+  }
+}

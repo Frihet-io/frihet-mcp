@@ -1,0 +1,327 @@
+{
+  "name": "get_business_context",
+  "title": "Get Business Context",
+  "description": "Get complete business context — profile, defaults, plan limits, recent activity, top clients, and current month summary. Call this FIRST in any session to understand the user's business. Returns everything an AI agent needs to provide personalized help without multiple round-trips. / Obtiene el contexto completo del negocio — perfil, limites del plan, actividad reciente, principales clientes y resumen del mes actual. Llama a esto PRIMERO en cualquier sesion. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "business": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "fiscalZone": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "fiscalZone",
+          "currency",
+          "language",
+          "country"
+        ],
+        "additionalProperties": {}
+      },
+      "defaults": {
+        "type": "object",
+        "properties": {
+          "taxRate": {
+            "type": "number"
+          },
+          "irpfRate": {
+            "type": "number"
+          },
+          "dueDays": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "taxRate",
+          "irpfRate",
+          "dueDays",
+          "currency"
+        ],
+        "additionalProperties": {}
+      },
+      "plan": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "invoices": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "number"
+              },
+              "limit": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unlimited"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "used",
+              "limit"
+            ],
+            "additionalProperties": false
+          },
+          "expenses": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "number"
+              },
+              "limit": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unlimited"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "used",
+              "limit"
+            ],
+            "additionalProperties": false
+          },
+          "aiMessages": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "number"
+              },
+              "limit": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unlimited"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "used",
+              "limit"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "invoices",
+          "expenses",
+          "aiMessages"
+        ],
+        "additionalProperties": {}
+      },
+      "series": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string"
+            },
+            "current": {
+              "type": "number"
+            },
+            "year": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "recentActivity": {
+        "type": "object",
+        "properties": {
+          "lastInvoice": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "number": {
+                    "type": "string"
+                  },
+                  "date": {
+                    "type": "string"
+                  },
+                  "client": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastExpense": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string"
+                  },
+                  "vendor": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "amount"
+                ],
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overdueCount": {
+            "type": "number"
+          },
+          "overdueAmount": {
+            "type": "number"
+          },
+          "unpaidCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "lastInvoice",
+          "lastExpense",
+          "overdueCount",
+          "overdueAmount",
+          "unpaidCount"
+        ],
+        "additionalProperties": {}
+      },
+      "topClients": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "totalRevenue": {
+              "type": "number"
+            },
+            "invoiceCount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "name",
+            "totalRevenue",
+            "invoiceCount"
+          ],
+          "additionalProperties": {}
+        }
+      },
+      "currentMonth": {
+        "type": "object",
+        "properties": {
+          "revenue": {
+            "type": "number"
+          },
+          "expenses": {
+            "type": "number"
+          },
+          "profit": {
+            "type": "number"
+          },
+          "invoiceCount": {
+            "type": "number"
+          },
+          "expenseCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "revenue",
+          "expenses",
+          "profit",
+          "invoiceCount",
+          "expenseCount"
+        ],
+        "additionalProperties": {}
+      }
+    },
+    "required": [
+      "business",
+      "defaults",
+      "plan",
+      "series",
+      "recentActivity",
+      "topClients",
+      "currentMonth"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Business context snapshot: workspace profile, defaults, plan usage, recent activity and current-month performance",
+    "additionalProperties": {}
+  },
+  "annotations": {
+    "title": "Get Business Context",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "get_business_context",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}

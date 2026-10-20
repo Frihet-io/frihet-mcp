@@ -1,6 +1,639 @@
 {
   "tools": [
     {
+      "name": "create_expense",
+      "title": "Create Expense",
+      "description": "[expenses] Record a new expense. — full description and input fields via describe_tool('create_expense'). [openWorldHint: true — may interact with an external endpoint disclosed in describe_tool.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "description": "Expense description / Descripcion del gasto",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "amount": {
+            "description": "Amount in EUR / Importe en EUR",
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 10000000
+          },
+          "category": {
+            "description": "Expense category (e.g. 'office', 'travel', 'software') / Categoria",
+            "type": "string",
+            "maxLength": 10000
+          },
+          "date": {
+            "description": "Expense date in ISO 8601 (YYYY-MM-DD) / Fecha del gasto",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "vendor": {
+            "description": "Vendor/supplier name / Nombre del proveedor",
+            "type": "string",
+            "maxLength": 200
+          },
+          "taxDeductible": {
+            "description": "Whether the expense is tax deductible / Si el gasto es deducible fiscalmente",
+            "type": "boolean"
+          },
+          "paidDate": {
+            "description": "Optional payment date in ISO 8601 (YYYY-MM-DD). Determines when the expense is treated as paid. Must be a real calendar date (2028-02-29 is valid, 2026-02-29 is not). / Fecha de pago opcional en ISO 8601 (YYYY-MM-DD). Determina cuando se considera pagado el gasto.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          }
+        },
+        "required": [
+          "description",
+          "amount"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "category": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "vendorId": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          },
+          "taxDeductible": {
+            "type": "boolean"
+          },
+          "paidDate": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "amount"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "title": "Create Expense",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "create_expense",
+          "writesFrihet": true,
+          "externalInteraction": true,
+          "externalSideEffects": [
+            "webhook_delivery_or_configuration"
+          ]
+        }
+      }
+    },
+    {
+      "name": "create_invoice",
+      "title": "Create Invoice",
+      "description": "[invoicing] Create a new invoice. — full description and input fields via describe_tool('create_invoice'). [openWorldHint: true — may interact with an external endpoint disclosed in describe_tool.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "clientName": {
+            "description": "Client/customer name / Nombre del cliente",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "clientId": {
+            "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
+            "type": "string"
+          },
+          "clientTaxId": {
+            "description": "Client tax ID (NIF/CIF/VAT) shown on the invoice / NIF/CIF del cliente",
+            "type": "string"
+          },
+          "clientAddress": {
+            "description": "Client billing address shown on the invoice / Direccion fiscal del cliente",
+            "type": "string"
+          },
+          "items": {
+            "description": "Line items (each with description, quantity, unitPrice) / Conceptos de la factura",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "description": "Description of the line item / Descripcion del concepto",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "quantity": {
+                  "description": "Quantity / Cantidad",
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1000000
+                },
+                "unitPrice": {
+                  "description": "Unit price in EUR / Precio unitario en EUR",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000000
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "issueDate": {
+            "description": "Issue date in ISO 8601 format (YYYY-MM-DD), defaults to today / Fecha de emision",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "dueDate": {
+            "description": "Due date in ISO 8601 format (YYYY-MM-DD) / Fecha de vencimiento",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "status": {
+            "description": "Invoice status (default: draft) / Estado de la factura",
+            "type": "string",
+            "enum": [
+              "draft",
+              "sent",
+              "paid",
+              "overdue",
+              "cancelled"
+            ]
+          },
+          "notes": {
+            "description": "Additional notes shown on the invoice / Notas adicionales",
+            "type": "string",
+            "maxLength": 10000
+          },
+          "taxRate": {
+            "description": "Tax rate percentage (e.g. 21 for 21% IVA, 7 for IGIC) / Porcentaje de impuesto",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "irpfRate": {
+            "description": "IRPF withholding % (retencion autonomo ES, e.g. 15 or 7) / Retencion IRPF %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "equivalenceSurchargeRate": {
+            "description": "Recargo de equivalencia % (ES retail regime) / Recargo de equivalencia %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "clientLocation": {
+            "description": "Fiscal zone driving IVA vs IGIC vs exempt / Zona fiscal (IVA/IGIC/exento)",
+            "type": "string",
+            "enum": [
+              "peninsula",
+              "canarias",
+              "ceuta_melilla",
+              "eu",
+              "world"
+            ]
+          },
+          "prepayment": {
+            "description": "Prepaid/advance amount already collected in EUR / Anticipo cobrado en EUR",
+            "type": "number",
+            "minimum": 0
+          },
+          "discountRate": {
+            "description": "Global discount % applied to the invoice / Descuento global %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "seriesId": {
+            "description": "Invoice numbering series ID / ID de serie de numeracion",
+            "type": "string"
+          },
+          "documentNumber": {
+            "description": "Externally-issued number for import (honored verbatim) / Numero externo para importacion",
+            "type": "string",
+            "maxLength": 50
+          },
+          "poNumber": {
+            "description": "Client purchase-order reference / Numero de pedido del cliente",
+            "type": "string"
+          },
+          "operationType": {
+            "description": "Operation type (service or goods) / Tipo de operacion",
+            "type": "string",
+            "enum": [
+              "service",
+              "goods"
+            ]
+          },
+          "fiscalTreatment": {
+            "description": "Explicit fiscal treatment declared by the user; never inferred / Tratamiento fiscal declarado expresamente por el usuario; nunca inferido",
+            "type": "string",
+            "enum": [
+              "not_subject_location",
+              "export_exempt"
+            ]
+          }
+        },
+        "required": [
+          "clientName",
+          "items"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unitPrice": {
+                  "type": "number"
+                },
+                "taxRate": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "issueDate": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "taxRate": {
+            "type": "number"
+          },
+          "discountRate": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "title": "Create Invoice",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "create_invoice",
+          "writesFrihet": true,
+          "externalInteraction": true,
+          "externalSideEffects": [
+            "webhook_delivery_or_configuration",
+            "fiscal_or_einvoice_submission"
+          ]
+        }
+      }
+    },
+    {
+      "name": "create_quote",
+      "title": "Create Quote",
+      "description": "[invoicing] Create a new quote/estimate for a client. — full description and input fields via describe_tool('create_quote'). [openWorldHint: true — may interact with an external endpoint disclosed in describe_tool.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "clientName": {
+            "description": "Client name / Nombre del cliente",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "clientId": {
+            "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
+            "type": "string"
+          },
+          "clientTaxId": {
+            "description": "Client tax ID (NIF/CIF/VAT) / NIF/CIF del cliente",
+            "type": "string"
+          },
+          "clientAddress": {
+            "description": "Client billing address / Direccion fiscal del cliente",
+            "type": "string"
+          },
+          "issueDate": {
+            "description": "Issue date in ISO 8601 (YYYY-MM-DD), defaults to today / Fecha de emision",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "dueDate": {
+            "description": "Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "taxRate": {
+            "description": "Tax rate % (e.g. 21 IVA, 7 IGIC) / Porcentaje de impuesto",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "irpfRate": {
+            "description": "IRPF withholding % (retencion autonomo ES) / Retencion IRPF %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "equivalenceSurchargeRate": {
+            "description": "Recargo de equivalencia % / Recargo de equivalencia %",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "clientLocation": {
+            "description": "Fiscal zone driving IVA vs IGIC vs exempt / Zona fiscal",
+            "type": "string",
+            "enum": [
+              "peninsula",
+              "canarias",
+              "ceuta_melilla",
+              "eu",
+              "world"
+            ]
+          },
+          "items": {
+            "description": "Line items (each with description, quantity, unitPrice) / Conceptos del presupuesto",
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "description": "Description of the line item / Descripcion del concepto",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "quantity": {
+                  "description": "Quantity / Cantidad",
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1000000
+                },
+                "unitPrice": {
+                  "description": "Unit price in EUR / Precio unitario en EUR",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000000
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "validUntil": {
+            "description": "Expiry date in ISO 8601 (YYYY-MM-DD) / Fecha de validez",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "notes": {
+            "description": "Additional notes shown on the quote / Notas adicionales",
+            "type": "string",
+            "maxLength": 10000
+          },
+          "status": {
+            "description": "Quote status (default: draft) / Estado del presupuesto",
+            "type": "string",
+            "enum": [
+              "draft",
+              "sent",
+              "accepted",
+              "rejected",
+              "expired"
+            ]
+          }
+        },
+        "required": [
+          "clientName",
+          "items"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unitPrice": {
+                  "type": "number"
+                },
+                "taxRate": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "issueDate": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "validUntil": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total": {
+            "type": "number"
+          },
+          "taxRate": {
+            "type": "number"
+          },
+          "discountRate": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "title": "Create Quote",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "create_quote",
+          "writesFrihet": true,
+          "externalInteraction": true,
+          "externalSideEffects": [
+            "webhook_delivery_or_configuration"
+          ]
+        }
+      }
+    },
+    {
       "name": "describe_tool",
       "title": "Describe tool",
       "description": "Return the full original description, group, read-only flag and input field names for a specific Frihet ERP tool by its exact name (as returned by search_tools). Use this to load a tool's full depth on demand before calling it. [openWorldHint: false — reads the in-process tool catalog only.] / Devuelve la descripción completa de una herramienta por su nombre exacto.",
@@ -39,6 +672,717 @@
           "registered": true,
           "callability": "local",
           "canonicalOperation": "describe_tool",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "get_bank_account",
+      "title": "Get Bank Account",
+      "description": "[banking] Get a single connected bank account by ID. — full description and input fields via describe_tool('get_bank_account'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Bank account ID / ID de la cuenta bancaria",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "ibanLast4": {
+            "description": "Last 4 digits of IBAN (security masked)",
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "balance": {
+            "type": "number"
+          },
+          "lastSyncedAt": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "title": "Get Bank Account",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "get_bank_account",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "get_business_context",
+      "title": "Get Business Context",
+      "description": "[intelligence] Get complete business context — profile, defaults, plan limits, recent activity, top clients, and current month summary. — full description and input fields via describe_tool('get_business_context'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "business": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "fiscalZone": {
+                "type": "string"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "fiscalZone",
+              "currency",
+              "language",
+              "country"
+            ],
+            "additionalProperties": {}
+          },
+          "defaults": {
+            "type": "object",
+            "properties": {
+              "taxRate": {
+                "type": "number"
+              },
+              "irpfRate": {
+                "type": "number"
+              },
+              "dueDays": {
+                "type": "number"
+              },
+              "currency": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "taxRate",
+              "irpfRate",
+              "dueDays",
+              "currency"
+            ],
+            "additionalProperties": {}
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "invoices": {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "number"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "const": "unlimited"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit"
+                ],
+                "additionalProperties": false
+              },
+              "expenses": {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "number"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "const": "unlimited"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit"
+                ],
+                "additionalProperties": false
+              },
+              "aiMessages": {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "number"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "const": "unlimited"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "used",
+                  "limit"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "name",
+              "invoices",
+              "expenses",
+              "aiMessages"
+            ],
+            "additionalProperties": {}
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                },
+                "current": {
+                  "type": "number"
+                },
+                "year": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": {}
+            }
+          },
+          "recentActivity": {
+            "type": "object",
+            "properties": {
+              "lastInvoice": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "number": {
+                        "type": "string"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "client": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastExpense": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string"
+                      },
+                      "vendor": {
+                        "type": "string"
+                      },
+                      "amount": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "amount"
+                    ],
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "overdueCount": {
+                "type": "number"
+              },
+              "overdueAmount": {
+                "type": "number"
+              },
+              "unpaidCount": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "lastInvoice",
+              "lastExpense",
+              "overdueCount",
+              "overdueAmount",
+              "unpaidCount"
+            ],
+            "additionalProperties": {}
+          },
+          "topClients": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "totalRevenue": {
+                  "type": "number"
+                },
+                "invoiceCount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "totalRevenue",
+                "invoiceCount"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "currentMonth": {
+            "type": "object",
+            "properties": {
+              "revenue": {
+                "type": "number"
+              },
+              "expenses": {
+                "type": "number"
+              },
+              "profit": {
+                "type": "number"
+              },
+              "invoiceCount": {
+                "type": "number"
+              },
+              "expenseCount": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "revenue",
+              "expenses",
+              "profit",
+              "invoiceCount",
+              "expenseCount"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "business",
+          "defaults",
+          "plan",
+          "series",
+          "recentActivity",
+          "topClients",
+          "currentMonth"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "Business context snapshot: workspace profile, defaults, plan usage, recent activity and current-month performance",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "title": "Get Business Context",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "get_business_context",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "get_expense",
+      "title": "Get Expense",
+      "description": "[expenses] Get a single expense by its ID. — full description and input fields via describe_tool('get_expense'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Expense ID / ID del gasto",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "category": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "vendorId": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          },
+          "taxDeductible": {
+            "type": "boolean"
+          },
+          "paidDate": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "amount"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "title": "Get Expense",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "get_expense",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "get_invoice",
+      "title": "Get Invoice",
+      "description": "[invoicing] Get a single invoice by its ID. — full description and input fields via describe_tool('get_invoice'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Invoice ID / ID de la factura",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unitPrice": {
+                  "type": "number"
+                },
+                "taxRate": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "quantity",
+                "unitPrice"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "issueDate": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "taxRate": {
+            "type": "number"
+          },
+          "discountRate": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "title": "Get Invoice",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "get_invoice",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "list_bank_accounts",
+      "title": "List Bank Accounts",
+      "description": "[banking] List all connected bank accounts for the workspace. — full description and input fields via describe_tool('list_bank_accounts'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Max results (1-100) / Resultados maximos",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "description": "Offset / Desplazamiento",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "alias": {
+                  "type": "string"
+                },
+                "ibanLast4": {
+                  "description": "Last 4 digits of IBAN (security masked)",
+                  "type": "string"
+                },
+                "currency": {
+                  "type": "string"
+                },
+                "balance": {
+                  "type": "number"
+                },
+                "lastSyncedAt": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "List Bank Accounts",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "list_bank_accounts",
           "writesFrihet": false,
           "externalInteraction": false,
           "externalSideEffects": []
@@ -819,7 +2163,7 @@
     {
       "name": "list_tool_groups",
       "title": "List tool groups",
-      "description": "List the available Frihet tool domains (invoicing, expenses, crm, catalog) with a one-line blurb and tool count for each. Start here, then use search_tools(query) to find tools and describe_tool(name) for a tool's full description and input fields. Only domains present in this reviewed connector are listed. [openWorldHint: false — reads the in-process tool catalog only.] / Lista los dominios de herramientas de Frihet ERP con descripción y recuento. Empieza aquí.",
+      "description": "List the available Frihet tool domains (invoicing, expenses, fiscal, banking, crm, hr, stay, pos, intelligence, catalog, platform) with a one-line blurb and tool count for each. Start here, then use search_tools(query) to find tools and describe_tool(name) for a tool's full description and input fields. Only domains present in this reviewed connector are listed. [openWorldHint: false — reads the in-process tool catalog only.] / Lista los dominios de herramientas de Frihet ERP con descripción y recuento. Empieza aquí.",
       "inputSchema": {
         "type": "object",
         "properties": {},
@@ -847,6 +2191,154 @@
           "registered": true,
           "callability": "local",
           "canonicalOperation": "list_tool_groups",
+          "writesFrihet": false,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "list_transactions",
+      "title": "List Bank Transactions",
+      "description": "[banking] List bank transactions with optional filters. — full description and input fields via describe_tool('list_transactions'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "description": "Filter by bank account ID / Filtrar por ID de cuenta",
+            "type": "string"
+          },
+          "from": {
+            "description": "Start date ISO 8601 (YYYY-MM-DD) / Fecha inicio",
+            "type": "string"
+          },
+          "to": {
+            "description": "End date ISO 8601 (YYYY-MM-DD) / Fecha fin",
+            "type": "string"
+          },
+          "status": {
+            "description": "Filter by transaction status / Filtrar por estado",
+            "type": "string",
+            "enum": [
+              "pending",
+              "posted",
+              "excluded"
+            ]
+          },
+          "category": {
+            "description": "Filter by category slug / Filtrar por categoria",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max results (1-100) / Resultados maximos",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "description": "Offset / Desplazamiento",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "after": {
+            "description": "Cursor for cursor-based pagination / Cursor para paginacion",
+            "type": "string"
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "accountId": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "currency": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "postedAt": {
+                  "type": "string"
+                },
+                "category": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "posted",
+                    "excluded"
+                  ]
+                },
+                "matchedDocId": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "amount"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "List Bank Transactions",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "list_transactions",
           "writesFrihet": false,
           "externalInteraction": false,
           "externalSideEffects": []
@@ -982,6 +2474,116 @@
       }
     },
     {
+      "name": "match_transaction_to_invoice",
+      "title": "Match Transaction to Invoice",
+      "description": "[banking] TRUST AREA — RECONCILIATION. Requires confirm=true. — full description and input fields via describe_tool('match_transaction_to_invoice'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "description": "Bank transaction ID / ID del movimiento bancario",
+            "type": "string"
+          },
+          "documentId": {
+            "description": "Invoice or expense ID to link / ID de la factura o gasto a vincular",
+            "type": "string"
+          },
+          "documentType": {
+            "description": "Type of document being matched / Tipo de documento",
+            "type": "string",
+            "enum": [
+              "invoice",
+              "expense"
+            ]
+          },
+          "confirm": {
+            "description": "Must be true to confirm fiscal reconciliation / Debe ser true para confirmar conciliacion fiscal",
+            "type": "boolean"
+          },
+          "notes": {
+            "description": "Optional reconciliation notes / Notas de conciliacion opcionales",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transactionId",
+          "documentId",
+          "documentType",
+          "confirm"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "accountId": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "postedAt": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "posted",
+              "excluded"
+            ]
+          },
+          "matchedDocId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "amount"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "title": "Match Transaction to Invoice",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "match_transaction_to_invoice",
+          "writesFrihet": true,
+          "externalInteraction": false,
+          "externalSideEffects": []
+        }
+      }
+    },
+    {
       "name": "search_tools",
       "title": "Search tools",
       "description": "Find Frihet ERP tools by free-text query (matches tool name, title, summary and group). Returns matching tools with their group, one-line summary, read-only flag and input field names — progressive disclosure so you load only what you need. Optionally filter by group. Then call describe_tool(name) for a tool's full description and call it by its real name. [openWorldHint: false — reads the in-process tool catalog only.] / Busca herramientas por texto libre. Devuelve coincidencias con grupo, resumen y campos.",
@@ -998,8 +2600,15 @@
             "enum": [
               "invoicing",
               "expenses",
+              "fiscal",
+              "banking",
               "crm",
-              "catalog"
+              "hr",
+              "stay",
+              "pos",
+              "intelligence",
+              "catalog",
+              "platform"
             ]
           },
           "limit": {
@@ -1036,6 +2645,82 @@
           "writesFrihet": false,
           "externalInteraction": false,
           "externalSideEffects": []
+        }
+      }
+    },
+    {
+      "name": "send_invoice",
+      "title": "Send Invoice",
+      "description": "[invoicing] Send an invoice to the client via email. Requires confirm=true. — full description and input fields via describe_tool('send_invoice'). [openWorldHint: true — may interact with an external endpoint disclosed in describe_tool.]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Invoice ID / ID de la factura",
+            "type": "string"
+          },
+          "to": {
+            "description": "Override recipient email / Email destinatario alternativo",
+            "type": "string"
+          },
+          "confirm": {
+            "description": "Must be true to confirm sending / Debe ser true para confirmar el envio",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "confirm"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "data": {
+            "not": {}
+          },
+          "meta": {
+            "not": {}
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": {}
+      },
+      "annotations": {
+        "title": "Send Invoice",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "io.frihet/capability": {
+          "registered": true,
+          "callability": "api_dependent",
+          "canonicalOperation": "send_invoice",
+          "writesFrihet": true,
+          "externalInteraction": true,
+          "externalSideEffects": [
+            "email_or_invitation",
+            "webhook_delivery_or_configuration",
+            "fiscal_or_einvoice_submission"
+          ]
         }
       }
     }

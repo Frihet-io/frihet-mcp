@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
 export const plugin = join(root, "plugins/claude/frihet-erp");
-export const claudeSource = join(root, "plugins/claude/consultation");
+export const claudeSource = join(root, "plugins/claude/operational");
 
 export function filesIn(directory, prefix = "") {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

@@ -1,0 +1,123 @@
+{
+  "name": "get_invoice",
+  "title": "Get Invoice",
+  "description": "Get a single invoice by its ID. Returns the full invoice including line items, totals, and status. / Obtiene una factura por su ID. Devuelve la factura completa con conceptos, totales y estado. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "description": "Invoice ID / ID de la factura",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "clientId": {
+        "type": "string"
+      },
+      "clientName": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number"
+            },
+            "unitPrice": {
+              "type": "number"
+            },
+            "taxRate": {
+              "type": "number"
+            },
+            "discount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "description",
+            "quantity",
+            "unitPrice"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "issueDate": {
+        "type": "string"
+      },
+      "dueDate": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string"
+      },
+      "notes": {
+        "type": "string"
+      },
+      "taxRate": {
+        "type": "number"
+      },
+      "discountRate": {
+        "type": "number"
+      },
+      "total": {
+        "type": "number"
+      },
+      "createdAt": {
+        "type": "string"
+      },
+      "updatedAt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": {}
+  },
+  "annotations": {
+    "title": "Get Invoice",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "get_invoice",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}

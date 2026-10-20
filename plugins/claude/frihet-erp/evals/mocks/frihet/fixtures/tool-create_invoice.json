@@ -1,0 +1,272 @@
+{
+  "name": "create_invoice",
+  "title": "Create Invoice",
+  "description": "Create a new invoice. Requires client name and at least one line item. The invoice number is auto-generated. Defaults to draft status and today's date. Example: clientName='Acme Corp', items=[{description:'Consulting', quantity:10, unitPrice:150}], taxRate=21, irpfRate=15 / Crea una nueva factura. Requiere nombre del cliente y al menos un concepto. El numero se genera automaticamente. Por defecto estado borrador y fecha de hoy. Soporta retencion IRPF (autonomos ES), recargo de equivalencia, serie, anticipo y descuento global. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "clientName": {
+        "description": "Client/customer name / Nombre del cliente",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "clientId": {
+        "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
+        "type": "string"
+      },
+      "clientTaxId": {
+        "description": "Client tax ID (NIF/CIF/VAT) shown on the invoice / NIF/CIF del cliente",
+        "type": "string"
+      },
+      "clientAddress": {
+        "description": "Client billing address shown on the invoice / Direccion fiscal del cliente",
+        "type": "string"
+      },
+      "items": {
+        "description": "Line items (each with description, quantity, unitPrice) / Conceptos de la factura",
+        "minItems": 1,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "description": "Description of the line item / Descripcion del concepto",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "quantity": {
+              "description": "Quantity / Cantidad",
+              "type": "number",
+              "minimum": 0.0001,
+              "maximum": 1000000
+            },
+            "unitPrice": {
+              "description": "Unit price in EUR / Precio unitario en EUR",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10000000
+            }
+          },
+          "required": [
+            "description",
+            "quantity",
+            "unitPrice"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "issueDate": {
+        "description": "Issue date in ISO 8601 format (YYYY-MM-DD), defaults to today / Fecha de emision",
+        "type": "string",
+        "format": "date",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+      },
+      "dueDate": {
+        "description": "Due date in ISO 8601 format (YYYY-MM-DD) / Fecha de vencimiento",
+        "type": "string",
+        "format": "date",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+      },
+      "status": {
+        "description": "Invoice status (default: draft) / Estado de la factura",
+        "type": "string",
+        "enum": [
+          "draft",
+          "sent",
+          "paid",
+          "overdue",
+          "cancelled"
+        ]
+      },
+      "notes": {
+        "description": "Additional notes shown on the invoice / Notas adicionales",
+        "type": "string",
+        "maxLength": 10000
+      },
+      "taxRate": {
+        "description": "Tax rate percentage (e.g. 21 for 21% IVA, 7 for IGIC) / Porcentaje de impuesto",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "irpfRate": {
+        "description": "IRPF withholding % (retencion autonomo ES, e.g. 15 or 7) / Retencion IRPF %",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "equivalenceSurchargeRate": {
+        "description": "Recargo de equivalencia % (ES retail regime) / Recargo de equivalencia %",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "clientLocation": {
+        "description": "Fiscal zone driving IVA vs IGIC vs exempt / Zona fiscal (IVA/IGIC/exento)",
+        "type": "string",
+        "enum": [
+          "peninsula",
+          "canarias",
+          "ceuta_melilla",
+          "eu",
+          "world"
+        ]
+      },
+      "prepayment": {
+        "description": "Prepaid/advance amount already collected in EUR / Anticipo cobrado en EUR",
+        "type": "number",
+        "minimum": 0
+      },
+      "discountRate": {
+        "description": "Global discount % applied to the invoice / Descuento global %",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "seriesId": {
+        "description": "Invoice numbering series ID / ID de serie de numeracion",
+        "type": "string"
+      },
+      "documentNumber": {
+        "description": "Externally-issued number for import (honored verbatim) / Numero externo para importacion",
+        "type": "string",
+        "maxLength": 50
+      },
+      "poNumber": {
+        "description": "Client purchase-order reference / Numero de pedido del cliente",
+        "type": "string"
+      },
+      "operationType": {
+        "description": "Operation type (service or goods) / Tipo de operacion",
+        "type": "string",
+        "enum": [
+          "service",
+          "goods"
+        ]
+      },
+      "fiscalTreatment": {
+        "description": "Explicit fiscal treatment declared by the user; never inferred / Tratamiento fiscal declarado expresamente por el usuario; nunca inferido",
+        "type": "string",
+        "enum": [
+          "not_subject_location",
+          "export_exempt"
+        ]
+      }
+    },
+    "required": [
+      "clientName",
+      "items"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "clientId": {
+        "type": "string"
+      },
+      "clientName": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number"
+            },
+            "unitPrice": {
+              "type": "number"
+            },
+            "taxRate": {
+              "type": "number"
+            },
+            "discount": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "description",
+            "quantity",
+            "unitPrice"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "issueDate": {
+        "type": "string"
+      },
+      "dueDate": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string"
+      },
+      "notes": {
+        "type": "string"
+      },
+      "taxRate": {
+        "type": "number"
+      },
+      "discountRate": {
+        "type": "number"
+      },
+      "total": {
+        "type": "number"
+      },
+      "createdAt": {
+        "type": "string"
+      },
+      "updatedAt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": {}
+  },
+  "annotations": {
+    "title": "Create Invoice",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "create_invoice",
+      "writesFrihet": true,
+      "externalInteraction": true,
+      "externalSideEffects": [
+        "webhook_delivery_or_configuration",
+        "fiscal_or_einvoice_submission"
+      ]
+    }
+  }
+}

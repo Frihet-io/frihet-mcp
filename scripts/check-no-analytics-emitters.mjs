@@ -272,7 +272,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "fe4b2932d3c21b29533d420a6e1306a8b1c0f3738bfee0f13e98e0265587c039", // path ids go through one segment check that refuses "", "." and ".." before any request; sinks unchanged
-  "workers/remote-mcp/src/claude-public-surface.ts": "17cd457c677077b3807ec077c591c99c69d17f8c6bb59a9dfafdc2732d34f749", // isolated Claude host and authorization boundary; consultation scope reviewed, no new sink
+  "workers/remote-mcp/src/claude-public-surface.ts": "e0180b3921dbdf5ccdb841a12a2704bb271f7a57587d76cc43025f2f43f549da", // isolated Claude host and authorization boundary; operational scope reviewed, no new sink
   "workers/remote-mcp/src/oauth-profile.ts": "fd78139588876001b0521d5d9370b89a019f065ed783fdc76617a863c978c8a1", // isolated Claude host and authorization boundary
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "bfde5584b9b37fd24c4d7b4a32b149813c08e22dc06aa46b9b4d8afae3b77d90", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink); confirm comment no longer claims every mutating tool requires it
@@ -309,9 +309,9 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/verify-claude-erp-source-release.mjs": "48e6919a9e7bc87158ecb356aeaf38d8d8055fc74075269af45ac8ca4d9138a3", // authenticated read-only GitHub release/build artifacts; no telemetry or cloud mutation
   "scripts/check-claude-bootstrap-secrets.mjs": "4d4700482718ea1ae88480dd215521f07dbc9e8342838775826a8846d20925e4", // local Claude bootstrap secret check; no network or raw credential output
   "scripts/__tests__/claude-bootstrap-secrets.test.mjs": "90159f0a689cb8f5d6ffc6630871b0b596510b1e9f24e32adbdfe4dc2c779095", // local Claude bootstrap secret check; no network or raw credential output
-  "scripts/check-claude-hosted-release.mjs": "1a4bac22450643ea5c487e41367b5b7abfc4b2642a023b2014ce8285f50a2c70", // reviewed Claude ERP source-only provenance admission; no telemetry emitter; consultation scope reviewed, no new sink
+  "scripts/check-claude-hosted-release.mjs": "ae3c8105eb160fe6a518effab8cb09f384aebec290a28c605ba1b566ef6dccdf", // reviewed Claude ERP source-only provenance admission; no telemetry emitter; operational scope reviewed, no new sink
   "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
-  "scripts/__tests__/claude-hosted-release.test.mjs": "e5893c9cb3f9a862450360bf121f98a32f3d297b6ded7f1875e09912deee6f6d", // reviewed Claude ERP source-only provenance admission + bootstrapped KV namespace test; no telemetry emitter; consultation scope reviewed, no new sink
+  "scripts/__tests__/claude-hosted-release.test.mjs": "e8049cd0313ee06a26bab15bd92fc78b947277297edb8cc84aba9b6028f07134", // reviewed Claude ERP source-only provenance admission + bootstrapped KV namespace test; no telemetry emitter; operational scope reviewed, no new sink
   "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata

@@ -1,32 +1,34 @@
 ---
 name: documentos
 description: >-
-  Prepare invoice or quote text proposals in conversation using available Frihet
-  client, product and document lists. Use for preparar factura, presupuesto or
-  document review. Marks missing currency and tax treatment. Cannot save a draft,
-  convert, issue or send. Can look for a matching record after a prior timeout.
+  Prepare invoices and quotes for a connected Frihet workspace. Use for preparar
+  factura, presupuesto, invoice draft, quote or quote conversion. Resolves missing
+  client, currency and tax data before an authorized draft creation. Also use for
+  invoice recovery after timeout, lost response or resultado desconocido al crear.
 license: MIT
 ---
 
-# Propuesta de documento en la conversación
+# Preparar documentos
 
-Lee [las reglas de consulta](../frihet-mcp/SKILL.md),
+Antes de usar herramientas, lee [las reglas de Frihet](../frihet-mcp/SKILL.md),
 [el flujo de documentos](../frihet-mcp/references/workflows.md#documentos) y
-[los límites fiscales](../frihet-mcp/references/tax-guide.md).
+[las comprobaciones fiscales](../frihet-mcp/references/tax-guide.md).
 
-Consulta solo las listas necesarias de clientes, productos, facturas o
-presupuestos. Presenta una propuesta de texto con cliente, conceptos,
-cantidades, precios, moneda, tratamiento fiscal y condiciones aportados o
-verificados. Identifica la procedencia y lo que falta. La ausencia de un campo
-en una lista no prueba que falte en Frihet: puede no estar expuesto por este perfil.
+Presenta cliente, conceptos, cantidades, precios, moneda, impuestos y condiciones.
+Distingue los datos verificados de los pendientes. No deduzcas impuesto nulo,
+inversión del sujeto pasivo ni exención solo a partir del país del cliente.
+Si faltan datos, prepara la propuesta y pide lo necesario antes de guardarla.
 
-«Prepara» y «crea el borrador» producen aquí una propuesta en el chat. Explica
-que esta conexión no puede guardarla, incluso con autorización. No la emitas,
-envíes ni conviertas; indica completar esos pasos en la aplicación. No inventes
-tipos impositivos ni una conversión a otra moneda para terminar la propuesta.
+«Prepara una factura» pide una propuesta. «Crea el borrador con estos datos»
+autoriza guardarlo cuando estén completos y el esquema los pueda representar;
+no vuelvas a pedir una autorización ya dada. Crear un borrador no autoriza
+emitir, enviar, cobrar ni presentar impuestos. Conserva el borrador y verifica
+el resultado. Un timeout requiere buscar la creación anterior antes de repetir.
+El hallazgo confirma la existencia y el estado del documento. Atribuye su creación
+al intento anterior únicamente con una correlación fiable de la petición. Sin
+ella, informa: «Existe un borrador coincidente; no puedo confirmar que lo creara
+la petición que terminó en timeout».
 
-Si el usuario pregunta por una escritura anterior con resultado desconocido,
-busca coincidencias mediante las listas disponibles. Un registro coincidente
-prueba su existencia y el estado devuelto, no que lo causara la petición que
-falló. Sin correlación fiable, dilo y remite a verificarlo en Frihet. No repitas
-la escritura ni prometas recuperar campos o detalle que no ofrece esta conexión.
+Para una conversión, verifica el presupuesto, el vínculo existente y la capacidad
+específica del servidor. No simules la conversión creando otra factura y cambiando
+el estado del presupuesto. Indica el paso en Frihet si la operación no existe.

@@ -1,95 +1,88 @@
 # Frihet ERP para Claude
 
-Consulta clientes, facturas, presupuestos, gastos, proveedores y productos de tu
-workspace de Frihet. Prepara propuestas de texto y recordatorios en la
-conversación. Esta primera versión de consulta no guarda borradores, envía
-mensajes, cambia registros, cobra ni presenta impuestos.
+Gestiona tu negocio desde una conversación: consulta facturas y clientes,
+prepara presupuestos, registra gastos y trabaja con tus movimientos bancarios.
+El plugin combina el MCP remoto de Frihet con guías para completar tareas,
+verificar lo guardado y mostrar qué queda pendiente.
 
-## Versión de consulta en preparación
+## Qué puedes hacer
 
-El paquete `1.18.0-preview.3` usa `https://claude-mcp.frihet.io/mcp` y está diseñado
-para nueve herramientas: seis listas de negocio y tres de descubrimiento.
-Incluye cuatro skills, ningún prompt MCP y un recurso de formatos de divisas.
-Los skills no añaden herramientas ni amplían permisos. El catálogo general del
-MCP y otros perfiles conservan sus propias operaciones.
+| Necesidad | Ejemplo de petición | Resultado esperado |
+| --- | --- | --- |
+| Facturas y presupuestos | «Prepara el presupuesto para este cliente con los conceptos acordados» | Propuesta completa; guardado en borrador cuando lo autorices |
+| Cobros | «Revisa los vencimientos y redacta los recordatorios» | Saldos verificados por moneda y textos preparados |
+| Gastos y proveedores | «Registra este gasto con estos datos» | Registro verificado, con importe, fecha e ID |
+| Bancos | «Revisa los movimientos y propone conciliaciones» | Correspondencias, dudas y diferencias; cambios concretos cuando los autorices |
+| CRM | «Ponme al día sobre este cliente y guarda esta nota» | Contexto de sus registros y nota guardada con verificación |
+| Revisión mensual | «Cómo fue septiembre y qué debería resolver» | Resumen con cobertura, incidencias y próximos pasos |
+| Operaciones | «Revisa las horas del equipo o los tickets pendientes» | Lectura del módulo y acciones específicas según permisos |
 
-El endpoint remoto y OAuth se comprobaron con una cuenta QA sintética el
-20 de octubre de 2026. Esa prueba anterior utilizó un catálogo más amplio;
-no acredita el despliegue ni la aceptación completa de este nuevo catálogo de
-consulta. Su publicación requiere comprobar la versión desplegada, sus nueve
-herramientas y los recorridos con datos QA poblados. Este paquete no acredita
-presentación, aprobación de Anthropic ni disponibilidad en Claude Directory.
-El conector y el plugin deben presentarse desde la misma organización de Claude
-y con este mismo endpoint, después de completar esas comprobaciones.
+El perfil operativo contiene 125 operaciones de negocio en once áreas: documentos,
+gastos, fiscalidad disponible, banca, CRM, equipo y tiempo, alojamientos, TPV y
+cocina, inteligencia, catálogo y plataforma. Cuatro alias fiscales y tres
+herramientas de descubrimiento completan los 132 nombres del modo agrupado.
+No necesitas aprender sus nombres: describe la tarea y las skills seleccionan
+las herramientas disponibles en tu conexión.
 
-## Instalación
+## Conectar y empezar
 
-En Claude Code, carga la carpeta del plugin para una sesión:
+1. Instala el plugin y conecta el servidor Frihet incluido mediante OAuth.
+2. Inicia sesión con la cuenta de Frihet y el workspace al que quieres acceder.
+   No pegues claves ni tokens en la conversación.
+3. Empieza con una consulta concreta. Por ejemplo: «Resume mi negocio este mes
+   y dime qué facturas requieren atención». Revisa la cobertura y los datos
+   pendientes antes de decidir cambios.
 
-```bash
-claude --plugin-dir ./plugins/claude/frihet-erp
-```
+El MCP es la conexión y sus herramientas; las ocho skills son guías para usarlas.
+Puedes pedir la tarea en lenguaje natural o invocar `frihet-mcp`, `documentos`,
+`cobros`, `gastos`, `tesoreria`, `clientes`, `revision-mensual` y `operaciones`
+dentro del plugin `frihet-erp`. No sustituyen el plan ni los permisos de Frihet.
 
-En chat y Cowork, añade el ZIP de esta carpeta desde **Customize → Plugins →
-Add → Upload plugin**. Abre **Connectors** y conecta Frihet mediante el inicio de
-sesión que muestre Claude. El acceso al piloto requiere una identidad QA
-habilitada; no está abierto a todas las cuentas. Tu plan u organización de
-Claude también debe permitir plugins y conectores. No pegues credenciales en
-el chat. Si ya tienes Frihet conectado, usa la conexión existente cuando Claude
-lo permita y evita conexiones duplicadas al mismo negocio.
+## Cambios claros y resultados comprobados
 
-## Peticiones de ejemplo
+Una revisión o propuesta no guarda ni envía nada. Una instrucción concreta puede
+ya autorizar una acción: el plugin no debe pedir la misma autorización de nuevo
+si el alcance y los datos están claros. Los borradores se conservan como tales;
+pueden recibir numeración y generar eventos configurados. Los envíos, cambios de
+equipo, recurrencias y operaciones fiscales requieren su alcance específico.
 
-- «Revisa los registros de cobros vencidos, separa monedas y señala saldos desconocidos».
-- «Prepara aquí un texto de presupuesto con estos conceptos y marca lo que falta».
-- «Revisa las facturas y gastos disponibles de septiembre e indica la cobertura».
+Los importes se separan por moneda. Una factura parcialmente pagada requiere
+comprobar su saldo; la primera página de una lista no representa todo el negocio.
+Los creadores actuales de facturas, presupuestos y gastos expresan importes en
+EUR: una propuesta en otra divisa necesita una operación que pueda representarla.
+Una escritura con resultado desconocido se consulta antes de repetirla.
 
-En Claude Code puedes invocar `/frihet-erp:cobros`, `/frihet-erp:documentos`,
-`/frihet-erp:revision-mensual` o `/frihet-erp:frihet-mcp`. En chat los skills pueden
-aplicarse por lenguaje natural. Una propuesta permanece en la conversación;
-para guardarla, convertirla, emitirla o enviarla, completa el paso en Frihet.
+El catálogo excluye transferencias de dinero, operaciones diferidas, rutas de
+factura electrónica no disponibles para esta conexión, determinados borrados y
+artefactos PDF/XML que no puedan sanearse. Conciliar o registrar un pago no
+mueve fondos. Una revisión fiscal no equivale a presentar ni garantiza aceptación
+por una autoridad. El detalle de cada herramienta determina sus efectos reales.
 
-## Superficie y límites
+## Datos y soporte
 
-Las consultas de negocio son `list_clients`, `list_invoices`, `list_quotes`,
-`list_expenses`, `list_vendors` y `list_products`. `list_tool_groups`, `search_tools`
-y `describe_tool` descubren sus contratos y no ejecutan las operaciones descritas.
-El único recurso, `frihet://config/currencies`, ofrece ejemplos de formato,
-no cambios de divisas ni precisión de pagos. No hay lectura de detalle individual,
-resumen mensual del servidor, descargas ni herramientas de escritura.
+El paquete aporta instrucciones y la conexión remota; no instala ejecutables,
+hooks ni procesos locales. Anthropic recibe los parámetros y resultados de las
+herramientas bajo las condiciones de tu cuenta. Cloudflare gestiona OAuth y
+sesiones; Firebase Authentication verifica la identidad y el backend de Google
+Cloud procesa los registros de Frihet. El host Claude desactiva Langfuse.
 
-Los informes exponen filtros, páginas y registros revisados. Una paginación
-incompleta implica cobertura parcial; una moneda ausente queda fuera de sumas.
-El total de una factura no prueba su saldo ni su cobro. Si los registros no
-respaldan pagos, abonos y saldo, se informa «saldo desconocido». Un importe pagado
-sin fecha no demuestra un cobro en el periodo. Las revisiones no sustituyen un
-cierre contable ni deciden deducibilidad o aceptación fiscal.
+Las escrituras pueden generar eventos de negocio en PostHog EU, notificaciones
+por Novu, envíos o webhooks según la operación y la configuración del workspace.
+Revisa esos efectos antes de autorizarlos. Los resultados de Claude omiten campos
+sensibles de la política compartida, incluidos identificadores fiscales, IBAN,
+secretos, `documentNumber` y `verifactuHash`. El texto libre puede contener otros
+datos personales: utiliza solo los necesarios.
 
-## Datos y servicios
+[Documentación](https://docs.frihet.io/desarrolladores/mcp-server) ·
+[Soporte](https://claude-mcp.frihet.io/support) ·
+[Privacidad](https://www.frihet.io/es/privacy) ·
+[Condiciones](https://www.frihet.io/es/terms) ·
+[Contacto](mailto:hola@frihet.io)
 
-El paquete contiene un manifiesto, configuración del MCP remoto e instrucciones.
-No instala ejecutables, hooks ni procesos locales. Las llamadas MCP envían los
-parámetros necesarios a `claude-mcp.frihet.io`; el servidor consulta la API de
-Frihet para el workspace autorizado y devuelve resultados a Claude. Las skills
-no piden exportar registros a otros servicios.
+## Estado de esta versión
 
-El perfil Claude omite los campos de la política de redacción compartida,
-incluidos identificadores fiscales, IBAN, secretos, `documentNumber` y
-`verifactuHash`, también en recursos JSON y texto generado desde datos saneados.
-No ofrece descargas de PDF ni archivos de factura electrónica. Evita incluir
-datos sensibles en texto libre: la redacción por campos no detecta toda la
-información personal.
-
-Anthropic recibe parámetros y resultados bajo las condiciones de tu cuenta de
-Claude. Cloudflare gestiona OAuth y sesiones; Firebase Authentication verifica
-tu identidad y el backend de Google Cloud consulta los registros de Frihet.
-El perfil Claude desactiva Langfuse. Este catálogo no ejecuta escrituras ni sus
-efectos de correo, cobro, webhooks o envíos fiscales. El [contrato de
-observabilidad](https://github.com/Frihet-io/frihet-mcp/blob/main/docs/observability.md)
-limita la telemetría a metadatos operativos; no incluye entradas, salidas ni
-credenciales de las herramientas. Consulta la
-[privacidad](https://www.frihet.io/es/privacy) y las
-[condiciones](https://www.frihet.io/es/terms) del servicio.
-
-Documentación: https://docs.frihet.io/desarrolladores/mcp-server.
-Soporte: hola@frihet.io. Licencia MIT.
+`1.18.0-preview.4` es el candidato operativo para distribución. El control de
+admisión del piloto sigue separado del alcance del producto. Instalar el paquete
+no abre el acceso a cuentas nuevas ni acredita que el catálogo esté desplegado.
+La disponibilidad pública y la inclusión en los directorios de Anthropic requieren
+el despliegue, la aceptación del catálogo completo y sus respectivos envíos.
