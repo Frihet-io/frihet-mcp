@@ -6,7 +6,8 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import { applyClaudeCandidateProfile } from "../claude-profile.js";
-import { sanitizeClaudeOutput } from "../claude-output-privacy.js";
+import { claudeToolResult, sanitizeClaudeOutput } from "../claude-output-privacy.js";
+import { FrihetApiError } from "../client.js";
 import { SENSITIVE_FIELD_NAMES } from "../redaction.js";
 import { registerMcpSurface, localMcpSurfaceComposition, remoteMcpSurfaceComposition } from "../server-composition.js";
 import type { IFrihetClient } from "../client-interface.js";
@@ -159,6 +160,32 @@ test("Claude error paths retain outcome flags without returning arbitrary text o
       return true;
     });
   } finally { await close(); }
+});
+
+test("real Claude product handlers retain only typed denial flags and withhold provider details", async () => {
+  for (const [status, flag] of [[404, "resourceNotFound"], [403, "accessDenied"]] as const) {
+    const server = new McpServer({ name: "privacy-denial", version: "1.0.0" });
+    const clientApi = new Proxy({}, { get: () => async () => {
+      throw new FrihetApiError(status, "PRIVATE_code", "PRIVATE_message", "PRIVATE_detail");
+    } }) as IFrihetClient;
+    registerMcpSurface(server, clientApi, remoteMcpSurfaceComposition(false, true, true));
+    const { client, close } = await connect(server);
+    try {
+      const result = await client.callTool({ name: "get_product", arguments: { id: "synthetic_record" } });
+      assert.equal(result.isError, true);
+      assert.deepEqual(result._meta, { [`io.frihet/${flag}`]: true });
+      assert.equal(result.structuredContent, undefined);
+      assertPrivate(result);
+      assert.equal((result.content as Array<{ text: string }>)[0].text,
+        "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry.");
+    } finally { await close(); }
+  }
+  for (const value of ["true", 1, null, { raw: "PRIVATE_metadata" }]) {
+    const result = claudeToolResult({ isError: true, content: [{ type: "text", text: "PRIVATE_error" }],
+      _meta: { "io.frihet/resourceNotFound": value, "io.frihet/accessDenied": value, raw: "PRIVATE_metadata" } });
+    assert.equal(result._meta, undefined);
+    assertPrivate(result);
+  }
 });
 
 test("general profile retains its existing outputs and inputs", async () => {

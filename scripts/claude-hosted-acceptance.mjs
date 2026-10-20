@@ -369,14 +369,16 @@ export async function runAcceptance(options = {}, {
     const descriptor = contract.tools.grouped.find(item => item.name === name);
     requireThat(descriptor && validator.validate(descriptor.inputSchema, args), "TOOL_INPUT_INVALID");
     const result = await rpc("tools/call", { name, arguments: args });
-    // Match only the existing shared.ts sanitized 404/403 responses. A generic
-    // tool error, timeout, authentication failure, or raw record is no denial proof.
-    if (allowNotFound && result?.isError === true && !result.structuredContent
-      && result.content?.length === 1 && result.content[0].type === "text") {
-      const message = result.content[0].text;
-      const forbidden = "Error: Access denied. Reconnect Frihet or use configured credentials with permission for this action. / Acceso denegado. Vuelve a conectar Frihet o usa credenciales con permiso para esta accion.";
-      if (typeof message === "string" && (message === "Error: Resource not found. / Recurso no encontrado."
-        || (allowNotFound === "foreign" && (message === forbidden || message.startsWith(`${forbidden} Server guidance: `))))) return null;
+    // Only the shared mapper's exact boolean survives the Claude privacy
+    // boundary. Generic prose, structured records, competing flags and unknown
+    // outcomes prove nothing; 403 never proves deletion of an owned product.
+    if (allowNotFound && result?.isError === true && !Object.hasOwn(result, "structuredContent")
+      && Array.isArray(result.content) && result.content.length === 1 && result.content[0]?.type === "text"
+      && typeof result.content[0].text === "string") {
+      const meta = result._meta;
+      if (meta && typeof meta === "object" && !Array.isArray(meta) && Object.keys(meta).length === 1
+        && (meta["io.frihet/resourceNotFound"] === true
+          || (allowNotFound === "foreign" && meta["io.frihet/accessDenied"] === true))) return null;
     }
     requireThat(result?.isError !== true && validator.validate(descriptor.outputSchema, result?.structuredContent), "TOOL_RESULT_INVALID_OR_UNCERTAIN");
     return result.structuredContent;

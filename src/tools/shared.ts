@@ -161,6 +161,10 @@ export function handleToolError(error: unknown, toolName?: string): {
         error.statusCode === 409
         && error.errorCode.toUpperCase() === "IDEMPOTENCY_REQUEST_IN_PROGRESS"
       );
+    // Fixed booleans only: private output profiles must preserve definitive
+    // API denial semantics without forwarding provider text, codes or IDs.
+    const definitiveDenial = !operationOutcomeUnknown
+      && (error.statusCode === 404 || error.statusCode === 403);
 
     let friendlyMessage: string;
     if (error.statusCode === 413 && error.errorCode === "payload_too_large") {
@@ -185,9 +189,12 @@ export function handleToolError(error: unknown, toolName?: string): {
         },
       ],
       isError: true,
-      ...(error.statusCode === 401 || operationOutcomeUnknown
+      ...(error.statusCode === 401 || operationOutcomeUnknown || definitiveDenial
         ? {
             _meta: {
+              ...(definitiveDenial
+                ? { [error.statusCode === 404 ? "io.frihet/resourceNotFound" : "io.frihet/accessDenied"]: true }
+                : {}),
               ...(error.statusCode === 401
                 ? { "io.frihet/authenticationRequired": true }
                 : {}),
