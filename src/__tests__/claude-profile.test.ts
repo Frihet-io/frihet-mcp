@@ -18,7 +18,14 @@ import { localMcpSurfaceComposition, remoteMcpSurfaceComposition, registerMcpSur
 
 const readFixture = (name: string) => readFileSync(new URL(`../../src/__tests__/fixtures/${name}`, import.meta.url), "utf8");
 // Independent inventory oracle: all 156 canonical names in the existing public capture.
-const fullNames: string[] = JSON.parse(readFixture("public-capability-contract.json")).surfaces.localFull.tools.map((tool: { name: string }) => tool.name);
+const publicSurfaces = JSON.parse(readFixture("public-capability-contract.json")).surfaces as Record<string, {
+  tools: Array<{ name: string; annotations: Record<string, boolean> }>;
+}>;
+const fullNames = publicSurfaces.localFull.tools.map((tool) => tool.name);
+const originalAnnotations = new Map([
+  ...publicSurfaces.localFull.tools,
+  ...publicSurfaces.remoteGrouped.tools,
+].map((tool) => [tool.name, tool.annotations]));
 const excluded = [
   "ksef_submit", "get_modelo_180_summary", "frihet_modelo_415_summary", "frihet_modelo_418_summary", "frihet_modelo_425_summary", "frihet_aiem_calculate", "frihet_modelo_200_summary", "frihet_modelo_202_summary",
   "period_close", "period_reopen", "gestoria_message_send", "gestoria_messages_list", "gestoria_template_bulk_send", "gestoria_aging_consolidated", "create_reservation", "sync_channel",
@@ -104,7 +111,7 @@ test("descriptor deduplication rejects drift in every discarded surface field", 
 });
 
 for (const local of [true, false]) for (const grouped of [false, true]) {
-  test(`Claude ${local ? "local" : "remote composition"}/${grouped ? "grouped" : "full"}: exact catalog, denial and discovery`, async () => {
+  test(`Claude ${local ? "local" : "remote composition"}/${grouped ? "grouped" : "full"}: exact catalog, Directory titles, denial and discovery`, async () => {
     const { client, calls, close } = await connect(local, grouped);
     try {
       const { tools } = await client.listTools();
@@ -115,6 +122,10 @@ for (const local of [true, false]) for (const grouped of [false, true]) {
         for (const annotation of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"] as const) {
           assert.equal(typeof tool.annotations?.[annotation], "boolean", `${tool.name}.${annotation}`);
         }
+        assert.deepEqual(tool.annotations, {
+          ...originalAnnotations.get(tool.name),
+          title: tool.title,
+        }, `${tool.name} must duplicate its title and preserve every existing hint`);
         const capability = tool._meta?.[CAPABILITY_META_KEY] as { callability: string; externalSideEffects: string[] };
         assert.ok(capability);
         assert.ok(!["unavailable", "deferred"].includes(capability.callability), tool.name);

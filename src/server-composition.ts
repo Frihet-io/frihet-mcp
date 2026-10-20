@@ -53,6 +53,15 @@ export function registerMcpSurface(
   if (options.openaiMode && options.claudeMode) {
     throw new Error("FRIHET_OPENAI_MODE and FRIHET_CLAUDE_MODE are mutually exclusive");
   }
+  if (options.claudeMode) {
+    // Directory reads annotations.title. Install before grouped discovery eagerly
+    // registers its meta-tools, and clone annotations to preserve shared hints.
+    const registerTool = server.registerTool.bind(server);
+    server.registerTool = (name, config, handler) => registerTool(name, {
+      ...config,
+      annotations: { ...config.annotations, title: config.title },
+    }, handler);
+  }
   if (options.groupedMode) {
     if (options.openaiMode) {
       applyOpenAIReviewProfiles(server);
