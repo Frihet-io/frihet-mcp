@@ -50,6 +50,36 @@ const RELEASE_RECEIPT_KIND = "frihet-production-firebase-release-receipt";
 const ERP_PROJECT = "gen-lang-client-0335716041";
 const ERP_REGION = "europe-west1";
 const WRITE_ROUTE_FIXTURE = fileURLToPath(new URL("../src/__tests__/fixtures/claude-write-route-contract.json", import.meta.url));
+const SERVED_ROUTE_FIXTURE = fileURLToPath(new URL("../src/__tests__/fixtures/claude-consultation-route-contract.json", import.meta.url));
+const CANDIDATE_FIXTURE = fileURLToPath(new URL("../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url));
+const CREDENTIAL_CEILING_SHA256 = "bcf2185915523c60468afc380d1e2456a5c0da5cb2ca4b4820e74886b06b928f";
+const CONSULTATION_CORE = Object.freeze(["list_clients", "list_expenses", "list_invoices", "list_products", "list_quotes", "list_vendors"]);
+const CONSULTATION_DISCOVERY = Object.freeze(["describe_tool", "list_tool_groups", "search_tools"]);
+
+/** The served surface is a separate exact contract, never a replacement ERP ceiling. */
+export function assertClaudeConsultationSurface(candidate, served) {
+  const tools = Object.fromEntries([...CONSULTATION_CORE, ...CONSULTATION_DISCOVERY].sort().map((name) => [name,
+    CONSULTATION_CORE.includes(name) ? [`GET /${name.slice("list_".length)}`] : []]));
+  const routes = Object.values(tools).flat().sort();
+  assert.deepEqual(served, {
+    schemaVersion: 1, kind: "frihet-claude-consultation-served-route-contract", accessProfile: "claude",
+    sha256: createHash("sha256").update(routes.join("\n")).digest("hex"), routes, tools,
+    resources: ["frihet://config/currencies"], prompts: [],
+  }, "served Claude route contract must be the exact six GET handlers and three discovery handlers");
+  const names = (descriptors) => descriptors.map((tool) => tool.name).sort();
+  assert.deepEqual(names(candidate.tools.full), [...CONSULTATION_CORE], "Claude full surface differs from the consultation core");
+  assert.deepEqual(names(candidate.tools.grouped), Object.keys(tools), "Claude grouped surface differs from the nine consultation tools");
+  for (const descriptor of [...candidate.tools.full, ...candidate.tools.grouped]) {
+    assert.equal(descriptor.annotations?.readOnlyHint, true, `${descriptor.name} must be read-only`);
+    assert.equal(descriptor.annotations?.destructiveHint, false, `${descriptor.name} must not be destructive`);
+  }
+  assert.deepEqual(candidate.prompts, [], "consultation must register no prompts");
+  assert.deepEqual(candidate.promptContent, [], "consultation must retain no prompt handlers");
+  for (const kind of ["local", "remote"]) assert.deepEqual(candidate.resources[kind].map((resource) => resource.uri), served.resources, `${kind} resource surface`);
+  assert.equal(candidate.groups.totalTools, 6, "discovery must describe only six core operations");
+  assert.equal(candidate.catalogue.canonicalOperations, 6);
+  assert.deepEqual(candidate.catalogue.aliases, {}, "consultation must expose no fiscal aliases");
+}
 
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
@@ -78,8 +108,10 @@ export function erpCeilingRoutes(source) {
  * assembled deployed artifact, which requires a separate artifact verifier.
  * At the direct-source commit,
  * publicApi.ts must reference `isClaudeWriteRouteAllowed(` (a text check) and
- * claudeWriteRoutes.ts must list exactly the routes of the committed Claude
- * contract fixture. A receipt proves that a release deployed the ceiling, not
+ * claudeWriteRoutes.ts must list exactly the routes of the frozen credential
+ * ceiling fixture. This intentionally remains broader than the separate served
+ * consultation contract; it does not claim backend credential revocation.
+ * A receipt proves that a release deployed the ceiling, not
  * that no later release replaced publicApi: pass the latest release that
  * deployed it.
  */
@@ -138,11 +170,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { config, sharedNamespaceIds } = readClaudeConfiguration();
   const sourceOnly = process.argv.includes("--source-only");
   assertClaudeWorkerIsolation(config, sharedNamespaceIds, sourceOnly);
+  assertClaudeConsultationSurface(JSON.parse(readFileSync(CANDIDATE_FIXTURE, "utf8")), JSON.parse(readFileSync(SERVED_ROUTE_FIXTURE, "utf8")));
+  const ceiling = JSON.parse(readFileSync(WRITE_ROUTE_FIXTURE, "utf8"));
+  assert.equal(ceiling.sha256, CREDENTIAL_CEILING_SHA256, "historical ERP credential ceiling digest must remain unchanged");
+  assert.equal(createHash("sha256").update(ceiling.routes.join("\n")).digest("hex"), CREDENTIAL_CEILING_SHA256, "historical ERP credential ceiling routes must remain unchanged");
   if (!sourceOnly) {
     const { FRIHET_ERP_ROOT: erpRoot, FRIHET_ERP_RELEASE_RECEIPT: receiptPath } = process.env;
     assert.ok(erpRoot && receiptPath, "Set FRIHET_ERP_ROOT and FRIHET_ERP_RELEASE_RECEIPT: the ERP Claude ceiling must be deployed first");
-    const { routes } = JSON.parse(readFileSync(WRITE_ROUTE_FIXTURE, "utf8"));
-    await verifyErpCeilingDeployed(JSON.parse(readFileSync(receiptPath, "utf8")), erpRoot, routes);
+    await verifyErpCeilingDeployed(JSON.parse(readFileSync(receiptPath, "utf8")), erpRoot, ceiling.routes);
   }
   console.log(sourceOnly ? "Claude source topology passes; deployment and hosted acceptance are not established" : "Claude deployment target isolation and the ERP ceiling receipt pass; hosted acceptance is not established");
 }

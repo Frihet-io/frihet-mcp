@@ -511,7 +511,7 @@ describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoi
     assert.equal(result.success, false, "Strict ERP schema must reject extraneous keys");
   });
 
-  test("send_invoice and send_quote require explicit recipient confirmation (to=<email>) when only a document fallback email exists, and expose effectiveRecipient across standard and Claude profiles", async () => {
+  test("standard send tools require explicit document-fallback recipient confirmation; Claude consultation exposes neither send handler", async () => {
     const sentInvoices: Array<{ id: string; to: string }> = [];
     const sentQuotes: Array<{ id: string; to?: string }> = [];
 
@@ -602,24 +602,27 @@ describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoi
     assert.equal(badClientEmail.isError, true);
     assert.equal(sentInvoices.length, 1);
 
-    // 6. Verify through real MCP SDK + Claude candidate privacy boundary (`applyClaudeCandidateProfile`):
-    //    Claude must see `effectiveRecipient` in structuredContent when document fallback triggers.
+    // 6. The consultation profile rejects both send handlers before execution,
+    //    even when the caller supplies explicit recipient confirmation.
     const claudeServer = new McpServer({ name: "claude-send-fallback-test", version: "1.0.0" });
     applyClaudeCandidateProfile(claudeServer);
     registerInvoiceTools(claudeServer, mockClient);
+    registerQuoteTools(claudeServer, mockClient);
     const mcpClient = new Client({ name: "claude-send-client", version: "1.0.0" });
     const [ct, st] = InMemoryTransport.createLinkedPair();
     await Promise.all([mcpClient.connect(ct), claudeServer.connect(st)]);
     try {
-      const claudeRes = await mcpClient.callTool({
-        name: "send_invoice",
-        arguments: { id: "inv_doc_fallback", confirm: true },
-      });
-      assert.equal(claudeRes.isError, true);
-      const sc = claudeRes.structuredContent as Record<string, unknown>;
-      assert.equal(sc?.effectiveRecipient, "historic-invoice@acme.example");
-      assert.equal(sc?.recipientSource, "document_fallback");
-      assert.equal(sc?.requiresExplicitRecipientConfirmation, true);
+      for (const [name, id] of [["send_invoice", "inv_doc_fallback"], ["send_quote", "quo_doc_fallback"]]) {
+        const claudeRes = await mcpClient.callTool({
+          name,
+          arguments: { id, to: "explicit@acme.example", confirm: true },
+        });
+        assert.equal(claudeRes.isError, true);
+        assert.match(JSON.stringify(claudeRes.content), /not found/);
+        assert.equal(claudeRes.structuredContent, undefined);
+      }
+      assert.equal(sentInvoices.length, 1);
+      assert.equal(sentQuotes.length, 1);
     } finally {
       await Promise.allSettled([mcpClient.close(), claudeServer.close()]);
     }

@@ -9,13 +9,41 @@ import test from "node:test";
 import { FrihetApiError } from "../../dist/client.js";
 import { handleToolError } from "../../dist/tools/shared.js";
 import { claudeToolResult } from "../../dist/claude-output-privacy.js";
-import { ORIGIN, RESOURCE, SCOPES, FIREBASE_PROJECT, boundedTransport, parseArguments, privateReceiptWriter, runAcceptance, validateFirebaseInput } from "../claude-hosted-acceptance.mjs";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerProductTools } from "../../dist/tools/products.js";
+import { CONSULTATION_LISTS, CONSULTATION_DENIED, ORIGIN, RESOURCE, SCOPES, FIREBASE_PROJECT, boundedTransport, parseArguments, privateReceiptWriter, runAcceptance, validateFirebaseInput } from "../claude-hosted-acceptance.mjs";
 
 const NOW = Date.parse("2026-10-19T12:00:00Z");
 const UID = "offline-only-synthetic-qa";
 const hash = value => createHash("sha256").update(value).digest("hex");
 const SHA = "a".repeat(40), UID_HASH = hash(UID);
-const CONTRACT = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url), "utf8"));
+const CANDIDATE = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url), "utf8"));
+const CONSULTATION_CONTRACT = structuredClone(CANDIDATE);
+const consultationNames = [...CONSULTATION_LISTS, "list_tool_groups", "search_tools", "describe_tool"];
+CONSULTATION_CONTRACT.tools.full = CANDIDATE.tools.full.filter(item => CONSULTATION_LISTS.includes(item.name));
+CONSULTATION_CONTRACT.tools.grouped = CANDIDATE.tools.grouped.filter(item => consultationNames.includes(item.name));
+CONSULTATION_CONTRACT.prompts = []; CONSULTATION_CONTRACT.promptContent = [];
+for (const kind of ["local", "remote"]) CONSULTATION_CONTRACT.resources[kind] = CANDIDATE.resources[kind].filter(item => item.uri === "frihet://config/currencies");
+CONSULTATION_CONTRACT.catalogue.canonicalOperations = 6; CONSULTATION_CONTRACT.catalogue.aliases = {};
+CONSULTATION_CONTRACT.groups.totalTools = 6;
+const consultationGroups = { invoicing: 2, expenses: 2, crm: 1, catalog: 1 };
+CONSULTATION_CONTRACT.groups.groups = CONSULTATION_CONTRACT.groups.groups.filter(item => item.group in consultationGroups).map(item => ({ ...item, toolCount: consultationGroups[item.group] }));
+CONSULTATION_CONTRACT.groups.totalGroups = 4;
+// Only an injected, four-tool offline fixture keeps the historical destructive
+// lifecycle safety tests. It is not a deployable/accepted current Claude profile.
+async function historicalProductPilotContract() {
+  const server = new McpServer({ name: "offline-historical-products", version: "1" });
+  registerProductTools(server, {});
+  const client = new Client({ name: "offline-historical-descriptors", version: "1" });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  try {
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    return { ...CONSULTATION_CONTRACT, tools: { grouped: (await client.listTools()).tools.filter(item => ["create_product", "get_product", "update_product", "delete_product"].includes(item.name)) } };
+  } finally { await Promise.allSettled([client.close(), server.close()]); }
+}
+const CONTRACT = await historicalProductPilotContract();
 const NOT_FOUND = handleToolError(new FrihetApiError(404, "not_found", "PRIVATE_provider_message", "PRIVATE_provider_detail"));
 const FORBIDDEN = handleToolError(new FrihetApiError(403, "forbidden", "PRIVATE_provider_message", "PRIVATE_provider_detail"));
 const FOREIGN_ID = "foreign-synthetic-product", FOREIGN_MARKER = `FRIHET-QA-${"b".repeat(32)}`;
@@ -28,6 +56,7 @@ function fakeToken(overrides = {}) {
 const response = (status, data, headers = {}, text = "") => ({ status, data, text, headers: new Headers(headers) });
 
 function fixture(faults = {}) {
+  const contract = faults.consultation ? CONSULTATION_CONTRACT : CONTRACT;
   const calls = [], receipts = [], clients = new Map(), access = new Map(), refreshTokens = new Map(), products = new Map();
   let clientCount = 0, tokenCount = 0, reads = 0, admissions = 0;
   const publicData = {
@@ -108,18 +137,30 @@ function fixture(faults = {}) {
       const request = JSON.parse(options.body), { id, params } = request;
       // Exercise the actual runtime privacy boundary, including errors: the
       // shared mapper's human-readable denial text never reaches Claude.
-      const done = (result, headers) => response(200, { jsonrpc: "2.0", id,
-        result: request.method === "tools/call" ? claudeToolResult(result) : result }, headers);
-      if (request.method === "initialize") return done({ protocolVersion: "2025-03-26", capabilities: {}, serverInfo: { name: "offline-server", version: "1" } }, { "mcp-session-id": `v1.${"s".repeat(24)}.${"a".repeat(64)}` });
+      const done = (result, headers, raw = false) => response(200, { jsonrpc: "2.0", id,
+        result: request.method === "tools/call" && !raw ? claudeToolResult(result) : result }, headers);
+      if (request.method === "initialize") return done({ protocolVersion: "2025-03-26", capabilities: faults.retainedPromptCapability ? { prompts: {} } : {}, serverInfo: { name: "offline-server", version: "1" } }, { "mcp-session-id": `v1.${"s".repeat(24)}.${"a".repeat(64)}` });
       assert.ok(options.headers["Mcp-Session-Id"]); assert.equal(options.headers["MCP-Protocol-Version"], "2025-03-26");
       if (request.method === "notifications/initialized") return response(202);
-      if (request.method === "tools/list") return done({ tools: faults.catalogMismatch ? [] : CONTRACT.tools.grouped });
-      if (request.method === "resources/list") return done({ resources: CONTRACT.resources.remote });
-      if (request.method === "prompts/list") return done({ prompts: CONTRACT.prompts });
-      if (request.method === "resources/read") { assert.equal(params.uri, "frihet://config/currencies"); return done(CONTRACT.currencies); }
-      if (request.method === "prompts/get") return done(CONTRACT.promptContent.find(item => item.name === params.name).result);
+      if (request.method === "tools/list") return done({ tools: faults.catalogMismatch ? [] : contract.tools.grouped });
+      if (request.method === "resources/list") return done({ resources: contract.resources.remote });
+      if (request.method === "prompts/list") { assert.equal(Boolean(faults.consultation), false, "consultation must not call an unsupported capability"); return done({ prompts: contract.prompts }); }
+      if (request.method === "resources/read") { assert.equal(params.uri, "frihet://config/currencies"); return done(contract.currencies); }
+      if (request.method === "prompts/get") return done(contract.promptContent.find(item => item.name === params.name).result);
       assert.equal(request.method, "tools/call");
       const { name, arguments: input } = params;
+      if (faults.consultation) {
+        if (CONSULTATION_DENIED.includes(name)) return done(faults.excludedResult ?? { isError: true, content: [{ type: "text", text: `MCP error -32602: Tool ${name} not found` }] }, {}, true);
+        if (name === "list_tool_groups") return done({ structuredContent: contract.groups, content: [] });
+        if (name === "search_tools") return done({ structuredContent: { count: 6, tools: CONSULTATION_LISTS.map(name => ({ name, readOnly: true })) }, content: [] });
+        if (name === "describe_tool") return done({ structuredContent: { name: "list_invoices", readOnly: true }, content: [] });
+        assert.ok(CONSULTATION_LISTS.includes(name), `consultation must never invoke ${name}`);
+        assert.deepEqual(input, { limit: 10, offset: 0 });
+        const empty = faults.consultationEmpty, incomplete = faults.consultationIncomplete;
+        return done({ content: [], structuredContent: { data: empty ? [] : [{ id: `synthetic-${name}` }],
+          total: faults.badConsultationTotal ? 0 : incomplete ? 20 : empty ? 0 : 1, limit: 10, offset: 0,
+          ...(faults.consultationCursor ? { nextCursor: "synthetic-more" } : {}) } });
+      }
       if (name === "get_product" && input.id === FOREIGN_ID) {
         if (faults.foreignResult) return done(faults.foreignResult);
         if (faults.foreignAccessible) return done({ structuredContent: { id: FOREIGN_ID, name: FOREIGN_MARKER, unitPrice: 0 }, content: [] });
@@ -153,10 +194,11 @@ function fixture(faults = {}) {
     send, clock: () => NOW, readToken: async () => { reads++; return fakeToken(); },
     verifyAdmission: async () => { admissions++; if (faults.guardRejected) throw new Error("do not leak offline-secret-password"); },
     persist: receipt => receipts.push(structuredClone(receipt)),
+    contractLoader: () => contract,
   };
   return {
     dependencies, calls, receipts, clients, products, reads: () => reads, admissions: () => admissions,
-    run: (options = {}, overrides = {}) => runAcceptance({ hosted: true, expectedSha: SHA, expectedUidHash: UID_HASH, label: "offline_qa", ...options }, { ...dependencies, ...overrides }),
+    run: (options = {}, overrides = {}) => runAcceptance({ hosted: true, expectedSha: SHA, expectedUidHash: UID_HASH, label: "offline_qa", ...(faults.consultation ? { consultation: true } : {}), ...options }, { ...dependencies, ...overrides }),
   };
 }
 
@@ -172,11 +214,11 @@ test("hosted exported API requires a private receipt sink before network or cred
   assert.equal(f.calls.length, 0); assert.equal(f.reads(), 0); assert.equal(f.admissions(), 0);
 });
 
-test("complete offline single-identity lifecycle validates real contract, CRUD, rotation, revocation and reconnect", async () => {
+test("offline historical four-product lifecycle retains CRUD uncertainty, rotation, revocation and reconnect checks", async () => {
   const f = fixture(), result = await f.run();
   assert.equal(result.status, "single_identity_protocol_pass", JSON.stringify(result));
   assert.ok(Object.entries(result.checks).filter(([name]) => name !== "foreign_product_exact_id_denied").every(([, value]) => value === "pass"));
-  assert.deepEqual([result.catalog.tools, result.catalog.resources, result.catalog.prompts], [132, 1, 2]);
+  assert.deepEqual([result.catalog.tools, result.catalog.resources, result.catalog.prompts], [4, 1, 0]);
   assert.equal(result.productLedger[0].phase, "deleted_and_not_found"); assert.equal(f.products.size, 0);
   assert.equal(f.clients.size, 3); assert.equal([...f.clients.values()].some(client => client.active), false);
   assert.deepEqual(result.grants.map(grant => grant.phase), ["revoked", "replay_invalidated", "replay_invalidated"]);
@@ -185,6 +227,81 @@ test("complete offline single-identity lifecycle validates real contract, CRUD, 
   assert.ok(result.unexercised.includes("actual_claude_client_journey"));
   const serialized = JSON.stringify(f.receipts);
   for (const value of [fakeToken(), UID, "offline-access-", "offline-refresh-", "offline-code-", "offline-state-", "offline-secret-password"]) assert.equal(serialized.includes(value), false, value);
+});
+
+test("explicit consultation runs all nine real-descriptor cases, the resource and excluded-name probes without business writes", async () => {
+  const f = fixture({ consultation: true }), result = await f.run();
+  assert.equal(result.status, "consultation_protocol_pass", JSON.stringify(result));
+  assert.ok(Object.values(result.checks).every(value => value === "pass"));
+  assert.deepEqual([result.catalog.tools, result.catalog.resources, result.catalog.prompts], [9, 1, 0]);
+  assert.deepEqual([...result.consultation.succeededTools].sort(), [...consultationNames].sort());
+  assert.deepEqual(result.consultation.excludedCalls, CONSULTATION_DENIED);
+  assert.equal(result.consultation.populatedCompleteLists, true);
+  assert.equal(result.consultation.filtersAndPaginationWithDataVerified, false);
+  assert.deepEqual(result.productLedger, []); assert.equal(f.products.size, 0);
+  assert.equal(result.submissionReady, false); assert.equal(result.hostedAcceptanceVerified, false);
+  const methods = f.calls.filter(call => call.path === "/mcp" && call.options.body).map(call => JSON.parse(call.options.body));
+  assert.equal(methods.some(call => call.method === "prompts/list" || call.method === "prompts/get"), false);
+  assert.deepEqual(methods.filter(call => call.method === "tools/call").map(call => call.params.name).sort(), [...consultationNames, ...CONSULTATION_DENIED].sort());
+  assert.equal(JSON.stringify(result).includes("synthetic-list_"), false, "record identifiers must not enter receipts");
+});
+
+test("empty, truncated or cursor-bearing consultation pages cannot prove populated complete data", async () => {
+  for (const fault of ["consultationEmpty", "consultationIncomplete", "consultationCursor"]) {
+    const f = fixture({ consultation: true, [fault]: true }), result = await f.run();
+    assert.equal(result.status, "fail", JSON.stringify(result));
+    assert.equal(result.failure, "CONSULTATION_DATA_EMPTY_OR_INCOMPLETE");
+    assert.equal(result.failedAt, "consultation_population");
+    assert.equal(result.checks.consultation_reads, "pass"); assert.equal(result.checks.consultation_denials, "pass");
+    assert.equal(result.consultation.succeededTools.length, 9); assert.equal(result.consultation.populatedCompleteLists, false);
+    assert.equal(result.submissionReady, false); assert.deepEqual(result.productLedger, []);
+    assert.equal([...f.clients.values()].some(client => client.active), false);
+  }
+});
+
+test("consultation rejects contradictory pagination and any retained prompt capability", async () => {
+  for (const [fault, failure] of [["badConsultationTotal", "CONSULTATION_PAGE_INVALID"], ["retainedPromptCapability", "CONSULTATION_PROMPT_CAPABILITY_MISMATCH"]]) {
+    const f = fixture({ consultation: true, [fault]: true }), result = await f.run();
+    assert.equal(result.status, "fail"); assert.equal(result.failure, failure);
+    assert.deepEqual(result.productLedger, []); assert.equal(result.submissionReady, false);
+  }
+});
+
+test("consultation requires registration absence, never generic denial or input errors", async () => {
+  for (const excludedResult of [
+    { isError: true, content: [{ type: "text", text: "Action denied" }] },
+    { isError: true, content: [{ type: "text", text: "Invalid params: name required" }] },
+    { isError: true, structuredContent: {}, content: [{ type: "text", text: "MCP error -32602: Tool create_product not found" }] },
+    { content: [], structuredContent: { id: "unwanted-write" } },
+  ]) {
+    const f = fixture({ consultation: true, excludedResult }), result = await f.run();
+    assert.equal(result.status, "fail"); assert.equal(result.failure, "EXCLUDED_TOOL_NOT_PROVEN_ABSENT");
+    assert.deepEqual(result.productLedger, []);
+  }
+});
+
+test("consultation refuses a mixed catalog before credentials and legacy mode refuses the new catalog", async () => {
+  const expanded = structuredClone(CONSULTATION_CONTRACT);
+  expanded.tools.grouped.push(CONTRACT.tools.grouped.find(item => item.name === "create_product"));
+  const f = fixture({ consultation: true });
+  const result = await f.run({}, { contractLoader: () => expanded });
+  assert.equal(result.failure, "CONSULTATION_CONTRACT_REQUIRED"); assert.equal(f.reads(), 0);
+  assert.equal(f.calls.some(call => call.path === "/register"), false);
+  const legacy = fixture({ consultation: true });
+  const legacyResult = await legacy.run({ consultation: false });
+  assert.equal(legacyResult.failure, "LEGACY_PRODUCT_PILOT_UNAVAILABLE_FOR_CURRENT_CATALOG");
+  assert.equal(legacy.reads(), 0); assert.equal(legacy.calls.some(call => call.path === "/register"), false);
+});
+
+test("consultation cannot inherit a foreign-product hook or product lifecycle target", async () => {
+  for (const [options, overrides] of [
+    [{ foreignProductId: FOREIGN_ID, foreignMarker: FOREIGN_MARKER }, {}],
+    [{}, { afterProductCreated: async () => assert.fail("must not be invoked") }],
+  ]) {
+    const f = fixture({ consultation: true }), result = await f.run(options, overrides);
+    assert.equal(result.failure, "CONSULTATION_CANNOT_RUN_PRODUCT_LIFECYCLE");
+    assert.equal(f.calls.length, 0); assert.equal(f.reads(), 0);
+  }
 });
 
 test("deployment guard or public release mismatch stops before any credential read or DCR", async () => {
@@ -544,8 +661,9 @@ test("receipt checkpoints are atomic mode0600, reject overwrite and symlink dest
 test("CLI only accepts token descriptor number, never token/password argv or mode ambiguity", () => {
   assert.deepEqual(parseArguments([]), {});
   assert.deepEqual(parseArguments(["--dry-run"]), { hosted: false });
+  assert.deepEqual(parseArguments(["--dry-run", "--consultation"]), { hosted: false, consultation: true });
   assert.equal(parseArguments(["--hosted", "--firebase-token-fd", "3", "--output", "/private/receipt.json"]).tokenFd, 3);
-  for (const args of [["--token", fakeToken()], ["--password", "bad"], ["toString", "bad"], ["--token-fd", "not-a-number"], ["--hosted"], ["--dry-run", "--hosted"]]) assert.throws(() => parseArguments(args));
+  for (const args of [["--token", fakeToken()], ["--password", "bad"], ["toString", "bad"], ["--token-fd", "not-a-number"], ["--hosted"], ["--dry-run", "--hosted"], ["--consultation", "--consultation"]]) assert.throws(() => parseArguments(args));
 });
 
 test("actual CLI defaults to zero-network dry-run and emits only sanitized non-readiness summary", () => {

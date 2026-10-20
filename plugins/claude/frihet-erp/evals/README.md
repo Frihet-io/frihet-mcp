@@ -1,10 +1,18 @@
-# Claude plugin behavior checks
+# Claude consultation plugin behavior checks
 
-Synthetic records only. The suite uses mocked Frihet tools and never starts the
-real MCP server. Tool schemas are extracted from the local candidate SDK fixture;
-this is not proof of a hosted catalogue or OAuth login. Four cases cover remaining
-receivables, missing fiscal treatment, a prior unknown write and incomplete monthly
-pagination. Negative tool graders prevent creation and sending in these cases.
+Synthetic records only. The suite advertises the nine consultation tools and
+never starts the real MCP server. Tool schemas are extracted from the candidate
+SDK fixture, including six business lists and three discovery tools. This does
+not prove a hosted catalogue, OAuth login, populated-data acceptance or that
+every tool has been exercised. No unavailable detail or write tool is mocked.
+
+Four cases cover verified and unknown balances, missing fiscal treatment in a
+chat proposal, a prior unknown write and incomplete monthly pagination. Fixed
+list/search responses are bounded scenarios, not emulation of every filter.
+Discovery describes only the six business lists; negative graders reject any
+attempt to create or send, even though this catalogue does not offer those tools.
+Missing fields remain unknown; an accumulated amount paid without a payment
+date does not establish collection in the reviewed month.
 
 Run from the repository root:
 
@@ -15,5 +23,8 @@ claude plugin eval plugins/claude/frihet-erp --runs 3 --ablation none --concurre
 The command trusts this authored plugin/suite and grants only the simulated MCP
 tools. Do not add --allow-real-servers or --mocks off. Three repeated runs check these bounded scenarios, not production reliability.
 The plugin bundles its MCP, so the no-plugin arm has no equivalent connector;
-do not use that unequal baseline to claim an improvement in model behavior. Reports stay local. To refresh schemas, extract the named
-tools from src/__tests__/fixtures/claude-candidate-contract.json and review them.
+do not use that unequal baseline to claim an improvement in model behavior.
+Reports stay local. To refresh schemas, extract the nine named tools from
+`tools.grouped` in src/__tests__/fixtures/claude-candidate-contract.json and review
+the corresponding discovery fixtures. The package unit tests validate schema
+equality; they do not execute this model-behavior suite.

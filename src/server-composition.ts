@@ -70,6 +70,7 @@ export function registerMcpSurface(
         ...(options.claudeMode ? {
           allowlist: CLAUDE_CANDIDATE_TOOLS,
           groupMetadata: CLAUDE_GROUP_METADATA,
+          describeToolExample: "list_invoices",
         } : {}),
         capabilityTruth: {
           metaKey: CAPABILITY_META_KEY,

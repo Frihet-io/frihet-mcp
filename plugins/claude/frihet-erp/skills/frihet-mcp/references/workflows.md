@@ -1,59 +1,51 @@
-# Flujos de trabajo de Frihet
+# Flujos de consulta
 
-Aplica primero las reglas de SKILL.md y el contrato del servidor conectado.
-Los nombres siguientes son ejemplos canónicos; descubre su equivalente agrupado
-si el servidor lo usa. Un flujo no autoriza todas sus escrituras.
+Aplica siempre las reglas del skill principal. Todas las propuestas y textos
+permanecen en la conversación; ninguna de estas guías guarda ni envía registros.
 
 ## Cobros pendientes
 
-1. Define fecha de corte y empresa. Lee list_invoices con los filtros admitidos y
-   completa la paginación. Incluye pagos parciales; no dependas únicamente de una
-   etiqueta overdue. Usa get_invoice cuando falten vencimiento, moneda o saldo.
-2. Obtén el saldo pendiente comprobado tras pagos y abonos. Excluye borradores,
-   documentos cancelados y saldos no positivos del total de cobros exigibles.
-   Separa vencidos, todavía no vencidos y datos desconocidos. Ordena por antigüedad
-   y por saldo dentro de cada moneda, sin comparar monedas como si fueran iguales.
-3. Muestra documento, cliente, vencimiento, saldo y moneda; totales por moneda,
-   registros pendientes de verificar y cobertura de páginas. Prepara recordatorios
-   únicamente como texto. Si se solicita un envío, comprueba que la herramienta
-   disponible envía ese contenido, y valida destinatario, texto y autorización.
-   send_invoice puede enviar la factura y no un recordatorio personalizable;
-   no lo uses como sustituto si su contrato no lo admite.
+Define fecha de corte, workspace y zona horaria. Consulta `list_invoices` sin
+restringir la cartera al estado vencido; recorre las páginas disponibles y
+selecciona los estados relevantes sin confundir borrador o cancelado con deuda.
+Una factura enviada o parcial también puede tener saldo vencido.
+
+Comprueba el saldo y su moneda en los campos devueltos. El total original no es
+el saldo; pagos y abonos pueden cambiarlo. Si no se puede comprobar, informa
+«saldo desconocido» y propone verificarlo en la aplicación. No existe una
+herramienta de detalle que complete estos datos en este perfil.
+
+Separa vencidos y no vencidos por moneda, con referencias de origen y cobertura.
+Redacta recordatorios solo en el chat. No afirmes una deuda concreta a partir
+de un saldo desconocido, no inventes destinatarios y no afirmes haber enviado nada.
 
 ## Documentos
 
-1. Resuelve cliente y documento de origen; recupera contexto, conceptos, cantidades,
-   precios, moneda y condiciones. Revisa el tratamiento fiscal en tax-guide.md.
-   No supongas la moneda ni los impuestos por la ubicación del cliente.
-2. Presenta la propuesta con los campos conocidos y pendientes. «Prepara» no
-   implica crear. Para una creación autorizada, usa create_invoice o create_quote
-   con estado draft si su esquema lo permite; si la moneda requerida no se puede
-   representar en el contrato actual, no guardes en la moneda por defecto.
-3. Verifica ID, estado y cantidades devueltos. Si se pierde la respuesta, consulta
-   el estado antes de cualquier reintento. Para convertir un presupuesto, busca
-   una operación explícita de conversión que preserve el vínculo y comprueba si
-   ya existe una factura asociada. Si no está disponible, completa la conversión
-   desde Frihet; no crees una factura copiando conceptos y alterando el presupuesto.
+Usa `list_clients`, `list_products`, `list_quotes` o `list_invoices` solo cuando
+ayuden a la propuesta. No asumas que una lista contiene todos los campos de un
+documento. Pregunta por cliente exacto, conceptos, cantidades, precios, moneda,
+tratamiento fiscal, fechas o condiciones que no se puedan verificar.
+
+Entrega un texto revisable y señala los datos pendientes. Incluso si el usuario
+pide crear, convertir, emitir o enviar, explica que esta versión solo consulta
+y que debe completar esa acción en Frihet. No presenta impuestos ni calcula
+un tratamiento fiscal basándose únicamente en país o dirección.
+
+Tras un timeout anterior, una coincidencia en la lista demuestra solo existencia
+y estado observados. Sin correlación fiable no la atribuyas a la llamada fallida;
+no prometas detalle ni reintentes esa escritura.
 
 ## Revisión mensual
 
-1. Define mes, empresa y zona horaria. Usa get_monthly_summary cuando esté
-   disponible, comprobando qué incluye. Lee invoices y expenses del periodo con
-   todas sus páginas cuando necesites detalle o contrastar la cobertura.
-2. Separa facturación emitida de borradores y cancelaciones, base de impuestos,
-   cobrado de pendiente y abonos de ingresos originales. Usa los importes y estados
-   reales. No trates el total de una factura parcialmente pagada como cobrado o
-   pendiente. Identifica gastos faltantes o sin validar y evita duplicar registros.
-3. Presenta por moneda las métricas que puedas verificar y los documentos que las
-   sustentan. Una diferencia aritmética entre facturas y gastos no acredita cierre
-   contable, beneficio neto ni impuestos a presentar. Si la cobertura es parcial,
-   no concluyas que el mes está cerrado. Propón acciones sin ejecutarlas.
+Define periodo y zona horaria. Recorre `list_invoices` y `list_expenses` con los
+filtros declarados; añade otras listas únicamente si la pregunta lo necesita.
+No hay resumen mensual del servidor en esta versión.
 
-## Otros flujos
+Separa emitido, borrador y cancelado. No llames «cobrado en el mes» a un importe
+pagado acumulado si no hay fecha del cobro que lo sustente. Presenta saldos solo
+cuando estén respaldados y separa monedas. Si faltan páginas, campos o
+justificantes, muestra un subconjunto verificado y la revisión como parcial.
 
-Para clientes, productos, gastos y otros dominios, prepara los datos necesarios,
-resuelve duplicados, muestra el cambio y respeta la autorización concreta. En un
-lote, conserva el resultado individual de cada registro y señala fallos parciales.
-La clasificación propuesta de un gasto requiere el catálogo real de categorías;
-no garantiza deducibilidad. Una revisión no incluye modificar categorías,
-conciliar movimientos, enviar documentos ni ejecutar recurrencias.
+Entrega referencias, cobertura, incidencias y siguientes pasos en el chat.
+Nunca declares un cierre contable o fiscal, conciliaciones ni validaciones de
+gastos a partir de estas listas.

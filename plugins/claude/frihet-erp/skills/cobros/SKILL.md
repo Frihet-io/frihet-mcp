@@ -1,28 +1,31 @@
 ---
 name: cobros
 description: >-
-  Review pending and overdue invoices in a connected Frihet workspace. Use for
-  cobros pendientes, impagos, morosos, antigüedad de saldos, receivables or payment
-  follow-up. Verifies partial payments and currencies, then drafts reminders.
+  Review available invoice list records and draft reminder text in conversation.
+  Use for cobros pendientes, impagos, receivables or payment follow-up in Frihet.
+  Separates currencies and marks balances unknown when the list lacks evidence.
+  This consultation profile cannot send, collect or change records.
 license: MIT
 ---
 
-# Cobros pendientes
+# Consulta de cobros pendientes
 
-Antes de usar herramientas, lee [las reglas de Frihet](../frihet-mcp/SKILL.md)
-y [el flujo de cobros](../frihet-mcp/references/workflows.md#cobros-pendientes).
-Si Frihet no está conectado, indica el paso de conexión sin pedir credenciales.
+Lee [las reglas de consulta](../frihet-mcp/SKILL.md) y
+[el flujo de cobros](../frihet-mcp/references/workflows.md#cobros-pendientes).
 
-Obtén una cartera verificable a la fecha de corte: recorre todas las páginas,
-comprueba el saldo después de pagos y abonos y agrupa por moneda. Para importes
-aportados por el usuario, identifica la procedencia y los datos que faltan;
-no afirmes que has consultado Frihet si no lo has hecho.
+Define la fecha de corte y consulta las páginas pertinentes de facturas. No
+limites la cartera solo al estado vencido: puede haber facturas enviadas o con
+pagos parciales. Conserva cada estado, fecha, moneda y campo de saldo recibido.
+Si no hay evidencia suficiente de pagos, abonos y saldo, escribe «saldo
+desconocido»; no sustituyas el saldo por el total original ni inventes una
+herramienta de detalle. Señala cualquier cobertura parcial.
 
-Entrega una tabla con factura, cliente, vencimiento, días vencidos, saldo y moneda.
-Separa lo vencido de lo todavía no vencido. Muestra saldos desconocidos y cobertura
-parcial. Propón prioridades dentro de cada moneda y redacta recordatorios cuando
-se soliciten. No escales automáticamente a amenazas o reclamaciones legales.
+Entrega una tabla con referencia o ID, cliente, vencimiento, días vencidos,
+saldo verificado o desconocido y moneda. Separa vencido de no vencido y agrupa
+solo importes comparables por moneda. Prioriza únicamente saldos verificados.
+Puedes redactar recordatorios en la conversación; si falta el saldo, prepara
+un texto neutral que pida comprobarlo sin afirmar una deuda concreta.
 
-Un informe o un borrador de recordatorio no autoriza envíos, marcas de pago,
-conciliaciones, devoluciones ni cambios en clientes. Para enviar, comprueba el
-contenido y destinatario con el usuario y la capacidad real de la herramienta.
+Este perfil no envía recordatorios, marca pagos, concilia ni modifica clientes.
+Indica los pasos pendientes en la aplicación. No afirmes que un borrador del
+chat se guardó y no escales automáticamente a reclamaciones legales.

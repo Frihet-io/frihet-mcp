@@ -374,6 +374,7 @@ export function applyToolExposureProfile(
   options?: {
     allowlist?: ReadonlySet<string>;
     groupMetadata?: Partial<Record<ToolGroupId, GroupMeta>>;
+    describeToolExample?: string;
     capabilityTruth?: {
       metaKey: string;
       localDiscovery: (name: string) => object;
@@ -500,6 +501,7 @@ export function applyToolExposureProfile(
     groupMetadata,
     options?.capabilityTruth,
     options?.securitySchemes,
+    options?.describeToolExample,
   );
 
   return handle;
@@ -548,6 +550,7 @@ function registerMetaTools(
     type: "oauth2";
     scopes: readonly string[];
   }>,
+  describeToolExample = "create_invoice",
 ): void {
   const { catalog, groups } = handle;
   const oauthConfig = securitySchemes
@@ -595,7 +598,7 @@ function registerMetaTools(
     name: z
       .string()
       .describe(
-        "Exact tool name as returned by search_tools (e.g. 'create_invoice') / " +
+        `Exact tool name as returned by search_tools (e.g. '${describeToolExample}') / ` +
           "Nombre exacto de la herramienta devuelto por search_tools.",
       ),
   };

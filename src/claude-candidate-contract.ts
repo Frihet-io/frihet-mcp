@@ -24,7 +24,9 @@ async function captureSurface(local: boolean, grouped: boolean) {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     const tools = (await client.listTools()).tools.sort((a, b) => a.name.localeCompare(b.name));
     const resources = (await client.listResources()).resources.sort((a, b) => a.uri.localeCompare(b.uri));
-    const prompts = (await client.listPrompts()).prompts.sort((a, b) => a.name.localeCompare(b.name));
+    const prompts = client.getServerCapabilities()?.prompts
+      ? (await client.listPrompts()).prompts.sort((a, b) => a.name.localeCompare(b.name))
+      : [];
     const promptContent = await Promise.all(prompts.map(async ({ name }) => ({ name, result: await client.getPrompt({ name }) })));
     const currencies = await client.readResource({ uri: "frihet://config/currencies" });
     const groups = grouped ? (await client.callTool({ name: "list_tool_groups", arguments: {} })).structuredContent : undefined;

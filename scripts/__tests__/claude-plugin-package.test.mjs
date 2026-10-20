@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { exportedFiles, filesIn, plugin, root } from "../sync-claude-plugin.mjs";
+import { claudeSource, exportedFiles, filesIn, plugin, root } from "../sync-claude-plugin.mjs";
 
-test("remote preview is a small self-contained export of the local plugin skills", () => {
+test("remote preview is a small self-contained export of the Claude consultation skills", () => {
   const source = exportedFiles();
   const files = filesIn(plugin);
-  assert.deepEqual(files.filter((path) => !path.startsWith("evals/")), [...source.keys(), ".gitignore", ".mcp.json", "README.md"].sort());
+  assert.deepEqual(files.filter((path) => !path.startsWith("evals/")), [...source.keys(), ".gitignore", ".mcp.json"].sort());
   for (const [path, bytes] of source) {
     assert.deepEqual(readFileSync(join(plugin, path)), bytes, `Export drift: ${path}`);
   }
@@ -18,6 +18,7 @@ test("remote preview is a small self-contained export of the local plugin skills
   }
   const manifest = JSON.parse(readFileSync(join(plugin, ".claude-plugin/plugin.json"), "utf8"));
   assert.equal(manifest.name, "frihet-erp");
+  assert.equal(manifest.version, "1.18.0-preview.3");
   assert.equal(manifest.license, "MIT");
   assert.equal(manifest.author.name, "Frihet");
   assert.equal(manifest.author.email, "hola@frihet.io");
@@ -35,6 +36,30 @@ test("remote preview is a small self-contained export of the local plugin skills
   assert.ok(readme.replace(/```[\s\S]*?```/gu, "").split(/\s+/u).length >= 40);
   assert.deepEqual(files.filter((path) => path.endsWith("/SKILL.md")).map((path) => path.split("/")[1]).sort(),
     ["cobros", "documentos", "frihet-mcp", "revision-mensual"]);
+  for (const path of files.filter((path) => path.endsWith(".md") && !path.startsWith("evals/"))) {
+    const markdown = readFileSync(join(plugin, path), "utf8");
+    for (const [, target] of markdown.matchAll(/\[[^\]]+\]\(([^)]+)\)/gu)) {
+      if (/^(?:https?:|#)/u.test(target)) continue;
+      assert.ok(existsSync(join(dirname(join(plugin, path)), target.split("#")[0])), `Broken package link: ${path} -> ${target}`);
+    }
+  }
+});
+
+test("Claude consultation exports and mocks cover only the nine advertised read tools", () => {
+  assert.deepEqual(filesIn(claudeSource), [...exportedFiles().keys()].filter((path) => ![".claude-plugin/icon.png", "LICENSE"].includes(path)).sort());
+  const names = ["describe_tool", "list_clients", "list_expenses", "list_invoices", "list_products", "list_quotes", "list_tool_groups", "list_vendors", "search_tools"];
+  const mocks = JSON.parse(readFileSync(join(plugin, "evals/mocks/frihet/_tools.json"), "utf8"));
+  assert.deepEqual(mocks.tools.map((tool) => tool.name).sort(), names);
+  const candidate = JSON.parse(readFileSync(join(root, "src/__tests__/fixtures/claude-candidate-contract.json"), "utf8"));
+  for (const mock of mocks.tools) {
+    const descriptor = candidate.tools.grouped.find((tool) => tool.name === mock.name);
+    assert.ok(descriptor, `Unknown mock tool: ${mock.name}`);
+    assert.deepEqual(mock, descriptor, `Mock schema drift: ${mock.name}`);
+    assert.equal(mock.annotations.readOnlyHint, true, `${mock.name} must be read only`);
+  }
+  for (const path of filesIn(join(plugin, "evals")).filter((path) => /(?:^|\/)mocks\/frihet\//u.test(path) && path.endsWith(".md"))) {
+    assert.ok(names.includes(path.split("/").at(-1).slice(0, -3)), `Mock for unavailable tool: ${path}`);
+  }
 });
 
 test("skill/ (declared source of truth) is byte-identical to skills/frihet-mcp", () => {
