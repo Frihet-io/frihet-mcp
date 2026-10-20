@@ -242,7 +242,7 @@ export function applyClaudeCandidateProfile(server: any): void {
       description: `${description} Claude omits sensitive output fields under the shared redaction policy.`,
       ...(config.outputSchema ? { outputSchema: claudeOutputSchema(config.outputSchema) } : {}),
     }, async (...args: any[]) => {
-      try { return claudeToolResult(await handler(...args)); }
+      try { return claudeToolResult(await handler(...args), name); }
       catch {
         return claudeToolResult({ isError: true, _meta: { "io.frihet/operationOutcomeUnknown": true } });
       }

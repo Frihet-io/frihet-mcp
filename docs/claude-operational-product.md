@@ -85,6 +85,18 @@ The shared general/OpenAI annotations and every execution handler stay unchanged
 Claude's permission prompt is separate from the conversation: the skills must
 still avoid asking the user to repeat a complete, specific instruction.
 
+Claude never returns backend search indexes. In the four client-record tools
+(`get_client`, `create_client`, `update_client`, `list_clients`), only the direct
+record's `id` and `name` may retain an index token reproduced from that same
+canonical name. This prevents an ordinary indexed name from corrupting record
+identity. Index copies remain hidden in notes, nested fields and serialized JSON;
+known sensitive fields take precedence, including normalized identifier forms.
+Malformed indexes or an incomplete sensitive-source scan disable this exception.
+An opaque string placed both in the public canonical name and solely in its
+derived index cannot be distinguished from a legitimate name by this boundary;
+the public name is not a safe place to store a secret. Other tool/resource
+contracts and the shared OpenAI/general redaction policy retain their behavior.
+
 ## Isolation and rollback
 
 This source change modifies Claude's registration profile, instructions, plugin,

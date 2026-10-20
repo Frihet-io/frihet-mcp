@@ -10,13 +10,34 @@ const sensitiveFields = new Set([...SENSITIVE_FIELD_NAMES,
 ].map(normalizeField));
 const isSensitiveField = (field: string) => sensitiveFields.has(normalizeField(field));
 
+const isSearchIndex = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 32
+  && value.every((token) => typeof token === "string" && token.length > 0 && token.length <= 200
+    && token === token.trim().toLowerCase());
+
 /** Collect copies before deleting fields, including copies embedded in prose. */
-function sensitiveValues(value: unknown, values = new Set<string>(), depth = 0): Set<string> {
-  if (depth > 16 || value === null || typeof value !== "object") return values;
+function sensitiveValues(value: unknown, values = new Set<string>(), depth = 0, includeIndexTokens = true,
+  scan?: { complete: boolean }): Set<string> {
+  if (depth > 16) {
+    if (scan) scan.complete = false;
+    return values;
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (parsed !== null && typeof parsed === "object") return sensitiveValues(parsed, values, depth + 1, includeIndexTokens, scan);
+    } catch { /* ordinary prose */ }
+    // Do not grant identity exceptions if structured-looking prose cannot be
+    // inspected as JSON (including an embedded/double-encoded response).
+    if (scan && /[{}\[\]]/u.test(value)) scan.complete = false;
+  }
+  if (value === null || typeof value !== "object") return values;
   for (const [key, item] of Object.entries(value)) {
-    if (isSensitiveField(key)) {
+    if (isSensitiveField(key) && (includeIndexTokens || normalizeField(key) !== "searchtokens" || !isSearchIndex(item))) {
       const collect = (part: unknown, level: number): void => {
-        if (level > 16) return;
+        if (level > 16) {
+          if (scan) scan.complete = false;
+          return;
+        }
         // Tiny identifiers (requestId="x", documentNumber="1") are ambiguous
         // substrings of unrelated IDs/statuses. Their fields are removed, but
         // only sufficiently distinctive values are scrubbed from other text.
@@ -27,12 +48,46 @@ function sensitiveValues(value: unknown, values = new Set<string>(), depth = 0):
       };
       collect(item, depth + 1);
     }
-    sensitiveValues(item, values, depth + 1);
+    sensitiveValues(item, values, depth + 1, includeIndexTokens, scan);
   }
   return values;
 }
 
-function sanitizeValue(value: unknown, copies: readonly string[], depth = 0): unknown {
+/** Only the four client-record contracts expose these exact identity paths.
+ * An index token reproduced from that record's name is derived public identity,
+ * not evidence that its name/ID is a secret. Never exempt unrelated index values,
+ * open/nested fields, other tools, or values also found in a sensitive field.
+ * Name tokenization mirrors the backend identityIndex name branch: full lowercase
+ * name plus whitespace-split lowercase words, each trimmed and at most 200 chars.
+ */
+function clientIdentityTokens(value: unknown, toolName?: string): WeakMap<object, ReadonlySet<string>> {
+  const identities = new WeakMap<object, ReadonlySet<string>>();
+  if (!["get_client", "create_client", "update_client", "list_clients"].includes(toolName ?? "")) return identities;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return identities;
+  const root = value as Record<string, unknown>;
+  const records = toolName === "list_clients" ? (Array.isArray(root.data) ? root.data : []) : [root];
+  const scan = { complete: true };
+  const hardValues = sensitiveValues(value, new Set(), 0, false, scan);
+  if (!scan.complete) return identities;
+  const hardForms = new Set([...hardValues].flatMap((part) => [
+    part, part.trim().toLowerCase(), part.replace(/[^a-z0-9]/giu, "").toLowerCase(),
+  ]));
+  for (const record of records) {
+    if (record === null || typeof record !== "object" || Array.isArray(record)) continue;
+    const item = record as Record<string, unknown>;
+    if (typeof item.id !== "string" || typeof item.name !== "string") continue;
+    const indexes = Object.entries(item).filter(([key]) => normalizeField(key) === "searchtokens");
+    if (!indexes.length || indexes.some(([, tokens]) => !isSearchIndex(tokens))) continue;
+    const nameTokens = new Set([item.name, ...item.name.split(/\s+/u)]
+      .map((part) => part.trim().toLowerCase()).filter((part) => part.length > 0 && part.length <= 200));
+    identities.set(record, new Set(indexes.flatMap(([, tokens]) => tokens as string[])
+      .filter((token) => nameTokens.has(token) && !hardForms.has(token))));
+  }
+  return identities;
+}
+
+function sanitizeValue(value: unknown, copies: readonly string[], depth = 0,
+  identities = new WeakMap<object, ReadonlySet<string>>(), preservedTokens?: ReadonlySet<string>): unknown {
   if (depth > 16) return REDACTED;
   if (typeof value === "string") {
     // A string can contain another serialized response. Parse it before
@@ -44,19 +99,21 @@ function sanitizeValue(value: unknown, copies: readonly string[], depth = 0): un
       }
     } catch { /* ordinary prose */ }
     let text = redactText(value);
-    for (const secret of copies) text = text.split(secret).join(REDACTED);
+    for (const secret of copies) if (!preservedTokens?.has(secret)) text = text.split(secret).join(REDACTED);
     return text;
   }
   if (value === null || typeof value === "boolean" || typeof value === "number") return value;
-  if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, copies, depth + 1));
+  if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, copies, depth + 1, identities));
   if (typeof value !== "object") return REDACTED;
   return Object.fromEntries(Object.entries(value).flatMap(([key, item]) =>
-    isSensitiveField(key) ? [] : [[key, sanitizeValue(item, copies, depth + 1)]],
+    isSensitiveField(key) ? [] : [[key, sanitizeValue(item, copies, depth + 1, identities,
+      key === "id" || key === "name" ? identities.get(value) : undefined)]],
   ));
 }
 
-export function sanitizeClaudeOutput(value: unknown): unknown {
-  return sanitizeValue(value, [...sensitiveValues(value)].sort((a, b) => b.length - a.length));
+export function sanitizeClaudeOutput(value: unknown, toolName?: string): unknown {
+  return sanitizeValue(value, [...sensitiveValues(value)].sort((a, b) => b.length - a.length), 0,
+    clientIdentityTokens(value, toolName));
 }
 
 /** Keep the existing output shape, including open summaries, but never require
@@ -113,8 +170,9 @@ function claudeErrorText(meta: Record<string, unknown>): string {
 }
 
 /** Never forward opaque content blocks or arbitrary response metadata. */
-export function claudeToolResult(result: Record<string, unknown>): Record<string, unknown> {
-  const structured = result.structuredContent === undefined ? undefined : sanitizeClaudeOutput(result.structuredContent);
+export function claudeToolResult(result: Record<string, unknown>, toolName?: string): Record<string, unknown> {
+  const structured = result.structuredContent === undefined ? undefined
+    : sanitizeClaudeOutput(result.structuredContent, result.isError === true ? undefined : toolName);
   const meta = result._meta as Record<string, unknown> | undefined;
   const safeMeta = Object.fromEntries(SAFE_META_FLAGS.flatMap((key) =>
     typeof meta?.[key] === "boolean" ? [[key, meta[key]]] : [],
