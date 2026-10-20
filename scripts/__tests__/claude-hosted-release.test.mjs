@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
   assertClaudeWorkerIsolation,
+  assertClaudeConsultationSurface,
   assertErpCeilingDeployed,
   DRY_RUN_NAMESPACE,
   erpCeilingRoutes,
@@ -44,6 +45,40 @@ test("source config isolates Claude with its dedicated KV namespace and refuses 
 });
 
 const { routes: CONTRACT_ROUTES } = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-write-route-contract.json", import.meta.url), "utf8"));
+const SERVED = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-consultation-route-contract.json", import.meta.url), "utf8"));
+
+test("consultation source guard requires exact served reads while preserving the broader immutable credential ceiling", () => {
+  const candidate = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url), "utf8"));
+  const names = Object.keys(SERVED.tools);
+  candidate.tools.full = candidate.tools.full.filter(item => names.includes(item.name));
+  candidate.tools.grouped = candidate.tools.grouped.filter(item => names.includes(item.name));
+  candidate.prompts = []; candidate.promptContent = [];
+  for (const kind of ["local", "remote"]) candidate.resources[kind] = candidate.resources[kind].filter(item => item.uri === "frihet://config/currencies");
+  candidate.catalogue.canonicalOperations = 6; candidate.catalogue.aliases = {}; candidate.groups.totalTools = 6;
+  assert.doesNotThrow(() => assertClaudeConsultationSurface(candidate, SERVED));
+  assert.equal(digest(CONTRACT_ROUTES.join("\n")), "bcf2185915523c60468afc380d1e2456a5c0da5cb2ca4b4820e74886b06b928f");
+  assert.ok(CONTRACT_ROUTES.length > SERVED.routes.length);
+  for (const mutate of [
+    c => { c.tools.grouped = c.tools.grouped.slice(1); },
+    c => { c.tools.grouped.push({ name: "create_invoice", annotations: { readOnlyHint: false } }); },
+    c => { c.tools.full[0].annotations.readOnlyHint = false; },
+    c => { c.prompts.push({ name: "invoice-review" }); },
+    c => { c.resources.local.push({ uri: "frihet://business/profile" }); },
+    c => { c.catalogue.aliases = { frihet_modelo_303_summary: "get_modelo_303_summary" }; },
+    c => { c.groups.totalTools = 125; },
+  ]) {
+    const changed = structuredClone(candidate); mutate(changed);
+    assert.throws(() => assertClaudeConsultationSurface(changed, SERVED));
+  }
+  for (const mutate of [
+    s => { s.routes = []; },
+    s => { s.tools.list_invoices.push("POST /invoices"); },
+    s => { s.tools.create_invoice = ["POST /invoices"]; },
+  ]) {
+    const changed = structuredClone(SERVED); mutate(changed);
+    assert.throws(() => assertClaudeConsultationSurface(candidate, changed));
+  }
+});
 
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);

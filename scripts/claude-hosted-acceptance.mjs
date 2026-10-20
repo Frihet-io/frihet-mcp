@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
  * Single-identity Claude protocol pilot. Default: no network, no credentials.
+ * --consultation exercises the nine-tool read-only surface. The historical
+ * product lifecycle is refused before credentials when the catalog lacks CRUD.
  * Build first. Hosted execution requires the existing full deployment guard,
  * a matching public release, and a fresh real Firebase ID token on a private FD.
  * This command never signs in, retries a write, or certifies two-account/client
@@ -14,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import Ajv from "ajv";
 import { rejectRedirectResponse } from "../dist/fetch-no-redirect.js";
+import { assertClaudeConsultationSurface } from "./check-claude-hosted-release.mjs";
 
 export const ORIGIN = "https://claude-mcp.frihet.io";
 export const RESOURCE = `${ORIGIN}/mcp`;
@@ -22,6 +25,10 @@ export const SCOPES = Object.freeze(["openid", "email", "frihet:workspace.manage
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const FIXTURE = new URL("../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url);
 const FIXTURE_SHA256 = "c46264776466bb8f38ee3ea6ae6524b7397195455da87a81033c28dbb8b912d0";
+const SERVED_FIXTURE = new URL("../src/__tests__/fixtures/claude-consultation-route-contract.json", import.meta.url);
+export const CONSULTATION_LISTS = Object.freeze(["list_clients", "list_expenses", "list_invoices", "list_products", "list_quotes", "list_vendors"]);
+export const CONSULTATION_DENIED = Object.freeze(["create_product", "update_product", "delete_product", "get_client", "create_invoice", "send_invoice", "verifactu_resubmit", "frihet_modelo_303_summary"]);
+const CONSULTATION_ROWS = ["deployment_guard", "public_release", "firebase_input", "oauth", "userinfo", "callback_replay", "code_replay", "mcp_catalogs", "static_resource", "consultation_reads", "consultation_denials", "consultation_population", "refresh", "revoke", "reconnect", "refresh_replay"];
 const MAX_BODY = 4 * 1024 * 1024;
 const MAX_TOKEN = 16 * 1024;
 const ROWS = ["deployment_guard", "public_release", "firebase_input", "oauth", "userinfo", "callback_replay", "code_replay", "mcp_catalogs", "static_resource", "foreign_product_exact_id_denied", "product_crud", "product_cleanup", "refresh", "revoke", "reconnect", "refresh_replay"];
@@ -230,9 +237,10 @@ export async function runAcceptance(options = {}, {
   const receipt = {
     schemaVersion: 1, kind: "frihet-claude-single-identity-pilot", runId,
     mode: options.hosted ? "hosted" : "dry_run", label: labelValid ? label : "invalid_label",
+    acceptanceMode: options.consultation ? "consultation" : "historical_product_lifecycle",
     startedAt: new Date(clock()).toISOString(), status: "dry_run",
     hostedAcceptanceVerified: false, submissionReady: false, independentBackendCleanupVerified: false,
-    checks: Object.fromEntries(ROWS.map(row => [row, "not_exercised"])),
+    checks: Object.fromEntries((options.consultation ? CONSULTATION_ROWS : ROWS).map(row => [row, "not_exercised"])),
     unexercised: [...UNEXERCISED], grants: [], productLedger: [],
   };
   if (!options.hosted) { persist?.(receipt); return receipt; }
@@ -360,6 +368,7 @@ export async function runAcceptance(options = {}, {
       requireThat(typeof sid === "string" && /^v1\.[A-Za-z0-9_-]{16,128}\.[a-f0-9]{64}$/u.test(sid), "MCP_SESSION_INVALID");
       requireThat(["2025-03-26", "2025-06-18", "2025-11-25"].includes(response.data.result?.protocolVersion), "MCP_PROTOCOL_INVALID");
       session.id = sid; session.protocol = response.data.result.protocolVersion;
+      session.capabilities = response.data.result.capabilities;
       remember(sid);
       receipt.sessionSha256 = sha256(sid);
     }
@@ -404,16 +413,60 @@ export async function runAcceptance(options = {}, {
     requireThat(await tool("get_product", { id: ledger.id }, true) === null, "DELETED_PRODUCT_STILL_PRESENT");
     ledger.phase = "deleted_and_not_found"; productOwned = false; pass("product_cleanup");
   }
+  async function consultationReads() {
+    receipt.consultation = { succeededTools: [], collections: [], excludedCalls: [],
+      populatedCompleteLists: false, filtersAndPaginationWithDataVerified: false };
+    const groups = await tool("list_tool_groups", {});
+    requireThat(isDeepStrictEqual(stable(groups), stable(contract.groups)), "CONSULTATION_DISCOVERY_MISMATCH");
+    receipt.consultation.succeededTools.push("list_tool_groups"); save();
+    const search = await tool("search_tools", { limit: 10 });
+    requireThat(search?.count === 6 && Array.isArray(search.tools)
+      && isDeepStrictEqual(search.tools.map(item => item.name).sort(), [...CONSULTATION_LISTS])
+      && search.tools.every(item => item.readOnly === true), "CONSULTATION_DISCOVERY_MISMATCH");
+    receipt.consultation.succeededTools.push("search_tools"); save();
+    const description = await tool("describe_tool", { name: "list_invoices" });
+    requireThat(description?.name === "list_invoices" && description.readOnly === true, "CONSULTATION_DISCOVERY_MISMATCH");
+    receipt.consultation.succeededTools.push("describe_tool"); save();
+    // One bounded page per domain. Never label a truncated/empty result as a
+    // populated complete QA list; no record contents enter the receipt.
+    for (const name of CONSULTATION_LISTS) {
+      const page = await tool(name, { limit: 10, offset: 0 });
+      requireThat(Array.isArray(page?.data) && Number.isSafeInteger(page.total) && page.total >= 0
+        && page.limit === 10 && page.offset === 0 && page.data.length <= 10 && page.total >= page.data.length
+        && page.data.every(item => safeProductId(item?.id))
+        && new Set(page.data.map(item => item.id)).size === page.data.length, "CONSULTATION_PAGE_INVALID");
+      receipt.consultation.succeededTools.push(name);
+      receipt.consultation.collections.push({ name, returned: page.data.length, total: page.total,
+        populated: page.data.length > 0, complete: page.data.length === page.total && page.nextCursor === undefined });
+      save();
+    }
+    requireThat(isDeepStrictEqual([...receipt.consultation.succeededTools].sort(), contract.tools.grouped.map(item => item.name).sort()), "CONSULTATION_TOOL_COVERAGE_INCOMPLETE");
+    receipt.consultation.populatedCompleteLists = receipt.consultation.collections.every(item => item.populated && item.complete);
+  }
+  async function consultationDenials() {
+    for (const name of CONSULTATION_DENIED) {
+      const result = await rpc("tools/call", { name, arguments: {} });
+      requireThat(result?.isError === true && !Object.hasOwn(result, "structuredContent")
+        && Array.isArray(result.content) && result.content.length === 1 && result.content[0]?.type === "text"
+        && [`MCP error -32602: Tool ${name} not found`, `Tool ${name} not found`].includes(result.content[0].text), "EXCLUDED_TOOL_NOT_PROVEN_ABSENT");
+      receipt.consultation.excludedCalls.push(name); save();
+    }
+  }
   try {
     requireThat(labelValid, "QA_LABEL_INVALID");
     requireThat(/^[a-f0-9]{40}$/u.test(options.expectedSha ?? "") && /^[a-f0-9]{64}$/u.test(options.expectedUidHash ?? ""), "EXPECTED_BINDING_REQUIRED");
     requireThat((options.foreignProductId === undefined && options.foreignMarker === undefined)
       || (typeof options.foreignProductId === "string" && /^[A-Za-z0-9_-]{1,256}$/u.test(options.foreignProductId)
         && /^FRIHET-QA-[a-f0-9]{32}$/u.test(options.foreignMarker ?? "")), "FOREIGN_SYNTHETIC_BINDING_REQUIRED");
+    requireThat(!options.consultation || (options.foreignProductId === undefined && !afterProductCreated), "CONSULTATION_CANNOT_RUN_PRODUCT_LIFECYCLE");
     receipt.releaseSha = options.expectedSha; receipt.uidSha256 = options.expectedUidHash; receipt.status = "running"; save();
     await verifyAdmission(); pass(current);
     current = "public_release"; await publicPreflight(send, options.expectedSha); pass(current);
-    contract = contractLoader(); validator = new Ajv({ strict: false, validateFormats: false });
+    current = "mcp_catalogs"; contract = contractLoader(); validator = new Ajv({ strict: false, validateFormats: false });
+    if (options.consultation) {
+      try { assertClaudeConsultationSurface(contract, JSON.parse(readFileSync(SERVED_FIXTURE, "utf8"))); }
+      catch { throw new PilotFailure("CONSULTATION_CONTRACT_REQUIRED"); }
+    } else requireThat(["create_product", "get_product", "update_product", "delete_product"].every(name => contract.tools.grouped.some(item => item.name === name)), "LEGACY_PRODUCT_PILOT_UNAVAILABLE_FOR_CURRENT_CATALOG");
     current = "firebase_input"; token = await readToken(options.tokenFd ?? 0);
     const uid = validateFirebaseInput(token, options.expectedUidHash, clock()); remember(token, uid); pass(current);
     current = "oauth"; const primary = await grantNew(); pass(current);
@@ -424,7 +477,12 @@ export async function runAcceptance(options = {}, {
     current = "mcp_catalogs"; session = { grant: primary.grant };
     await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "frihet-synthetic-qa", version: "1.0.0" } });
     await rpc("notifications/initialized", undefined, true);
-    const tools = await rpc("tools/list", {}), resources = await rpc("resources/list", {}), prompts = await rpc("prompts/list", {});
+    if (options.consultation) requireThat(session.capabilities && typeof session.capabilities === "object"
+      && session.capabilities.prompts === undefined, "CONSULTATION_PROMPT_CAPABILITY_MISMATCH");
+    const tools = await rpc("tools/list", {}), resources = await rpc("resources/list", {});
+    // Zero prompt registrations mean no prompts capability in the real SDK.
+    // Do not swallow -32601 or other errors from an advertised capability.
+    const prompts = options.consultation ? { prompts: [] } : await rpc("prompts/list", {});
     const ordered = (values, key) => [...values].sort((a, b) => a[key].localeCompare(b[key]));
     requireThat(Array.isArray(tools.tools) && Array.isArray(resources.resources) && Array.isArray(prompts.prompts)
       && tools.nextCursor === undefined && resources.nextCursor === undefined && prompts.nextCursor === undefined
@@ -437,31 +495,36 @@ export async function runAcceptance(options = {}, {
     requireThat(isDeepStrictEqual(stable(await rpc("resources/read", { uri: "frihet://config/currencies" })), stable(contract.currencies)), "STATIC_RESOURCE_MISMATCH");
     for (const { name, result } of contract.promptContent) requireThat(isDeepStrictEqual(stable(await rpc("prompts/get", { name })), stable(result)), "PROMPT_CONTENT_MISMATCH");
     pass(current);
-    if (options.foreignProductId !== undefined) {
-      current = "foreign_product_exact_id_denied";
-      requireThat(await tool("get_product", { id: options.foreignProductId }, "foreign") === null, "FOREIGN_PRODUCT_ACCESSIBLE_OR_DENIAL_UNPROVEN");
-      receipt.foreignProduct = { idSha256: sha256(options.foreignProductId), markerSha256: sha256(options.foreignMarker) }; pass(current);
+    if (options.consultation) {
+      current = "consultation_reads"; await consultationReads(); pass(current);
+      current = "consultation_denials"; await consultationDenials(); pass(current);
+    } else {
+      if (options.foreignProductId !== undefined) {
+        current = "foreign_product_exact_id_denied";
+        requireThat(await tool("get_product", { id: options.foreignProductId }, "foreign") === null, "FOREIGN_PRODUCT_ACCESSIBLE_OR_DENIAL_UNPROVEN");
+        receipt.foreignProduct = { idSha256: sha256(options.foreignProductId), markerSha256: sha256(options.foreignMarker) }; pass(current);
+      }
+      current = "product_crud";
+      const ledger = { marker: `FRIHET-QA-${runId}`, id: null, phase: "create_pending" }; receipt.productLedger.push(ledger); save();
+      const product = await tool("create_product", { name: ledger.marker, unitPrice: 0, description: `Synthetic Claude acceptance ${runId}; remove after test` });
+      requireThat(safeProductId(product.id), "PRODUCT_ID_INVALID_OR_REFLECTED");
+      ledger.unverifiedReturnedIdSha256 = sha256(product.id); save();
+      requireThat(ownProduct(product), "CREATED_PRODUCT_IDENTITY_MISMATCH");
+      requireThat(ownProduct(await tool("get_product", { id: product.id }), product.id), "PRODUCT_READBACK_MISMATCH");
+      ledger.id = product.id; delete ledger.unverifiedReturnedIdSha256; ledger.phase = "created"; productOwned = true; save();
+      if (afterProductCreated) {
+        ledger.phase = "awaiting_owner_counterpart"; save();
+        // Only synthetic identifiers cross the hook; all credentials stay here.
+        await afterProductCreated(Object.freeze({ id: ledger.id, marker: ledger.marker }));
+        ledger.phase = "counterpart_hook_returned"; save();
+      }
+      const description = `Synthetic Claude acceptance ${runId} updated`;
+      const updated = await tool("update_product", { id: ledger.id, description });
+      requireThat(ownProduct(updated, ledger.id) && updated.description === description, "PRODUCT_UPDATE_MISMATCH");
+      const readback = await tool("get_product", { id: ledger.id });
+      requireThat(ownProduct(readback, ledger.id) && readback.description === description, "PRODUCT_UPDATE_READBACK_MISMATCH"); pass(current);
+      current = "product_cleanup"; await cleanupProduct();
     }
-    current = "product_crud";
-    const ledger = { marker: `FRIHET-QA-${runId}`, id: null, phase: "create_pending" }; receipt.productLedger.push(ledger); save();
-    const product = await tool("create_product", { name: ledger.marker, unitPrice: 0, description: `Synthetic Claude acceptance ${runId}; remove after test` });
-    requireThat(safeProductId(product.id), "PRODUCT_ID_INVALID_OR_REFLECTED");
-    ledger.unverifiedReturnedIdSha256 = sha256(product.id); save();
-    requireThat(ownProduct(product), "CREATED_PRODUCT_IDENTITY_MISMATCH");
-    requireThat(ownProduct(await tool("get_product", { id: product.id }), product.id), "PRODUCT_READBACK_MISMATCH");
-    ledger.id = product.id; delete ledger.unverifiedReturnedIdSha256; ledger.phase = "created"; productOwned = true; save();
-    if (afterProductCreated) {
-      ledger.phase = "awaiting_owner_counterpart"; save();
-      // Only synthetic identifiers cross the hook; all credentials stay here.
-      await afterProductCreated(Object.freeze({ id: ledger.id, marker: ledger.marker }));
-      ledger.phase = "counterpart_hook_returned"; save();
-    }
-    const description = `Synthetic Claude acceptance ${runId} updated`;
-    const updated = await tool("update_product", { id: ledger.id, description });
-    requireThat(ownProduct(updated, ledger.id) && updated.description === description, "PRODUCT_UPDATE_MISMATCH");
-    const readback = await tool("get_product", { id: ledger.id });
-    requireThat(ownProduct(readback, ledger.id) && readback.description === description, "PRODUCT_UPDATE_READBACK_MISMATCH"); pass(current);
-    current = "product_cleanup"; await cleanupProduct();
     current = "revoke"; await revoke(primary.grant); pass(current);
     // A spent-code replay revokes its family; isolate it from business probes.
     current = "code_replay"; const codeReplay = await grantNew(); await userinfo(codeReplay.grant);
@@ -473,7 +536,11 @@ export async function runAcceptance(options = {}, {
     expectInvalidGrant(await tokenRequest(negative.grant, { grant_type: "refresh_token", client_id: negative.grant.clientId, refresh_token: oldRefresh, resource: RESOURCE }));
     await deadAccess(negative.grant); await deadRefresh(negative.grant);
     negative.grant.ledger.phase = "replay_invalidated"; negative.grant.ledger.cleanup = "http_invalidated_backend_unverified"; pass(current);
-    receipt.status = "single_identity_protocol_pass";
+    if (options.consultation) {
+      current = "consultation_population";
+      requireThat(receipt.consultation.populatedCompleteLists, "CONSULTATION_DATA_EMPTY_OR_INCOMPLETE"); pass(current);
+    }
+    receipt.status = options.consultation ? "consultation_protocol_pass" : "single_identity_protocol_pass";
   } catch (error) {
     receipt.status = error instanceof PilotFailure && ["TIMEOUT", "NETWORK_UNAVAILABLE"].includes(error.code) ? "inconclusive" : "fail";
     receipt.failure = error instanceof PilotFailure ? error.code : "UNEXPECTED_FAILURE";
@@ -505,6 +572,8 @@ export function parseArguments(args) {
     const argument = args[i];
     if (argument === "--hosted" || argument === "--dry-run") {
       requireThat(options.hosted === undefined, "DUPLICATE_MODE"); options.hosted = argument === "--hosted";
+    } else if (argument === "--consultation") {
+      requireThat(options.consultation === undefined, "DUPLICATE_ACCEPTANCE_MODE"); options.consultation = true;
     } else {
       const name = Object.hasOwn(names, argument) ? names[argument] : undefined;
       requireThat(name && options[name] === undefined && typeof args[i + 1] === "string" && !args[i + 1].startsWith("--"), "ARGUMENT_INVALID");
@@ -524,7 +593,7 @@ if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(f
     const persist = options.output ? privateReceiptWriter(options.output) : () => {};
     const result = await runAcceptance(options, { persist });
     process.stdout.write(`${JSON.stringify({ status: result.status, hostedAcceptanceVerified: false, submissionReady: false, privateReceiptWritten: Boolean(options.output) })}\n`);
-    process.exitCode = ["dry_run", "single_identity_protocol_pass"].includes(result.status) ? 0 : result.status === "inconclusive" ? 2 : 1;
+    process.exitCode = ["dry_run", "single_identity_protocol_pass", "consultation_protocol_pass"].includes(result.status) ? 0 : result.status === "inconclusive" ? 2 : 1;
   } catch (error) {
     process.stderr.write(`${JSON.stringify({ status: "fail", failure: error instanceof PilotFailure ? error.code : "PILOT_SETUP_FAILED" })}\n`); process.exitCode = 1;
   }
