@@ -6,6 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { FrihetApiError } from "../../dist/client.js";
+import { handleToolError } from "../../dist/tools/shared.js";
+import { claudeToolResult } from "../../dist/claude-output-privacy.js";
 import { ORIGIN, RESOURCE, SCOPES, FIREBASE_PROJECT, boundedTransport, parseArguments, privateReceiptWriter, runAcceptance, validateFirebaseInput } from "../claude-hosted-acceptance.mjs";
 
 const NOW = Date.parse("2026-10-19T12:00:00Z");
@@ -13,8 +16,8 @@ const UID = "offline-only-synthetic-qa";
 const hash = value => createHash("sha256").update(value).digest("hex");
 const SHA = "a".repeat(40), UID_HASH = hash(UID);
 const CONTRACT = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url), "utf8"));
-const NOT_FOUND = { isError: true, content: [{ type: "text", text: "Error: Resource not found. / Recurso no encontrado." }] };
-const FORBIDDEN = { isError: true, content: [{ type: "text", text: "Error: Access denied. Reconnect Frihet or use configured credentials with permission for this action. / Acceso denegado. Vuelve a conectar Frihet o usa credenciales con permiso para esta accion." }] };
+const NOT_FOUND = handleToolError(new FrihetApiError(404, "not_found", "PRIVATE_provider_message", "PRIVATE_provider_detail"));
+const FORBIDDEN = handleToolError(new FrihetApiError(403, "forbidden", "PRIVATE_provider_message", "PRIVATE_provider_detail"));
 const FOREIGN_ID = "foreign-synthetic-product", FOREIGN_MARKER = `FRIHET-QA-${"b".repeat(32)}`;
 function fakeToken(overrides = {}) {
   const part = value => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -103,7 +106,10 @@ function fixture(faults = {}) {
     if (target.pathname === "/mcp") {
       const client = principal(options); if (!client?.active) return response(401, { error: "invalid_token" });
       const request = JSON.parse(options.body), { id, params } = request;
-      const done = (result, headers) => response(200, { jsonrpc: "2.0", id, result }, headers);
+      // Exercise the actual runtime privacy boundary, including errors: the
+      // shared mapper's human-readable denial text never reaches Claude.
+      const done = (result, headers) => response(200, { jsonrpc: "2.0", id,
+        result: request.method === "tools/call" ? claudeToolResult(result) : result }, headers);
       if (request.method === "initialize") return done({ protocolVersion: "2025-03-26", capabilities: {}, serverInfo: { name: "offline-server", version: "1" } }, { "mcp-session-id": `v1.${"s".repeat(24)}.${"a".repeat(64)}` });
       assert.ok(options.headers["Mcp-Session-Id"]); assert.equal(options.headers["MCP-Protocol-Version"], "2025-03-26");
       if (request.method === "notifications/initialized") return response(202);
@@ -115,6 +121,7 @@ function fixture(faults = {}) {
       assert.equal(request.method, "tools/call");
       const { name, arguments: input } = params;
       if (name === "get_product" && input.id === FOREIGN_ID) {
+        if (faults.foreignResult) return done(faults.foreignResult);
         if (faults.foreignAccessible) return done({ structuredContent: { id: FOREIGN_ID, name: FOREIGN_MARKER, unitPrice: 0 }, content: [] });
         if (faults.foreignGenericError) return done({ isError: true, content: [{ type: "text", text: "Error: offline timeout" }] });
         return done(faults.foreignForbidden ? FORBIDDEN : NOT_FOUND);
@@ -128,7 +135,7 @@ function fixture(faults = {}) {
         return done({ content: [], structuredContent: { ...products.get("offline-product-1"), ...(faults.badCreatedProduct ? { name: "unrelated-product" } : {}) } });
       }
       assert.equal(input.id, "offline-product-1", "Only recorded newly-created synthetic product may be touched");
-      if (name === "get_product") return done(products.has(input.id) ? { structuredContent: structuredClone(products.get(input.id)), content: [] } : NOT_FOUND);
+      if (name === "get_product") return done(products.has(input.id) ? { structuredContent: structuredClone(products.get(input.id)), content: [] } : faults.cleanupReadbackResult ?? NOT_FOUND);
       if (name === "update_product") {
         assert.deepEqual(Object.keys(input).sort(), ["description", "id"]);
         Object.assign(products.get(input.id), { description: input.description });
@@ -419,7 +426,7 @@ test("a lost revoke response checkpoints uncertainty and never sends a second re
   assert.equal(result.grants[0].cleanup, "reconciliation_required"); assert.notEqual(result.checks.revoke, "pass");
 });
 
-test("foreign synthetic exact-ID denial accepts only sanitized not-found or forbidden responses", async () => {
+test("foreign synthetic exact-ID denial accepts only real Claude-profile not-found or forbidden responses", async () => {
   for (const faults of [{}, { foreignForbidden: true }, { foreignAccessible: true }, { foreignGenericError: true }]) {
     const f = fixture(faults), result = await f.run({ foreignProductId: FOREIGN_ID, foreignMarker: FOREIGN_MARKER });
     const rejected = faults.foreignAccessible || faults.foreignGenericError;
@@ -428,6 +435,47 @@ test("foreign synthetic exact-ID denial accepts only sanitized not-found or forb
     if (!rejected) assert.deepEqual(result.foreignProduct, { idSha256: hash(FOREIGN_ID), markerSha256: hash(FOREIGN_MARKER) });
     assert.equal(result.hostedAcceptanceVerified, false);
   }
+});
+
+test("denial and deletion proof reject non-denial errors and ambiguous metadata through the real privacy boundary", async () => {
+  const rejected = [
+    ...[[401, "unauthorized"], [429, "rate_limited"], [500, "internal_error"],
+      [503, "network_error"], [408, "request_timeout"], [504, "response_timeout"],
+      [404, "request_timeout"], [403, "network_error"], [404, "invalid_response_after_success"]]
+      .map(([status, code]) => handleToolError(new FrihetApiError(status, code, "PRIVATE_provider_message"))),
+    handleToolError(new Error("PRIVATE_unexpected_error")),
+    { isError: true, content: [{ type: "text", text: "Error: Resource not found. / Recurso no encontrado." }] },
+    ...[false, "true", 1, { raw: "PRIVATE_meta" }].map(value => ({ ...NOT_FOUND, _meta: { "io.frihet/resourceNotFound": value } })),
+    { ...NOT_FOUND, _meta: { "io.frihet/resourceNotFound": true, "io.frihet/accessDenied": true } },
+    ...["authenticationRequired", "operationOutcomeUnknown", "transportOutcomeUnknown", "operationMayHaveCompleted", "retryable"]
+      .map(flag => ({ ...NOT_FOUND, _meta: { "io.frihet/resourceNotFound": true, [`io.frihet/${flag}`]: true } })),
+    { ...NOT_FOUND, structuredContent: { id: FOREIGN_ID, taxId: "PRIVATE_record" } },
+    { ...NOT_FOUND, structuredContent: null },
+    { ...NOT_FOUND, isError: false },
+  ];
+  for (const denial of rejected) {
+    const foreign = fixture({ foreignResult: denial });
+    const result = await foreign.run({ foreignProductId: FOREIGN_ID, foreignMarker: FOREIGN_MARKER });
+    assert.equal(result.status, "fail", JSON.stringify(denial));
+    assert.equal(result.checks.foreign_product_exact_id_denied, "fail");
+    assert.equal(result.failure, "TOOL_RESULT_INVALID_OR_UNCERTAIN");
+    assert.equal(foreign.products.size, 0);
+    const cleanup = fixture({ cleanupReadbackResult: denial });
+    const cleaned = await cleanup.run();
+    assert.equal(cleaned.status, "fail", JSON.stringify(denial));
+    assert.notEqual(cleaned.checks.product_cleanup, "pass");
+    assert.equal(cleaned.productLedger[0].phase, "delete_readback_pending");
+    assert.equal(cleanup.calls.filter(call => call.options.body?.includes('"delete_product"')).length, 1);
+    assert.equal(JSON.stringify([...foreign.receipts, ...cleanup.receipts]).includes("PRIVATE_"), false);
+  }
+});
+
+test("forbidden is foreign denial evidence but never proves deletion of an owned product", async () => {
+  const f = fixture({ cleanupReadbackResult: FORBIDDEN }), result = await f.run();
+  assert.equal(result.status, "fail");
+  assert.notEqual(result.checks.product_cleanup, "pass");
+  assert.equal(result.productLedger[0].phase, "delete_readback_pending");
+  assert.equal(f.calls.filter(call => call.options.body?.includes('"delete_product"')).length, 1);
 });
 
 test("owner in-memory counterpart hook receives only own ID/marker while record exists, then cleanup runs", async () => {

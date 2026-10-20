@@ -23,6 +23,25 @@ function rendered(error: unknown): string {
 }
 
 describe("403 remediation rendering", () => {
+  test("only definitive API 404/403 responses carry non-PII denial flags", () => {
+    for (const [status, flag] of [[404, "resourceNotFound"], [403, "accessDenied"]] as const) {
+      const result = handleToolError(new FrihetApiError(status, "PRIVATE_code", "PRIVATE_message", "PRIVATE_detail"));
+      assert.deepEqual(result._meta, { [`io.frihet/${flag}`]: true });
+      assert.equal(result.structuredContent, undefined);
+    }
+    for (const error of [
+      ...[400, 401, 429, 500, 503].map(status => new FrihetApiError(status, "error", "PRIVATE_message")),
+      ...[403, 404].flatMap(status => ["request_timeout", "network_error", "response_timeout", "invalid_response_after_success"]
+        .map(code => new FrihetApiError(status, code, "PRIVATE_message"))),
+      new Error("PRIVATE_unexpected"),
+      { statusCode: 404, message: "not_found" },
+    ]) {
+      const result = handleToolError(error);
+      assert.equal(result._meta?.["io.frihet/resourceNotFound"], undefined);
+      assert.equal(result._meta?.["io.frihet/accessDenied"], undefined);
+    }
+  });
+
   test("prefers actionable detail and includes it exactly once", () => {
     const text = rendered(new FrihetApiError(403, "Forbidden", "Access forbidden", SCOPE_REMEDY));
     assert.match(text, new RegExp(GENERIC_403.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

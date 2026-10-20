@@ -90,6 +90,7 @@ export function claudeOutputSchema(schema: unknown): z.ZodType {
 const SAFE_META_FLAGS = [
   "io.frihet/authenticationRequired", "io.frihet/operationOutcomeUnknown",
   "io.frihet/transportOutcomeUnknown", "io.frihet/retryable", "io.frihet/operationMayHaveCompleted",
+  "io.frihet/resourceNotFound", "io.frihet/accessDenied",
 ] as const;
 
 /** Never forward opaque content blocks or arbitrary response metadata. */
