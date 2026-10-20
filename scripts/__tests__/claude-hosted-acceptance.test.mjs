@@ -30,7 +30,7 @@ function fixture(faults = {}) {
   const publicData = {
     "/health": { status: "ok", accessProfile: "claude", releaseSha: faults.releaseSha ?? SHA },
     "/.well-known/oauth-authorization-server": { issuer: ORIGIN, authorization_endpoint: `${ORIGIN}/authorize`, token_endpoint: `${ORIGIN}/token`, registration_endpoint: `${ORIGIN}/register`, revocation_endpoint: `${ORIGIN}/token`, scopes_supported: SCOPES, code_challenge_methods_supported: ["S256"] },
-    "/.well-known/oauth-protected-resource": { resource: ORIGIN, authorization_servers: [ORIGIN], scopes_supported: SCOPES },
+    "/.well-known/oauth-protected-resource": { resource: RESOURCE, authorization_servers: [ORIGIN], scopes_supported: SCOPES },
     "/.well-known/oauth-protected-resource/mcp": { resource: RESOURCE, authorization_servers: [ORIGIN], scopes_supported: SCOPES },
     "/.well-known/openid-configuration": { issuer: ORIGIN, userinfo_endpoint: `${ORIGIN}/userinfo` },
   };
@@ -181,6 +181,25 @@ test("deployment guard or public release mismatch stops before any credential re
     assert.ok(["fail", "inconclusive"].includes(result.status)); assert.equal(f.reads(), 0);
     assert.equal(f.calls.some(call => call.path === "/register"), false);
     assert.equal(JSON.stringify(result).includes("offline-secret-password"), false);
+  }
+});
+
+test("root protected-resource metadata rejects the legacy origin, foreign resource and missing resource before credentials or DCR", async () => {
+  for (const resource of [ORIGIN, "https://foreign.invalid/mcp", undefined]) {
+    const f = fixture(), base = f.dependencies.send;
+    const result = await f.run({}, { send: async (path, options = {}) => {
+      const response = await base(path, options);
+      if (path === "/.well-known/oauth-protected-resource") {
+        if (resource === undefined) delete response.data.resource;
+        else response.data.resource = resource;
+      }
+      return response;
+    } });
+    assert.equal(result.status, "fail"); assert.equal(result.failure, "RESOURCE_METADATA_MISMATCH");
+    assert.equal(result.failedAt, "public_release"); assert.equal(f.reads(), 0);
+    assert.equal(f.calls.some(call => call.path === "/register"), false);
+    assert.ok(f.calls.every(call => call.method === "GET"));
+    assert.deepEqual(result.grants, []); assert.deepEqual(result.productLedger, []);
   }
 });
 

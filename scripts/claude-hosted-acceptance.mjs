@@ -206,7 +206,7 @@ async function publicPreflight(send, expectedSha) {
     && authorization.token_endpoint === `${ORIGIN}/token` && authorization.registration_endpoint === `${ORIGIN}/register`
     && authorization.revocation_endpoint === `${ORIGIN}/token` && sameScopes(authorization.scopes_supported)
     && isDeepStrictEqual(authorization.code_challenge_methods_supported, ["S256"]), "AUTH_METADATA_MISMATCH");
-  requireThat(root?.resource === ORIGIN && mcp?.resource === RESOURCE
+  requireThat(root?.resource === RESOURCE && mcp?.resource === RESOURCE
     && isDeepStrictEqual(root.authorization_servers, [ORIGIN]) && isDeepStrictEqual(mcp.authorization_servers, [ORIGIN])
     && sameScopes(root.scopes_supported) && sameScopes(mcp.scopes_supported), "RESOURCE_METADATA_MISMATCH");
   requireThat(oidc?.issuer === ORIGIN && oidc.userinfo_endpoint === `${ORIGIN}/userinfo`, "OIDC_METADATA_MISMATCH");
