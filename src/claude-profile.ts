@@ -233,6 +233,12 @@ export function applyClaudeCandidateProfile(server: any): void {
         : config.description ?? "";
     return registerTool(name, {
       ...config,
+      // Claude Directory requires every write to prompt, including creates and
+      // invitations. Preserve all other hints on the shared handlers.
+      annotations: {
+        ...config.annotations,
+        ...(config.annotations?.readOnlyHint !== true ? { destructiveHint: true } : {}),
+      },
       description: `${description} Claude omits sensitive output fields under the shared redaction policy.`,
       ...(config.outputSchema ? { outputSchema: claudeOutputSchema(config.outputSchema) } : {}),
     }, async (...args: any[]) => {

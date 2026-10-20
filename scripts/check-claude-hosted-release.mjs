@@ -74,6 +74,9 @@ export function assertClaudeOperationalSurface(candidate, ceiling) {
     for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {
       assert.equal(typeof tool.annotations?.[hint], "boolean", `${tool.name}.${hint}`);
     }
+    if (!tool.annotations.readOnlyHint) {
+      assert.equal(tool.annotations.destructiveHint, true, `${tool.name} must require Claude write confirmation`);
+    }
     assert.ok(!(tool.name in candidate.exclusions.tools), `${tool.name} is excluded`);
     const capability = tool._meta?.["io.frihet/capability"];
     assert.ok(capability, `${tool.name} needs capability metadata`);

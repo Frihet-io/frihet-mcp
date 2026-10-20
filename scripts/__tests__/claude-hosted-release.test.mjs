@@ -91,6 +91,7 @@ test("operational source guard preserves broad product scope without expanding t
     c => { c.tools.grouped.pop(); },
     c => { c.tools.grouped[0].title = ""; },
     c => { c.tools.grouped[0].annotations.readOnlyHint = undefined; },
+    c => { c.tools.grouped.find(({ name }) => name === "invite_team_member").annotations.destructiveHint = false; },
     c => { c.tools.grouped[0]._meta["io.frihet/capability"].callability = "unavailable"; },
     c => { c.tools.grouped[0]._meta["io.frihet/capability"].externalSideEffects = ["money_movement"]; },
     c => { c.tools.full.find(({ name }) => name === "create_invoice").annotations.readOnlyHint = true; },

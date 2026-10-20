@@ -79,6 +79,12 @@ and ambiguous reconciliation. Mock schema checks and unit tests are not model-ru
 results or hosted acceptance. Real MCP servers must remain disabled during those
 model scenarios; use the approved publisher account for model runs.
 
+All 65 write operations carry `destructiveHint: true` in Claude, including
+creation and invitation tools, as required by the Directory review criteria.
+The shared general/OpenAI annotations and every execution handler stay unchanged.
+Claude's permission prompt is separate from the conversation: the skills must
+still avoid asking the user to repeat a complete, specific instruction.
+
 ## Isolation and rollback
 
 This source change modifies Claude's registration profile, instructions, plugin,

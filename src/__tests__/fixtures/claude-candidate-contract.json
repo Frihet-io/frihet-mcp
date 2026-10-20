@@ -364,7 +364,7 @@
         "annotations": {
           "title": "Apply Late Fee",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -459,7 +459,7 @@
         "annotations": {
           "title": "Clock In (Attendance)",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -885,7 +885,7 @@
         "annotations": {
           "title": "Create Client Contact",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -955,7 +955,7 @@
         "annotations": {
           "title": "Create Client Note",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -1193,7 +1193,7 @@
         "annotations": {
           "title": "Create Deposit",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -2077,7 +2077,7 @@
         "annotations": {
           "title": "Create Recurring Invoice",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -2176,7 +2176,7 @@
         "annotations": {
           "title": "Create Time Entry",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -2309,7 +2309,7 @@
         "annotations": {
           "title": "Create Vendor",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -2454,7 +2454,7 @@
         "annotations": {
           "title": "Create Webhook",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": true
         },
@@ -3332,7 +3332,7 @@
         "annotations": {
           "title": "Create Bank Categorization Rule",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -4674,7 +4674,7 @@
         "annotations": {
           "title": "Generate Portal Self-Onboard Link",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -4830,7 +4830,7 @@
         "annotations": {
           "title": "Create Gestoria Template",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -7973,7 +7973,7 @@
         "annotations": {
           "title": "Invite Team Member",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": true
         },
@@ -8625,7 +8625,7 @@
         "annotations": {
           "title": "Create Leave Request",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -15683,7 +15683,7 @@
         "annotations": {
           "title": "Test Webhook",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": true
         },
@@ -17933,7 +17933,7 @@
         "annotations": {
           "title": "Apply Late Fee",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -18028,7 +18028,7 @@
         "annotations": {
           "title": "Clock In (Attendance)",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -18454,7 +18454,7 @@
         "annotations": {
           "title": "Create Client Contact",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -18524,7 +18524,7 @@
         "annotations": {
           "title": "Create Client Note",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -18762,7 +18762,7 @@
         "annotations": {
           "title": "Create Deposit",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -19646,7 +19646,7 @@
         "annotations": {
           "title": "Create Recurring Invoice",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -19745,7 +19745,7 @@
         "annotations": {
           "title": "Create Time Entry",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -19878,7 +19878,7 @@
         "annotations": {
           "title": "Create Vendor",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -20023,7 +20023,7 @@
         "annotations": {
           "title": "Create Webhook",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": true
         },
@@ -20946,7 +20946,7 @@
         "annotations": {
           "title": "Create Bank Categorization Rule",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -22288,7 +22288,7 @@
         "annotations": {
           "title": "Generate Portal Self-Onboard Link",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -22444,7 +22444,7 @@
         "annotations": {
           "title": "Create Gestoria Template",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -25587,7 +25587,7 @@
         "annotations": {
           "title": "Invite Team Member",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": true
         },
@@ -26239,7 +26239,7 @@
         "annotations": {
           "title": "Create Leave Request",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": false
         },
@@ -33399,7 +33399,7 @@
         "annotations": {
           "title": "Test Webhook",
           "readOnlyHint": false,
-          "destructiveHint": false,
+          "destructiveHint": true,
           "idempotentHint": false,
           "openWorldHint": true
         },

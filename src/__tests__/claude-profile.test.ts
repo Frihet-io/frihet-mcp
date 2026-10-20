@@ -122,10 +122,14 @@ for (const local of [true, false]) for (const grouped of [false, true]) {
         for (const annotation of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"] as const) {
           assert.equal(typeof tool.annotations?.[annotation], "boolean", `${tool.name}.${annotation}`);
         }
+        if (tool.annotations?.readOnlyHint === false) {
+          assert.equal(tool.annotations.destructiveHint, true, `${tool.name} must prompt before writing`);
+        }
         assert.deepEqual(tool.annotations, {
           ...originalAnnotations.get(tool.name),
+          ...(originalAnnotations.get(tool.name)?.readOnlyHint !== true ? { destructiveHint: true } : {}),
           title: tool.title,
-        }, `${tool.name} must duplicate its title and preserve every existing hint`);
+        }, `${tool.name} must preserve every hint except Claude's required write confirmation`);
         const capability = tool._meta?.[CAPABILITY_META_KEY] as { callability: string; externalSideEffects: string[] };
         assert.ok(capability);
         assert.ok(!["unavailable", "deferred"].includes(capability.callability), tool.name);
