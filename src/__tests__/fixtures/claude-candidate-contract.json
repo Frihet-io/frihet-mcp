@@ -203,6 +203,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Anomalies",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -284,6 +285,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Apply Deposit",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -356,6 +358,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Apply Late Fee",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -450,6 +453,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Clock In (Attendance)",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -536,6 +540,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Clock Out (Attendance)",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -631,6 +636,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Categorize Transaction",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -766,6 +772,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Client",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -872,6 +879,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Client Contact",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -941,6 +949,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Client Note",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -1050,6 +1059,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Credit Note",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -1177,6 +1187,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Deposit",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -1295,6 +1306,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Expense",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -1565,6 +1577,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -1661,6 +1674,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Product",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -1900,6 +1914,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Quote",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -2056,6 +2071,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -2154,6 +2170,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Time Entry",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -2286,6 +2303,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Vendor",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -2430,6 +2448,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Create Webhook",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -2495,6 +2514,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Client Contact",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -2558,6 +2578,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Client Note",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -2612,6 +2633,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Deposit",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -2687,6 +2709,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -2744,6 +2767,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Product",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -2819,6 +2843,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Quote",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -2880,6 +2905,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -2939,6 +2965,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Time Entry",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -2993,6 +3020,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Vendor",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -3047,6 +3075,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Webhook",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -3180,6 +3209,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Duplicate Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -3296,6 +3326,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Bank Categorization Rule",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -3467,6 +3498,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Bank Categorization Rules",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -3515,6 +3547,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Approve GL Entry",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -3559,6 +3592,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get GL Entry Audit Log",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -3609,6 +3643,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Reject GL Entry",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -3813,6 +3848,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 130 Summary (IRPF Estimated Payment)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -4017,6 +4053,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 303 Summary (IVA Quarterly)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -4221,6 +4258,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 347 Summary (Operations >€3,005 Annual Recap)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -4425,6 +4463,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 390 Summary (IVA Annual Recap)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -4473,6 +4512,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Add Custom Portal Domain",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -4519,6 +4559,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Remove Custom Portal Domain",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -4565,6 +4606,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Verify Custom Portal Domain",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -4626,6 +4668,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Generate Portal Self-Onboard Link",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -4677,6 +4720,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Lookup Tax ID via VIES (EU VAT Validation)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -4780,6 +4824,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Gestoria Template",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -4852,6 +4897,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Bank Account",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -5178,6 +5224,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Business Context",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -5268,6 +5315,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Client",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -5356,6 +5404,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Deposit",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -5438,6 +5487,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Expense",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -5560,6 +5610,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Invoice",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -5656,6 +5707,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Kitchen Ticket",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -5860,6 +5912,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 130 Summary (IRPF Estimated Payment)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -6064,6 +6117,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 303 Summary (IVA Quarterly)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -6268,6 +6322,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 347 Summary (Operations >€3,005 Annual Recap)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -6472,6 +6527,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 390 Summary (IVA Annual Recap)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -6663,6 +6719,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Monthly Summary",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -6736,6 +6793,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Product",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -6777,6 +6835,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Quarterly Taxes",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -6902,6 +6961,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Quote",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -7000,6 +7060,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Recurring Invoice",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -7106,6 +7167,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Reservation",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -7216,6 +7278,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get POS Sale",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -7291,6 +7354,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Time Entry",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -7416,6 +7480,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Time Summary",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -7503,6 +7568,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Vendor",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -7608,6 +7674,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Get Webhook",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -7736,6 +7803,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Global Search",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -7899,6 +7967,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Invite Team Member",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -7985,6 +8054,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Kitchen Flow Summary",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -8082,6 +8152,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Approve Leave Request",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -8175,6 +8246,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Cancel Leave Request",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -8326,6 +8398,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Leave Requests",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -8425,6 +8498,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Reject Leave Request",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -8545,6 +8619,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Leave Request",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -8649,6 +8724,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Bank Accounts",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -8784,6 +8860,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Client Activities",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -8895,6 +8972,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Client Contacts",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -8994,6 +9072,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Client Notes",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -9136,6 +9215,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Clients",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -9275,6 +9355,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Deposits",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -9408,6 +9489,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Expenses",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -9594,6 +9676,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Invoices",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -9688,6 +9771,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Kitchen Stations",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -9836,6 +9920,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Kitchen Tickets",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -9954,6 +10039,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Menu Items",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -10070,6 +10156,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Products",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -10209,6 +10296,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Properties",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -10398,6 +10486,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Quotes",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -10536,6 +10625,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Recurring Invoices",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -10697,6 +10787,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Reservations",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -10866,6 +10957,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List POS Sales",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -11065,6 +11157,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Team Members",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -11177,6 +11270,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List POS Terminals",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -11308,6 +11402,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Time Entries",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -11455,6 +11550,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Bank Transactions",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -11582,6 +11678,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Vendors",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -11702,6 +11799,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Webhooks",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -11821,6 +11919,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Log Client Activity",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -11889,6 +11988,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Mark Invoice Paid",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -12001,6 +12101,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Match Transaction to Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -12215,6 +12316,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Overtime Report",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -12277,6 +12379,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Pause Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -12456,6 +12559,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Payroll Readiness Checklist",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -12642,6 +12746,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Payroll Export-Ready Data",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -12829,6 +12934,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Period Close Status",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -14380,6 +14486,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Permissions Matrix",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -14950,6 +15057,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "My Permissions",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -15024,6 +15132,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Record Deposit Refund",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -15091,6 +15200,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Remove Team Member",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -15153,6 +15263,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Resume Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -15226,6 +15337,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Run Recurring Invoice Now",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -15411,6 +15523,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Search Invoices",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -15482,6 +15595,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Send Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -15563,6 +15677,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Test Webhook",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -15706,6 +15821,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Client",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -15836,6 +15952,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Deposit",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -15946,6 +16063,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Expense",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -16212,6 +16330,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -16327,6 +16446,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Kitchen Ticket",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -16423,6 +16543,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Product",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -16660,6 +16781,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Quote",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -16806,6 +16928,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -16879,6 +17002,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Team Member Role",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -16975,6 +17099,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Time Entry",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -17113,6 +17238,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Vendor",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -17260,6 +17386,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Update Webhook",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -17378,6 +17505,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Re-submit VeriFactu Submission",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -17491,6 +17619,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get VeriFactu Submission Status",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -17643,6 +17772,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Anomalies",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -17724,6 +17854,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Apply Deposit",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -17796,6 +17927,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Apply Late Fee",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -17890,6 +18022,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Clock In (Attendance)",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -17976,6 +18109,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Clock Out (Attendance)",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -18071,6 +18205,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Categorize Transaction",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -18206,6 +18341,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Client",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -18312,6 +18448,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Client Contact",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -18381,6 +18518,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Client Note",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -18490,6 +18628,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Credit Note",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -18617,6 +18756,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Deposit",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -18735,6 +18875,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Expense",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -19005,6 +19146,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -19101,6 +19243,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Product",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -19340,6 +19483,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Quote",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -19496,6 +19640,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -19594,6 +19739,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Time Entry",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -19726,6 +19872,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Vendor",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -19870,6 +20017,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Create Webhook",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -19935,6 +20083,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Client Contact",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -19998,6 +20147,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Client Note",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -20052,6 +20202,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Deposit",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -20127,6 +20278,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -20184,6 +20336,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Product",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -20259,6 +20412,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Quote",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -20320,6 +20474,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -20379,6 +20534,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Time Entry",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -20433,6 +20589,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Vendor",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -20487,6 +20644,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Delete Webhook",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -20533,6 +20691,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Describe tool",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -20664,6 +20823,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Duplicate Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -20780,6 +20940,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Bank Categorization Rule",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -20951,6 +21112,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Bank Categorization Rules",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -20999,6 +21161,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Approve GL Entry",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -21043,6 +21206,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get GL Entry Audit Log",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -21093,6 +21257,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Reject GL Entry",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -21297,6 +21462,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 130 Summary (IRPF Estimated Payment)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -21501,6 +21667,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 303 Summary (IVA Quarterly)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -21705,6 +21872,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 347 Summary (Operations >€3,005 Annual Recap)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -21909,6 +22077,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 390 Summary (IVA Annual Recap)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -21957,6 +22126,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Add Custom Portal Domain",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -22003,6 +22173,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Remove Custom Portal Domain",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -22049,6 +22220,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Verify Custom Portal Domain",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -22110,6 +22282,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Generate Portal Self-Onboard Link",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -22161,6 +22334,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Lookup Tax ID via VIES (EU VAT Validation)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -22264,6 +22438,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Gestoria Template",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -22336,6 +22511,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Bank Account",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -22662,6 +22838,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Business Context",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -22752,6 +22929,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Client",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -22840,6 +23018,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Deposit",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -22922,6 +23101,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Expense",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -23044,6 +23224,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Invoice",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -23140,6 +23321,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Kitchen Ticket",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -23344,6 +23526,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 130 Summary (IRPF Estimated Payment)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -23548,6 +23731,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 303 Summary (IVA Quarterly)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -23752,6 +23936,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 347 Summary (Operations >€3,005 Annual Recap)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -23956,6 +24141,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Modelo 390 Summary (IVA Annual Recap)",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24147,6 +24333,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Monthly Summary",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24220,6 +24407,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Product",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24261,6 +24449,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Quarterly Taxes",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24386,6 +24575,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Quote",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24484,6 +24674,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Recurring Invoice",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24590,6 +24781,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Reservation",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24700,6 +24892,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get POS Sale",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24775,6 +24968,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Time Entry",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24900,6 +25094,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Time Summary",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -24987,6 +25182,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get Vendor",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -25092,6 +25288,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Get Webhook",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -25220,6 +25417,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Global Search",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -25383,6 +25581,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Invite Team Member",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -25469,6 +25668,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Kitchen Flow Summary",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -25566,6 +25766,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Approve Leave Request",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -25659,6 +25860,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Cancel Leave Request",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -25810,6 +26012,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Leave Requests",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -25909,6 +26112,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Reject Leave Request",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -26029,6 +26233,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Create Leave Request",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -26133,6 +26338,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Bank Accounts",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -26268,6 +26474,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Client Activities",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -26379,6 +26586,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Client Contacts",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -26478,6 +26686,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Client Notes",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -26620,6 +26829,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Clients",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -26759,6 +26969,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Deposits",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -26892,6 +27103,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Expenses",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -27078,6 +27290,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Invoices",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -27172,6 +27385,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Kitchen Stations",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -27320,6 +27534,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Kitchen Tickets",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -27438,6 +27653,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Menu Items",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -27554,6 +27770,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Products",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -27693,6 +27910,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Properties",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -27882,6 +28100,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Quotes",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -28020,6 +28239,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Recurring Invoices",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -28181,6 +28401,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Reservations",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -28350,6 +28571,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List POS Sales",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -28549,6 +28771,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Team Members",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -28661,6 +28884,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List POS Terminals",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -28792,6 +29016,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Time Entries",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -28828,6 +29053,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "List tool groups",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -28975,6 +29201,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Bank Transactions",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -29102,6 +29329,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Vendors",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -29222,6 +29450,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "List Webhooks",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -29341,6 +29570,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Log Client Activity",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -29409,6 +29639,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Mark Invoice Paid",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -29521,6 +29752,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Match Transaction to Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -29735,6 +29967,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Overtime Report",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -29797,6 +30030,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Pause Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -29976,6 +30210,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Payroll Readiness Checklist",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -30162,6 +30397,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Payroll Export-Ready Data",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -30349,6 +30585,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Period Close Status",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -31900,6 +32137,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Permissions Matrix",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -32470,6 +32708,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "My Permissions",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -32544,6 +32783,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Record Deposit Refund",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -32611,6 +32851,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Remove Team Member",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -32673,6 +32914,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Resume Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -32746,6 +32988,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Run Recurring Invoice Now",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -32931,6 +33174,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Search Invoices",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -32995,6 +33239,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Search tools",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
@@ -33066,6 +33311,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Send Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -33147,6 +33393,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Test Webhook",
           "readOnlyHint": false,
           "destructiveHint": false,
           "idempotentHint": false,
@@ -33290,6 +33537,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Client",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -33420,6 +33668,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Deposit",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -33530,6 +33779,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Expense",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -33796,6 +34046,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -33911,6 +34162,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Kitchen Ticket",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -34007,6 +34259,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Product",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -34244,6 +34497,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Quote",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -34390,6 +34644,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Recurring Invoice",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -34463,6 +34718,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Team Member Role",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -34559,6 +34815,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Time Entry",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -34697,6 +34954,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Update Vendor",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -34844,6 +35102,7 @@
           "additionalProperties": false
         },
         "annotations": {
+          "title": "Update Webhook",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": true,
@@ -34962,6 +35221,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Re-submit VeriFactu Submission",
           "readOnlyHint": false,
           "destructiveHint": true,
           "idempotentHint": false,
@@ -35075,6 +35335,7 @@
           "additionalProperties": {}
         },
         "annotations": {
+          "title": "Get VeriFactu Submission Status",
           "readOnlyHint": true,
           "destructiveHint": false,
           "idempotentHint": true,
