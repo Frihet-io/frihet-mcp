@@ -140,6 +140,10 @@ for (const local of [true, false]) for (const grouped of [false, true]) {
           const detail = described.structuredContent as Record<string, unknown>;
           assert.equal(detail.name, name);
           assert.equal(typeof detail.description, "string");
+          if (name === "list_clients" || name === "list_vendors") {
+            assert.match(String(detail.description), /tax identifiers are omitted/);
+            assert.doesNotMatch(String(detail.description), /Returns contact info, tax IDs|Devuelve informacion de contacto, NIF\/CIF/);
+          }
         }
         for (const name of [...excluded, ...deniedAliases, "future_unknown_tool"]) {
           assert.equal((await client.callTool({ name: "describe_tool", arguments: { name } })).isError, true);

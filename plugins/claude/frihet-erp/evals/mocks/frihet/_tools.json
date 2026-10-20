@@ -48,7 +48,7 @@
     {
       "name": "list_clients",
       "title": "List Clients",
-      "description": "[crm] List all clients/customers with optional pagination. — full description and input fields via describe_tool('list_clients'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+      "description": "[crm] List clients/customers with optional pagination and search. — full description and input fields via describe_tool('list_clients'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -856,7 +856,7 @@
     {
       "name": "list_vendors",
       "title": "List Vendors",
-      "description": "[expenses] List all vendors/suppliers with optional pagination and search. — full description and input fields via describe_tool('list_vendors'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+      "description": "[expenses] List vendors/suppliers with optional pagination and search. — full description and input fields via describe_tool('list_vendors'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
       "inputSchema": {
         "type": "object",
         "properties": {

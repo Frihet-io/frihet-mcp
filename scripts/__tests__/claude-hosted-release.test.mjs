@@ -49,12 +49,6 @@ const SERVED = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/cla
 
 test("consultation source guard requires exact served reads while preserving the broader immutable credential ceiling", () => {
   const candidate = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url), "utf8"));
-  const names = Object.keys(SERVED.tools);
-  candidate.tools.full = candidate.tools.full.filter(item => names.includes(item.name));
-  candidate.tools.grouped = candidate.tools.grouped.filter(item => names.includes(item.name));
-  candidate.prompts = []; candidate.promptContent = [];
-  for (const kind of ["local", "remote"]) candidate.resources[kind] = candidate.resources[kind].filter(item => item.uri === "frihet://config/currencies");
-  candidate.catalogue.canonicalOperations = 6; candidate.catalogue.aliases = {}; candidate.groups.totalTools = 6;
   assert.doesNotThrow(() => assertClaudeConsultationSurface(candidate, SERVED));
   assert.equal(digest(CONTRACT_ROUTES.join("\n")), "bcf2185915523c60468afc380d1e2456a5c0da5cb2ca4b4820e74886b06b928f");
   assert.ok(CONTRACT_ROUTES.length > SERVED.routes.length);

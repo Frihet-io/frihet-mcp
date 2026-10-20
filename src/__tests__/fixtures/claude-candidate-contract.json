@@ -195,7 +195,7 @@
       {
         "name": "list_clients",
         "title": "List Clients",
-        "description": "List all clients/customers with optional pagination. Returns contact info, tax IDs, and addresses. / Lista todos los clientes con paginacion opcional. Devuelve informacion de contacto, NIF/CIF y direcciones. Claude omits sensitive output fields under the shared redaction policy.",
+        "description": "List clients/customers with optional pagination and search. Returns available contact information and addresses; tax identifiers are omitted. / Lista clientes con paginacion y busqueda opcionales. Devuelve informacion de contacto y direcciones disponibles; omite identificadores fiscales. Claude omits sensitive output fields under the shared redaction policy.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -966,7 +966,7 @@
       {
         "name": "list_vendors",
         "title": "List Vendors",
-        "description": "List all vendors/suppliers with optional pagination and search. Returns contact info, tax IDs, and addresses. / Lista todos los proveedores con paginacion y busqueda opcional. Devuelve informacion de contacto, NIF/CIF y direcciones. Claude omits sensitive output fields under the shared redaction policy.",
+        "description": "List vendors/suppliers with optional pagination and search. Returns available contact information and addresses; tax identifiers are omitted. / Lista proveedores con paginacion y busqueda opcionales. Devuelve informacion de contacto y direcciones disponibles; omite identificadores fiscales. Claude omits sensitive output fields under the shared redaction policy.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -1141,7 +1141,7 @@
       {
         "name": "list_clients",
         "title": "List Clients",
-        "description": "[crm] List all clients/customers with optional pagination. — full description and input fields via describe_tool('list_clients'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+        "description": "[crm] List clients/customers with optional pagination and search. — full description and input fields via describe_tool('list_clients'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -1949,7 +1949,7 @@
       {
         "name": "list_vendors",
         "title": "List Vendors",
-        "description": "[expenses] List all vendors/suppliers with optional pagination and search. — full description and input fields via describe_tool('list_vendors'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+        "description": "[expenses] List vendors/suppliers with optional pagination and search. — full description and input fields via describe_tool('list_vendors'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
         "inputSchema": {
           "type": "object",
           "properties": {

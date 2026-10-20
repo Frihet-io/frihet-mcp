@@ -226,9 +226,14 @@ export function applyClaudeCandidateProfile(server: any): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server.registerTool = (name: string, config: any, handler: any) => {
     if (!CLAUDE_CANDIDATE_TOOLS.has(name)) return undefined;
+    const description = name === "list_clients"
+      ? "List clients/customers with optional pagination and search. Returns available contact information and addresses; tax identifiers are omitted. / Lista clientes con paginacion y busqueda opcionales. Devuelve informacion de contacto y direcciones disponibles; omite identificadores fiscales."
+      : name === "list_vendors"
+        ? "List vendors/suppliers with optional pagination and search. Returns available contact information and addresses; tax identifiers are omitted. / Lista proveedores con paginacion y busqueda opcionales. Devuelve informacion de contacto y direcciones disponibles; omite identificadores fiscales."
+        : config.description ?? "";
     return registerTool(name, {
       ...config,
-      description: `${config.description ?? ""} Claude omits sensitive output fields under the shared redaction policy.`,
+      description: `${description} Claude omits sensitive output fields under the shared redaction policy.`,
       ...(config.outputSchema ? { outputSchema: claudeOutputSchema(config.outputSchema) } : {}),
     }, async (...args: any[]) => {
       try { return claudeToolResult(await handler(...args)); }
