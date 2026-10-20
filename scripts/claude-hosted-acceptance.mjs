@@ -418,7 +418,6 @@ export async function runAcceptance(options = {}, {
     current = "userinfo"; await userinfo(primary.grant); pass(current);
     current = "callback_replay";
     requireThat((await jsonRequest("/callback", { stateKey: primary.stateKey, idToken: token, locale: "es" })).status === 400, "CALLBACK_REPLAY_ACCEPTED"); pass(current);
-    current = "code_replay"; expectInvalidGrant(await tokenRequest(primary.grant, primary.redemption)); pass(current);
     current = "refresh"; await refresh(primary.grant); await userinfo(primary.grant); pass(current);
     current = "mcp_catalogs"; session = { grant: primary.grant };
     await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "frihet-synthetic-qa", version: "1.0.0" } });
@@ -462,6 +461,11 @@ export async function runAcceptance(options = {}, {
     requireThat(ownProduct(readback, ledger.id) && readback.description === description, "PRODUCT_UPDATE_READBACK_MISMATCH"); pass(current);
     current = "product_cleanup"; await cleanupProduct();
     current = "revoke"; await revoke(primary.grant); pass(current);
+    // A spent-code replay revokes its family; isolate it from business probes.
+    current = "code_replay"; const codeReplay = await grantNew(); await userinfo(codeReplay.grant);
+    expectInvalidGrant(await tokenRequest(codeReplay.grant, codeReplay.redemption));
+    await deadAccess(codeReplay.grant); await deadRefresh(codeReplay.grant);
+    codeReplay.grant.ledger.phase = "replay_invalidated"; codeReplay.grant.ledger.cleanup = "http_invalidated_backend_unverified"; pass(current);
     current = "reconnect"; const negative = await grantNew(); await userinfo(negative.grant); pass(current);
     current = "refresh_replay"; const oldRefresh = await refresh(negative.grant); await userinfo(negative.grant);
     expectInvalidGrant(await tokenRequest(negative.grant, { grant_type: "refresh_token", client_id: negative.grant.clientId, refresh_token: oldRefresh, resource: RESOURCE }));
