@@ -25,8 +25,11 @@
  * undrained ones when the state expires. Let pending states expire and their
  * alarms reconcile before rolling back.
  * New Claude family bindings may also retain their provisioning correlation.
- * Older readers reject that field: keep this reader/cleanup on rollback unless
- * every affected family and cleanup outbox has been verifiably drained.
+ * Older readers reject that field: keep this reader/cleanup on rollback while
+ * any affected family, tombstone, grant, or cleanup outbox remains. Draining
+ * outboxes alone is insufficient. An older-reader downgrade requires verified
+ * absence of all affected records and closed backend correlations; never delete
+ * durable records to force that downgrade.
  */
 
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
