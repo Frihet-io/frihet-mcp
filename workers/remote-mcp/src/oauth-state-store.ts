@@ -24,6 +24,9 @@
  * including unproven attempts. A Worker without the replacement outbox drops
  * undrained ones when the state expires. Let pending states expire and their
  * alarms reconcile before rolling back.
+ * New Claude family bindings may also retain their provisioning correlation.
+ * Older readers reject that field: keep this reader/cleanup on rollback unless
+ * every affected family and cleanup outbox has been verifiably drained.
  */
 
 import type { OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
@@ -56,7 +59,7 @@ export type OAuthApiKeyBinding = {
   keyId: string;
 } & (
   | { accessProfile: "openai"; oauthResource: "https://openai-mcp.frihet.io" }
-  | { accessProfile: "claude"; oauthResource: "https://claude-mcp.frihet.io" }
+  | { accessProfile: "claude"; oauthResource: "https://claude-mcp.frihet.io"; correlationId?: string }
 );
 
 /** One provisioning request that may have reached the ERP authority. */
@@ -220,10 +223,19 @@ export const DEFAULT_CLEANUP_AUTHORITIES: OAuthCleanupAuthorities = {
     if (binding.accessProfile !== accessProfile) {
       throw new Error("OAuth API-key cleanup profile differs from the Worker");
     }
-    const [{ resolveOAuthApiKeyUrl }, { revokeOAuthApiKey, resolveOAuthServiceSecret }] = await Promise.all([
+    const [{ resolveOAuthApiKeyUrl }, { revokeOAuthApiKey, reconcileOAuthApiKeyCorrelation, resolveOAuthServiceSecret }] = await Promise.all([
       import("./api-url.js"),
       import("./oauth-provisioning.js"),
     ]);
+    if (binding.accessProfile === "claude" && binding.correlationId !== undefined) {
+      // A keyId ACK alone cannot tombstone its provisioning attempt. Never
+      // downgrade a failed correlation proof to the legacy key-only cleanup.
+      return reconcileOAuthApiKeyCorrelation(
+        resolveOAuthApiKeyUrl(env.FRIHET_API_BASE, accessProfile),
+        resolveOAuthServiceSecret(env, accessProfile),
+        { ...binding, correlationId: binding.correlationId },
+      );
+    }
     const response = await revokeOAuthApiKey(
       resolveOAuthApiKeyUrl(env.FRIHET_API_BASE, accessProfile),
       resolveOAuthServiceSecret(env, accessProfile),
@@ -462,7 +474,7 @@ function isGrantId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{16}$/u.test(value);
 }
 
-function isUuidV4(value: unknown): value is string {
+export function isUuidV4(value: unknown): value is string {
   return typeof value === "string"
     && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
 }
@@ -483,12 +495,15 @@ function isSafeUid(value: unknown): value is string {
 
 function parseApiKeyBinding(value: unknown): OAuthApiKeyBinding | undefined {
   if (!isRecord(value)) return undefined;
-  const { uid, keyId, accessProfile, oauthResource } = value;
+  const { uid, keyId, accessProfile, oauthResource, correlationId } = value;
   if (
     !isSafeUid(uid)
     || typeof keyId !== "string"
     || !/^[A-Za-z0-9]{20}$/u.test(keyId)
-    || !hasOnlyKeys(value, new Set(["uid", "keyId", "accessProfile", "oauthResource"]))
+    || !hasOnlyKeys(value, new Set([
+      "uid", "keyId", "accessProfile", "oauthResource",
+      ...(accessProfile === "claude" ? ["correlationId"] : []),
+    ]))
   ) {
     return undefined;
   }
@@ -496,7 +511,11 @@ function parseApiKeyBinding(value: unknown): OAuthApiKeyBinding | undefined {
     return { uid, keyId, accessProfile, oauthResource };
   }
   if (accessProfile === "claude" && oauthResource === "https://claude-mcp.frihet.io") {
-    return { uid, keyId, accessProfile, oauthResource };
+    if (correlationId !== undefined && !isUuidV4(correlationId)) return undefined;
+    return {
+      uid, keyId, accessProfile, oauthResource,
+      ...(correlationId === undefined ? {} : { correlationId }),
+    };
   }
   return undefined;
 }
@@ -518,7 +537,8 @@ function sameBinding(
   return left.uid === right.uid
     && left.keyId === right.keyId
     && left.accessProfile === right.accessProfile
-    && left.oauthResource === right.oauthResource;
+    && left.oauthResource === right.oauthResource
+    && (left.accessProfile !== "claude" || (right.accessProfile === "claude" && left.correlationId === right.correlationId));
 }
 
 function isCleanupIntent(value: unknown): value is TokenFamilyCleanupIntent {

@@ -738,6 +738,7 @@ app.post("/callback", async (c) => {
           ? {
               apiKey: provisioned.apiKey,
               keyId: provisioned.keyId,
+              ...(accessProfile === "claude" ? { correlationId: lease.correlationId } : {}),
               apiKeyExpiresAt: provisioned.expiresAt,
               userId: decoded.uid,
               email: verifiedIdentity.email,
