@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "d5c85b77749778b5ad4f9fea34ee4c7a7800cb4f540b0cc016bc7cb1f474fed2", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs, the local candidate wire test and descriptor regeneration/check commands, the Claude plugin export test, the Claude write-route wire contract test, Claude output privacy, bootstrap secret and local hosted-acceptance harness tests; no new deps, lifecycle or network script
+  "package.json": "7aebccc945f1a7700496ce8634241c59f2a6ccace338a2355400b139d8fd9370", // adds paginated-metadata-contract.test.js to the reviewed test script; all other scripts, deps, lifecycle and network settings unchanged
   "workers/remote-mcp/package.json": "0248007796a87b37d4f7060566b48d767aa4dcdc7a70b9fdb5883387997d1c72", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -271,7 +271,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "fe4b2932d3c21b29533d420a6e1306a8b1c0f3738bfee0f13e98e0265587c039", // path ids go through one segment check that refuses "", "." and ".." before any request; sinks unchanged
+  "src/client.ts": "7e326fce3960ebe69c88e77831a0b1815b79f1a6ed44e0798f295c3de3e63f2e", // paginated and search responses omit undeclared transport metadata; rows, pagination and path-id validation preserved; sinks unchanged
   "workers/remote-mcp/src/claude-public-surface.ts": "acf419dcbdfb3acb4cdfa04999aa179006df828870939680911dd9e2589a832d", // isolated Claude host and authorization boundary; operational scope and Frihet display name reviewed, no new sink
   "workers/remote-mcp/src/oauth-profile.ts": "fd78139588876001b0521d5d9370b89a019f065ed783fdc76617a863c978c8a1", // isolated Claude host and authorization boundary
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
