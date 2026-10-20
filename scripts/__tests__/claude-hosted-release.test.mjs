@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
   assertClaudeWorkerIsolation,
+  assertClaudeOperationalSurface,
   assertClaudeConsultationSurface,
   assertErpCeilingDeployed,
   DRY_RUN_NAMESPACE,
@@ -48,7 +49,14 @@ const { routes: CONTRACT_ROUTES } = JSON.parse(readFileSync(new URL("../../src/_
 const SERVED = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-consultation-route-contract.json", import.meta.url), "utf8"));
 
 test("consultation source guard requires exact served reads while preserving the broader immutable credential ceiling", () => {
+  // Historical nine-tool receipt oracle, independent of the current broad profile.
   const candidate = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url), "utf8"));
+  const core = ["list_clients", "list_expenses", "list_invoices", "list_products", "list_quotes", "list_vendors"];
+  candidate.tools.full = candidate.tools.full.filter(({ name }) => core.includes(name));
+  candidate.tools.grouped = candidate.tools.grouped.filter(({ name }) => [...core, "describe_tool", "list_tool_groups", "search_tools"].includes(name));
+  candidate.prompts = []; candidate.promptContent = [];
+  candidate.catalogue.canonicalOperations = 6; candidate.catalogue.aliases = {};
+  candidate.groups.totalTools = 6;
   assert.doesNotThrow(() => assertClaudeConsultationSurface(candidate, SERVED));
   assert.equal(digest(CONTRACT_ROUTES.join("\n")), "bcf2185915523c60468afc380d1e2456a5c0da5cb2ca4b4820e74886b06b928f");
   assert.ok(CONTRACT_ROUTES.length > SERVED.routes.length);
@@ -72,6 +80,32 @@ test("consultation source guard requires exact served reads while preserving the
     const changed = structuredClone(SERVED); mutate(changed);
     assert.throws(() => assertClaudeConsultationSurface(candidate, changed));
   }
+});
+
+test("operational source guard preserves broad product scope without expanding the ERP ceiling", () => {
+  const candidate = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url), "utf8"));
+  const ceiling = JSON.parse(readFileSync(new URL("../../src/__tests__/fixtures/claude-write-route-contract.json", import.meta.url), "utf8"));
+  assert.doesNotThrow(() => assertClaudeOperationalSurface(candidate, ceiling));
+  for (const mutate of [
+    c => { c.tools.full.pop(); },
+    c => { c.tools.grouped.pop(); },
+    c => { c.tools.grouped[0].title = ""; },
+    c => { c.tools.grouped[0].annotations.readOnlyHint = undefined; },
+    c => { c.tools.grouped.find(({ name }) => name === "invite_team_member").annotations.destructiveHint = false; },
+    c => { c.tools.grouped[0]._meta["io.frihet/capability"].callability = "unavailable"; },
+    c => { c.tools.grouped[0]._meta["io.frihet/capability"].externalSideEffects = ["money_movement"]; },
+    c => { c.tools.full.find(({ name }) => name === "create_invoice").annotations.readOnlyHint = true; },
+    c => { c.groups.totalGroups = 4; },
+    c => { c.prompts = []; },
+    c => { c.resources.remote.push({ uri: "frihet://api/schema" }); },
+    c => { c.catalogue.aliases = {}; },
+  ]) {
+    const changed = structuredClone(candidate); mutate(changed);
+    assert.throws(() => assertClaudeOperationalSurface(changed, ceiling));
+  }
+  const expanded = structuredClone(ceiling);
+  expanded.routes.push("POST /sales/:id/refund");
+  assert.throws(() => assertClaudeOperationalSurface(candidate, expanded));
 });
 
 function stable(value) {

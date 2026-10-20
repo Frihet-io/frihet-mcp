@@ -1,4 +1,4 @@
 ---
 type: fixed
 ---
-{{file:fixtures/{input.name}.json}}
+{{file:fixtures/tool-{input.name}.json}}

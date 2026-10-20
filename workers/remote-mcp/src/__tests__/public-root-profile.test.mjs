@@ -228,11 +228,11 @@ test("Claude public routes use their own descriptor and fail closed before provi
   const descriptor = await root.json();
   assert.equal(root.status, 200);
   assert.equal(descriptor.mcp, "https://claude-mcp.frihet.io/mcp");
-  assert.equal(descriptor.tools, 9);
-  assert.equal(descriptor.catalogueOperations, 6);
-  assert.equal(descriptor.aliasNames, 0);
+  assert.equal(descriptor.tools, 132);
+  assert.equal(descriptor.catalogueOperations, 125);
+  assert.equal(descriptor.aliasNames, 4);
   assert.equal(descriptor.resources, 1);
-  assert.equal(descriptor.prompts, 0);
+  assert.equal(descriptor.prompts, 2);
   for (const path of ["/mcp.json", "/.well-known/mcp"]) {
     assert.deepEqual(await (await request(path)).json(), descriptor);
   }

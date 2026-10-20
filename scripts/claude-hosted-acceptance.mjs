@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Single-identity Claude protocol pilot. Default: no network, no credentials.
- * --consultation exercises the nine-tool read-only surface. The historical
- * product lifecycle is refused before credentials when the catalog lacks CRUD.
+ * --consultation exercises only the historical nine-tool read-only surface.
+ * The product lifecycle checks one narrow synthetic CRUD flow; neither mode
+ * establishes acceptance of the complete operational catalogue.
  * Build first. Hosted execution requires the existing full deployment guard,
  * a matching public release, and a fresh real Firebase ID token on a private FD.
  * This command never signs in, retries a write, or certifies two-account/client
@@ -24,7 +25,7 @@ export const FIREBASE_PROJECT = "gen-lang-client-0335716041";
 export const SCOPES = Object.freeze(["openid", "email", "frihet:workspace.manage"]);
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const FIXTURE = new URL("../src/__tests__/fixtures/claude-candidate-contract.json", import.meta.url);
-const FIXTURE_SHA256 = "9990297d794872729d9567c3d267c34165c85e57621413c6a1b9d836becbffa3";
+const FIXTURE_SHA256 = "5e5b2ce57440efccb4b092af4ef62228ac8297858f3f884f90b3ca98432d86fb";
 const SERVED_FIXTURE = new URL("../src/__tests__/fixtures/claude-consultation-route-contract.json", import.meta.url);
 export const CONSULTATION_LISTS = Object.freeze(["list_clients", "list_expenses", "list_invoices", "list_products", "list_quotes", "list_vendors"]);
 export const CONSULTATION_DENIED = Object.freeze(["create_product", "update_product", "delete_product", "get_client", "create_invoice", "send_invoice", "verifactu_resubmit", "frihet_modelo_303_summary"]);

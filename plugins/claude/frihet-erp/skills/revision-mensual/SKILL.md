@@ -1,31 +1,28 @@
 ---
 name: revision-mensual
 description: >-
-  Review a month's available Frihet invoice, quote and expense list records.
-  Use for revisión mensual, monthly review or resumen del mes. Separates
-  currencies, document status and unknown balances; reports coverage gaps.
-  Does not use a server monthly summary or perform accounting or fiscal close.
+  Review a month's business records in a connected Frihet workspace. Use for
+  revisión mensual, cierre mensual, monthly review, month summary or resumen del
+  mes. Separates billed, collected and outstanding amounts by currency and reports
+  gaps without claiming accounting or fiscal close.
 license: MIT
 ---
 
-# Revisión mensual de registros disponibles
+# Revisión mensual
 
-Lee [las reglas de consulta](../frihet-mcp/SKILL.md) y
-[el flujo mensual](../frihet-mcp/references/workflows.md#revisión-mensual).
+Antes de usar herramientas, lee [las reglas de Frihet](../frihet-mcp/SKILL.md)
+y [el flujo mensual](../frihet-mcp/references/workflows.md#revisión-mensual).
 
-Define workspace, periodo y zona horaria. Revisa las listas de facturas y
-gastos; añade presupuestos, clientes o proveedores solo cuando sirvan a la
-pregunta. No hay un resumen mensual del servidor: cualquier resumen es tu
-análisis de los registros efectivamente recuperados.
+Define el periodo y la empresa. Revisa resúmenes y registros disponibles, páginas,
+moneda y significado de cada importe. No mezcles borradores con facturación
+emitida, facturado con cobrado ni total original con saldo después de pagos
+parciales. Identifica abonos, cancelaciones y gastos pendientes de validar.
 
-Expón filtros, páginas y cobertura por lista. Excluye borradores y cancelaciones
-del importe emitido y mantén abonos separados cuando se puedan identificar.
-No confundas facturado, cobrado y pendiente. Usa importes solo con evidencia y
-moneda comprobadas; un pago acumulado sin fecha no demuestra cobro en el mes.
-Indica «cobrado en el periodo desconocido» o «saldo desconocido» cuando proceda.
+Entrega un resumen por moneda con facturado, cobrado, pendiente y gastos solo
+cuando se puedan comprobar. Incluye la cobertura, los registros de origen,
+incidencias y siguientes acciones propuestas. Si faltan páginas o justificantes,
+indica que la revisión es parcial; no declares que el mes está cerrado.
 
-Entrega resultados por moneda, referencias de origen, lagunas e incidencias.
-Si faltan páginas, justificantes o campos, etiqueta la revisión como parcial;
-no extrapoles totales ni declares el mes cerrado. Propón siguientes pasos en
-la conversación. Esta conexión no concilia, valida gastos, cambia estados,
-guarda documentos ni presenta impuestos.
+No ejecutes conciliaciones, cambios de estado, recurrencias ni presentaciones
+fiscales como parte de una revisión. Solicita una instrucción concreta cuando
+el usuario decida realizar una de las acciones propuestas.

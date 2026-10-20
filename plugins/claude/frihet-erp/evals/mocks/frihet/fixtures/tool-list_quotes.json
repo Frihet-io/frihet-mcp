@@ -1,0 +1,190 @@
+{
+  "name": "list_quotes",
+  "title": "List Quotes",
+  "description": "List all quotes/estimates with optional pagination and filters. Quotes are proposals sent to clients before they become invoices. Supports filtering by status (draft/sent/accepted/rejected/expired) and date range. Example: status='sent', from='2026-01-01', limit=20 / Lista todos los presupuestos con paginacion y filtros opcionales. Soporta filtrado por estado y rango de fechas. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "description": "Filter by quote status / Filtrar por estado",
+        "type": "string",
+        "enum": [
+          "draft",
+          "sent",
+          "accepted",
+          "rejected",
+          "expired"
+        ]
+      },
+      "clientId": {
+        "description": "Filter by client ID / Filtrar por ID de cliente",
+        "type": "string"
+      },
+      "seriesId": {
+        "description": "Filter by quote series ID / Filtrar por ID de serie",
+        "type": "string"
+      },
+      "from": {
+        "description": "Start date filter (YYYY-MM-DD) / Fecha inicio",
+        "type": "string"
+      },
+      "to": {
+        "description": "End date filter (YYYY-MM-DD) / Fecha fin",
+        "type": "string"
+      },
+      "fields": {
+        "description": "Comma-separated field names to return (e.g. 'id,clientName,total') / Campos a devolver",
+        "type": "string"
+      },
+      "limit": {
+        "description": "Max results (1-100) / Resultados maximos",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "offset": {
+        "description": "Offset / Desplazamiento",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "after": {
+        "description": "Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor",
+        "type": "string"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "clientName": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "number"
+                  },
+                  "unitPrice": {
+                    "type": "number"
+                  },
+                  "taxRate": {
+                    "type": "number"
+                  },
+                  "discount": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "description",
+                  "quantity",
+                  "unitPrice"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "issueDate": {
+              "type": "string"
+            },
+            "dueDate": {
+              "type": "string"
+            },
+            "validUntil": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "total": {
+              "type": "number"
+            },
+            "taxRate": {
+              "type": "number"
+            },
+            "discountRate": {
+              "type": "number"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "total": {
+        "type": "number"
+      },
+      "limit": {
+        "type": "number"
+      },
+      "offset": {
+        "type": "number"
+      },
+      "nextCursor": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "data",
+      "total",
+      "limit",
+      "offset"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false
+  },
+  "annotations": {
+    "title": "List Quotes",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "list_quotes",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}

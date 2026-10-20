@@ -1,0 +1,105 @@
+{
+  "name": "list_bank_accounts",
+  "title": "List Bank Accounts",
+  "description": "List all connected bank accounts for the workspace. Returns alias, IBAN (last 4 digits only for security), currency, balance, and last sync timestamp. / Lista todas las cuentas bancarias conectadas al espacio de trabajo. Devuelve alias, IBAN (solo ultimos 4 digitos por seguridad), divisa, saldo y ultima sincronizacion. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "description": "Max results (1-100) / Resultados maximos",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "offset": {
+        "description": "Offset / Desplazamiento",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "alias": {
+              "type": "string"
+            },
+            "ibanLast4": {
+              "description": "Last 4 digits of IBAN (security masked)",
+              "type": "string"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "balance": {
+              "type": "number"
+            },
+            "lastSyncedAt": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": {}
+        }
+      },
+      "total": {
+        "type": "number"
+      },
+      "limit": {
+        "type": "number"
+      },
+      "offset": {
+        "type": "number"
+      },
+      "nextCursor": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "data",
+      "total",
+      "limit",
+      "offset"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false
+  },
+  "annotations": {
+    "title": "List Bank Accounts",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "list_bank_accounts",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}
