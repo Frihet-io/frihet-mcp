@@ -915,7 +915,7 @@ export class FrihetClient {
    * Only unwraps when the body is an object carrying a `data` property that is
    * itself a (non-array) object — i.e. a genuine single-object envelope. It is
    * deliberately distinct from {@link requestPaginated}, which keeps the
-   * `{ data: [...] , meta }` shape intact for list endpoints. If the body is
+   * list rows and pagination fields while omitting transport metadata. If the body is
    * not an envelope (legacy endpoints that return the item directly), it is
    * returned unchanged so existing callers keep working.
    */
@@ -946,7 +946,7 @@ export class FrihetClient {
     return raw as T;
   }
 
-  /** Wrapper for paginated endpoints — validates response shape has `data` array. */
+  /** Validate list rows and emit only the declared MCP pagination envelope. */
   private async requestPaginated<T>(
     method: string,
     path: string,
@@ -963,7 +963,15 @@ export class FrihetClient {
       );
     }
 
-    return result;
+    // API transport metadata is not part of the closed MCP page contract.
+    // Keep rows untouched and preserve every declared pagination field.
+    return {
+      data: result.data,
+      total: result.total,
+      limit: result.limit,
+      offset: result.offset,
+      ...(result.nextCursor !== undefined ? { nextCursor: result.nextCursor } : {}),
+    };
   }
 
   // ---------------------------------------------------------------- Public
@@ -1493,8 +1501,14 @@ export class FrihetClient {
       offset: params.offset,
     });
     return {
-      ...result,
+      data: result.data,
+      total: result.total,
+      limit: result.limit,
+      offset: result.offset,
+      hasMore: result.hasMore,
+      query: result.query,
       types: result.types as ReadonlyArray<"invoices" | "expenses" | "vendors" | "clients" | "products">,
+      ...(result.truncated !== undefined ? { truncated: result.truncated } : {}),
     };
   }
 
@@ -2201,7 +2215,7 @@ export class FrihetClient {
   // NOTE: /v1/banking/rules Q3-flagged (PR #394). 404 until callable wrapper ships.
 
   async listBankRules(params?: { isActive?: boolean; limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>> {
-    return this.request("GET", "/banking/rules", undefined, {
+    return this.requestPaginated("GET", "/banking/rules", undefined, {
       isActive: params?.isActive !== undefined ? String(params.isActive) : undefined,
       limit: params?.limit,
       offset: params?.offset,
