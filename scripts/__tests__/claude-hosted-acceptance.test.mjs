@@ -87,7 +87,11 @@ function fixture(faults = {}) {
       if (form.get("grant_type") === "authorization_code") {
         assert.equal(form.get("redirect_uri"), client.redirect); assert.equal(form.get("resource"), RESOURCE);
         assert.equal(createHash("sha256").update(form.get("code_verifier")).digest("base64url"), client.challenge);
-        if (client.redeemed) return faults.codeReplayAccepted ? tokens(client) : invalid();
+        if (client.redeemed) {
+          if (faults.codeReplayAccepted) return tokens(client);
+          if (!faults.codeReplayIneffective) client.active = false;
+          return invalid();
+        }
         client.redeemed = true; return tokens(client);
       }
       assert.equal(form.get("resource"), RESOURCE);
@@ -167,7 +171,8 @@ test("complete offline single-identity lifecycle validates real contract, CRUD, 
   assert.ok(Object.entries(result.checks).filter(([name]) => name !== "foreign_product_exact_id_denied").every(([, value]) => value === "pass"));
   assert.deepEqual([result.catalog.tools, result.catalog.resources, result.catalog.prompts], [132, 1, 2]);
   assert.equal(result.productLedger[0].phase, "deleted_and_not_found"); assert.equal(f.products.size, 0);
-  assert.equal(f.clients.size, 2); assert.equal([...f.clients.values()].some(client => client.active), false);
+  assert.equal(f.clients.size, 3); assert.equal([...f.clients.values()].some(client => client.active), false);
+  assert.deepEqual(result.grants.map(grant => grant.phase), ["revoked", "replay_invalidated", "replay_invalidated"]);
   assert.equal(f.reads(), 1); assert.equal(f.admissions(), 1);
   assert.equal(result.hostedAcceptanceVerified, false); assert.equal(result.submissionReady, false); assert.equal(result.independentBackendCleanupVerified, false);
   assert.ok(result.unexercised.includes("actual_claude_client_journey"));
@@ -219,8 +224,8 @@ test("Firebase local input guard rejects wrong audience, identity, verification,
   assert.throws(() => validateFirebaseInput("credential-in-argv", UID_HASH, NOW), /FIREBASE_INPUT_INVALID/u);
 });
 
-test("callback target/state, UserInfo principal and replays fail closed without business writes", async () => {
-  for (const faults of [{ callbackTarget: "https://untrusted.invalid/callback" }, { wrongState: true }, { wrongUser: true }, { callbackReplayAccepted: true }, { codeReplayAccepted: true }, { catalogMismatch: true }]) {
+test("callback target/state, UserInfo principal, callback replay and catalog fail closed without business writes", async () => {
+  for (const faults of [{ callbackTarget: "https://untrusted.invalid/callback" }, { wrongState: true }, { wrongUser: true }, { callbackReplayAccepted: true }, { catalogMismatch: true }]) {
     const f = fixture(faults), result = await f.run();
     assert.equal(result.status, "fail"); assert.equal(result.productLedger.length, 0);
     assert.equal(f.calls.some(call => call.options.body?.includes('"create_product"')), false);
@@ -307,20 +312,21 @@ test("uncertain delete is never retried; successful delete without not-found rea
 });
 
 test("revoke HTTP 200 or replay 400 alone is insufficient without dead access readback", async () => {
-  for (const faults of [{ revocationIneffective: true }, { replayIneffective: true }]) {
+  for (const faults of [{ revocationIneffective: true }, { codeReplayIneffective: true }, { replayIneffective: true }]) {
     const f = fixture(faults), result = await f.run(); assert.equal(result.status, "fail");
     assert.equal(result.independentBackendCleanupVerified, false);
     if (faults.revocationIneffective) assert.notEqual(result.checks.revoke, "pass");
+    else if (faults.codeReplayIneffective) assert.notEqual(result.checks.code_replay, "pass");
     else assert.notEqual(result.checks.refresh_replay, "pass");
   }
 });
 
-for (const phase of ["revoke", "refresh_replay"]) {
+for (const phase of ["revoke", "code_replay", "refresh_replay"]) {
   for (const path of ["/userinfo", "/mcp"]) {
     test(`${phase} checks earlier issued access tokens on ${path}`, async () => {
       const f = fixture(), base = f.dependencies.send;
-      const clientId = phase === "revoke" ? "offline-client-1" : "offline-client-2";
-      const staleAccess = phase === "revoke" ? "offline-access-1" : "offline-access-3";
+      const clientId = phase === "revoke" ? "offline-client-1" : phase === "code_replay" ? "offline-client-2" : "offline-client-3";
+      const staleAccess = phase === "revoke" ? "offline-access-1" : phase === "code_replay" ? "offline-access-3" : "offline-access-4";
       const send = async (target, options = {}) => {
         const result = await base(target, options);
         if (target === path && options.headers?.Authorization === `Bearer ${staleAccess}` && f.clients.get(clientId)?.active === false) {
@@ -344,10 +350,18 @@ test("revocation and replay probe every issued access and refresh token without 
     for (const path of ["/userinfo", "/mcp"]) assert.ok(primaryAfterRevoke.some(call => call.path === path && call.options.headers?.Authorization === `Bearer offline-access-${serial}`));
     assert.ok(primaryAfterRevoke.some(call => call.path === "/token" && new URLSearchParams(call.options.body).get("refresh_token") === `offline-refresh-${serial}`));
   }
+  const codeReplayIndex = f.calls.map((call, index) => ({ call, index }))
+    .filter(({ call }) => call.path === "/token" && new URLSearchParams(call.options.body).get("grant_type") === "authorization_code"
+      && new URLSearchParams(call.options.body).get("client_id") === "offline-client-2")[1].index;
+  assert.ok(codeReplayIndex > revokeIndex);
+  const reconnectIndex = f.calls.map((call, index) => ({ call, index })).filter(({ call }) => call.path === "/register")[2].index;
+  const codeAfterReplay = f.calls.slice(codeReplayIndex + 1, reconnectIndex);
+  for (const path of ["/userinfo", "/mcp"]) assert.ok(codeAfterReplay.some(call => call.path === path && call.options.headers?.Authorization === "Bearer offline-access-3"));
+  assert.ok(codeAfterReplay.some(call => call.path === "/token" && new URLSearchParams(call.options.body).get("refresh_token") === "offline-refresh-3"));
   const replayIndex = f.calls.map((call, index) => ({ call, index }))
-    .filter(({ call }) => call.path === "/token" && new URLSearchParams(call.options.body).get("refresh_token") === "offline-refresh-3")[1].index;
+    .filter(({ call }) => call.path === "/token" && new URLSearchParams(call.options.body).get("refresh_token") === "offline-refresh-4")[1].index;
   const negativeAfterReplay = f.calls.slice(replayIndex);
-  for (const serial of [3, 4]) {
+  for (const serial of [4, 5]) {
     for (const path of ["/userinfo", "/mcp"]) assert.ok(negativeAfterReplay.some(call => call.path === path && call.options.headers?.Authorization === `Bearer offline-access-${serial}`));
     assert.ok(negativeAfterReplay.some(call => call.path === "/token" && new URLSearchParams(call.options.body).get("refresh_token") === `offline-refresh-${serial}`));
   }
@@ -359,8 +373,15 @@ test("unexpected tokens issued by accepted code replay are tracked and revoked b
   const f = fixture({ codeReplayAccepted: true }), result = await f.run();
   assert.equal(result.status, "fail"); assert.equal(result.failure, "INVALID_GRANT_NOT_ENFORCED");
   assert.equal(result.grants[0].phase, "revoked"); assert.equal(f.clients.get("offline-client-1").active, false);
-  for (const serial of [1, 2]) {
-    for (const path of ["/userinfo", "/mcp"]) assert.ok(f.calls.some(call => call.path === path && call.options.headers?.Authorization === `Bearer offline-access-${serial}`));
+  assert.equal(result.grants[1].phase, "revoked"); assert.equal(f.clients.get("offline-client-2").active, false);
+  assert.equal(result.failedAt, "code_replay"); assert.equal(result.checks.product_cleanup, "pass"); assert.equal(f.products.size, 0);
+  const cleanupIndex = f.calls.findIndex(call => call.path === "/token" && new URLSearchParams(call.options.body).has("token")
+    && new URLSearchParams(call.options.body).get("client_id") === "offline-client-2");
+  assert.ok(cleanupIndex >= 0);
+  const cleanup = f.calls.slice(cleanupIndex + 1);
+  for (const serial of [3, 4]) {
+    for (const path of ["/userinfo", "/mcp"]) assert.ok(cleanup.some(call => call.path === path && call.options.headers?.Authorization === `Bearer offline-access-${serial}`));
+    assert.ok(cleanup.some(call => call.path === "/token" && new URLSearchParams(call.options.body).get("refresh_token") === `offline-refresh-${serial}`));
   }
   assert.equal(JSON.stringify(f.receipts).includes("offline-access-"), false);
   assert.equal(JSON.stringify(f.receipts).includes("offline-refresh-"), false);
