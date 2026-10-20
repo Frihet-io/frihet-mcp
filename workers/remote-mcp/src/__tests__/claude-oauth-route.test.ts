@@ -117,7 +117,8 @@ for (const [label, configured] of [
     assert.equal(h.kv.grantKeys().length, 0);
     await h.runFamilyAlarms();
     assert.deepEqual(h.erp.activeKeyIds(), []);
-    assert.deepEqual(h.erp.requests.at(-1), { method: "DELETE", body: { uid: initial.userId, keyId: initial.keyId } });
+    assert.deepEqual(h.erp.requests.at(-1), { method: "DELETE", body: { uid: initial.userId, correlationId: h.erp.postCorrelations[0] } });
+    assert.equal(h.erp.correlations.get(h.erp.postCorrelations[0]!)?.tombstoned, true);
   });
 }
 
@@ -164,6 +165,7 @@ test("Claude local SDK route completes DCR, Firebase verification, credential bi
     keyId: mcp.keyId,
     accessProfile: "claude",
     oauthResource: CLAUDE_ORIGIN,
+    correlationId: h.erp.postCorrelations[0],
   });
   assert.deepEqual(h.erp.requests[0]?.body, { uid: mcp.userId, correlationId: h.erp.postCorrelations[0] });
   assert.match(h.erp.postCorrelations[0]!, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu);
@@ -278,6 +280,7 @@ test("Claude local SDK refresh rotates once; replay tombstones the family and cl
   assert.deepEqual(h.erp.activeKeyIds(), []);
   assert.equal(h.kv.grantKeys().length, 0);
   assert.equal([...h.namespace.objects.values()].some(({ state }) => state.storage.values.has("oauth_token_family_cleanup")), false);
+  assert.equal(h.erp.correlations.get(h.erp.postCorrelations[0]!)?.tombstoned, true);
 });
 
 test("Claude local refresh-token disconnect removes the SDK grant and revokes the exact backend credential", async (t) => {
@@ -292,7 +295,8 @@ test("Claude local refresh-token disconnect removes the SDK grant and revokes th
   await h.runFamilyAlarms();
   assert.deepEqual(h.erp.activeKeyIds(), []);
   assert.equal(h.kv.grantKeys().length, 0);
-  assert.deepEqual(h.erp.requests.at(-1), { method: "DELETE", body: { uid: initial.userId, keyId: initial.keyId } });
+  assert.deepEqual(h.erp.requests.at(-1), { method: "DELETE", body: { uid: initial.userId, correlationId: h.erp.postCorrelations[0] } });
+  assert.equal(h.erp.correlations.get(h.erp.postCorrelations[0]!)?.tombstoned, true);
 });
 
 for (const host of ["localhost", "127.0.0.1"]) {

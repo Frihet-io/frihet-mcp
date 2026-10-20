@@ -39,7 +39,6 @@ import { resolveOAuthApiKeyUrl } from "../../api-url.ts";
 import {
   reconcileOAuthApiKeyCorrelation,
   resolveOAuthServiceSecret,
-  revokeOAuthApiKey,
 } from "../../oauth-provisioning.ts";
 import {
   isOAuthAccessTokenFamilyActive,
@@ -622,16 +621,6 @@ export async function createOAuthRouteHarness(
         async revokeGrant(cleanupEnv, userId, grantId) {
           await getOAuthApi({ ...providerOptions, apiHandler, defaultHandler: authHandler }, cleanupEnv).revokeGrant(grantId, userId);
         },
-        async revokeBackend(cleanupEnv, binding) {
-          if (!binding) return true;
-          const accessProfile = resolveWorkerAccessProfile(cleanupEnv);
-          const response = await revokeOAuthApiKey(
-            resolveOAuthApiKeyUrl(cleanupEnv.FRIHET_API_BASE, accessProfile),
-            resolveOAuthServiceSecret(cleanupEnv, accessProfile),
-            binding,
-          );
-          return response.ok || response.status === 404;
-        },
         async revokeBackendCorrelation(cleanupEnv, attempt) {
           const bound = boundOAuthProfile(resolveWorkerAccessProfile(cleanupEnv));
           return reconcileOAuthApiKeyCorrelation(
@@ -679,7 +668,7 @@ export async function createOAuthRouteHarness(
           uid: callbackOptions.userId,
           keyId: String(props.keyId),
           ...(profile === "claude"
-            ? { accessProfile: profile, oauthResource: CLAUDE_ORIGIN }
+            ? { accessProfile: profile, oauthResource: CLAUDE_ORIGIN, ...(props.correlationId === undefined ? {} : { correlationId: String(props.correlationId) }) }
             : { accessProfile: profile, oauthResource: OPENAI_REVIEW_ORIGIN }),
         });
       }

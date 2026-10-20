@@ -172,4 +172,60 @@ for (const grantType of ["authorization_code", "refresh_token"] as const) {
     const accepted = exchange(options(ALLOWED_UID)) as { accessTokenProps: { userId: string } };
     assert.equal(accepted.accessTokenProps.userId, ALLOWED_UID);
   });
+
+  test(`production Claude ${grantType} exchange rejects a malformed retained correlation instead of using legacy cleanup`, () => {
+    for (const correlationId of [null, "", "not-a-uuid", "7fac6e06-e24c-1a74-9460-4e213b683f13"]) {
+      assert.throws(() => claudeOptions.tokenExchangeCallback!({
+        grantType,
+        scope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+        requestedScope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+        props: { ...authProps(ALLOWED_UID), correlationId },
+        userId: ALLOWED_UID,
+      }), /does not match the Frihet connector boundary/u);
+    }
+  });
 }
+
+test("the production guarded Claude callback carries the encrypted grant correlation into the new durable family", async () => {
+  const correlationId = "7fac6e06-e24c-4a74-9460-4e213b683f13";
+  const credential = `${ALLOWED_UID}:${GRANT_ID}:${TOKEN_SECRET}`;
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(credential))))
+    .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const initialized: Array<Record<string, unknown>> = [];
+  let begins = 0;
+  const env = claudeEnv(JSON.stringify([ALLOWED_UID]), {
+    OAUTH_KV: { get: async () => ({ refreshTokenId: hash, expiresAt: Math.floor(Date.now() / 1000) + 60_000 }) },
+    OAUTH_STATE: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        fetch: async (url: string, init: RequestInit) => {
+          if (new URL(url).pathname === "/token-family/begin") {
+            return Response.json(++begins === 1 ? { outcome: "missing" } : { outcome: "started", leaseId: correlationId });
+          }
+          assert.equal(new URL(url).pathname, "/token-family");
+          initialized.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+          return new Response(null, { status: 204 });
+        },
+      }),
+    },
+  });
+  const response = await production.default.fetch(new Request(`${CLAUDE_ORIGIN}/token`, {
+    method: "POST",
+    body: new URLSearchParams({
+      grant_type: "refresh_token", refresh_token: credential, client_id: "synthetic-client",
+      resource: `${CLAUDE_ORIGIN}/mcp`,
+    }),
+  }), env, { waitUntil() {}, passThroughOnException() {} });
+  assert.equal(response.status, 204, "the recorder captures the production guarded provider");
+  const recorded = (globalThis as unknown as { __recordedOAuthProviders: RecordedProviderOptions[] }).__recordedOAuthProviders;
+  const guarded = recorded[recorded.length - 1];
+  await guarded.tokenExchangeCallback!({
+    grantType: "refresh_token", scope: [...OPENAI_REVIEW_OAUTH_SCOPES], requestedScope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+    props: { ...authProps(ALLOWED_UID), correlationId }, userId: ALLOWED_UID,
+  });
+  assert.equal(initialized.length, 1);
+  assert.deepEqual(initialized[0].apiKeyBinding, {
+    uid: ALLOWED_UID, keyId: authProps(ALLOWED_UID).keyId,
+    accessProfile: "claude", oauthResource: CLAUDE_ORIGIN, correlationId,
+  });
+});

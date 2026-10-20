@@ -90,7 +90,7 @@ import {
   OAuthTokenFamilyRevocation,
   type OAuthTokenFamilySettlement,
 } from "./oauth-token-family.js";
-import type { OAuthApiKeyBinding } from "./oauth-state-store.js";
+import { isUuidV4, type OAuthApiKeyBinding } from "./oauth-state-store.js";
 import {
   BoundedRequestBodyError,
   readBoundedTextRequest,
@@ -105,6 +105,8 @@ export { OAuthStateStore } from "./oauth-state-store.js";
 export type AuthProps = {
   apiKey: string;
   keyId?: string;
+  /** Server-generated provisioning identity retained by new Claude grants only. */
+  correlationId?: string;
   apiKeyExpiresAt?: string;
   locale: string;
   userId?: string;
@@ -1014,6 +1016,7 @@ function validateReviewedTokenExchange({
     })
     || typeof reviewedProps.keyId !== "string"
     || !/^[A-Za-z0-9]{20}$/u.test(reviewedProps.keyId)
+    || (profile === "claude" && reviewedProps.correlationId !== undefined && !isUuidV4(reviewedProps.correlationId))
     || typeof reviewedProps.apiKey !== "string"
     || !/^fri_[A-Za-z0-9_-]{43}$/u.test(reviewedProps.apiKey)
     || typeof reviewedProps.apiKeyExpiresAt !== "string"
@@ -1039,7 +1042,11 @@ function validateReviewedTokenExchange({
       uid: userId,
       keyId: reviewedProps.keyId,
       ...(profile === "claude"
-        ? { accessProfile: profile, oauthResource: CLAUDE_ORIGIN }
+        ? {
+            accessProfile: profile,
+            oauthResource: CLAUDE_ORIGIN,
+            ...(reviewedProps.correlationId === undefined ? {} : { correlationId: reviewedProps.correlationId }),
+          }
         : { accessProfile: profile, oauthResource: OPENAI_REVIEW_ORIGIN }),
     },
     credentialTtlSeconds,
