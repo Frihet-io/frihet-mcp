@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "frihet-erp",
-  "displayName": "Frihet ERP",
+  "displayName": "Frihet",
   "version": "1.18.0-preview.4",
   "description": "Run your Frihet business from Claude: invoices and quotes, expenses, CRM, banking and reconciliation, products, team and operations. Guided workflows inspect real records, prepare useful decisions and carry out authorized changes with clear results.",
   "author": {

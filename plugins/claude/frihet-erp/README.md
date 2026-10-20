@@ -1,4 +1,4 @@
-# Frihet ERP para Claude
+# Frihet para Claude
 
 Gestiona tu negocio desde una conversación: consulta facturas y clientes,
 prepara presupuestos, registra gastos y trabaja con tus movimientos bancarios.

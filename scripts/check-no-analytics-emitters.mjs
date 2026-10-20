@@ -272,7 +272,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "fe4b2932d3c21b29533d420a6e1306a8b1c0f3738bfee0f13e98e0265587c039", // path ids go through one segment check that refuses "", "." and ".." before any request; sinks unchanged
-  "workers/remote-mcp/src/claude-public-surface.ts": "e0180b3921dbdf5ccdb841a12a2704bb271f7a57587d76cc43025f2f43f549da", // isolated Claude host and authorization boundary; operational scope reviewed, no new sink
+  "workers/remote-mcp/src/claude-public-surface.ts": "acf419dcbdfb3acb4cdfa04999aa179006df828870939680911dd9e2589a832d", // isolated Claude host and authorization boundary; operational scope and Frihet display name reviewed, no new sink
   "workers/remote-mcp/src/oauth-profile.ts": "fd78139588876001b0521d5d9370b89a019f065ed783fdc76617a863c978c8a1", // isolated Claude host and authorization boundary
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "bfde5584b9b37fd24c4d7b4a32b149813c08e22dc06aa46b9b4d8afae3b77d90", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink); confirm comment no longer claims every mutating tool requires it

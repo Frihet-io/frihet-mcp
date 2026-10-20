@@ -1,7 +1,7 @@
 ---
 name: frihet-mcp
 description: >-
-  Manage a connected Frihet ERP workspace: invoices, quotes, expenses, clients,
+  Manage a connected Frihet workspace: invoices, quotes, expenses, clients,
   products and other available business operations. Use for Frihet requests,
   facturas, presupuestos, gastos, cobros, overdue invoices, monthly review or
   revisión mensual. Reads current tool schemas before acting, separates currencies

@@ -10,9 +10,17 @@ customer distribution through the Claude connector and plugin directories.
 The existing admission control remains in force while the complete candidate is
 accepted. Installing a package never grants workspace access.
 
+The public product is for every eligible Frihet user connecting their own
+workspace under its existing plan and permissions. The Anthropic publisher
+account identifies the submission owner; it is not a synthetic Frihet identity.
+Keep the owner's real businesses outside QA admission, fixtures and writes.
+Tests use only the two independently prepared synthetic identities/workspaces.
+
 ## Exact product surface
 
 - Plugin: `frihet-erp`, version `1.18.0-preview.4`.
+- Public display name: **Frihet**. The existing `frihet-erp` package identifier
+  and submission path remain compatible with the saved Directory draft.
 - 125 canonical business operations, four fiscal aliases, three discovery tools:
   132 tool names in grouped mode. Discovery describes operations; it does not
   hide a second executable catalogue or execute arbitrary methods.
@@ -42,6 +50,17 @@ remain excluded until reviewed. The 31 explicit exclusions concern deferred or
 unavailable handlers, unsupported credential scopes, money transfer, cleanup or
 recipient/retry guarantees, and opaque artifacts that cannot be redacted. They
 are not an arbitrary limit chosen to reduce the testing workload.
+
+## Existing Frihet identity
+
+The plugin uses Frihet's existing black circular mark (`#171717`), consistent
+with the ERP asset `apps/erp/public/brand/frihet-mark-ink.svg`. Its packaged icon
+is `.claude-plugin/icon.png`, with SHA-256
+`2a8fbc5984c81fbaf1901b1049ce75483660f80ae2b2871590e22ed27416624c`.
+The generated submission package contains the same bytes. Do not introduce a
+lettermark or replace the established identity. A Directory page's fallback
+initial is not evidence that the icon was imported or displayed; verify the
+actual listing separately before submission.
 
 ## Experience to accept
 

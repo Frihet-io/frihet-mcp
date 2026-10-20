@@ -130,7 +130,7 @@ function main(): void {
     name: "frihet-erp",
     version: PKG_VERSION,
     description: claudeMode
-      ? `Local Claude candidate for Frihet ERP: ${CLAUDE_CANDIDATE_TOOLS.size} canonical operations with reviewed fiscal aliases, 1 currencies resource and 2 receivables prompts. Optional grouped discovery adds 3 names. API-dependent operations require live workspace verification; this is not a published Directory connector.`
+      ? `Local Claude candidate for Frihet: ${CLAUDE_CANDIDATE_TOOLS.size} canonical operations with reviewed fiscal aliases, 1 currencies resource and 2 receivables prompts. Optional grouped discovery adds 3 names. API-dependent operations require live workspace verification; this is not a published Directory connector.`
       :
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
       "Provides a catalogue of 158 canonical operations; fiscal aliases and optional grouped discovery names are reported separately. " +

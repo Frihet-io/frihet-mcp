@@ -25,7 +25,7 @@ export function claudePublicSurface(request: Request, env: Env, grouped: boolean
   const aliasCount = Object.values(FISCAL_MODELO_ALIASES).filter((canonical) => CLAUDE_CANDIDATE_TOOLS.has(canonical)).length;
   const toolCount = operationCount + aliasCount + (grouped ? GROUPED_META_TOOL_COUNT : 0);
   const info = {
-    name: "Frihet ERP", version: MCP_SERVER_VERSION,
+    name: "Frihet", version: MCP_SERVER_VERSION,
     description: "Business records and authorized ERP workflows through the Frihet Claude profile.",
     mcp: CLAUDE_MCP_RESOURCE, docs: DOCS, privacy: `${CLAUDE_ORIGIN}/privacy`, support: `${CLAUDE_ORIGIN}/support`,
     auth: { type: "oauth2", authorization_server: `${CLAUDE_ORIGIN}/.well-known/oauth-authorization-server` },
