@@ -254,3 +254,117 @@ test("short sensitive identifiers cannot corrupt unrelated record IDs or enum va
     documentNumber: "1", requestId: "x", id: "invoice_1x", status: "partial", total: 100,
   }), { id: "invoice_1x", status: "partial", total: 100 });
 });
+
+test("Claude client identity survives the derived search index without exposing its copies", async () => {
+  const nonce = "2f2897c069044e27a1bf7742d8925f65";
+  const indexed = {
+    id: `qa-claude-read-${nonce}-clients`,
+    name: `Example Test Client / ${nonce} / QA reversible 7e81c4`,
+    searchTokens: [nonce, "reversible", "only_index_private_value"],
+    notes: `${nonce} reversible only_index_private_value`,
+    details: { name: "reversible", id: nonce },
+    serialized: JSON.stringify({ name: "reversible", notes: "only_index_private_value" }),
+  };
+  const before = JSON.stringify(indexed);
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  const clientApi = new Proxy({}, { get: (_target, method) => async (...args: unknown[]) => {
+    calls.push({ method: String(method), args });
+    return method === "listClients" ? { data: [indexed], total: 1, limit: 20, offset: 0 } : indexed;
+  } }) as IFrihetClient;
+  const server = new McpServer({ name: "client-index-identity", version: "1.0.0" });
+  registerMcpSurface(server, clientApi, remoteMcpSurfaceComposition(false, true, true));
+  const { client, close } = await connect(server);
+  try {
+    for (const [name, args] of [
+      ["get_client", { id: indexed.id }],
+      ["update_client", { id: indexed.id, name: indexed.name }],
+      ["create_client", { name: indexed.name }],
+      ["list_clients", {}],
+    ] as const) {
+      const result = await client.callTool({ name, arguments: args });
+      assert.notEqual(result.isError, true);
+      const structured = result.structuredContent as Record<string, unknown>;
+      const output = (name === "list_clients" ? (structured.data as unknown[])[0] : structured) as Record<string, unknown>;
+      assert.equal(output.id, indexed.id, `${name}: indexed name token must not corrupt the record ID`);
+      assert.equal(output.name, indexed.name);
+      assert.equal(output.notes, "[redacted] [redacted] [redacted]");
+      assert.deepEqual(output.details, { name: "[redacted]", id: "[redacted]" });
+      assert.deepEqual(JSON.parse(output.serialized as string), { name: "[redacted]", notes: "[redacted]" });
+      assert.equal(output.searchTokens, undefined);
+      assert.equal((result.content as Array<{ text: string }>)[0].text, JSON.stringify(structured, null, 2));
+    }
+    assert.equal(calls.filter((call) => call.method === "updateClient").length, 1);
+    assert.equal(calls.filter((call) => call.method === "createClient").length, 1);
+    assert.equal(JSON.stringify(indexed), before, "privacy filtering must not mutate the shared response");
+    assert.match((sanitizeClaudeOutput(indexed) as { id: string }).id, /\[redacted\]/u,
+      "unknown output contexts keep the conservative policy");
+  } finally { await close(); }
+});
+
+test("client identity never overrides known secrets, including normalized tax IDs and serialized sources", () => {
+  for (const source of [
+    { taxId: "b12345678" },
+    { taxId: "B-12345678" },
+    { nested: { taxIdNormalized: "B12345678" } },
+    { iban: "b12345678" },
+    { credentials: { secret: "b12345678" } },
+    { serialized: JSON.stringify({ nested: { secret: "b12345678" } }) },
+  ]) {
+    const value = { id: "client-b12345678", name: "Example b12345678", searchTokens: ["b12345678"],
+      notes: "b12345678", ...source };
+    const before = JSON.stringify(value);
+    const output = sanitizeClaudeOutput(value, "get_client") as Record<string, unknown>;
+    assert.equal(output.id, "client-[redacted]", JSON.stringify(source));
+    assert.equal(output.name, "Example [redacted]");
+    assert.equal(output.notes, "[redacted]");
+    assert.equal(JSON.stringify(value), before);
+  }
+});
+
+test("malformed search indexes and unexpected tool/record paths keep the conservative policy", () => {
+  for (const searchTokens of ["reversible", { token: "reversible" }, ["reversible", 1],
+    ["reversible", "INVALID"], Array(33).fill("reversible")]) {
+    const value = { id: "client-reversible", name: "Example reversible", searchTokens };
+    const output = sanitizeClaudeOutput(value, "get_client") as Record<string, unknown>;
+    assert.equal(output.id, "client-[redacted]");
+    assert.equal(output.name, "Example [redacted]");
+    assert.equal(output.searchTokens, undefined);
+  }
+  const value = { id: "client-reversible", name: "Example reversible", searchTokens: ["reversible"] };
+  for (const toolName of [undefined, "get_invoice", "get_vendor", "list_client_contacts", "get_client_unknown"]) {
+    assert.equal((sanitizeClaudeOutput(value, toolName) as { id: string }).id, "client-[redacted]");
+  }
+  const nested = sanitizeClaudeOutput({ id: "parent", name: "Parent", child: value }, "get_client") as { child: { id: string } };
+  assert.equal(nested.child.id, "client-[redacted]");
+  const error = claudeToolResult({ isError: true, structuredContent: value }, "get_client");
+  assert.equal((error.structuredContent as { id: string }).id, "client-[redacted]");
+});
+
+test("identity exemptions belong to their client record and never consume another record's secrets", () => {
+  const first = { id: "client-reversible", name: "Example reversible", searchTokens: ["reversible"] };
+  const second = { id: "other-reversible", name: "Different ordinary", searchTokens: ["ordinary"] };
+  const output = sanitizeClaudeOutput({ data: [first, second] }, "list_clients") as { data: Array<{ id: string }> };
+  assert.equal(output.data[0].id, first.id);
+  assert.equal(output.data[1].id, "other-[redacted]");
+  const collision = sanitizeClaudeOutput({ data: [first, { ...second, secret: "reversible" }] }, "list_clients") as typeof output;
+  assert.equal(collision.data[0].id, "client-[redacted]");
+  const unproven = sanitizeClaudeOutput({ id: "client-only_index_private", name: "Different ordinary",
+    searchTokens: ["only_index_private"], notes: "only_index_private" }, "get_client") as Record<string, unknown>;
+  assert.equal(unproven.id, "client-[redacted]");
+  assert.equal(unproven.notes, "[redacted]");
+});
+
+test("incomplete sensitive-source inspection disables every client identity exception", () => {
+  let deep: Record<string, unknown> = { secret: "reversible" };
+  for (let i = 0; i < 18; i++) deep = { child: deep };
+  const cyclic: Record<string, unknown> = {};
+  cyclic.child = cyclic;
+  for (const extra of [deep, cyclic, { serialized: '{"secret":"reversible"' },
+    { serialized: 'prose {"secret":"reversible"}' },
+    { serialized: JSON.stringify(JSON.stringify({ secret: "reversible" })) }]) {
+    const output = sanitizeClaudeOutput({ id: "client-reversible", name: "Example reversible",
+      searchTokens: ["reversible"], extra }, "get_client") as Record<string, unknown>;
+    assert.equal(output.id, "client-[redacted]");
+    assert.equal(output.name, "Example [redacted]");
+  }
+});
