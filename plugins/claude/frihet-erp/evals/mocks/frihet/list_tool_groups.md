@@ -1,0 +1,4 @@
+---
+type: fixed
+---
+{"groups":[{"group":"invoicing","label":"Invoicing & receivables / Facturación y cobros","blurb":"Read invoice and quote lists; proposals stay in the conversation and are saved in Frihet by the user.","toolCount":2},{"group":"expenses","label":"Expenses & vendors / Gastos y proveedores","blurb":"Read expense and vendor lists; no expense creation or financial classification.","toolCount":2},{"group":"crm","label":"CRM & clients / CRM y clientes","blurb":"Read client lists; no contacts, invitations or account changes.","toolCount":1},{"group":"catalog","label":"Products / Productos","blurb":"Read product and service lists; no catalog changes.","toolCount":1}],"totalGroups":4,"totalTools":6,"next":"search_tools(query) to find tools; describe_tool(name) for full description and input fields."}

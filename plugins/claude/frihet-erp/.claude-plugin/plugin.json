@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "frihet-erp",
   "displayName": "Frihet ERP",
-  "version": "1.18.0-preview.2",
-  "description": "Review receivables, prepare invoices and quotes, and review monthly business records in Frihet. Uses the connected MCP schemas, verifies partial payments and currencies, and respects approval before changes.",
+  "version": "1.18.0-preview.3",
+  "description": "Consult clients, invoices, quotes, expenses, vendors and products in Frihet. Review available records and prepare proposals in conversation, with explicit pagination, currency and balance limits. This Claude preview cannot save or send records.",
   "author": {
     "name": "Frihet",
     "email": "hola@frihet.io",
@@ -17,13 +17,5 @@
   "termsOfServiceUrl": "https://www.frihet.io/es/terms",
   "repository": "https://github.com/Frihet-io/frihet-mcp",
   "license": "MIT",
-  "keywords": [
-    "erp",
-    "invoicing",
-    "quotes",
-    "expenses",
-    "receivables",
-    "mcp",
-    "business-management"
-  ]
+  "keywords": ["erp", "invoicing", "quotes", "expenses", "receivables", "mcp", "business-management"]
 }

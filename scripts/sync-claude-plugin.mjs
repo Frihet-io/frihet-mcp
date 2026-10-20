@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
 export const plugin = join(root, "plugins/claude/frihet-erp");
+export const claudeSource = join(root, "plugins/claude/consultation");
 
 export function filesIn(directory, prefix = "") {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -17,8 +18,12 @@ export function filesIn(directory, prefix = "") {
 }
 
 export function exportedFiles() {
-  const paths = [".claude-plugin/plugin.json", ".claude-plugin/icon.png", "LICENSE", ...filesIn(join(root, "skills")).map((path) => `skills/${path}`)];
-  return new Map(paths.map((path) => [path, readFileSync(join(root, path))]));
+  const sharedPaths = [".claude-plugin/icon.png", "LICENSE"];
+  const claudePaths = [".claude-plugin/plugin.json", "README.md", ...filesIn(join(claudeSource, "skills")).map((path) => `skills/${path}`)];
+  return new Map([
+    ...sharedPaths.map((path) => [path, readFileSync(join(root, path))]),
+    ...claudePaths.map((path) => [path, readFileSync(join(claudeSource, path))]),
+  ]);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

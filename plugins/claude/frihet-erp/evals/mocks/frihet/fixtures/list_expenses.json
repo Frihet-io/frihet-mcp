@@ -1,0 +1,32 @@
+{
+  "name": "list_expenses",
+  "group": "expenses",
+  "title": "List Expenses",
+  "readOnly": true,
+  "annotations": {
+    "title": "List Expenses",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "capability": {
+    "registered": true,
+    "callability": "api_dependent",
+    "canonicalOperation": "list_expenses",
+    "writesFrihet": false,
+    "externalInteraction": false,
+    "externalSideEffects": []
+  },
+  "inputFields": [
+    "vendorId",
+    "category",
+    "from",
+    "to",
+    "fields",
+    "limit",
+    "offset",
+    "after"
+  ],
+  "description": "[expenses] List all expenses with optional pagination and date range filters. — full description and input fields via describe_tool('list_expenses'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]"
+}

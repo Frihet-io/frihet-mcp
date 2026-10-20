@@ -1,0 +1,33 @@
+{
+  "name": "list_quotes",
+  "group": "invoicing",
+  "title": "List Quotes",
+  "readOnly": true,
+  "annotations": {
+    "title": "List Quotes",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "capability": {
+    "registered": true,
+    "callability": "api_dependent",
+    "canonicalOperation": "list_quotes",
+    "writesFrihet": false,
+    "externalInteraction": false,
+    "externalSideEffects": []
+  },
+  "inputFields": [
+    "status",
+    "clientId",
+    "seriesId",
+    "from",
+    "to",
+    "fields",
+    "limit",
+    "offset",
+    "after"
+  ],
+  "description": "[invoicing] List all quotes/estimates with optional pagination and filters. — full description and input fields via describe_tool('list_quotes'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]"
+}
