@@ -214,6 +214,23 @@ test("hosted exported API requires a private receipt sink before network or cred
   assert.equal(f.calls.length, 0); assert.equal(f.reads(), 0); assert.equal(f.admissions(), 0);
 });
 
+test("default bundled operational contract reaches the credential boundary without an injected catalogue", async () => {
+  const f = fixture();
+  let requested = false;
+  const result = await f.run({}, {
+    contractLoader: undefined,
+    readToken: async () => { requested = true; throw new Error("offline-stop-before-credentials"); },
+  });
+  assert.equal(requested, true, "the shipped catalogue must pass its digest and product checks");
+  assert.equal(result.failedAt, "firebase_input");
+  assert.equal(result.status, "fail");
+  assert.equal(result.grants.length, 0);
+  assert.equal(result.productLedger.length, 0);
+  assert.ok(f.calls.every(call => call.method === "GET"), "contract loading must not authorize or write");
+  assert.equal(result.hostedAcceptanceVerified, false);
+  assert.equal(result.submissionReady, false);
+});
+
 test("offline historical four-product lifecycle retains CRUD uncertainty, rotation, revocation and reconnect checks", async () => {
   const f = fixture(), result = await f.run();
   assert.equal(result.status, "single_identity_protocol_pass", JSON.stringify(result));
