@@ -161,10 +161,16 @@ test("Claude error paths retain outcome flags without returning arbitrary text o
   } finally { await close(); }
 });
 
-test("real Claude product handlers retain only typed denial flags and withhold provider details", async () => {
-  for (const [status, flag] of [[404, "resourceNotFound"], [403, "accessDenied"]] as const) {
+test("real Claude product handlers expose actionable fixed denial text without provider details or retries", async () => {
+  for (const [status, flag, code] of [
+    [404, "resourceNotFound", "NOT_FOUND"],
+    [403, "accessDenied", "ACCESS_DENIED"],
+    [401, "authenticationRequired", "AUTHENTICATION_REQUIRED"],
+  ] as const) {
     const server = new McpServer({ name: "privacy-denial", version: "1.0.0" });
+    let calls = 0;
     const clientApi = new Proxy({}, { get: () => async () => {
+      calls++;
       throw new FrihetApiError(status, "PRIVATE_code", "PRIVATE_message", "PRIVATE_detail");
     } }) as IFrihetClient;
     registerMcpSurface(server, clientApi, remoteMcpSurfaceComposition(false, true, true));
@@ -175,8 +181,8 @@ test("real Claude product handlers retain only typed denial flags and withhold p
       assert.deepEqual(result._meta, { [`io.frihet/${flag}`]: true });
       assert.equal(result.structuredContent, undefined);
       assertPrivate(result);
-      assert.equal((result.content as Array<{ text: string }>)[0].text,
-        "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry.");
+      assert.match((result.content as Array<{ text: string }>)[0].text, new RegExp(`^${code}:`));
+      assert.equal(calls, 1, "rendering a denial must never replay the API request");
     } finally { await close(); }
   }
   for (const value of ["true", 1, null, { raw: "PRIVATE_metadata" }]) {
@@ -185,6 +191,20 @@ test("real Claude product handlers retain only typed denial flags and withhold p
     assert.equal(result._meta, undefined);
     assertPrivate(result);
   }
+});
+
+test("Claude denial messages never overrule an uncertain operation outcome", () => {
+  for (const unknown of ["operationOutcomeUnknown", "transportOutcomeUnknown", "operationMayHaveCompleted"]) {
+    const result = claudeToolResult({ isError: true, content: [{ type: "text", text: "PRIVATE_error" }],
+      _meta: { [`io.frihet/${unknown}`]: true, "io.frihet/resourceNotFound": true, "io.frihet/accessDenied": true,
+        "io.frihet/authenticationRequired": true, raw: "PRIVATE_metadata" } });
+    assertPrivate(result);
+    assert.equal((result.content as Array<{ text: string }>)[0].text,
+      "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry.");
+    assert.equal(result.structuredContent, undefined);
+  }
+  const falseFlag = claudeToolResult({ isError: true, _meta: { "io.frihet/resourceNotFound": false } });
+  assert.doesNotMatch((falseFlag.content as Array<{ text: string }>)[0].text, /^NOT_FOUND:/);
 });
 
 test("general profile retains its existing outputs and inputs", async () => {

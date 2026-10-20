@@ -93,6 +93,25 @@ const SAFE_META_FLAGS = [
   "io.frihet/resourceNotFound", "io.frihet/accessDenied",
 ] as const;
 
+/** Claude does not expose opaque tool metadata as an actionable error message.
+ * Render fixed text from the typed flags, never provider text, codes or IDs.
+ */
+function claudeErrorText(meta: Record<string, unknown>): string {
+  const unknown = "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry.";
+  if (["io.frihet/operationOutcomeUnknown", "io.frihet/transportOutcomeUnknown", "io.frihet/operationMayHaveCompleted"]
+    .some((flag) => meta[flag] === true)) return unknown;
+  if (meta["io.frihet/authenticationRequired"] === true) {
+    return "AUTHENTICATION_REQUIRED: Reconnect Frihet using the authorized account and existing permissions before retrying.";
+  }
+  if (meta["io.frihet/accessDenied"] === true) {
+    return "ACCESS_DENIED: Frihet did not authorize this request. Check the current account and existing permissions; do not retry automatically.";
+  }
+  if (meta["io.frihet/resourceNotFound"] === true) {
+    return "NOT_FOUND: No record is available with this ID in the authorized workspace. Check the ID; after deletion, verify absence with a list. Do not automatically repeat a write.";
+  }
+  return unknown;
+}
+
 /** Never forward opaque content blocks or arbitrary response metadata. */
 export function claudeToolResult(result: Record<string, unknown>): Record<string, unknown> {
   const structured = result.structuredContent === undefined ? undefined : sanitizeClaudeOutput(result.structuredContent);
@@ -102,7 +121,7 @@ export function claudeToolResult(result: Record<string, unknown>): Record<string
   ));
   const error = result.isError === true;
   const text = structured !== undefined ? JSON.stringify(structured, null, 2)
-    : error ? "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry."
+    : error ? claudeErrorText(safeMeta)
       : "Frihet returned an unstructured response. Its content was withheld by the Claude privacy boundary.";
   return {
     content: [{ type: "text", text }],
