@@ -56,7 +56,7 @@ import {
   OPENAI_REVIEW_ORIGIN,
   validateOAuthBoundary,
 } from "../../../src/openai-review-oauth.js";
-import { boundOAuthProfile, CLAUDE_ORIGIN, isClaudeQaUidAllowed, resolveWorkerAccessProfile } from "./oauth-profile.js";
+import { boundOAuthProfile, CLAUDE_ORIGIN, claudeAdmissionUnavailableResponse, isClaudeIdentityAdmitted, isVerifiedClaudeIdentity, resolveWorkerAccessProfile } from "./oauth-profile.js";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 const OAUTH_CALLBACK_MAX_BODY_BYTES = 20 * 1024;
@@ -453,7 +453,10 @@ app.post("/callback", async (c) => {
     };
     if (
       boundaryProfile
-      && !isVerifiedOpenAIIdentity(verifiedIdentity)
+      && (
+        !isVerifiedOpenAIIdentity(verifiedIdentity)
+        || (accessProfile === "claude" && !isVerifiedClaudeIdentity(verifiedIdentity))
+      )
     ) {
       log({
         level: "warn",
@@ -466,12 +469,12 @@ app.post("/callback", async (c) => {
       };
     }
 
-    // Membership comes only from the verified Firebase identity, before the
+    // Admission comes only from the verified Firebase identity, before the
     // state is armed or any backend credential can be provisioned.
-    if (accessProfile === "claude" && !isClaudeQaUidAllowed(c.env, decoded.uid)) {
+    if (accessProfile === "claude" && !isClaudeIdentityAdmitted(c.env, verifiedIdentity)) {
       return {
         settlement: "clean",
-        response: c.json({ error: "Claude pilot access is unavailable for this identity" }, 403),
+        response: claudeAdmissionUnavailableResponse(),
       };
     }
 

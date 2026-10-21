@@ -232,7 +232,7 @@ describe("anti-defang contract", () => {
   });
 
   test("pins exact source, built, navigation, and resource inventories", () => {
-    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 31);
+    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 32);
     assert.deepEqual(APPROVED_NETWORK_SINKS, {
       "src/client.ts|request|fetch|url.toString()": 1,
       "src/client.ts|fetchRaw|fetch|url.toString()": 1,
@@ -252,6 +252,7 @@ describe("anti-defang contract", () => {
       "workers/remote-mcp/src/oauth-state-store.ts|releaseOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/release`": 1,
       "workers/remote-mcp/src/oauth-state-store.ts|reserveOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/reserve`": 1,
       "workers/remote-mcp/src/oauth-state-store.ts|storeOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/state`": 1,
+      "workers/remote-mcp/src/oauth-token-family.ts|assertPolicyPauseIsSafe|(awaittokenFamilyStub(this.namespace,this.credential.userId,this.credential.grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/status`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|beginOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/begin`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|checkOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/check`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|commitOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/commit`": 1,
@@ -598,7 +599,7 @@ describe("executable analytics shapes fail closed", () => {
   test("the current source repository satisfies the complete gate", () => {
     const result = scanRepository(REPOSITORY_ROOT);
     assert.deepEqual(result.findings, []);
-    assert.equal(result.sinks.length, 31);
+    assert.equal(result.sinks.length, 32);
     assert.equal(result.resources.length, 2);
   });
 });

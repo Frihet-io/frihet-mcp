@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   boundOAuthProfile, CLAUDE_MCP_RESOURCE, CLAUDE_OAUTH_RESOURCES,
-  CLAUDE_ORIGIN, isClaudeQaUidAllowed, resolveWorkerAccessProfile,
+  CLAUDE_ORIGIN, isClaudeQaUidAllowed, isClaudeIdentityAdmitted, readClaudeAdmissionPolicy, resolveWorkerAccessProfile,
 } from "../oauth-profile.ts";
 import {
   buildOpenAIUserInfo, FRIHET_CONNECTOR_SCOPE, OPENAI_REVIEW_OAUTH_RESOURCES, OPENAI_REVIEW_OAUTH_SCOPES,
@@ -52,6 +52,50 @@ test("Claude flags require explicit isolation while existing profiles retain the
   assert.deepEqual(CLAUDE_OAUTH_RESOURCES, [CLAUDE_MCP_RESOURCE]);
   for (const resource of [CLAUDE_MCP_RESOURCE, CLAUDE_ORIGIN, ...OPENAI_REVIEW_OAUTH_RESOURCES, "https://mcp.frihet.io/mcp"]) {
     assert.equal(validateOAuthBoundary({ resource, scope: OPENAI_REVIEW_OAUTH_SCOPES, requireResource: true, requireScope: true }, CLAUDE_OAUTH_RESOURCES).ok, resource === CLAUDE_MCP_RESOURCE, resource);
+  }
+});
+
+test("Claude admission retains legacy QA and accepts only exact versioned QA or customer policy", () => {
+  const qaUids = ["synthetic-qa-user", "second-synthetic-qa-user"];
+  const identity = { uid: "verified-customer", email: "customer@example.com", emailVerified: true };
+  const env = { FRIHET_CLAUDE_QA_UIDS: JSON.stringify(qaUids) };
+  assert.deepEqual(readClaudeAdmissionPolicy(env), { mode: "qa", qaUids });
+  assert.equal(isClaudeIdentityAdmitted(env, identity), false);
+  assert.equal(isClaudeIdentityAdmitted(env, { ...identity, uid: qaUids[0] }), true);
+  for (const mode of ["qa", "customers"] as const) {
+    env.FRIHET_CLAUDE_QA_UIDS = JSON.stringify({ version: 1, mode, qaUids });
+    assert.deepEqual(readClaudeAdmissionPolicy(env), { mode, qaUids });
+    assert.equal(isClaudeIdentityAdmitted(env, identity), mode === "customers");
+    assert.equal(isClaudeQaUidAllowed(env, identity.uid), false, "customers never become QA members");
+    assert.equal(isClaudeQaUidAllowed(env, qaUids[0]), true);
+  }
+  env.FRIHET_CLAUDE_QA_UIDS = JSON.stringify(qaUids);
+  assert.equal(isClaudeIdentityAdmitted(env, identity), false, "legacy rollback pauses customers on the next decision");
+});
+
+test("Claude admission fails closed on malformed policies and unverified identities in either mode", () => {
+  const qaUids = ["synthetic-qa-user"];
+  const identity = { uid: qaUids[0], email: "qa@example.com", emailVerified: true };
+  const valid = { version: 1, mode: "customers", qaUids };
+  for (const policy of [
+    { ...valid, extra: true }, { ...valid, version: "1" }, { ...valid, version: 2 },
+    { ...valid, mode: "CUSTOMERS" }, { ...valid, mode: "*" }, { ...valid, mode: true },
+    { ...valid, qaUids: [] }, { ...valid, qaUids: [qaUids[0], qaUids[0]] },
+    { ...valid, qaUids: ["user/path"] }, { ...valid, qaUids: "*" },
+    { mode: "customers", qaUids }, { version: 1, qaUids }, { version: 1, mode: "customers" },
+  ]) {
+    const env = { FRIHET_CLAUDE_QA_UIDS: JSON.stringify(policy) };
+    assert.equal(readClaudeAdmissionPolicy(env), undefined, JSON.stringify(policy));
+    assert.equal(isClaudeIdentityAdmitted(env, identity), false);
+  }
+  for (const mode of ["qa", "customers"]) {
+    const env = { FRIHET_CLAUDE_QA_UIDS: JSON.stringify({ version: 1, mode, qaUids }) };
+    for (const mutation of [
+      { emailVerified: false }, { emailVerified: "true" }, { emailVerified: undefined },
+      { email: undefined }, { email: null }, { email: " invalid@example.com" },
+      { email: "invalid" }, { email: "a@b\n" }, { email: "a@b\0" }, { email: "a".repeat(321) },
+      { uid: "." }, { uid: ".." }, { uid: "user/path" }, { uid: "user\0name" }, { uid: "u".repeat(129) },
+    ]) assert.equal(isClaudeIdentityAdmitted(env, { ...identity, ...mutation }), false, JSON.stringify(mutation));
   }
 });
 

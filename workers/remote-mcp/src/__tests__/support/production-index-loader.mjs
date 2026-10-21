@@ -30,7 +30,11 @@ export default class OAuthProvider {
     this.options = options;
     (globalThis.__recordedOAuthProviders ??= []).push(options);
   }
-  async fetch() { return new Response(null, { status: 204 }); }
+  async fetch(request, env, ctx) {
+    return globalThis.__recordedOAuthProviderFetch
+      ? globalThis.__recordedOAuthProviderFetch(this.options, request, env, ctx)
+      : new Response(null, { status: 204 });
+  }
 }
 `;
 

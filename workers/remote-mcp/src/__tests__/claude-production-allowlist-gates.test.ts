@@ -10,7 +10,8 @@ import assert from "node:assert/strict";
 import { register } from "node:module";
 import { before, test } from "node:test";
 
-import { CLAUDE_ORIGIN } from "../oauth-profile.ts";
+import { CLAUDE_ORIGIN, ClaudeAdmissionPolicyError } from "../oauth-profile.ts";
+import { bindMcpSessionId, fingerprintSessionPrincipal } from "../mcp-session-binding.ts";
 import { FRIHET_CONNECTOR_SCOPE, OPENAI_REVIEW_OAUTH_SCOPES } from "../../../../src/openai-review-oauth.ts";
 
 const ALLOWED_UID = "claude-qa-allowed-user";
@@ -94,7 +95,9 @@ function ingressEnv(qaUids: string | undefined) {
   return { env, mcpObjectTouches };
 }
 
-async function ingress(method: string, userId: string, qaUids: string | undefined) {
+async function ingress(method: string, userId: string, qaUids: string | undefined, extra: {
+  props?: Record<string, unknown>; tokenUserId?: string; sessionId?: string;
+} = {}) {
   const { env, mcpObjectTouches } = ingressEnv(qaUids);
   let response: Response | undefined;
   let thrown: unknown;
@@ -103,14 +106,15 @@ async function ingress(method: string, userId: string, qaUids: string | undefine
       new Request(`${CLAUDE_ORIGIN}/mcp`, {
         method,
         headers: {
-          Authorization: `Bearer ${userId}:${GRANT_ID}:${TOKEN_SECRET}`,
+          Authorization: `Bearer ${extra.tokenUserId ?? userId}:${GRANT_ID}:${TOKEN_SECRET}`,
           "Content-Type": "application/json",
+          ...(extra.sessionId ? { "mcp-session-id": extra.sessionId } : {}),
           Accept: "application/json, text/event-stream",
         },
         ...(method === "POST" ? { body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) } : {}),
       }),
       env,
-      { waitUntil() {}, passThroughOnException() {}, props: authProps(userId) },
+      { waitUntil() {}, passThroughOnException() {}, props: { ...authProps(userId), ...extra.props } },
     );
   } catch (error) {
     thrown = error;
@@ -125,8 +129,8 @@ function isGateRejection(response: Response | undefined, body: string | undefine
 test("production ingress rejects a Claude principal outside FRIHET_CLAUDE_QA_UIDS before the MCP Durable Object", async () => {
   const denied = await ingress("POST", OUTSIDER_UID, JSON.stringify([ALLOWED_UID]));
   assert.equal(denied.thrown, undefined);
-  assert.equal(denied.response?.status, 401);
-  assert.deepEqual(await denied.response?.json(), { error: "invalid_token" });
+  assert.equal(denied.response?.status, 503);
+  assert.equal((await denied.response?.json() as { error: string }).error, "temporarily_unavailable");
   assert.deepEqual(denied.mcpObjectTouches, [], "the DO must never be contacted for a non-allow-listed uid");
 });
 
@@ -137,7 +141,7 @@ for (const [label, qaUids] of [
 ] as const) {
   test(`production ingress fails closed on ${label} even for a previously valid uid`, async () => {
     const denied = await ingress("POST", ALLOWED_UID, qaUids);
-    assert.equal(denied.response?.status, 401);
+    assert.equal(denied.response?.status, 503);
     assert.deepEqual(denied.mcpObjectTouches, []);
   });
 }
@@ -166,7 +170,7 @@ for (const grantType of ["authorization_code", "refresh_token"] as const) {
     });
     assert.throws(
       () => exchange(options(OUTSIDER_UID)),
-      /does not match the Frihet connector boundary/u,
+      ClaudeAdmissionPolicyError,
     );
     // Control: everything else identical, allow-listed uid is accepted.
     const accepted = exchange(options(ALLOWED_UID)) as { accessTokenProps: { userId: string } };
@@ -228,4 +232,125 @@ test("the production guarded Claude callback carries the encrypted grant correla
     uid: ALLOWED_UID, keyId: authProps(ALLOWED_UID).keyId,
     accessProfile: "claude", oauthResource: CLAUDE_ORIGIN, correlationId,
   });
+});
+
+const customerPolicy = () => JSON.stringify({ version: 1, mode: "customers", qaUids: [ALLOWED_UID] });
+
+async function productionClaudeOptions(policy: string): Promise<RecordedProviderOptions> {
+  await production.default.fetch(new Request(`${CLAUDE_ORIGIN}/.well-known/oauth-authorization-server`),
+    claudeEnv(policy), { waitUntil() {}, passThroughOnException() {} });
+  const recorded = (globalThis as unknown as { __recordedOAuthProviders: RecordedProviderOptions[] }).__recordedOAuthProviders;
+  return recorded[recorded.length - 1];
+}
+
+test("production Claude customer ingress and both grant exchanges admit verified non-QA customers", async () => {
+  const admitted = await ingress("POST", OUTSIDER_UID, customerPolicy());
+  assert.notEqual(admitted.response?.status, 503);
+  assert.equal(isGateRejection(admitted.response, await admitted.response?.clone().text()), false);
+  const options = await productionClaudeOptions(customerPolicy());
+  for (const grantType of ["authorization_code", "refresh_token"] as const) {
+    const accepted = options.tokenExchangeCallback!({
+      grantType, scope: [...OPENAI_REVIEW_OAUTH_SCOPES], requestedScope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      props: authProps(OUTSIDER_UID), userId: OUTSIDER_UID,
+    }) as { accessTokenProps: Record<string, unknown>; accessTokenScope: string[] };
+    assert.equal(accepted.accessTokenProps.userId, OUTSIDER_UID);
+    assert.deepEqual(accepted.accessTokenScope, [...OPENAI_REVIEW_OAUTH_SCOPES]);
+  }
+});
+
+test("production ingress rejects invalid encrypted claims before the policy check or session cleanup bypass", async () => {
+  for (const policy of [customerPolicy(), JSON.stringify([ALLOWED_UID])]) {
+    for (const mutation of [
+      { accessProfile: "openai" }, { authMethod: "api-key" }, { oauthIssuer: "https://openai-mcp.frihet.io" },
+      { oauthResource: "https://mcp.frihet.io" }, { oauthAudience: CLAUDE_ORIGIN },
+      { oauthScope: "read" }, { oauthScopes: ["read", "write"] },
+      { emailVerified: false }, { emailVerified: "true" }, { emailVerified: undefined },
+      { email: undefined }, { email: "invalid" }, { userId: "user/path" },
+    ]) {
+      for (const method of ["POST", "DELETE"]) {
+        const denied = await ingress(method, OUTSIDER_UID, policy, { props: mutation });
+        assert.equal(denied.response?.status, 401, JSON.stringify({ method, mutation }));
+        assert.deepEqual(denied.mcpObjectTouches, []);
+      }
+    }
+  }
+});
+
+test("production paused DELETE keeps token-owner and signed session-principal checks", async () => {
+  const qaPolicy = JSON.stringify([ALLOWED_UID]);
+  const fingerprint = await fingerprintSessionPrincipal(authProps(OUTSIDER_UID));
+  assert.ok(fingerprint);
+  const ownSession = await bindMcpSessionId("synthetic_session_123", fingerprint, "k".repeat(64));
+  assert.ok(ownSession);
+  const mismatchedToken = await ingress("DELETE", OUTSIDER_UID, qaPolicy, { tokenUserId: ALLOWED_UID, sessionId: ownSession });
+  assert.equal(mismatchedToken.response?.status, 401);
+  assert.deepEqual(mismatchedToken.mcpObjectTouches, []);
+  const otherFingerprint = await fingerprintSessionPrincipal(authProps(ALLOWED_UID));
+  assert.ok(otherFingerprint);
+  const otherSession = await bindMcpSessionId("synthetic_session_123", otherFingerprint, "k".repeat(64));
+  assert.ok(otherSession);
+  const foreignSession = await ingress("DELETE", OUTSIDER_UID, qaPolicy, { sessionId: otherSession });
+  assert.equal(foreignSession.response?.status, 403);
+  assert.deepEqual(foreignSession.mcpObjectTouches, []);
+  const owner = await ingress("DELETE", OUTSIDER_UID, qaPolicy, { sessionId: ownSession });
+  assert.notEqual(owner.response?.status, 401);
+  assert.notEqual(owner.response?.status, 403);
+  assert.notEqual(owner.response?.status, 503);
+});
+
+test("production token exchange validates all retained claims and credential lifetime before a reversible policy denial", async () => {
+  const options = await productionClaudeOptions(JSON.stringify([ALLOWED_UID]));
+  for (const mutation of [
+    { accessProfile: "openai" }, { authMethod: "api-key" }, { oauthIssuer: "https://openai-mcp.frihet.io" },
+    { oauthAudience: CLAUDE_ORIGIN }, { oauthScopes: ["read"] }, { emailVerified: false },
+    { emailVerified: "true" }, { email: undefined }, { userId: "other-user" },
+    { apiKey: "invalid" }, { keyId: "invalid" }, { correlationId: "invalid" },
+    { apiKeyExpiresAt: new Date(Date.now() - 1000).toISOString() },
+  ]) {
+    assert.throws(() => options.tokenExchangeCallback!({
+      grantType: "refresh_token", scope: [...OPENAI_REVIEW_OAUTH_SCOPES], requestedScope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      props: { ...authProps(OUTSIDER_UID), ...mutation }, userId: OUTSIDER_UID,
+    }), (error: unknown) => error instanceof Error && !(error instanceof ClaudeAdmissionPolicyError), JSON.stringify(mutation));
+  }
+});
+
+test("production guarded token route returns generic 503 with no reserve, grant write or revocation for a valid paused refresh", async (t) => {
+  const credential = `${OUTSIDER_UID}:${GRANT_ID}:${TOKEN_SECRET}`;
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(credential))))
+    .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const touched: string[] = [];
+  const state = globalThis as unknown as {
+    __recordedOAuthProviderFetch?: (options: RecordedProviderOptions) => Promise<Response>;
+  };
+  state.__recordedOAuthProviderFetch = async (options) => {
+    await options.tokenExchangeCallback!({
+      grantType: "refresh_token", scope: [...OPENAI_REVIEW_OAUTH_SCOPES], requestedScope: [...OPENAI_REVIEW_OAUTH_SCOPES],
+      props: authProps(OUTSIDER_UID), userId: OUTSIDER_UID,
+    });
+    throw new Error("a paused credential must not issue a token");
+  };
+  t.after(() => { delete state.__recordedOAuthProviderFetch; });
+  const env = claudeEnv(JSON.stringify([ALLOWED_UID]), {
+    OAUTH_KV: { get: async () => ({ refreshTokenId: hash }), put: () => { throw new Error("unexpected grant write"); } },
+    OAUTH_STATE: {
+      idFromName: (name: string) => name,
+      get: () => ({ fetch: async (url: string) => {
+        const path = new URL(url).pathname;
+        touched.push(path);
+        if (path === "/token-family/check") return Response.json({ outcome: "current" });
+        assert.equal(path, "/token-family/status");
+        return Response.json({ outcome: "active" });
+      } }),
+    },
+  });
+  const response = await production.default.fetch(new Request(`${CLAUDE_ORIGIN}/token`, {
+    method: "POST", body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: credential,
+      client_id: "synthetic-client", resource: `${CLAUDE_ORIGIN}/mcp` }),
+  }), env, { waitUntil() {}, passThroughOnException() {} });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    error: "temporarily_unavailable", error_description: "Frihet Claude access is temporarily unavailable. Try again later.",
+  });
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual(touched, ["/token-family/check", "/token-family/status"]);
 });

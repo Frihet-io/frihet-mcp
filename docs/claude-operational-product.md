@@ -99,10 +99,10 @@ contracts and the shared OpenAI/general redaction policy retain their behavior.
 
 ## Isolation and rollback
 
-This source change modifies Claude's registration profile, instructions, plugin,
-fixtures, release-source checks and Claude-only public wording. It does not modify
-OAuth admission, IAM, secrets, KV or Durable Object bindings, credentials,
-OpenAI's frozen descriptor, the general tool registry or cloud resources.
+This consolidated source candidate also prepares explicit Claude customer admission
+using the existing policy field; see [the admission and rollback contract](claude-customer-admission.md).
+It does not activate customer access. IAM, secrets, KV and Durable Object bindings,
+OpenAI's frozen descriptor, the general tool registry and cloud resources remain unchanged.
 
 The write-route test dispatches the operational Claude handlers through the real
 HTTP client against a loopback server. Its write set must equal the existing ERP

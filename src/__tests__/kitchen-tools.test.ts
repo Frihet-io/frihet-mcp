@@ -22,6 +22,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { FrihetClient } from "../client.js";
 import { registerKitchenTools } from "../tools/kitchen.js";
+import { claudeToolResult } from "../claude-output-privacy.js";
 
 // ── Minimal McpServer stub ───────────────────────────────────────────────────
 
@@ -459,6 +460,25 @@ test("kitchen_flow_summary counts canonical multi-station tickets once and exclu
     { stationId: "sta_bar", openTickets: 2 },
     { stationId: "__unassigned__", openTickets: 1 },
   ]);
+});
+
+test("empty kitchen_flow_summary omits the optional bottleneck before and after Claude privacy", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => Response.json({ data: [], total: 0, limit: 100, offset: 0 }));
+  // Inspect the raw result as well: JSON transport alone would silently omit
+  // an undefined property before the privacy boundary could encounter it.
+  const emptyClient = new FrihetClient("fri_test_kitchen", "https://api.frihet.io/v1");
+  const server = await makeServer(() => emptyClient);
+  const raw = await server.tools.get("kitchen_flow_summary")!.handler({});
+  const client = await connectKitchen(t);
+  const transported = await client.callTool({ name: "kitchen_flow_summary", arguments: {} });
+  for (const result of [raw, transported, claudeToolResult(raw, "kitchen_flow_summary")]) {
+    assert.notEqual(result.isError, true);
+    const summary = result.structuredContent as Record<string, unknown>;
+    assert.deepEqual(summary.stations, []);
+    assert.equal(summary.totalOpenTickets, 0);
+    assert.equal(Object.hasOwn(summary, "bottleneckStationId"), false);
+    assert.doesNotMatch(JSON.stringify(result), /\[redacted\]/u);
+  }
 });
 
 describe("list_kitchen_stations — success path", () => {

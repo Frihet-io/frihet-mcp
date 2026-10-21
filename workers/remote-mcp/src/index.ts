@@ -64,7 +64,7 @@ import {
   validateOAuthBoundary,
 } from "../../../src/openai-review-oauth.js";
 import { CLAUDE_CANDIDATE_INSTRUCTIONS } from "../../../src/claude-profile.js";
-import { boundOAuthProfile, CLAUDE_ORIGIN, isClaudeQaUidAllowed, resolveWorkerAccessProfile, type WorkerAccessProfile } from "./oauth-profile.js";
+import { boundOAuthProfile, CLAUDE_ORIGIN, ClaudeAdmissionPolicyError, claudeAdmissionUnavailableResponse, isClaudeIdentityAdmitted, isVerifiedClaudeIdentity, resolveWorkerAccessProfile, type WorkerAccessProfile } from "./oauth-profile.js";
 import { claudePublicSurface } from "./claude-public-surface.js";
 import { reviewedMcpProtectedResourceMetadataResponse } from "./protected-resource-metadata.js";
 import {
@@ -122,6 +122,22 @@ export type AuthProps = {
   authMethod?: "oauth" | "api-key";
 };
 
+/** Claims come exclusively from the provider's authenticated encrypted props. */
+function hasReviewedOAuthAccessContext(props: AuthProps | undefined, profile: WorkerAccessProfile): boolean {
+  if (profile === "full") return false;
+  const boundary = boundOAuthProfile(profile);
+  const identity = { uid: props?.userId, email: props?.email, emailVerified: props?.emailVerified };
+  return props?.accessProfile === profile
+    && props.oauthScope === FRIHET_CONNECTOR_SCOPE
+    && hasExactOpenAIReviewScopes(props.oauthScopes)
+    && props.oauthIssuer === boundary.origin
+    && typeof props.oauthAudience === "string"
+    && boundary.acceptedResources.includes(props.oauthAudience)
+    && props.oauthResource === boundary.origin
+    && props.authMethod === "oauth"
+    && (profile === "claude" ? isVerifiedClaudeIdentity(identity) : isVerifiedOpenAIIdentity(identity));
+}
+
 // ---------------------------------------------------------------------------
 // McpAgent — one Durable Object per authenticated session
 // ---------------------------------------------------------------------------
@@ -143,21 +159,7 @@ export class FrihetMCP extends McpAgent<Env, Record<string, never>, AuthProps> {
     const boundaryProfile = accessProfile === "full" ? undefined : boundOAuthProfile(accessProfile);
     if (
       boundaryProfile
-      && (
-        this.props?.accessProfile !== accessProfile
-        || this.props?.oauthScope !== FRIHET_CONNECTOR_SCOPE
-        || !hasExactOpenAIReviewScopes(this.props?.oauthScopes)
-        || this.props?.oauthIssuer !== boundaryProfile.origin
-        || typeof this.props?.oauthAudience !== "string"
-        || !boundaryProfile.acceptedResources.includes(this.props.oauthAudience)
-        || this.props?.oauthResource !== boundaryProfile.origin
-        || this.props?.authMethod !== "oauth"
-        || !isVerifiedOpenAIIdentity({
-          uid: this.props?.userId,
-          email: this.props?.email,
-          emailVerified: this.props?.emailVerified,
-        })
-      )
+      && !hasReviewedOAuthAccessContext(this.props, accessProfile)
     ) {
       throw new Error("OAuth access context does not match the reviewed Frihet server");
     }
@@ -898,14 +900,9 @@ const mcpApiHandler = createPrincipalBoundMcpHandler(unboundMcpApiHandler);
 const reviewedMcpApiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const props = (ctx as ExecutionContext & { props?: AuthProps }).props;
+    const claude = resolveWorkerAccessProfile(env) === "claude";
     if (
-      // Check at ingress before both new and existing session requests reach
-      // the DO. A QA throw in init() would also prevent DELETE after a DO wakes.
-      // Session deletion is cleanup, so an authenticated principal may still
-      // close its own session after pilot membership has been withdrawn.
-      (resolveWorkerAccessProfile(env) === "claude"
-        && request.method !== "DELETE"
-        && !isClaudeQaUidAllowed(env, props?.userId))
+      (claude && !hasReviewedOAuthAccessContext(props, "claude"))
       || !(await isOAuthAccessTokenFamilyActive(
         env.OAUTH_STATE,
         request,
@@ -920,6 +917,13 @@ const reviewedMcpApiHandler = {
           "Pragma": "no-cache",
         },
       });
+    }
+    // Check existing sessions at ingress, not init(): authenticated owners
+    // retain DELETE cleanup through the principal-bound session envelope.
+    if (claude && request.method !== "DELETE" && !isClaudeIdentityAdmitted(env, {
+      uid: props?.userId, email: props?.email, emailVerified: props?.emailVerified,
+    })) {
+      return claudeAdmissionUnavailableResponse();
     }
     return mcpApiHandler.fetch(request, env, ctx);
   },
@@ -989,7 +993,7 @@ function validateReviewedTokenExchange({
     requestedScope,
     props,
     userId,
-  }: TokenExchangeCallbackOptions, profile: "openai" | "claude" = "openai", env?: Pick<Env, "FRIHET_CLAUDE_QA_UIDS">): {
+  }: TokenExchangeCallbackOptions, profile: "openai" | "claude" = "openai"): {
     reviewedProps: AuthProps;
     apiKeyBinding: OAuthApiKeyBinding;
     credentialTtlSeconds: number;
@@ -1008,11 +1012,8 @@ function validateReviewedTokenExchange({
     || !boundaryProfile.acceptedResources.includes(reviewedProps.oauthAudience)
     || reviewedProps.authMethod !== "oauth"
     || reviewedProps.userId !== userId
-    || (profile === "claude" && !isClaudeQaUidAllowed(env ?? {}, userId))
-    || !isVerifiedOpenAIIdentity({
-      uid: reviewedProps.userId,
-      email: reviewedProps.email,
-      emailVerified: reviewedProps.emailVerified,
+    || !(profile === "claude" ? isVerifiedClaudeIdentity : isVerifiedOpenAIIdentity)({
+      uid: reviewedProps.userId, email: reviewedProps.email, emailVerified: reviewedProps.emailVerified,
     })
     || typeof reviewedProps.keyId !== "string"
     || !/^[A-Za-z0-9]{20}$/u.test(reviewedProps.keyId)
@@ -1091,7 +1092,10 @@ function createClaudeProviderOptions(env: Env): OAuthProviderOptions<Env> {
       resource_name: "Frihet Claude connector",
     },
     tokenExchangeCallback: (options: TokenExchangeCallbackOptions) => {
-      const { reviewedProps, credentialTtlSeconds } = validateReviewedTokenExchange(options, "claude", env);
+      const { reviewedProps, credentialTtlSeconds } = validateReviewedTokenExchange(options, "claude");
+      if (!isClaudeIdentityAdmitted(env, {
+        uid: reviewedProps.userId, email: reviewedProps.email, emailVerified: reviewedProps.emailVerified,
+      })) throw new ClaudeAdmissionPolicyError();
       return buildReviewedTokenExchangeResult(options, reviewedProps, credentialTtlSeconds);
     },
   };
@@ -1105,7 +1109,15 @@ function createGuardedOpenAIProvider(exchange: OAuthTokenFamilyExchange, env: En
         reviewedProps,
         apiKeyBinding,
         credentialTtlSeconds,
-      } = validateReviewedTokenExchange(options, profile, env);
+      } = validateReviewedTokenExchange(options, profile);
+      if (profile === "claude" && !isClaudeIdentityAdmitted(env, {
+        uid: reviewedProps.userId, email: reviewedProps.email, emailVerified: reviewedProps.emailVerified,
+      })) {
+        // Preserve a current credential without a lease/rotation, while a
+        // provider-accepted previous refresh still triggers replay revocation.
+        await exchange.assertPolicyPauseIsSafe(options, apiKeyBinding);
+        throw new ClaudeAdmissionPolicyError();
+      }
       await exchange.reserve(options, apiKeyBinding);
       return buildReviewedTokenExchangeResult(
         options,
@@ -1838,10 +1850,14 @@ export default {
       }
     } catch (error) {
       if (!tokenFamilyExchange) throw error;
-      try {
-        tokenSettlement = await tokenFamilyExchange.settleThrown(error);
-      } catch {
-        tokenSettlement = undefined;
+      if (accessProfile === "claude" && error instanceof ClaudeAdmissionPolicyError && !tokenFamilyExchange.hasLease()) {
+        tokenSettlement = { response: claudeAdmissionUnavailableResponse(), revokeGrant: false };
+      } else {
+        try {
+          tokenSettlement = await tokenFamilyExchange.settleThrown(error);
+        } catch {
+          tokenSettlement = undefined;
+        }
       }
       if (!tokenSettlement) {
         tokenSettlement = {

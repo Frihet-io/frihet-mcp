@@ -34,7 +34,7 @@ import {
   type OAuthCleanupAuthorities,
   OAuthStateStore,
 } from "../../oauth-state-store.ts";
-import { boundOAuthProfile, CLAUDE_ORIGIN, isClaudeQaUidAllowed, resolveWorkerAccessProfile } from "../../oauth-profile.ts";
+import { boundOAuthProfile, CLAUDE_ORIGIN, ClaudeAdmissionPolicyError, claudeAdmissionUnavailableResponse, isClaudeIdentityAdmitted, isVerifiedClaudeIdentity, resolveWorkerAccessProfile } from "../../oauth-profile.ts";
 import { resolveOAuthApiKeyUrl } from "../../api-url.ts";
 import {
   reconcileOAuthApiKeyCorrelation,
@@ -130,7 +130,7 @@ function base64url(value: string | Uint8Array): string {
 
 /** Mint a Firebase-shaped ID token; `expired`/`kid` produce verifier failures. */
 export async function mintIdToken(
-  options: { uid?: string; expired?: boolean; kid?: string } = {},
+  options: { uid?: string; expired?: boolean; kid?: string; email?: unknown; emailVerified?: unknown } = {},
 ): Promise<string> {
   const uid = options.uid ?? USER_ID;
   const now = Math.floor(Date.now() / 1000);
@@ -144,8 +144,8 @@ export async function mintIdToken(
     iat: issuedAt,
     auth_time: issuedAt,
     exp: options.expired ? now - 3600 : now + 3600,
-    email: "route-user@example.com",
-    email_verified: true,
+    email: "email" in options ? options.email : "route-user@example.com",
+    email_verified: "emailVerified" in options ? options.emailVerified : true,
     firebase: { identities: {}, sign_in_provider: "password" },
   };
   const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
@@ -639,7 +639,8 @@ export async function createOAuthRouteHarness(
   const apiHandler = {
     async fetch(request: Request, handlerEnv: Record<string, unknown>, ctx: { props?: Record<string, unknown> }) {
       const userId = typeof ctx.props?.userId === "string" ? ctx.props.userId : undefined;
-      if (profile === "claude" && request.method !== "DELETE" && !isClaudeQaUidAllowed(handlerEnv, userId)) {
+      const identity = { uid: userId, email: ctx.props?.email, emailVerified: ctx.props?.emailVerified };
+      if (profile === "claude" && !isVerifiedClaudeIdentity(identity)) {
         return json({ error: "invalid_token" }, 401);
       }
       if (!await isOAuthAccessTokenFamilyActive(
@@ -648,6 +649,9 @@ export async function createOAuthRouteHarness(
         userId,
       )) {
         return json({ error: "invalid_token" }, 401);
+      }
+      if (profile === "claude" && request.method !== "DELETE" && !isClaudeIdentityAdmitted(handlerEnv, identity)) {
+        return claudeAdmissionUnavailableResponse();
       }
       return json({ keyId: ctx.props?.keyId, userId });
     },
@@ -660,17 +664,23 @@ export async function createOAuthRouteHarness(
     // exact backend key carried by the grant the callback completed.
     tokenExchangeCallback: async (callbackOptions: { props: Record<string, unknown>; userId: string }) => {
       const props = callbackOptions.props;
-      if (profile === "claude" && !isClaudeQaUidAllowed(env, callbackOptions.userId)) {
-        throw new Error("Claude pilot access is unavailable for this identity");
+      const identity = { uid: props.userId, email: props.email, emailVerified: props.emailVerified };
+      if (profile === "claude" && (!isVerifiedClaudeIdentity(identity) || props.userId !== callbackOptions.userId)) {
+        throw new Error("Invalid Claude grant identity");
+      }
+      const apiKeyBinding = {
+        uid: callbackOptions.userId,
+        keyId: String(props.keyId),
+        ...(profile === "claude"
+          ? { accessProfile: profile, oauthResource: CLAUDE_ORIGIN, ...(props.correlationId === undefined ? {} : { correlationId: String(props.correlationId) }) }
+          : { accessProfile: profile, oauthResource: OPENAI_REVIEW_ORIGIN }),
+      };
+      if (profile === "claude" && !isClaudeIdentityAdmitted(env, identity)) {
+        if (exchange) await exchange.assertPolicyPauseIsSafe(callbackOptions as never, apiKeyBinding);
+        throw new ClaudeAdmissionPolicyError();
       }
       if (exchange) {
-        await exchange.reserve(callbackOptions as never, {
-          uid: callbackOptions.userId,
-          keyId: String(props.keyId),
-          ...(profile === "claude"
-            ? { accessProfile: profile, oauthResource: CLAUDE_ORIGIN, ...(props.correlationId === undefined ? {} : { correlationId: String(props.correlationId) }) }
-            : { accessProfile: profile, oauthResource: OPENAI_REVIEW_ORIGIN }),
-        });
+        await exchange.reserve(callbackOptions as never, apiKeyBinding);
       }
       return {
         accessTokenProps: props,
@@ -765,6 +775,9 @@ export async function createOAuthRouteHarness(
       if (revocation) return (await revocation.settle(response)).response;
       return response;
     } catch (error) {
+      if (profile === "claude" && error instanceof ClaudeAdmissionPolicyError && !exchange?.hasLease()) {
+        return claudeAdmissionUnavailableResponse();
+      }
       const settlement = await exchange?.settleThrown(error);
       if (settlement) return settlement.response;
       if (!exchange) throw error;

@@ -421,6 +421,55 @@ export class OAuthTokenFamilyExchange {
     return this.storedApiKeyBinding;
   }
 
+  /**
+   * Claude policy pause only, after the provider has authenticated the client
+   * and credential. A current code/refresh is inspected without reserving or
+   * consuming it. The provider also accepts one previous refresh token: that
+   * replay (or an already revoked/unknown durable family) must still revoke.
+   */
+  async assertPolicyPauseIsSafe(
+    options: TokenExchangeCallbackOptions,
+    apiKeyBinding: OAuthApiKeyBinding,
+  ): Promise<void> {
+    if (options.userId !== this.credential.userId || apiKeyBinding.uid !== options.userId) {
+      throw new OAuthTokenFamilyGuardError("invalid", apiKeyBinding);
+    }
+    const [familyHash, providerHash, grant] = await Promise.all([
+      this.familyHashPromise,
+      this.providerHashPromise,
+      this.oauthKv.get<OAuthGrantRecord>(
+        `grant:${this.credential.userId}:${this.credential.grantId}`, { type: "json" },
+      ),
+    ]);
+    const check = await checkOAuthTokenFamilyUse(
+      this.namespace, this.credential.userId, this.credential.grantId,
+      { kind: this.kind, credentialHash: familyHash },
+    );
+    const currentProviderHash = this.kind === "authorization_code" ? grant?.authCodeId : grant?.refreshTokenId;
+    if (currentProviderHash === providerHash && check.outcome === "missing") return;
+    if (currentProviderHash === providerHash && check.outcome === "current") {
+      // /check intentionally does not expire records. The existing status
+      // guard handles expiry so a genuinely expired family is never paused.
+      const status = await (await tokenFamilyStub(this.namespace, this.credential.userId, this.credential.grantId))
+        .fetch(`${INTERNAL_ORIGIN}/token-family/status`);
+      if (!status.ok) throw new Error("OAuth token family status is unavailable");
+      const body: unknown = await status.json();
+      if (isRecord(body) && Object.keys(body).length === 1 && body.outcome === "active") return;
+    }
+
+    this.providerValidatedCredential = true;
+    this.storedApiKeyBinding = apiKeyBinding;
+    if (check.outcome === "missing") {
+      await initializeOAuthTokenFamily(this.namespace, this.credential.userId, this.credential.grantId, {
+        currentKind: this.kind, currentHash: familyHash, expiresAtMs: expiryFromGrant(grant), apiKeyBinding,
+      });
+    }
+    const revokedBinding = await this.revoke();
+    const replay = check.outcome === "spent"
+      || (this.kind === "refresh_token" && grant?.previousRefreshTokenId === providerHash);
+    throw new OAuthTokenFamilyGuardError(replay ? "replay" : "revoked", revokedBinding ?? apiKeyBinding);
+  }
+
   /** Called only from the provider's already-validated token callback. */
   async reserve(
     options: TokenExchangeCallbackOptions,
