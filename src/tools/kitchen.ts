@@ -253,23 +253,32 @@ export function registerKitchenTools(server: McpServer, client: IFrihetClient): 
           oldestCreatedAt: number | null;
         }
         const agg = new Map<string, StationAgg>();
+        let totalOpenTickets = 0;
 
         for (const t of ticketsResult.data) {
           const ticket = t as Record<string, unknown>;
           const status = typeof ticket["status"] === "string" ? ticket["status"] : "";
-          if (status === "served" || status === "cancelled") continue;
+          if (status === "served" || status === "cancelled" || status === "voided") continue;
+          totalOpenTickets += 1;
 
-          const stationId = typeof ticket["stationId"] === "string" ? ticket["stationId"] : "__unassigned__";
+          // REST tickets can route to multiple stations; retain legacy single-station input.
+          const stationIds = Array.isArray(ticket["stationIds"])
+            ? [...new Set(ticket["stationIds"].filter((id): id is string => typeof id === "string" && id.length > 0))]
+            : typeof ticket["stationId"] === "string" ? [ticket["stationId"]] : [];
+          if (stationIds.length === 0) stationIds.push("__unassigned__");
           const createdAt = typeof ticket["createdAt"] === "string"
             ? new Date(ticket["createdAt"]).getTime()
             : null;
 
-          const existing = agg.get(stationId) ?? { openTickets: 0, oldestCreatedAt: null };
-          existing.openTickets += 1;
-          if (createdAt !== null && (existing.oldestCreatedAt === null || createdAt < existing.oldestCreatedAt)) {
-            existing.oldestCreatedAt = createdAt;
+          for (const stationId of stationIds) {
+            const existing = agg.get(stationId) ?? { openTickets: 0, oldestCreatedAt: null };
+            existing.openTickets += 1;
+            if (createdAt !== null && (existing.oldestCreatedAt === null || createdAt < existing.oldestCreatedAt)) {
+              existing.oldestCreatedAt = createdAt;
+            }
+            agg.set(stationId, existing);
+            if (stationId !== "__unassigned__" && !stationMap.has(stationId)) stationMap.set(stationId, stationId);
           }
-          agg.set(stationId, existing);
         }
 
         // Build station summaries, also include stations with zero open tickets
@@ -329,8 +338,6 @@ export function registerKitchenTools(server: McpServer, client: IFrihetClient): 
             }
           }
         }
-
-        const totalOpenTickets = summaries.reduce((acc, s) => acc + s.openTickets, 0);
 
         const result = {
           stations: summaries,
