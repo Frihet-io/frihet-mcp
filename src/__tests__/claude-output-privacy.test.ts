@@ -280,11 +280,32 @@ test("real Claude product handlers expose actionable fixed denial text without p
   }
 });
 
+test("Claude validation remediation uses fixed text and literal boolean flags only", () => {
+  for (const [flag, prefix] of [["localValidationRejected", "VALIDATION_FAILED"], ["requestRejected", "REQUEST_REJECTED"]] as const) {
+    const result = claudeToolResult({ isError: true,
+      content: [{ type: "text", text: "PRIVATE_provider_message" }],
+      structuredContent: { id: "PRIVATE_provider_id", code: "PRIVATE_provider_code", message: "PRIVATE_provider_message" },
+      _meta: { [`io.frihet/${flag}`]: true, raw: "PRIVATE_metadata" } });
+    assert.match((result.content as Array<{ text: string }>)[0].text, new RegExp(`^${prefix}:`, "u"));
+    assert.equal(result.structuredContent, undefined);
+    assert.deepEqual(result._meta, { [`io.frihet/${flag}`]: true });
+    assertPrivate(result);
+    for (const value of [undefined, false, "true", 1, null, { raw: "PRIVATE_metadata" }]) {
+      const invalid = claudeToolResult({ isError: true, content: [{ type: "text", text: "PRIVATE_provider_message" }],
+        _meta: { [`io.frihet/${flag}`]: value } });
+      assert.doesNotMatch((invalid.content as Array<{ text: string }>)[0].text, /^VALIDATION_FAILED:|^REQUEST_REJECTED:|No action was performed/u);
+      assertPrivate(invalid);
+    }
+  }
+});
+
 test("Claude denial messages never overrule an uncertain operation outcome", () => {
   for (const unknown of ["operationOutcomeUnknown", "transportOutcomeUnknown", "operationMayHaveCompleted"]) {
     const result = claudeToolResult({ isError: true, content: [{ type: "text", text: "PRIVATE_error" }],
+      structuredContent: { id: "PRIVATE_provider_id", code: "PRIVATE_provider_code" },
       _meta: { [`io.frihet/${unknown}`]: true, "io.frihet/resourceNotFound": true, "io.frihet/accessDenied": true,
-        "io.frihet/authenticationRequired": true, raw: "PRIVATE_metadata" } });
+        "io.frihet/authenticationRequired": true, "io.frihet/confirmationRequired": true,
+        "io.frihet/localValidationRejected": true, "io.frihet/requestRejected": true, raw: "PRIVATE_metadata" } });
     assertPrivate(result);
     assert.equal((result.content as Array<{ text: string }>)[0].text,
       "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry.");
