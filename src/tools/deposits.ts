@@ -5,7 +5,15 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, confirmationRequiredError, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, depositItemOutput, actionResultOutput } from "./shared.js";
+import { depositFields, DepositInputError } from "../deposit-contract.js";
+import { withToolLogging, confirmationRequiredError, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, ERROR_CONTENT_ANNOTATIONS, paginatedOutput, deleteResultOutput, depositItemOutput, actionResultOutput } from "./shared.js";
+
+function depositValidationResponse(error: DepositInputError) {
+  return {
+    isError: true as const,
+    content: [{ type: "text" as const, text: `Error: ${error.message}`, annotations: ERROR_CONTENT_ANNOTATIONS }],
+  };
+}
 
 export function registerDepositTools(server: McpServer, client: IFrihetClient): void {
   // -- list_deposits --
@@ -91,42 +99,36 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
     {
       title: "Create Deposit",
       description:
-        "Record a new deposit from a client. Requires clientId and amount. " +
-        "Useful for tracking advance payments, retainers, and security deposits. " +
-        "Example: clientId='abc123', amount=500, currency='EUR', description='Project retainer' " +
-        "/ Registra un nuevo deposito de un cliente. Requiere clientId e importe. " +
-        "Util para adelantos, retenciones y depositos de garantia.",
+        "Record a deposit in Frihet's bookkeeping; no money is transferred. Requires clientId, clientName, amount, date and description. " +
+        "The API initializes status='active'; status and notes are not writable. " +
+        "Example: clientId='abc123', clientName='Example Client', amount=500, date='2026-10-21', description='Project retainer' " +
+        "/ Registra un depósito contable sin transferir dinero. Requiere clientId, clientName, amount, date y description. " +
+        "La API inicia el estado 'active'; status y notes no son campos editables.",
       annotations: CREATE_ANNOTATIONS,
-      inputSchema: {
-        clientId: z.string().describe("Client ID / ID del cliente"),
-        clientName: z.string().optional().describe("Client name (denormalized) / Nombre del cliente"),
-        amount: z.number().describe("Deposit amount / Importe del deposito"),
-        currency: z.string().optional().describe("Currency code (e.g. 'EUR', 'USD') / Codigo de moneda"),
-        date: z
-          .string()
-          .optional()
-          .describe("Deposit date in ISO 8601 (YYYY-MM-DD) / Fecha del deposito"),
-        description: z.string().optional().describe("Deposit description / Descripcion del deposito"),
-        status: z
-          .string()
-          .optional()
-          .describe("Status (e.g. 'pending', 'applied', 'refunded') / Estado"),
-        paymentMethod: z
-          .string()
-          .optional()
-          .describe("Payment method (e.g. 'bank_transfer', 'card') / Metodo de pago"),
-        reference: z.string().optional().describe("External reference or receipt number / Referencia externa"),
-        notes: z.string().optional().describe("Internal notes / Notas internas"),
-      },
+      inputSchema: z.object({
+        clientId: depositFields.clientId.describe("Client ID / ID del cliente"),
+        clientName: depositFields.clientName.describe("Client name / Nombre del cliente"),
+        amount: depositFields.amount.describe("Positive deposit amount / Importe positivo del depósito"),
+        currency: depositFields.currency.optional().describe("Currency code, defaults to EUR / Moneda, EUR por defecto"),
+        date: depositFields.receivedDate.describe("Received date (YYYY-MM-DD), sent as receivedDate / Fecha de recepción"),
+        description: depositFields.description.describe("Deposit description / Descripción del depósito"),
+        paymentMethod: depositFields.paymentMethod.describe("Payment method (e.g. bank_transfer) / Método de pago"),
+        reference: depositFields.paymentReference.describe("Payment reference, sent as paymentReference / Referencia del pago"),
+      }).strict(),
       outputSchema: depositItemOutput,
     },
     async (input) => withToolLogging("create_deposit", async () => {
-      const result = await client.createDeposit(input);
-      const hints = enrichResponse("deposits", "create", result);
-      return {
-        content: [mutateContent(formatRecord("Deposit created", result) + hints)],
-        structuredContent: { ...result } as unknown as Record<string, unknown>,
-      };
+      try {
+        const result = await client.createDeposit(input);
+        const hints = enrichResponse("deposits", "create", result);
+        return {
+          content: [mutateContent(formatRecord("Deposit created", result) + hints)],
+          structuredContent: { ...result } as unknown as Record<string, unknown>,
+        };
+      } catch (error) {
+        if (error instanceof DepositInputError) return depositValidationResponse(error);
+        throw error;
+      }
     }),
   );
 
@@ -138,30 +140,37 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
       title: "Update Deposit",
       description:
         "Update an existing deposit using PATCH semantics. Only the provided fields will be changed. " +
-        "Example: id='abc123', amount=750, notes='Updated retainer amount' " +
-        "/ Actualiza un deposito existente. Solo se modifican los campos proporcionados.",
+        "At least one writable field is required; status and notes are not writable. " +
+        "Example: id='abc123', reference='RECEIPT-42' " +
+        "/ Actualiza un depósito existente. Requiere al menos un campo editable; status y notes no se pueden guardar.",
       annotations: UPDATE_ANNOTATIONS,
-      inputSchema: {
-        id: z.string().describe("Deposit ID / ID del deposito"),
-        clientId: z.string().optional().describe("Client ID / ID del cliente"),
-        clientName: z.string().optional().describe("Client name / Nombre del cliente"),
-        amount: z.number().optional().describe("Amount / Importe"),
-        currency: z.string().optional().describe("Currency code / Moneda"),
-        date: z.string().optional().describe("Date (YYYY-MM-DD) / Fecha"),
-        description: z.string().optional().describe("Description / Descripcion"),
-        status: z.string().optional().describe("Status / Estado"),
-        paymentMethod: z.string().optional().describe("Payment method / Metodo de pago"),
-        reference: z.string().optional().describe("Reference / Referencia"),
-        notes: z.string().optional().describe("Notes / Notas"),
-      },
+      inputSchema: z.object({
+        id: z.string().min(1).describe("Deposit ID / ID del depósito"),
+        clientId: depositFields.clientId.optional().describe("Client ID / ID del cliente"),
+        clientName: depositFields.clientName.optional().describe("Client name / Nombre del cliente"),
+        amount: depositFields.amount.optional().describe("Positive amount / Importe positivo"),
+        currency: depositFields.currency.optional().describe("Currency code / Moneda"),
+        date: depositFields.receivedDate.optional().describe("Received date (YYYY-MM-DD) / Fecha de recepción"),
+        description: depositFields.description.optional().describe("Description / Descripción"),
+        paymentMethod: depositFields.paymentMethod.describe("Payment method / Método de pago"),
+        reference: depositFields.paymentReference.describe("Payment reference / Referencia del pago"),
+      }).strict().refine(
+        ({ id: _id, ...fields }) => Object.values(fields).some((value) => value !== undefined),
+        { message: "Provide at least one writable deposit field / Indica al menos un campo del depósito" },
+      ),
       outputSchema: depositItemOutput,
     },
     async ({ id, ...data }) => withToolLogging("update_deposit", async () => {
-      const result = await client.updateDeposit(id, data);
-      return {
-        content: [mutateContent(formatRecord("Deposit updated", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
+      try {
+        const result = await client.updateDeposit(id, data);
+        return {
+          content: [mutateContent(formatRecord("Deposit updated", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      } catch (error) {
+        if (error instanceof DepositInputError) return depositValidationResponse(error);
+        throw error;
+      }
     }),
   );
 

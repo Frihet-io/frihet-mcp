@@ -64,6 +64,7 @@ after(async () => {
 
 type Schema = {
   type?: string | string[]; const?: unknown; enum?: unknown[]; format?: string; minimum?: number;
+  pattern?: string; minLength?: number; maxLength?: number;
   anyOf?: Schema[]; oneOf?: Schema[]; items?: Schema; properties?: Record<string, Schema>; required?: string[];
 };
 
@@ -87,8 +88,8 @@ function synthesize(schema: Schema | undefined, key = "", every = false): unknow
   }
   if (schema.format === "uri") return "https://example.com/hook";
   if (schema.format === "email") return "a@example.com";
-  if (schema.format === "date") return "2026-01-01";
-  return ID;
+  if (schema.format === "date" || schema.pattern === "^\\d{4}-\\d{2}-\\d{2}$") return "2026-01-01";
+  return ID.padEnd(schema.minLength ?? 0, "x").slice(0, schema.maxLength);
 }
 
 const template = (route: string) => route.split("/").map((segment) => (segment === ID ? ":id" : segment)).join("/");
