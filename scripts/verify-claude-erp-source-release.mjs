@@ -125,6 +125,7 @@ export async function verifyClaudeErpSourceRelease(receipt, erpRoot, {
     const mutation = receipt.functions.mutations[0];
     assert.ok(!Object.hasOwn(mutation, "secretBindingChange"), "Claude ERP must preserve secret bindings");
     const { secretEnvironmentVariables: _bindings, ...before } = spec.before;
+    assert.ok(decimal(before.versionId), "Claude ERP approved BEFORE version");
     assert.deepEqual(mutation.before, before, "Claude ERP captured BEFORE");
     assert.ok(mutation.target === "publicApi" && mutation.region === receipt.region && mutation.action === "UPDATE"
       && ["succeeded", "succeeded_reconciled"].includes(mutation.providerOperationState)
@@ -135,7 +136,7 @@ export async function verifyClaudeErpSourceRelease(receipt, erpRoot, {
     assert.equal(receipt.prepared?.candidate?.sha256, spec.candidateSourceSha256);
     assert.equal(receipt.prepared?.beforeArchive?.sha256, before.sourceSha256);
     assert.equal(receipt.prepared.candidate.uri, `gs://${spec.rollbackArchiveBucket}/candidates/${receipt.sourceSha}/${spec.candidateSourceSha256}.zip`);
-    assert.equal(receipt.prepared.beforeArchive.uri, `gs://${spec.rollbackArchiveBucket}/rollback/${receipt.sourceSha}/publicApi/131-${before.sourceSha256}.zip`);
+    assert.equal(receipt.prepared.beforeArchive.uri, `gs://${spec.rollbackArchiveBucket}/rollback/${receipt.sourceSha}/publicApi/${before.versionId}-${before.sourceSha256}.zip`);
     assert.ok(decimal(receipt.prepared.candidate.generation) && decimal(receipt.prepared.beforeArchive.generation), "Claude ERP immutable object generations");
     assert.deepEqual(mutation.beforeArchive, receipt.prepared.beforeArchive);
     const proof = spec.proof;
