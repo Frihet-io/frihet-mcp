@@ -25,6 +25,7 @@ import { safeRequestId, sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
 import { parseRetryAfter } from "./retry-after.js";
 import { fiscalModeloQuery } from "./fiscal-period.js";
+import { normalizeDepositBody } from "./deposit-contract.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
 
@@ -1594,14 +1595,14 @@ export class FrihetClient {
   }
 
   async createDeposit(data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", "/deposits", data);
+    return this.requestUnwrapped("POST", "/deposits", normalizeDepositBody(data, false));
   }
 
   async updateDeposit(
     id: string,
     data: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("PATCH", `/deposits/${pathSegment(id)}`, data);
+    return this.requestUnwrapped("PATCH", `/deposits/${pathSegment(id)}`, normalizeDepositBody(data, true));
   }
 
   async deleteDeposit(id: string): Promise<void> {

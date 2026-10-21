@@ -1088,56 +1088,64 @@
       {
         "name": "create_deposit",
         "title": "Create Deposit",
-        "description": "Record a new deposit from a client. Requires clientId and amount. Useful for tracking advance payments, retainers, and security deposits. Example: clientId='abc123', amount=500, currency='EUR', description='Project retainer' / Registra un nuevo deposito de un cliente. Requiere clientId e importe. Util para adelantos, retenciones y depositos de garantia. Claude omits sensitive output fields under the shared redaction policy.",
+        "description": "Record a deposit in Frihet's bookkeeping; no money is transferred. Requires clientId, clientName, amount, date and description. The API initializes status='active'; status and notes are not writable. Example: clientId='abc123', clientName='Example Client', amount=500, date='2026-10-21', description='Project retainer' / Registra un depósito contable sin transferir dinero. Requiere clientId, clientName, amount, date y description. La API inicia el estado 'active'; status y notes no son campos editables. Claude omits sensitive output fields under the shared redaction policy.",
         "inputSchema": {
           "type": "object",
           "properties": {
             "clientId": {
               "description": "Client ID / ID del cliente",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             },
             "clientName": {
-              "description": "Client name (denormalized) / Nombre del cliente",
-              "type": "string"
+              "description": "Client name / Nombre del cliente",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
             },
             "amount": {
-              "description": "Deposit amount / Importe del deposito",
-              "type": "number"
+              "description": "Positive deposit amount / Importe positivo del depósito",
+              "type": "number",
+              "exclusiveMinimum": 0
             },
             "currency": {
-              "description": "Currency code (e.g. 'EUR', 'USD') / Codigo de moneda",
-              "type": "string"
+              "description": "Currency code, defaults to EUR / Moneda, EUR por defecto",
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 3
             },
             "date": {
-              "description": "Deposit date in ISO 8601 (YYYY-MM-DD) / Fecha del deposito",
-              "type": "string"
+              "description": "Received date (YYYY-MM-DD), sent as receivedDate / Fecha de recepción",
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             },
             "description": {
-              "description": "Deposit description / Descripcion del deposito",
-              "type": "string"
-            },
-            "status": {
-              "description": "Status (e.g. 'pending', 'applied', 'refunded') / Estado",
-              "type": "string"
+              "description": "Deposit description / Descripción del depósito",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
             },
             "paymentMethod": {
-              "description": "Payment method (e.g. 'bank_transfer', 'card') / Metodo de pago",
-              "type": "string"
+              "description": "Payment method (e.g. bank_transfer) / Método de pago",
+              "type": "string",
+              "maxLength": 200
             },
             "reference": {
-              "description": "External reference or receipt number / Referencia externa",
-              "type": "string"
-            },
-            "notes": {
-              "description": "Internal notes / Notas internas",
-              "type": "string"
+              "description": "Payment reference, sent as paymentReference / Referencia del pago",
+              "type": "string",
+              "maxLength": 200
             }
           },
           "required": [
             "clientId",
-            "amount"
+            "clientName",
+            "amount",
+            "date",
+            "description"
           ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false
         },
         "outputSchema": {
           "type": "object",
@@ -15850,59 +15858,65 @@
       {
         "name": "update_deposit",
         "title": "Update Deposit",
-        "description": "Update an existing deposit using PATCH semantics. Only the provided fields will be changed. Example: id='abc123', amount=750, notes='Updated retainer amount' / Actualiza un deposito existente. Solo se modifican los campos proporcionados. Claude omits sensitive output fields under the shared redaction policy.",
+        "description": "Update an existing deposit using PATCH semantics. Only the provided fields will be changed. At least one writable field is required; status and notes are not writable. Example: id='abc123', reference='RECEIPT-42' / Actualiza un depósito existente. Requiere al menos un campo editable; status y notes no se pueden guardar. Claude omits sensitive output fields under the shared redaction policy.",
         "inputSchema": {
           "type": "object",
           "properties": {
             "id": {
-              "description": "Deposit ID / ID del deposito",
-              "type": "string"
+              "description": "Deposit ID / ID del depósito",
+              "type": "string",
+              "minLength": 1
             },
             "clientId": {
               "description": "Client ID / ID del cliente",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             },
             "clientName": {
               "description": "Client name / Nombre del cliente",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
             },
             "amount": {
-              "description": "Amount / Importe",
-              "type": "number"
+              "description": "Positive amount / Importe positivo",
+              "type": "number",
+              "exclusiveMinimum": 0
             },
             "currency": {
               "description": "Currency code / Moneda",
-              "type": "string"
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 3
             },
             "date": {
-              "description": "Date (YYYY-MM-DD) / Fecha",
-              "type": "string"
+              "description": "Received date (YYYY-MM-DD) / Fecha de recepción",
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             },
             "description": {
-              "description": "Description / Descripcion",
-              "type": "string"
-            },
-            "status": {
-              "description": "Status / Estado",
-              "type": "string"
+              "description": "Description / Descripción",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
             },
             "paymentMethod": {
-              "description": "Payment method / Metodo de pago",
-              "type": "string"
+              "description": "Payment method / Método de pago",
+              "type": "string",
+              "maxLength": 200
             },
             "reference": {
-              "description": "Reference / Referencia",
-              "type": "string"
-            },
-            "notes": {
-              "description": "Notes / Notas",
-              "type": "string"
+              "description": "Payment reference / Referencia del pago",
+              "type": "string",
+              "maxLength": 200
             }
           },
           "required": [
             "id"
           ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false
         },
         "outputSchema": {
           "type": "object",
@@ -18657,56 +18671,64 @@
       {
         "name": "create_deposit",
         "title": "Create Deposit",
-        "description": "[invoicing] Record a new deposit from a client. — full description and input fields via describe_tool('create_deposit'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
+        "description": "[invoicing] Record a deposit in Frihet's bookkeeping; no money is transferred. — full description and input fields via describe_tool('create_deposit'). [openWorldHint: false — has no user-directed external effect; it only reads or changes the authenticated Frihet workspace.]",
         "inputSchema": {
           "type": "object",
           "properties": {
             "clientId": {
               "description": "Client ID / ID del cliente",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             },
             "clientName": {
-              "description": "Client name (denormalized) / Nombre del cliente",
-              "type": "string"
+              "description": "Client name / Nombre del cliente",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
             },
             "amount": {
-              "description": "Deposit amount / Importe del deposito",
-              "type": "number"
+              "description": "Positive deposit amount / Importe positivo del depósito",
+              "type": "number",
+              "exclusiveMinimum": 0
             },
             "currency": {
-              "description": "Currency code (e.g. 'EUR', 'USD') / Codigo de moneda",
-              "type": "string"
+              "description": "Currency code, defaults to EUR / Moneda, EUR por defecto",
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 3
             },
             "date": {
-              "description": "Deposit date in ISO 8601 (YYYY-MM-DD) / Fecha del deposito",
-              "type": "string"
+              "description": "Received date (YYYY-MM-DD), sent as receivedDate / Fecha de recepción",
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             },
             "description": {
-              "description": "Deposit description / Descripcion del deposito",
-              "type": "string"
-            },
-            "status": {
-              "description": "Status (e.g. 'pending', 'applied', 'refunded') / Estado",
-              "type": "string"
+              "description": "Deposit description / Descripción del depósito",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
             },
             "paymentMethod": {
-              "description": "Payment method (e.g. 'bank_transfer', 'card') / Metodo de pago",
-              "type": "string"
+              "description": "Payment method (e.g. bank_transfer) / Método de pago",
+              "type": "string",
+              "maxLength": 200
             },
             "reference": {
-              "description": "External reference or receipt number / Referencia externa",
-              "type": "string"
-            },
-            "notes": {
-              "description": "Internal notes / Notas internas",
-              "type": "string"
+              "description": "Payment reference, sent as paymentReference / Referencia del pago",
+              "type": "string",
+              "maxLength": 200
             }
           },
           "required": [
             "clientId",
-            "amount"
+            "clientName",
+            "amount",
+            "date",
+            "description"
           ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false
         },
         "outputSchema": {
           "type": "object",
@@ -33571,54 +33593,60 @@
           "type": "object",
           "properties": {
             "id": {
-              "description": "Deposit ID / ID del deposito",
-              "type": "string"
+              "description": "Deposit ID / ID del depósito",
+              "type": "string",
+              "minLength": 1
             },
             "clientId": {
               "description": "Client ID / ID del cliente",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             },
             "clientName": {
               "description": "Client name / Nombre del cliente",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
             },
             "amount": {
-              "description": "Amount / Importe",
-              "type": "number"
+              "description": "Positive amount / Importe positivo",
+              "type": "number",
+              "exclusiveMinimum": 0
             },
             "currency": {
               "description": "Currency code / Moneda",
-              "type": "string"
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 3
             },
             "date": {
-              "description": "Date (YYYY-MM-DD) / Fecha",
-              "type": "string"
+              "description": "Received date (YYYY-MM-DD) / Fecha de recepción",
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
             },
             "description": {
-              "description": "Description / Descripcion",
-              "type": "string"
-            },
-            "status": {
-              "description": "Status / Estado",
-              "type": "string"
+              "description": "Description / Descripción",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
             },
             "paymentMethod": {
-              "description": "Payment method / Metodo de pago",
-              "type": "string"
+              "description": "Payment method / Método de pago",
+              "type": "string",
+              "maxLength": 200
             },
             "reference": {
-              "description": "Reference / Referencia",
-              "type": "string"
-            },
-            "notes": {
-              "description": "Notes / Notas",
-              "type": "string"
+              "description": "Payment reference / Referencia del pago",
+              "type": "string",
+              "maxLength": 200
             }
           },
           "required": [
             "id"
           ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false
         },
         "outputSchema": {
           "type": "object",

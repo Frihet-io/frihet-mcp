@@ -271,7 +271,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "7e326fce3960ebe69c88e77831a0b1815b79f1a6ed44e0798f295c3de3e63f2e", // paginated and search responses omit undeclared transport metadata; rows, pagination and path-id validation preserved; sinks unchanged
+  "src/client.ts": "aecffebc7b3222ee549fa839354fb8a02496e1869b3fb9621fdfd191495a367e", // reviewed deposit date/reference normalization before the existing POST/PATCH routes; sinks unchanged
   "workers/remote-mcp/src/claude-public-surface.ts": "acf419dcbdfb3acb4cdfa04999aa179006df828870939680911dd9e2589a832d", // isolated Claude host and authorization boundary; operational scope and Frihet display name reviewed, no new sink
   "workers/remote-mcp/src/oauth-profile.ts": "fd78139588876001b0521d5d9370b89a019f065ed783fdc76617a863c978c8a1", // isolated Claude host and authorization boundary
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
