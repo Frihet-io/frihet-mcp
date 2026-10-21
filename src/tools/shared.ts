@@ -1513,6 +1513,15 @@ interface ToolResult {
   isError?: boolean;
 }
 
+/** Mark a local confirmation refusal without parsing or exposing provider text. */
+export function confirmationRequiredError(message: string): ToolResult {
+  return {
+    content: [{ type: "text", text: message, annotations: ERROR_CONTENT_ANNOTATIONS }],
+    isError: true,
+    _meta: { "io.frihet/confirmationRequired": true },
+  };
+}
+
 /**
  * Wraps a tool handler to automatically log execution time, success/failure,
  * and record metrics. Catches errors and routes them through handleToolError.

@@ -21,6 +21,7 @@ import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
 import {
   withToolLogging,
+  confirmationRequiredError,
   formatPaginatedResponse,
   formatRecord,
   listContent,
@@ -262,17 +263,11 @@ export function registerRecurringTools(server: McpServer, client: IFrihetClient)
     },
     async ({ id, confirm }) => withToolLogging("delete_recurring_invoice", async () => {
       if (!confirm) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Error: confirm=true is required to delete a recurring invoice template. " +
-                "This will stop all future invoice generation from this template. Set confirm=true to proceed. / " +
-                "Se requiere confirm=true para eliminar la plantilla de factura recurrente.",
-            },
-          ],
-          isError: true,
-        };
+        return confirmationRequiredError(
+          "Error: confirm=true is required to delete a recurring invoice template. " +
+          "This will stop all future invoice generation from this template. Set confirm=true to proceed. / " +
+          "Se requiere confirm=true para eliminar la plantilla de factura recurrente.",
+        );
       }
       await client.deleteRecurringInvoice(id);
       return {
@@ -311,16 +306,12 @@ export function registerRecurringTools(server: McpServer, client: IFrihetClient)
     },
     async ({ templateId, draftOnly, confirm }) => withToolLogging("run_recurring_now", async () => {
       if (confirm !== true) {
-        return {
-          content: [{
-            type: "text" as const,
-            text: "Error: confirm=true is required to create a recurring invoice and allow configured webhooks. " +
-              "draftOnly=false may also trigger fiscal numbering and automatic tax submission. / " +
-              "Se requiere confirm=true para crear la factura y permitir los webhooks configurados. " +
-              "draftOnly=false también puede activar la numeración y remisión fiscal automática.",
-          }],
-          isError: true,
-        };
+        return confirmationRequiredError(
+          "Error: confirm=true is required to create a recurring invoice and allow configured webhooks. " +
+          "draftOnly=false may also trigger fiscal numbering and automatic tax submission. / " +
+          "Se requiere confirm=true para crear la factura y permitir los webhooks configurados. " +
+          "draftOnly=false también puede activar la numeración y remisión fiscal automática.",
+        );
       }
       const result = await client.runRecurringNow(templateId, { draftOnly: draftOnly ?? true });
       return {

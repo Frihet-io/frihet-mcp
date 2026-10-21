@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, depositItemOutput, actionResultOutput } from "./shared.js";
+import { withToolLogging, confirmationRequiredError, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, deleteResultOutput, depositItemOutput, actionResultOutput } from "./shared.js";
 
 export function registerDepositTools(server: McpServer, client: IFrihetClient): void {
   // -- list_deposits --
@@ -253,18 +253,12 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
     },
     async ({ id, confirm, amount }) => withToolLogging("refund_deposit", async () => {
       if (confirm !== true) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Error: confirm=true is required to record a deposit refund. " +
-                "This reduces the recorded remaining balance; no money is transferred and this tool cannot undo the entry. / " +
-                "Se requiere confirm=true para registrar la devolución y reducir el saldo contable. " +
-                "No se transfiere dinero y esta herramienta no permite deshacer el registro.",
-            },
-          ],
-          isError: true,
-        };
+        return confirmationRequiredError(
+          "Error: confirm=true is required to record a deposit refund. " +
+          "This reduces the recorded remaining balance; no money is transferred and this tool cannot undo the entry. / " +
+          "Se requiere confirm=true para registrar la devolución y reducir el saldo contable. " +
+          "No se transfiere dinero y esta herramienta no permite deshacer el registro.",
+        );
       }
       const result = await client.refundDeposit(id, amount === undefined ? {} : { amount });
       return {

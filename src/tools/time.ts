@@ -19,6 +19,7 @@ import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
 import {
   withToolLogging,
+  confirmationRequiredError,
   formatPaginatedResponse,
   formatRecord,
   listContent,
@@ -185,17 +186,11 @@ export function registerTimeTools(server: McpServer, client: IFrihetClient): voi
     },
     async ({ id, confirm }) => withToolLogging("delete_time_entry", async () => {
       if (!confirm) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Error: confirm=true is required to delete a time entry. " +
-                "Deleted entries affect billing reports. Set confirm=true to proceed. / " +
-                "Se requiere confirm=true para eliminar una entrada de tiempo.",
-            },
-          ],
-          isError: true,
-        };
+        return confirmationRequiredError(
+          "Error: confirm=true is required to delete a time entry. " +
+          "Deleted entries affect billing reports. Set confirm=true to proceed. / " +
+          "Se requiere confirm=true para eliminar una entrada de tiempo.",
+        );
       }
       await client.deleteTimeEntry(id);
       return {

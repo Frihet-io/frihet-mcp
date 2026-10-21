@@ -148,6 +148,7 @@ const SAFE_META_FLAGS = [
   "io.frihet/authenticationRequired", "io.frihet/operationOutcomeUnknown",
   "io.frihet/transportOutcomeUnknown", "io.frihet/retryable", "io.frihet/operationMayHaveCompleted",
   "io.frihet/resourceNotFound", "io.frihet/accessDenied",
+  "io.frihet/confirmationRequired",
 ] as const;
 
 /** Claude does not expose opaque tool metadata as an actionable error message.
@@ -157,6 +158,9 @@ function claudeErrorText(meta: Record<string, unknown>): string {
   const unknown = "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry.";
   if (["io.frihet/operationOutcomeUnknown", "io.frihet/transportOutcomeUnknown", "io.frihet/operationMayHaveCompleted"]
     .some((flag) => meta[flag] === true)) return unknown;
+  if (meta["io.frihet/confirmationRequired"] === true) {
+    return "CONFIRMATION_REQUIRED: This action requires explicit confirmation (confirm=true). No action was performed. Review the action and its side effects before confirming.";
+  }
   if (meta["io.frihet/authenticationRequired"] === true) {
     return "AUTHENTICATION_REQUIRED: Reconnect Frihet using the authorized account and existing permissions before retrying.";
   }
@@ -171,13 +175,16 @@ function claudeErrorText(meta: Record<string, unknown>): string {
 
 /** Never forward opaque content blocks or arbitrary response metadata. */
 export function claudeToolResult(result: Record<string, unknown>, toolName?: string): Record<string, unknown> {
-  const structured = result.structuredContent === undefined ? undefined
-    : sanitizeClaudeOutput(result.structuredContent, result.isError === true ? undefined : toolName);
   const meta = result._meta as Record<string, unknown> | undefined;
   const safeMeta = Object.fromEntries(SAFE_META_FLAGS.flatMap((key) =>
     typeof meta?.[key] === "boolean" ? [[key, meta[key]]] : [],
   ));
   const error = result.isError === true;
+  // Confirmation is a typed local refusal, never arbitrary tool/provider output.
+  // Fixed rendering also lets an uncertain-outcome flag take precedence.
+  const fixedConfirmation = error && safeMeta["io.frihet/confirmationRequired"] === true;
+  const structured = fixedConfirmation || result.structuredContent === undefined ? undefined
+    : sanitizeClaudeOutput(result.structuredContent, error ? undefined : toolName);
   const text = structured !== undefined ? JSON.stringify(structured, null, 2)
     : error ? claudeErrorText(safeMeta)
       : "Frihet returned an unstructured response. Its content was withheld by the Claude privacy boundary.";

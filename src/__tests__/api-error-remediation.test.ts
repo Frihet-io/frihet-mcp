@@ -11,12 +11,92 @@ import assert from "node:assert/strict";
 
 import { FrihetApiError, FrihetClient } from "../client.js";
 import { handleToolError, withToolLogging } from "../tools/shared.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerMcpSurface, localMcpSurfaceComposition, remoteMcpSurfaceComposition } from "../server-composition.js";
+import { isBackendNotFound, notDeployedError, withBackendGuard } from "../tools/backend-availability.js";
+import { initLangfuse } from "../observability.js";
 
 const GENERIC_403 =
   "Access denied. Reconnect Frihet or use configured credentials with permission for this action. / Acceso denegado. Vuelve a conectar Frihet o usa credenciales con permiso para esta accion.";
 const SCOPE_REMEDY =
   "This API key requires the einvoice:read or einvoice:write scope to access e-invoicing endpoints. Add the scope when creating or updating the key.";
 const REAL_FORMAT_FRIHET_KEY = `fri_${"A".repeat(43)}`;
+
+for (const local of [true, false]) for (const claude of [true, false]) {
+  test(`${claude ? "Claude" : "general"} ${local ? "local" : "remote"} preserves GL application404 and treats ambiguous404 as an error`, async () => {
+    const originalFetch = globalThis.fetch;
+    let requests = 0;
+    let mode: "application" | "generic" | "non-json" = "application";
+    globalThis.fetch = async input => {
+      requests++;
+      assert.equal(new URL(String(input)).pathname, "/v1/gl/entries/PRIVATE_entry_fixture/audit-log");
+      return new Response(mode === "application"
+        ? JSON.stringify({ error: "NOT_FOUND", message: "GL entry 'PRIVATE_entry_fixture' not found", meta: { requestId: "PRIVATE_request" } })
+        : mode === "generic" ? JSON.stringify({ error: "Resource not found" }) : "PRIVATE_upstream404", {
+        status: 404, headers: { "content-type": mode === "non-json" ? "text/html" : "application/json" },
+      });
+    };
+    initLangfuse({});
+    const server = new McpServer({ name: "lookup-denial", version: "1.0.0" });
+    const api = new FrihetClient("fri_synthetic_not_a_credential", "https://api.example.test/v1");
+    registerMcpSurface(server, api, (local ? localMcpSurfaceComposition : remoteMcpSurfaceComposition)(false, true, claude));
+    const client = new Client({ name: "lookup-test", version: "1.0.0" });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([client.connect(ct), server.connect(st)]);
+    try {
+      await assert.rejects(api.getGLEntryAuditLog("PRIVATE_entry_fixture"), (error: FrihetApiError) => {
+        assert.equal(error.statusCode, 404);
+        assert.equal(error.errorCode, "NOT_FOUND");
+        assert.equal(error.message, "GL entry 'PRIVATE_entry_fixture' not found");
+        return true;
+      });
+      requests = 0;
+      const missing = await client.callTool({ name: "frihet_gl_entry_audit_log", arguments: { entryId: "PRIVATE_entry_fixture" } });
+      assert.equal(missing.isError, true);
+      assert.equal(missing.structuredContent, undefined, "missing data must never become a fabricated empty audit log");
+      assert.deepEqual(missing._meta, { "io.frihet/resourceNotFound": true });
+      const missingText = (missing.content as Array<{ text: string }>)[0].text;
+      assert.match(missingText, claude ? /^NOT_FOUND:/u : /Resource not found/u);
+      assert.doesNotMatch(JSON.stringify(missing), /PRIVATE_|backend_unavailable|not deployed/u);
+      assert.equal(requests, 1, "rendering must not repeat a lookup");
+
+      for (mode of ["generic", "non-json"] as const) {
+        requests = 0;
+        const result = await client.callTool({ name: "frihet_gl_entry_audit_log", arguments: { entryId: "PRIVATE_entry_fixture" } });
+        assert.equal(result.isError, true);
+        const structured = result.structuredContent as Record<string, unknown>;
+        assert.equal(structured.error, "lookup_unavailable");
+        assert.equal(structured.code, "LOOKUP_UNAVAILABLE");
+        assert.equal(structured._backendUnavailable, undefined);
+        assert.equal(result._meta?.["io.frihet/resourceNotFound"], undefined);
+        const message = structured.message as string;
+        assert.match(message, /resource or endpoint/u);
+        assert.match(message, /Do not infer/u);
+        assert.doesNotMatch(message, /is not deployed|not available yet|no records/u);
+        assert.doesNotMatch(JSON.stringify(result), /PRIVATE_/u);
+        assert.equal(requests, 1);
+      }
+    } finally {
+      await Promise.allSettled([client.close(), server.close()]);
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
+
+test("backend404 predicate retains HTTP semantics and explicit NOT_DEPLOYED remains explicit", async () => {
+  assert.equal(isBackendNotFound(new FrihetApiError(404, "NOT_FOUND")), true);
+  assert.equal(isBackendNotFound({ status: 404 }), true);
+  assert.equal(isBackendNotFound(new FrihetApiError(403, "NOT_FOUND")), false);
+  const missing = new FrihetApiError(404, "NOT_FOUND", "PRIVATE_backend_message");
+  await assert.rejects(withBackendGuard("fixture", "/fixture", async () => { throw missing; }), error => error === missing);
+  const result = notDeployedError("get_modelo_180_summary", "/v1/fiscal/modelo/180");
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.code, "NOT_DEPLOYED");
+  assert.equal(result.structuredContent._backendUnavailable, true);
+  assert.match(result.structuredContent.message as string, /is not deployed/u);
+});
 
 function rendered(error: unknown): string {
   return handleToolError(error, "permissions_test").content[0]!.text;

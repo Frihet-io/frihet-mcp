@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, invoiceItemOutput, actionResultOutput, creditNoteResultOutput, pdfResultOutput, einvoiceResultOutput } from "./shared.js";
+import { withToolLogging, confirmationRequiredError, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, invoiceItemOutput, actionResultOutput, creditNoteResultOutput, pdfResultOutput, einvoiceResultOutput } from "./shared.js";
 
 const invoiceItemSchema = z.object({
   description: z.string().trim().min(1).max(500).describe("Description of the line item / Descripcion del concepto"),
@@ -324,19 +324,13 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     },
     async ({ id, confirm }) => withToolLogging("delete_invoice", async () => {
       if (!confirm) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Error: confirm=true is required to delete an invoice. " +
-                "A draft invoice is removed permanently; a sent/paid invoice is CANCELLED " +
-                "(status=cancelled) instead, because VeriFactu forbids breaking the hash chain. " +
-                "Either way the invoice stops counting as a live receivable. Set confirm=true to proceed. / " +
-                "Se requiere confirm=true para eliminar una factura.",
-            },
-          ],
-          isError: true,
-        };
+        return confirmationRequiredError(
+          "Error: confirm=true is required to delete an invoice. " +
+          "A draft invoice is removed permanently; a sent/paid invoice is CANCELLED " +
+          "(status=cancelled) instead, because VeriFactu forbids breaking the hash chain. " +
+          "Either way the invoice stops counting as a live receivable. Set confirm=true to proceed. / " +
+          "Se requiere confirm=true para eliminar una factura.",
+        );
       }
       // 204 → undefined (draft row destroyed). 200 → soft-cancel body (document
       // kept, status=cancelled). Reporting both as "deleted" is the GAP-12 lie.
@@ -448,18 +442,12 @@ export function registerInvoiceTools(server: McpServer, client: IFrihetClient): 
     },
     async ({ id, to, confirm }) => withToolLogging("send_invoice", async () => {
       if (!confirm) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Error: confirm=true is required to send an invoice. " +
-                "This delivers an email to the client — a third party outside this workspace — " +
-                "and it cannot be recalled once sent. Set confirm=true to proceed. / " +
-                "Se requiere confirm=true para enviar una factura por email a un tercero.",
-            },
-          ],
-          isError: true,
-        };
+        return confirmationRequiredError(
+          "Error: confirm=true is required to send an invoice. " +
+          "This delivers an email to the client — a third party outside this workspace — " +
+          "and it cannot be recalled once sent. Set confirm=true to proceed. / " +
+          "Se requiere confirm=true para enviar una factura por email a un tercero.",
+        );
       }
 
       const invoice = await client.getInvoice(id);

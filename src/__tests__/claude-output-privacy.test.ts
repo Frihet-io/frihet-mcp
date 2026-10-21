@@ -11,6 +11,7 @@ import { FrihetApiError } from "../client.js";
 import { SENSITIVE_FIELD_NAMES } from "../redaction.js";
 import { registerMcpSurface, localMcpSurfaceComposition, remoteMcpSurfaceComposition } from "../server-composition.js";
 import type { IFrihetClient } from "../client-interface.js";
+import { initLangfuse } from "../observability.js";
 
 const privateFields = Object.fromEntries([...SENSITIVE_FIELD_NAMES, "nss", "Authorization", "clientSecret"].map((name) => [name, `PRIVATE_${name}_fixture`]));
 const record: Record<string, unknown> = {
@@ -58,6 +59,92 @@ function api(calls: Array<{ method: string; args: unknown[] }>): IFrihetClient {
     return record;
   } }) as IFrihetClient;
 }
+
+const confirmationCases = [
+  ["delete_invoice", { id: "PRIVATE_invoice_fixture", confirm: false }],
+  ["delete_quote", { id: "PRIVATE_quote_fixture", confirm: false }],
+  ["delete_recurring_invoice", { id: "PRIVATE_recurring_fixture", confirm: false }],
+  ["delete_time_entry", { id: "PRIVATE_time_fixture", confirm: false }],
+  ["match_transaction_to_invoice", { transactionId: "PRIVATE_transaction_fixture", documentId: "PRIVATE_invoice_fixture", documentType: "invoice", confirm: false }],
+  ["refund_deposit", { id: "PRIVATE_deposit_fixture", confirm: false }],
+  ["remove_team_member", { memberId: "PRIVATE_member_fixture", confirm: false }],
+  ["run_recurring_now", { templateId: "PRIVATE_recurring_fixture", draftOnly: true, confirm: false }],
+  ["send_invoice", { id: "PRIVATE_invoice_fixture", to: "PRIVATE_recipient@example.invalid", confirm: false }],
+  ["verifactu_resubmit", { invoiceId: "PRIVATE_invoice_fixture", confirm: false }],
+] as const;
+
+const CONFIRMATION_TEXT = "CONFIRMATION_REQUIRED: This action requires explicit confirmation (confirm=true). No action was performed. Review the action and its side effects before confirming.";
+
+for (const local of [true, false]) for (const claude of [true, false]) {
+  test(`${claude ? "Claude" : "general"} ${local ? "local" : "remote"} confirms all ten real guards before any API or network IO`, async () => {
+    let apiCalls = 0;
+    let networkCalls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => { networkCalls++; throw new Error("PRIVATE_unexpected_network"); };
+    initLangfuse({});
+    const clientApi = new Proxy({}, { get: () => async () => {
+      apiCalls++;
+      throw new Error("PRIVATE_unexpected_API");
+    } }) as IFrihetClient;
+    const server = new McpServer({ name: "confirmation-boundary", version: "1.0.0" });
+    registerMcpSurface(server, clientApi, (local ? localMcpSurfaceComposition : remoteMcpSurfaceComposition)(false, true, claude));
+    const { client, close } = await connect(server);
+    try {
+      for (const [name, args] of confirmationCases) {
+        const result = await client.callTool({ name, arguments: args });
+        assert.equal(result.isError, true, name);
+        assert.deepEqual(result._meta, { "io.frihet/confirmationRequired": true }, name);
+        assert.equal(result.structuredContent, undefined, name);
+        const text = (result.content as Array<{ text: string }>)[0].text;
+        if (claude) assert.equal(text, CONFIRMATION_TEXT, name);
+        else assert.match(text, /confirm=true/u, name);
+        assertPrivate(result);
+      }
+      assert.equal(apiCalls, 0, "a confirmation guard must precede reads as well as writes");
+      assert.equal(networkCalls, 0, "denial must not contact providers or emit telemetry");
+    } finally { await close(); globalThis.fetch = originalFetch; }
+  });
+}
+
+test("Claude renders only typed confirmation flags and preserves uncertain-outcome precedence", () => {
+  const content = [{ type: "text", text: "PRIVATE_provider_claim: confirm=true is required" }];
+  const confirmed = claudeToolResult({ isError: true, content, structuredContent: { id: "PRIVATE_record", message: "PRIVATE_provider" },
+    _meta: { "io.frihet/confirmationRequired": true, arbitrary: "PRIVATE_metadata" } });
+  assert.equal((confirmed.content as Array<{ text: string }>)[0].text, CONFIRMATION_TEXT);
+  assert.deepEqual(confirmed._meta, { "io.frihet/confirmationRequired": true });
+  assert.equal(confirmed.structuredContent, undefined);
+  assertPrivate(confirmed);
+  for (const value of [undefined, false, "true", 1, null, { raw: "PRIVATE_metadata" }]) {
+    const result = claudeToolResult({ isError: true, content, _meta: { "io.frihet/confirmationRequired": value } });
+    assert.doesNotMatch((result.content as Array<{ text: string }>)[0].text, /^CONFIRMATION_REQUIRED:/u);
+    assertPrivate(result);
+  }
+  for (const flag of ["operationOutcomeUnknown", "transportOutcomeUnknown", "operationMayHaveCompleted"]) {
+    const result = claudeToolResult({ isError: true, content, structuredContent: { id: "PRIVATE_record" },
+      _meta: { "io.frihet/confirmationRequired": true, [`io.frihet/${flag}`]: true } });
+    const text = (result.content as Array<{ text: string }>)[0].text;
+    assert.match(text, /could not complete or confirm/u);
+    assert.doesNotMatch(text, /^CONFIRMATION_REQUIRED:|No action was performed/u);
+    assertPrivate(result);
+  }
+});
+
+test("OpenAI keeps the reviewed catalogue and rejects false confirmation before IO", async () => {
+  let calls = 0;
+  const server = new McpServer({ name: "openai-confirmation-regression", version: "1.0.0" });
+  const clientApi = new Proxy({}, { get: () => async () => { calls++; throw new Error("PRIVATE_API"); } }) as IFrihetClient;
+  registerMcpSurface(server, clientApi, remoteMcpSurfaceComposition(true, false));
+  const { client, close } = await connect(server);
+  try {
+    const listed = (await client.listTools()).tools;
+    assert.equal(listed.length, 33);
+    assert.ok(!listed.some(tool => tool.name === "frihet_gl_entry_audit_log"));
+    const result = await client.callTool({ name: "delete_quote", arguments: { id: "PRIVATE_quote", confirm: false } });
+    assert.equal(result.isError, true);
+    assert.equal(calls, 0);
+    assertPrivate(result);
+  } finally { await close(); }
+});
 
 for (const local of [true, false]) for (const grouped of [true, false]) {
   test(`Claude ${local ? "stdio composition" : "Worker composition"}/${grouped ? "grouped" : "full"} redacts actual SDK calls without replaying writes`, async () => {

@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, quoteItemOutput, actionResultOutput } from "./shared.js";
+import { withToolLogging, confirmationRequiredError, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, quoteItemOutput, actionResultOutput } from "./shared.js";
 
 const quoteItemSchema = z.object({
   description: z.string().trim().min(1).max(500).describe("Description of the line item / Descripcion del concepto"),
@@ -244,19 +244,13 @@ export function registerQuoteTools(server: McpServer, client: IFrihetClient): vo
     },
     async ({ id, confirm }) => withToolLogging("delete_quote", async () => {
       if (!confirm) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Error: confirm=true is required to delete a quote. " +
-                "A clean draft without delivery, response, attachment, or conversion evidence is removed permanently; a protected draft is refused; a sent/accepted quote is CANCELLED " +
-                "(status=cancelled) instead and remains in the record. " +
-                "Set confirm=true to proceed. / " +
-                "Se requiere confirm=true para eliminar un presupuesto.",
-            },
-          ],
-          isError: true,
-        };
+        return confirmationRequiredError(
+          "Error: confirm=true is required to delete a quote. " +
+          "A clean draft without delivery, response, attachment, or conversion evidence is removed permanently; a protected draft is refused; a sent/accepted quote is CANCELLED " +
+          "(status=cancelled) instead and remains in the record. " +
+          "Set confirm=true to proceed. / " +
+          "Se requiere confirm=true para eliminar un presupuesto.",
+        );
       }
       // 204 → undefined (draft row destroyed). 200 → soft-cancel body. See GAP-12.
       const outcome = await client.deleteQuote(id);
