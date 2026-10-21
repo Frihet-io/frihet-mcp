@@ -265,7 +265,7 @@ test("Claude deploy refuses runtime recipes even when the control commit contain
 });
 
 /** Authenticated Actions fixtures exercise the real ZIP/digest admission, without network or cloud writes. */
-function hybridRelease({ mutationChange, buildReceiptChange, routes = CONTRACT_ROUTES } = {}) {
+function hybridRelease({ mutationChange, buildReceiptChange, beforeVersion = "132", routes = CONTRACT_ROUTES } = {}) {
   const root = mkdtempSync(join(tmpdir(), "erp-claude-hybrid-"));
   const zip = (name, files) => {
     const stage = join(root, name);
@@ -306,7 +306,7 @@ function hybridRelease({ mutationChange, buildReceiptChange, routes = CONTRACT_R
     schemaVersion: 1, kind: "claude-publicapi-source-release-spec", scope: "claude-publicapi-source-20261016", approved: true,
     project: "gen-lang-client-0335716041", region: "europe-west1", target: "publicApi", action: "UPDATE", updateMask: "sourceArchiveUrl",
     rollbackArchiveBucket: "frihet-prod-release-artifacts-gen-lang-client-0335716041",
-    before: { presence: "present", versionId: "131", sourceSha256: "1".repeat(64), configSha256: "2".repeat(64), iamSha256: "3".repeat(64), secretEnvironmentVariables: [] },
+    before: { presence: "present", versionId: beforeVersion, sourceSha256: "1".repeat(64), configSha256: "2".repeat(64), iamSha256: "3".repeat(64), secretEnvironmentVariables: [] },
     baseline, build,
     replacements, replacementArchiveSha256: digest(replacementZip), candidateSourceSha256: "a".repeat(64),
     proof: { controlSha: buildControl, runId: "20", runAttempt: 1, artifactId: "202", artifactDigest: `sha256:${digest(buildZip)}`, receiptSha256: digest(buildReceipt) },
@@ -316,11 +316,11 @@ function hybridRelease({ mutationChange, buildReceiptChange, routes = CONTRACT_R
   const git = (...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   git("init", "-q"); git("add", "scripts");
   git("-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-q", "-m", "control");
-  const sourceSha = git("rev-parse", "HEAD"), beforeArchive = { uri: `gs://${spec.rollbackArchiveBucket}/rollback/${sourceSha}/publicApi/131-${spec.before.sourceSha256}.zip`, generation: "1", sha256: spec.before.sourceSha256 };
+  const sourceSha = git("rev-parse", "HEAD"), beforeArchive = { uri: `gs://${spec.rollbackArchiveBucket}/rollback/${sourceSha}/publicApi/${beforeVersion}-${spec.before.sourceSha256}.zip`, generation: "1", sha256: spec.before.sourceSha256 };
   const { secretEnvironmentVariables: _bindings, ...before } = spec.before;
   const mutation = { target: "publicApi", region: "europe-west1", action: "UPDATE", before, beforeArchive,
     candidateSourceSha256: spec.candidateSourceSha256, providerOperationState: "succeeded",
-    after: { ...before, versionId: "132", sourceSha256: spec.candidateSourceSha256 } };
+    after: { ...before, versionId: "133", sourceSha256: spec.candidateSourceSha256 } };
   mutationChange?.(mutation);
   const receipt = signed({ schemaVersion: 1, kind: "frihet-claude-publicapi-source-release-receipt", scope: spec.scope,
     project: spec.project, region: spec.region, target: spec.target, operation: "deploy", status: "deployed", stage: "completed",
@@ -378,6 +378,30 @@ test("an authenticated artifact cannot admit changed config, secret bindings, or
     const fixture = hybridRelease(options);
     try { await assert.rejects(verifyErpCeilingDeployed(fixture.receipt, fixture.root, CONTRACT_ROUTES, { token: "synthetic-token", fetchImpl: fixture.fetchImpl })); }
     finally { fixture.cleanup(); }
+  }
+});
+
+test("rollback archive version must match the authenticated approved BEFORE", async () => {
+  for (const beforeVersion of ["131", "132"]) {
+    const fixture = hybridRelease({ beforeVersion });
+    try {
+      await verifyErpCeilingDeployed(fixture.receipt, fixture.root, CONTRACT_ROUTES, {
+        token: "synthetic-token", fetchImpl: fixture.fetchImpl,
+      });
+    } finally { fixture.cleanup(); }
+  }
+  for (const options of [
+    { mutationChange: (m) => { m.beforeArchive.uri = m.beforeArchive.uri.replace("/132-", "/131-"); } },
+    { beforeVersion: "0" },
+    { beforeVersion: "0132" },
+    { beforeVersion: "../132" },
+  ]) {
+    const fixture = hybridRelease(options);
+    try {
+      await assert.rejects(verifyErpCeilingDeployed(fixture.receipt, fixture.root, CONTRACT_ROUTES, {
+        token: "synthetic-token", fetchImpl: fixture.fetchImpl,
+      }));
+    } finally { fixture.cleanup(); }
   }
 });
 
