@@ -1841,7 +1841,10 @@ export class FrihetClient {
   }
 
   async updateKitchenTicket(id: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("PATCH", `/kitchen/tickets/${pathSegment(id)}`, data);
+    // The public tool accepts one station; the strict REST contract stores an array.
+    const { stationId, ...patch } = data;
+    const body = stationId === undefined ? patch : { ...patch, stationIds: [stationId] };
+    return this.requestUnwrapped("PATCH", `/kitchen/tickets/${pathSegment(id)}`, body);
   }
 
   async listKitchenStations(

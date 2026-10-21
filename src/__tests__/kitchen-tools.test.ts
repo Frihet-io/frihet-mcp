@@ -15,8 +15,13 @@
  *   8. API error path — 404 propagated through handleToolError
  */
 
-import { test, describe, beforeEach } from "node:test";
+import { test, describe, beforeEach, type TestContext } from "node:test";
 import assert from "node:assert/strict";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { FrihetClient } from "../client.js";
+import { registerKitchenTools } from "../tools/kitchen.js";
 
 // ── Minimal McpServer stub ───────────────────────────────────────────────────
 
@@ -356,6 +361,105 @@ describe("update_kitchen_ticket — success path", () => {
 });
 
 // ── list_kitchen_stations ─────────────────────────────────────────────────────
+
+async function connectKitchen(t: TestContext): Promise<Client> {
+  const server = new McpServer({ name: "kitchen-contract", version: "0.0.0" });
+  registerKitchenTools(server, new FrihetClient("fri_test_kitchen", "https://api.frihet.io/v1"));
+  const client = new Client({ name: "kitchen-test", version: "0.0.0" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(a), client.connect(b)]);
+  t.after(async () => { await client.close(); await server.close(); });
+  return client;
+}
+
+test("update_kitchen_ticket maps stationId to the strict API stationIds field through the real SDK", async (t) => {
+  const expected = { ...MOCK_UPDATED_TICKET, stationIds: ["sta_bar"] };
+  const fetchMock = t.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    assert.equal(url, "https://api.frihet.io/v1/kitchen/tickets/tkt%2F001");
+    assert.equal(init?.method, "PATCH");
+    assert.deepEqual(JSON.parse(String(init?.body)), { status: "ready", stationIds: ["sta_bar"] });
+    assert.ok(new Headers(init?.headers).get("Idempotency-Key"));
+    return Response.json({ data: expected });
+  });
+  const client = await connectKitchen(t);
+  const result = await client.callTool({ name: "update_kitchen_ticket", arguments: { id: "tkt/001", status: "ready", stationId: "sta_bar" } });
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(result.structuredContent, expected);
+  assert.equal(fetchMock.mock.callCount(), 1);
+});
+
+test("updateKitchenTicket preserves status-only and native stationIds patches without mutating input", async (t) => {
+  const bodies: unknown[] = [];
+  t.mock.method(globalThis, "fetch", async (_url: string | URL | Request, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return Response.json({ data: MOCK_UPDATED_TICKET });
+  });
+  const api = new FrihetClient("fri_test_kitchen", "https://api.frihet.io/v1");
+  const statusOnly = Object.freeze({ status: "ready" });
+  const nativePatch = Object.freeze({ stationIds: ["sta_grill", "sta_bar"], priority: "rush" });
+  const toolPatch = Object.freeze({ stationId: "sta_bar", status: "ready" });
+  await api.updateKitchenTicket("tkt_001", statusOnly);
+  await api.updateKitchenTicket("tkt_001", nativePatch);
+  await api.updateKitchenTicket("tkt_001", toolPatch);
+  assert.deepEqual(bodies, [statusOnly, nativePatch, { status: "ready", stationIds: ["sta_bar"] }]);
+  assert.deepEqual(toolPatch, { stationId: "sta_bar", status: "ready" });
+});
+
+test("repeating the same kitchen station assignment keeps the same assignment", async (t) => {
+  let stationIds = ["sta_grill"];
+  const fetchMock = t.mock.method(globalThis, "fetch", async (_url: string | URL | Request, init?: RequestInit) => {
+    const patch = JSON.parse(String(init?.body));
+    assert.equal(Object.hasOwn(patch, "stationId"), false);
+    assert.deepEqual(patch, { stationIds: ["sta_bar"] });
+    stationIds = patch.stationIds;
+    return Response.json({ data: { ...MOCK_TICKET, stationIds } });
+  });
+  const client = await connectKitchen(t);
+  const request = { name: "update_kitchen_ticket", arguments: { id: "tkt_001", stationId: "sta_bar" } };
+  const first = await client.callTool(request);
+  const second = await client.callTool(request);
+  assert.notEqual(first.isError, true);
+  assert.notEqual(second.isError, true);
+  assert.deepEqual(first.structuredContent, second.structuredContent);
+  assert.deepEqual(stationIds, ["sta_bar"]);
+  assert.equal(fetchMock.mock.callCount(), 2);
+});
+
+test("update_kitchen_ticket rejects a non-string stationId before HTTP", async (t) => {
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => { throw new Error("Unexpected API call"); });
+  const client = await connectKitchen(t);
+  const result = await client.callTool({ name: "update_kitchen_ticket", arguments: { id: "tkt_001", stationId: 42 } });
+  assert.equal(result.isError, true);
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
+test("kitchen_flow_summary counts canonical multi-station tickets once and excludes voided tickets", async (t) => {
+  const tickets = [
+    { ...MOCK_TICKET, stationId: "stale_legacy_station", stationIds: ["sta_grill", "sta_bar", "sta_bar"] },
+    { ...MOCK_TICKET_2, stationId: undefined, stationIds: ["sta_bar"] },
+    { id: "unassigned", status: "on_hold", stationIds: [] },
+    { id: "voided", status: "voided", stationIds: ["sta_grill"] },
+    { id: "served", status: "served", stationIds: ["sta_grill"] },
+  ];
+  t.mock.method(globalThis, "fetch", async (url: string | URL | Request) => {
+    const path = new URL(String(url)).pathname;
+    if (path === "/v1/kitchen/tickets") return Response.json({ data: tickets, total: tickets.length, limit: 100, offset: 0 });
+    assert.equal(path, "/v1/kitchen/stations");
+    return Response.json(MOCK_STATIONS_LIST);
+  });
+  const client = await connectKitchen(t);
+  const result = await client.callTool({ name: "kitchen_flow_summary", arguments: {} });
+  assert.notEqual(result.isError, true);
+  const summary = result.structuredContent as Record<string, unknown>;
+  assert.equal(summary.totalOpenTickets, 3);
+  assert.equal(summary.bottleneckStationId, "sta_bar");
+  const stations = summary.stations as Array<Record<string, unknown>>;
+  assert.deepEqual(stations.map(({ stationId, openTickets }) => ({ stationId, openTickets })), [
+    { stationId: "sta_grill", openTickets: 1 },
+    { stationId: "sta_bar", openTickets: 2 },
+    { stationId: "__unassigned__", openTickets: 1 },
+  ]);
+});
 
 describe("list_kitchen_stations — success path", () => {
   test("returns stations list with total", async () => {
