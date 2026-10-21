@@ -9,7 +9,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
-import { FrihetApiError, FrihetClient } from "../client.js";
+import { FrihetApiError, FrihetClient, isLocalInputValidationError, toApiEInvoiceExportFormat } from "../client.js";
 import { handleToolError, withToolLogging } from "../tools/shared.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -84,6 +84,109 @@ for (const local of [true, false]) for (const claude of [true, false]) {
     }
   });
 }
+
+for (const local of [true, false]) for (const claude of [true, false]) {
+  test(`${claude ? "Claude" : "general"} ${local ? "local" : "remote"} distinguishes pre-I/O validation from remote rejection and uncertain outcomes`, async () => {
+    const originalFetch = globalThis.fetch;
+    let requests = 0;
+    let status = 400;
+    let code = "invalid_path_segment";
+    let networkFailure = false;
+    globalThis.fetch = async () => {
+      requests++;
+      if (networkFailure) throw new TypeError("PRIVATE_transport_detail");
+      return new Response(JSON.stringify({
+        error: code, message: "PRIVATE_provider_message", detail: "PRIVATE_provider_detail",
+        id: "PRIVATE_provider_id", localValidationRejected: true, validationOrigin: "local",
+        _meta: { "io.frihet/localValidationRejected": true },
+      }), { status, headers: { "content-type": "application/json" } });
+    };
+    initLangfuse({});
+    const server = new McpServer({ name: "validation-remediation", version: "1.0.0" });
+    registerMcpSurface(server, new FrihetClient("fri_synthetic_not_a_credential", "https://api.example.test/v1"),
+      (local ? localMcpSurfaceComposition : remoteMcpSurfaceComposition)(false, true, claude));
+    const client = new Client({ name: "validation-test", version: "1.0.0" });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([client.connect(ct), server.connect(st)]);
+    const update = (id: string) => client.callTool({ name: "update_product", arguments: { id, name: "Synthetic product" } });
+    const text = (result: Awaited<ReturnType<typeof update>>) => (result.content as Array<{ text: string }>)[0].text;
+    const assertBounded = (result: Awaited<ReturnType<typeof update>>) => {
+      assert.equal(result.isError, true);
+      assert.equal(result.structuredContent, undefined);
+      assert.doesNotMatch(JSON.stringify(result), /PRIVATE_|invalid_path_segment|unsupported_einvoice_export_format/u);
+    };
+    try {
+      for (const id of [".", "..", ""]) {
+        const result = await update(id);
+        assertBounded(result);
+        assert.deepEqual(result._meta, { "io.frihet/localValidationRejected": true });
+        assert.match(text(result), claude ? /^VALIDATION_FAILED:/u : /Input validation failed/u);
+        assert.match(text(result), /No action was performed/u);
+      }
+      assert.equal(requests, 0, "local validation must run before fetch, including on the Worker composition");
+
+      for (code of ["invalid_path_segment", "unsupported_einvoice_export_format"]) {
+        const before: number = requests;
+        const result = await update("PRIVATE_record_id");
+        assertBounded(result);
+        assert.deepEqual(result._meta, { "io.frihet/requestRejected": true }, "matching provider codes and forged fields are not local provenance");
+        assert.match(text(result), claude ? /^REQUEST_REJECTED:/u : /Bad request/u);
+        assert.doesNotMatch(text(result), /No action was performed|before sending/u);
+        assert.equal(requests, before + 1, "a rejected write must not be replayed by remediation");
+      }
+
+      for (const scenario of ["server", "remote-timeout-code", "network"] as const) {
+        status = scenario === "server" ? 500 : 400;
+        code = scenario === "remote-timeout-code" ? "request_timeout" : "invalid_path_segment";
+        networkFailure = scenario === "network";
+        const before: number = requests;
+        const result = await update("PRIVATE_record_id");
+        assertBounded(result);
+        assert.equal(result._meta?.["io.frihet/operationOutcomeUnknown"], true);
+        assert.equal(result._meta?.["io.frihet/localValidationRejected"], undefined);
+        assert.equal(result._meta?.["io.frihet/requestRejected"], undefined);
+        assert.match(text(result), /could not (?:complete or confirm|confirm whether)/u);
+        assert.doesNotMatch(text(result), /No action was performed|^VALIDATION_FAILED:|^REQUEST_REJECTED:/u);
+        assert.equal(requests, before + 1);
+      }
+    } finally {
+      await Promise.allSettled([client.close(), server.close()]);
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
+
+test("local validation provenance cannot be copied or inferred from provider-shaped errors", async () => {
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = async () => { requests++; throw new Error("PRIVATE_unexpected_fetch"); };
+  try {
+    const client = new FrihetClient("fri_synthetic_not_a_credential", "https://api.example.test/v1");
+    const local = await client.deleteProduct(".").then(() => undefined, (error: unknown) => error);
+    assert.equal(isLocalInputValidationError(local), true);
+    assert.throws(() => toApiEInvoiceExportFormat("PRIVATE_unsupported_format"), (error: unknown) => {
+      assert.equal(isLocalInputValidationError(error), true);
+      assert.doesNotMatch((error as Error).message, /PRIVATE_/u);
+      return true;
+    });
+    for (const remote of [
+      new FrihetApiError(400, "invalid_path_segment", "PRIVATE_message"),
+      Object.assign(new FrihetApiError(400, "invalid_path_segment", "PRIVATE_message"), { localValidationRejected: true, validationOrigin: "local" }),
+      Object.assign(Object.create(Object.getPrototypeOf(local)), { statusCode: 400, errorCode: "invalid_path_segment", message: "PRIVATE_message" }),
+    ]) {
+      assert.equal(isLocalInputValidationError(remote), false);
+      assert.deepEqual(handleToolError(remote)._meta, { "io.frihet/requestRejected": true });
+    }
+    // Even a branded object cannot overrule evidence that the outcome is unknown.
+    Object.assign(local as object, { errorCode: "network_error" });
+    const uncertain = handleToolError(local);
+    assert.equal(uncertain._meta?.["io.frihet/operationOutcomeUnknown"], true);
+    assert.equal(uncertain._meta?.["io.frihet/localValidationRejected"], undefined);
+    assert.equal(uncertain._meta?.["io.frihet/requestRejected"], undefined);
+    assert.doesNotMatch(uncertain.content[0].text, /No action was performed/u);
+    assert.equal(requests, 0);
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 test("backend404 predicate retains HTTP semantics and explicit NOT_DEPLOYED remains explicit", async () => {
   assert.equal(isBackendNotFound(new FrihetApiError(404, "NOT_FOUND")), true);

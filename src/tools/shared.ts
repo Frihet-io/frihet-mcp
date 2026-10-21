@@ -4,7 +4,8 @@
  * This module is used by both the local (stdio) and remote (Cloudflare Workers)
  * MCP servers. It must NOT import concrete classes from either client — error
  * detection uses duck-typing (checking for `statusCode`/`errorCode` properties)
- * so it works regardless of which FrihetApiError class threw the error.
+ * so it works regardless of which FrihetApiError class threw the error. The
+ * client-owned predicate separately verifies local validation provenance.
  */
 
 import type { ToolAnnotations, Annotations } from "@modelcontextprotocol/sdk/types.js";
@@ -13,6 +14,7 @@ import type { PaginatedResponse } from "../types.js";
 import { log, logToolCall } from "../logger.js";
 import { recordToolCall } from "../metrics.js";
 import { sanitizeServerRemediation } from "../redaction.js";
+import { isLocalInputValidationError } from "../client.js";
 
 /* ------------------------------------------------------------------ */
 /*  Safety annotations for MCP tool registrations                      */
@@ -165,9 +167,17 @@ export function handleToolError(error: unknown, toolName?: string): {
     // API denial semantics without forwarding provider text, codes or IDs.
     const definitiveDenial = !operationOutcomeUnknown
       && (error.statusCode === 404 || error.statusCode === 403);
+    const localValidationRejected = !operationOutcomeUnknown && error.statusCode === 400
+      && isLocalInputValidationError(error);
+    const requestRejected = !operationOutcomeUnknown && error.statusCode === 400
+      && !localValidationRejected;
 
     let friendlyMessage: string;
-    if (error.statusCode === 413 && error.errorCode === "payload_too_large") {
+    if (operationOutcomeUnknown) {
+      friendlyMessage = "Frihet could not confirm whether this request completed. Read the current record before deciding whether to retry. / Frihet no pudo confirmar si la solicitud se completó. Consulta el estado actual antes de decidir si reintentar.";
+    } else if (localValidationRejected) {
+      friendlyMessage = "Input validation failed before sending the request. No action was performed. Correct the ID and input parameters before retrying. / La validación falló antes de enviar la solicitud. No se realizó ninguna acción. Corrige el ID y los parámetros antes de reintentar.";
+    } else if (error.statusCode === 413 && error.errorCode === "payload_too_large") {
       friendlyMessage = `Document response too large: ${error.message} / Respuesta de documento demasiado grande.`;
     } else if (error.statusCode === 403) {
       const guidance = sanitizeServerRemediation(error.detail, error.errorCode)
@@ -189,7 +199,7 @@ export function handleToolError(error: unknown, toolName?: string): {
         },
       ],
       isError: true,
-      ...(error.statusCode === 401 || operationOutcomeUnknown || definitiveDenial
+      ...(error.statusCode === 401 || operationOutcomeUnknown || definitiveDenial || localValidationRejected || requestRejected
         ? {
             _meta: {
               ...(definitiveDenial
@@ -197,6 +207,12 @@ export function handleToolError(error: unknown, toolName?: string): {
                 : {}),
               ...(error.statusCode === 401
                 ? { "io.frihet/authenticationRequired": true }
+                : {}),
+              ...(localValidationRejected
+                ? { "io.frihet/localValidationRejected": true }
+                : {}),
+              ...(requestRejected
+                ? { "io.frihet/requestRejected": true }
                 : {}),
               ...(operationOutcomeUnknown
                 ? { "io.frihet/operationOutcomeUnknown": true }

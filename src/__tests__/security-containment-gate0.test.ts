@@ -8,7 +8,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-import { FrihetClient } from "../client.js";
+import { FrihetClient, isLocalInputValidationError } from "../client.js";
 import { log } from "../logger.js";
 import {
   buildTracePayload,
@@ -443,6 +443,8 @@ describe("public API path segments", () => {
           ]) {
             const result = await client.callTool(call);
             assert.equal(result.isError, true, `${call.name} with ${JSON.stringify(value)}`);
+            assert.deepEqual(result._meta, { "io.frihet/localValidationRejected": true });
+            assert.match((result.content as Array<{ text: string }>)[0].text, /No action was performed/u);
           }
         }
         assert.deepEqual(sent, []);
@@ -503,6 +505,7 @@ describe("public API path segments", () => {
             for (const request of requests) assert.doesNotMatch(request, /\/\/|\/(\?|$)/u, label);
           } else {
             assert.equal((error as { errorCode?: unknown } | undefined)?.errorCode, "invalid_path_segment", label);
+            assert.equal(isLocalInputValidationError(error), true, label);
             assert.deepEqual(requests, [], label);
           }
         }

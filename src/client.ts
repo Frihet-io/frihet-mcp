@@ -145,14 +145,24 @@ const E_INVOICE_EXPORT_API_FORMAT: Readonly<
   cii: "CII",
 };
 
+// Only the existing guards below can attest that a request was never sent.
+// Provider error codes, copied errors and public properties cannot forge this
+// process-local provenance. Both runtimes use this fetch-only client.
+const LOCAL_VALIDATION_ERRORS = new WeakSet<object>();
+
+export function isLocalInputValidationError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && LOCAL_VALIDATION_ERRORS.has(error);
+}
+
 export function toApiEInvoiceExportFormat(format: string): ApiEInvoiceExportFormat {
   if (!Object.hasOwn(E_INVOICE_EXPORT_API_FORMAT, format)) {
-    throw new FrihetApiError(
+    const error = new FrihetApiError(
       400,
       "unsupported_einvoice_export_format",
-      `Unsupported e-invoice export format: ${format}. ` +
-        "Factur-X export supports the EN16931 profile only.",
+      "Unsupported e-invoice export format. Factur-X export supports the EN16931 profile only.",
     );
+    LOCAL_VALIDATION_ERRORS.add(error);
+    throw error;
   }
   return E_INVOICE_EXPORT_API_FORMAT[format as McpEInvoiceExportFormat];
 }
@@ -167,11 +177,13 @@ export function toApiEInvoiceExportFormat(format: string): ApiEInvoiceExportForm
 function pathSegment(value: string): string {
   const segment = String(value);
   if (segment === "" || segment === "." || segment === "..") {
-    throw new FrihetApiError(
+    const error = new FrihetApiError(
       400,
       "invalid_path_segment",
-      `Invalid identifier ${JSON.stringify(segment)}: an id cannot be empty, "." or "..".`,
+      'Invalid identifier: an id cannot be empty, "." or "..".',
     );
+    LOCAL_VALIDATION_ERRORS.add(error);
+    throw error;
   }
   return encodeURIComponent(segment);
 }

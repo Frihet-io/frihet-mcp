@@ -148,7 +148,7 @@ const SAFE_META_FLAGS = [
   "io.frihet/authenticationRequired", "io.frihet/operationOutcomeUnknown",
   "io.frihet/transportOutcomeUnknown", "io.frihet/retryable", "io.frihet/operationMayHaveCompleted",
   "io.frihet/resourceNotFound", "io.frihet/accessDenied",
-  "io.frihet/confirmationRequired",
+  "io.frihet/confirmationRequired", "io.frihet/localValidationRejected", "io.frihet/requestRejected",
 ] as const;
 
 /** Claude does not expose opaque tool metadata as an actionable error message.
@@ -170,6 +170,12 @@ function claudeErrorText(meta: Record<string, unknown>): string {
   if (meta["io.frihet/resourceNotFound"] === true) {
     return "NOT_FOUND: No record is available with this ID in the authorized workspace. Check the ID; after deletion, verify absence with a list. Do not automatically repeat a write.";
   }
+  if (meta["io.frihet/localValidationRejected"] === true) {
+    return "VALIDATION_FAILED: The ID or input parameters were rejected before sending the request. No action was performed. Correct the ID and parameters before retrying.";
+  }
+  if (meta["io.frihet/requestRejected"] === true) {
+    return "REQUEST_REJECTED: Frihet rejected this request. Check the ID and input parameters, then read the current record before deciding whether to retry. Do not automatically repeat a write.";
+  }
   return unknown;
 }
 
@@ -180,10 +186,17 @@ export function claudeToolResult(result: Record<string, unknown>, toolName?: str
     typeof meta?.[key] === "boolean" ? [[key, meta[key]]] : [],
   ));
   const error = result.isError === true;
-  // Confirmation is a typed local refusal, never arbitrary tool/provider output.
-  // Fixed rendering also lets an uncertain-outcome flag take precedence.
-  const fixedConfirmation = error && safeMeta["io.frihet/confirmationRequired"] === true;
-  const structured = fixedConfirmation || result.structuredContent === undefined ? undefined
+  // Confirmation, validation and uncertain outcomes use fixed remediation,
+  // never provider text or IDs. Preserve the existing denial/output contract.
+  const fixedRemediation = error && (
+    safeMeta["io.frihet/confirmationRequired"] === true
+    || safeMeta["io.frihet/localValidationRejected"] === true
+    || safeMeta["io.frihet/requestRejected"] === true
+    || safeMeta["io.frihet/operationOutcomeUnknown"] === true
+    || safeMeta["io.frihet/transportOutcomeUnknown"] === true
+    || safeMeta["io.frihet/operationMayHaveCompleted"] === true
+  );
+  const structured = fixedRemediation || result.structuredContent === undefined ? undefined
     : sanitizeClaudeOutput(result.structuredContent, error ? undefined : toolName);
   const text = structured !== undefined ? JSON.stringify(structured, null, 2)
     : error ? claudeErrorText(safeMeta)
