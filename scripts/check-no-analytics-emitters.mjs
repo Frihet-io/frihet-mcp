@@ -308,12 +308,12 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/no-public-leak.test.mjs": "8e39d519a49cf19a88902f9038919361da664410cecbf78d594cf0350f1028cd", // synthetic credential tripwire regression; reports paths, never values
-  "scripts/verify-claude-erp-source-release.mjs": "48e6919a9e7bc87158ecb356aeaf38d8d8055fc74075269af45ac8ca4d9138a3", // authenticated read-only GitHub release/build artifacts; no telemetry or cloud mutation
+  "scripts/verify-claude-erp-source-release.mjs": "c9bbfdcea3f070a925c5d77bf1b0ed082f791485c1ee42bbee240f9d9d4b8ccd", // authenticated read-only GitHub artifacts and exact approved BEFORE-version backup; no telemetry or cloud mutation
   "scripts/check-claude-bootstrap-secrets.mjs": "4d4700482718ea1ae88480dd215521f07dbc9e8342838775826a8846d20925e4", // local Claude bootstrap secret check; no network or raw credential output
   "scripts/__tests__/claude-bootstrap-secrets.test.mjs": "90159f0a689cb8f5d6ffc6630871b0b596510b1e9f24e32adbdfe4dc2c779095", // local Claude bootstrap secret check; no network or raw credential output
   "scripts/check-claude-hosted-release.mjs": "d798bafcc17431b4e3f59b7a04432dbf27e3a2817f5406fc0059da9865fdd697", // reviewed Claude ERP source-only provenance admission and mandatory write hints; no telemetry emitter or new sink
   "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
-  "scripts/__tests__/claude-hosted-release.test.mjs": "5caa6ddf08406c2ec86aa6de2734eb99ab29596b5fdd96b348f07280ac3f6ab7", // reviewed Claude ERP source-only provenance admission, write hints and bootstrapped KV namespace test; no telemetry emitter or new sink
+  "scripts/__tests__/claude-hosted-release.test.mjs": "cdd433a3eadee50d26f00a618f34479c2cf9201399554101ad89f81035011408", // reviewed source-only admission, authenticated backup-version and topology tests; no telemetry emitter or new sink
   "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
