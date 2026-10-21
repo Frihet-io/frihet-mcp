@@ -341,7 +341,7 @@ export function registerKitchenTools(server: McpServer, client: IFrihetClient): 
 
         const result = {
           stations: summaries,
-          bottleneckStationId: maxLoad > 0 ? bottleneckId : undefined,
+          ...(maxLoad > 0 ? { bottleneckStationId: bottleneckId } : {}),
           totalOpenTickets,
           generatedAt: new Date().toISOString(),
         };

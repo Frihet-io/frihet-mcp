@@ -27,6 +27,16 @@ function findAll(node, predicate, out = []) {
 
 const indexSource = parse("index.ts", readFileSync(new URL("../index.ts", import.meta.url), "utf8"));
 
+test("Claude support describes enabled account access without claiming a QA-only or completed launch", async () => {
+  const response = claudePublicSurface(new Request("https://claude-mcp.frihet.io/support"), {}, true);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Connect with a verified Frihet account/u);
+  assert.match(html, /Access depends on whether the connector is enabled for your account/u);
+  assert.match(html, /does not grant access or establish Directory availability/u);
+  assert.doesNotMatch(html, /Pilot admission remains restricted|customer access is separately enabled/u);
+});
+
 /** Every enclosing node, innermost first. Requires the source to have been
  * parsed with setParentNodes = true (see `parse` above). */
 function ancestorsOf(node) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CLAUDE_MCP_RESOURCE, CLAUDE_ORIGIN } from "../oauth-profile.ts";
+import { OPENAI_REVIEW_OAUTH_SCOPES } from "../../../../src/openai-review-oauth.ts";
 import {
   CLAUDE_REDIRECT_URI,
   createOAuthRouteHarness,
@@ -34,7 +35,7 @@ for (const [label, configured] of [
     else h.env.FRIHET_CLAUDE_QA_UIDS = configured;
     const idToken = await mintIdToken();
     const response = await h.callback(stateKey, idToken);
-    assert.equal(response.status, 403);
+    assert.equal(response.status, 503);
     assert.equal("redirectTo" in response.body, false);
     assert.equal(h.events.includes("do:/attempt"), false);
     assert.equal(h.erp.requests.length, 0);
@@ -52,7 +53,7 @@ test("Claude QA membership cannot be spoofed with a caller UID when the verified
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ stateKey, idToken, uid: USER_ID, userId: USER_ID, accessProfile: "full" }),
   }));
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 503);
   assert.equal(h.events.includes("do:/attempt"), false);
   assert.equal(h.erp.requests.length, 0);
   assert.equal(h.kv.grantKeys().length, 0);
@@ -71,9 +72,9 @@ test("Claude authorization-code exchange rechecks current QA membership after th
     grant_type: "authorization_code", client_id: clientId, code,
     redirect_uri: h.redirectUri, code_verifier: "v".repeat(64),
   }));
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 503);
   const rejected = await response.json() as Record<string, unknown>;
-  assert.equal(rejected.error, "invalid_grant");
+  assert.equal(rejected.error, "temporarily_unavailable");
   assert.equal("access_token" in rejected || "refresh_token" in rejected, false);
   assert.equal([...h.namespace.objects.values()].some(({ state }) => state.storage.values.has("oauth_token_family")), false);
 });
@@ -97,7 +98,7 @@ for (const [label, configured] of [
         headers: { Authorization: `Bearer ${initial.accessToken}` },
         ...(method === "POST" ? { body: JSON.stringify({ uid: USER_ID }) } : {}),
       }));
-      assert.equal(mcp.status, 401, method);
+      assert.equal(mcp.status, 503, method);
     }
     const sessionDelete = await h.send(new Request(`${CLAUDE_ORIGIN}/mcp`, {
       method: "DELETE", headers: { Authorization: `Bearer ${initial.accessToken}` },
@@ -106,9 +107,9 @@ for (const [label, configured] of [
     const refreshed = await h.exchangeToken(new URLSearchParams({
       grant_type: "refresh_token", client_id: clientId, refresh_token: initial.refreshToken,
     }));
-    assert.equal(refreshed.status, 400);
+    assert.equal(refreshed.status, 503);
     const rejected = await refreshed.json() as Record<string, unknown>;
-    assert.equal(rejected.error, "invalid_grant");
+    assert.equal(rejected.error, "temporarily_unavailable");
     assert.equal("access_token" in rejected || "refresh_token" in rejected, false);
     const disconnected = await h.exchangeToken(new URLSearchParams({
       token: initial.refreshToken, client_id: clientId, token_type_hint: "refresh_token",
@@ -135,6 +136,169 @@ test("OpenAI OAuth and MCP access ignore the Claude-only private QA config", asy
   assert.equal(refreshed.status, 200);
   const tokens = await refreshed.json() as { access_token: string };
   assert.equal((await h.callMcp(tokens.access_token)).status, 200);
+});
+
+const CUSTOMER_UID = "verified-frihet-customer";
+const customerPolicy = () => JSON.stringify({ version: 1, mode: "customers", qaUids: [USER_ID] });
+
+function credentialSnapshot(h: Harness) {
+  return {
+    kv: structuredClone([...h.kv.values.entries()]),
+    // Resolving a stub for a read can instantiate an empty fake DO; compare
+    // persisted storage and alarms, not transient in-memory instances.
+    families: [...h.namespace.objects.entries()].filter(([, { state }]) => state.storage.values.size > 0 || state.storage.alarmAt !== null).map(([name, { state }]) => ({
+      name, values: structuredClone([...state.storage.values.entries()]), alarm: state.storage.alarmAt,
+    })),
+    activeKeys: h.erp.activeKeyIds(),
+    backendRequests: structuredClone(h.erp.requests),
+  };
+}
+
+test("customer admission verifies Firebase without adding the customer to QA or widening OAuth scope", async (t) => {
+  const h = await createOAuthRouteHarness(t, { profile: "claude" });
+  h.env.FRIHET_CLAUDE_QA_UIDS = customerPolicy();
+  const { clientId, stateKey } = await h.startLogin();
+  const idToken = await mintIdToken({ uid: CUSTOMER_UID });
+  const completed = await h.callback(stateKey, idToken);
+  assert.equal(completed.status, 200);
+  const initial = await h.redeem(clientId, completed.body.redirectTo);
+  assert.equal(initial.userId, CUSTOMER_UID);
+  assert.equal(initial.tokens.scope, OPENAI_REVIEW_OAUTH_SCOPES.join(" "));
+  assert.deepEqual(JSON.parse(String(h.env.FRIHET_CLAUDE_QA_UIDS)).qaUids, [USER_ID]);
+  assertNoSecretsInLogs(h, idToken);
+});
+
+for (const mode of ["qa", "customers"]) {
+  for (const claims of [{ emailVerified: false }, { emailVerified: "true" }, { email: undefined }, { email: "invalid" }]) {
+    test(`Claude ${mode} callback refuses invalid verified Firebase claims despite caller identity fields: ${JSON.stringify(claims)}`, async (t) => {
+      const h = await createOAuthRouteHarness(t, { profile: "claude" });
+      h.env.FRIHET_CLAUDE_QA_UIDS = JSON.stringify({ version: 1, mode, qaUids: [USER_ID] });
+      const { stateKey } = await h.startLogin();
+      const response = await h.send(new Request(`${CLAUDE_ORIGIN}/callback`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stateKey, idToken: await mintIdToken(claims), uid: USER_ID, email: "caller@example.com", emailVerified: true }),
+      }));
+      assert.equal(response.status, 403);
+      assert.equal(h.events.includes("do:/attempt"), false);
+      assert.deepEqual(h.erp.requests, []);
+      assert.deepEqual(h.kv.grantKeys(), []);
+    });
+  }
+}
+
+test("customer authorization code pauses without consuming or provisioning, then the same code resumes", async (t) => {
+  const h = await createOAuthRouteHarness(t, { profile: "claude" });
+  h.env.FRIHET_CLAUDE_QA_UIDS = customerPolicy();
+  const { clientId, stateKey } = await h.startLogin();
+  const completed = await h.callback(stateKey, await mintIdToken({ uid: CUSTOMER_UID }));
+  assert.equal(completed.status, 200);
+  const code = new URL(String(completed.body.redirectTo)).searchParams.get("code");
+  assert.ok(code);
+  const form = new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, code,
+    redirect_uri: h.redirectUri, code_verifier: "v".repeat(64) });
+  h.env.FRIHET_CLAUDE_QA_UIDS = JSON.stringify([USER_ID]);
+  const before = credentialSnapshot(h);
+  const invalidPkce = new URLSearchParams(form);
+  invalidPkce.set("code_verifier", "x".repeat(64));
+  const invalid = await h.exchangeToken(invalidPkce);
+  assert.equal(invalid.status, 400, "invalid PKCE stays invalid rather than becoming a policy response");
+  assert.deepEqual(credentialSnapshot(h), before);
+  const paused = await h.exchangeToken(form);
+  assert.equal(paused.status, 503);
+  assert.equal((await paused.json() as { error: string }).error, "temporarily_unavailable");
+  assert.deepEqual(credentialSnapshot(h), before);
+  h.env.FRIHET_CLAUDE_QA_UIDS = customerPolicy();
+  const resumed = await h.exchangeToken(form);
+  assert.equal(resumed.status, 200);
+  const tokens = await resumed.json() as { access_token: string };
+  assert.equal((await h.callMcp(tokens.access_token)).status, 200);
+  assert.equal(h.erp.postCorrelations.length, 1);
+});
+
+test("customer access and current refresh pause without changing KV, token-family hashes, alarms or API key and resume", async (t) => {
+  const h = await createOAuthRouteHarness(t, { profile: "claude" });
+  h.env.FRIHET_CLAUDE_QA_UIDS = customerPolicy();
+  const { clientId, stateKey } = await h.startLogin();
+  const completed = await h.callback(stateKey, await mintIdToken({ uid: CUSTOMER_UID }));
+  const initial = await h.redeem(clientId, completed.body.redirectTo);
+  const form = new URLSearchParams({ grant_type: "refresh_token", client_id: clientId, refresh_token: initial.refreshToken });
+  const before = credentialSnapshot(h);
+  for (const policy of [JSON.stringify([USER_ID]), "{", JSON.stringify({ version: 1, mode: "qa", qaUids: [USER_ID] })]) {
+    h.env.FRIHET_CLAUDE_QA_UIDS = policy;
+    assert.equal((await h.callMcp(initial.accessToken)).status, 503);
+    const paused = await h.exchangeToken(form);
+    assert.equal(paused.status, 503);
+    assert.equal((await paused.json() as { error: string }).error, "temporarily_unavailable");
+    assert.deepEqual(credentialSnapshot(h), before);
+  }
+  h.env.FRIHET_CLAUDE_QA_UIDS = customerPolicy();
+  assert.equal((await h.callMcp(initial.accessToken)).status, 200);
+  const resumed = await h.exchangeToken(form);
+  assert.equal(resumed.status, 200, "the exact unconsumed refresh remains redeemable");
+  assert.deepEqual(h.erp.activeKeyIds(), [initial.keyId]);
+  assert.equal(h.erp.postCorrelations.length, 1);
+});
+
+test("customer policy pause cannot disguise previous-refresh replay as temporary unavailability", async (t) => {
+  const h = await createOAuthRouteHarness(t, { profile: "claude" });
+  h.env.FRIHET_CLAUDE_QA_UIDS = customerPolicy();
+  const { clientId, stateKey } = await h.startLogin();
+  const completed = await h.callback(stateKey, await mintIdToken({ uid: CUSTOMER_UID }));
+  const initial = await h.redeem(clientId, completed.body.redirectTo);
+  const oldForm = new URLSearchParams({ grant_type: "refresh_token", client_id: clientId, refresh_token: initial.refreshToken });
+  const rotated = await h.exchangeToken(oldForm);
+  assert.equal(rotated.status, 200);
+  const tokens = await rotated.json() as { access_token: string; refresh_token: string };
+  h.env.FRIHET_CLAUDE_QA_UIDS = JSON.stringify([USER_ID]);
+  const replay = await h.exchangeToken(oldForm);
+  assert.equal(replay.status, 400);
+  assert.equal((await replay.json() as { error: string }).error, "invalid_grant");
+  assert.equal((await h.callMcp(tokens.access_token)).status, 401, "revocation precedes policy response");
+  await h.runFamilyAlarms();
+  assert.deepEqual(h.erp.activeKeyIds(), []);
+  assert.deepEqual(h.kv.grantKeys(), []);
+});
+
+for (const invalidState of ["expired", "revoked"] as const) {
+  test(`Claude policy pause still rejects and cleans a truly ${invalidState} token family`, async (t) => {
+    const h = await createOAuthRouteHarness(t, { profile: "claude" });
+    h.env.FRIHET_CLAUDE_QA_UIDS = customerPolicy();
+    const { clientId, stateKey } = await h.startLogin();
+    const completed = await h.callback(stateKey, await mintIdToken({ uid: CUSTOMER_UID }));
+    const initial = await h.redeem(clientId, completed.body.redirectTo);
+    const family = [...h.namespace.objects.values()].find(({ state }) => state.storage.values.has("oauth_token_family"));
+    assert.ok(family);
+    const record = structuredClone(family.state.storage.values.get("oauth_token_family")) as Record<string, unknown>;
+    if (invalidState === "expired") record.expiresAtMs = Date.now() - 1;
+    else record.status = "revoked";
+    family.state.storage.values.set("oauth_token_family", record);
+    h.env.FRIHET_CLAUDE_QA_UIDS = JSON.stringify([USER_ID]);
+    const response = await h.exchangeToken(new URLSearchParams({ grant_type: "refresh_token", client_id: clientId, refresh_token: initial.refreshToken }));
+    assert.equal(response.status, 400);
+    assert.equal((await response.json() as { error: string }).error, "invalid_grant");
+    await h.runFamilyAlarms();
+    assert.deepEqual(h.erp.activeKeyIds(), []);
+    assert.deepEqual(h.kv.grantKeys(), []);
+  });
+}
+
+test("paused customers can revoke their own grant while another OAuth client cannot revoke it", async (t) => {
+  const h = await createOAuthRouteHarness(t, { profile: "claude" });
+  h.env.FRIHET_CLAUDE_QA_UIDS = customerPolicy();
+  const { clientId, stateKey } = await h.startLogin();
+  const completed = await h.callback(stateKey, await mintIdToken({ uid: CUSTOMER_UID }));
+  const initial = await h.redeem(clientId, completed.body.redirectTo);
+  const otherClientId = await h.register();
+  h.env.FRIHET_CLAUDE_QA_UIDS = JSON.stringify([USER_ID]);
+  const before = credentialSnapshot(h);
+  const foreign = await h.exchangeToken(new URLSearchParams({ token: initial.refreshToken, client_id: otherClientId, token_type_hint: "refresh_token" }));
+  assert.equal(foreign.status, 200, "RFC7009 gives no token-existence information");
+  assert.deepEqual(credentialSnapshot(h), before);
+  const owner = await h.exchangeToken(new URLSearchParams({ token: initial.refreshToken, client_id: clientId, token_type_hint: "refresh_token" }));
+  assert.equal(owner.status, 200);
+  await h.runFamilyAlarms();
+  assert.deepEqual(h.erp.activeKeyIds(), []);
+  assert.deepEqual(h.kv.grantKeys(), []);
 });
 
 test("Claude local SDK route completes DCR, Firebase verification, credential binding, token redemption and MCP access", async (t) => {
