@@ -1,12 +1,8 @@
 /**
  * Backend-availability guard for MCP tool handlers.
  *
- * PROBLEM (the bug this prevents): several tool families are wired here AHEAD of
- * their Frihet-ERP backend Cloud Functions shipping (fiscal `/v1/fiscal/*`, bank
- * rules `/v1/banking/rules`, gestoria `/v1/gestoria/*`, GL audit `/v1/gl/*`,
- * portal domain/onboard, IGIC, IS, VIES onboarding, and webhook test). Until a
- * staged CF deploys, the API returns a genuine HTTP 404. Live HR, payroll-read,
- * and period-read tools also retain this guard as workspace-rollout safety.
+ * HTTP 404 can mean an unavailable record, an unknown route, or an endpoint
+ * that is not enabled. The status alone cannot establish deployment state.
  *
  * If that raw 404 reaches `handleToolError` it is mapped to the generic message
  * "Resource not found. / Recurso no encontrado." — which an LLM reads as "the
@@ -14,9 +10,9 @@
  * ("you have no Modelo 303 to file", "this workspace has no permissions matrix").
  * That is a Trust-Area failure: the model invents fiscal/compliance facts.
  *
- * FIX: wrap the client call in `withBackendGuard`. A genuine 404 is converted into
- * an explicit STRUCTURED tool error that names the tool and states the backend is
- * not available yet — never a value the LLM can mistake for real business data.
+ * Preserve typed application NOT_FOUND errors for the normal denial handler.
+ * Ambiguous 404s remain explicit errors with no inferred data or deployment
+ * state. Only notDeployedError states that a route is not deployed.
  * Any other error (401/403/429/5xx/network) is RE-THROWN unchanged so the normal
  * `withToolLogging` → `handleToolError` path still surfaces it.
  *
@@ -58,9 +54,7 @@ export function isBackendNotFound(error: unknown): boolean {
   return false;
 }
 
-/**
- * Builds the explicit, LLM-safe "backend not available" tool error.
- */
+/** Builds the explicit error for a route known not to be deployed. */
 export function backendUnavailableError(
   toolName: string,
   endpoint?: string,
@@ -90,23 +84,24 @@ export function backendUnavailableError(
   };
 }
 
-/**
- * Wraps a tool's client call. On a genuine 404 (backend not deployed) returns a
- * structured backend-unavailable error instead of letting the raw 404 surface as
- * a generic "resource not found" that the LLM would treat as real data. Any other
- * error is re-thrown so `withToolLogging`/`handleToolError` handle it normally.
- *
- * Usage:
- * ```ts
- * async ({ period }) => withToolLogging("get_modelo_303_summary", () =>
- *   withBackendGuard("get_modelo_303_summary", "/v1/fiscal/303", async () => {
- *     const result = await client.getFiscalModeloSummary("303", period);
- *     return { content: [getContent(formatRecord("Modelo 303 Summary", result))],
- *              structuredContent: result as unknown as Record<string, unknown> };
- *   }),
- * )
- * ```
- */
+/** An ambiguous 404 establishes neither missing business data nor deployment. */
+function lookupUnavailableError(toolName: string, endpoint?: string): BackendGuardErrorResult {
+  const message =
+    `Frihet could not resolve the requested resource or endpoint for "${toolName}" (HTTP 404). ` +
+    `No data could be retrieved. Do not infer an empty or zero result, missing business records, or deployment status. ` +
+    `Check the record ID and feature availability before deciding whether to retry. ` +
+    `/ Frihet no pudo resolver el recurso o endpoint solicitado (HTTP 404). ` +
+    `No se recuperaron datos. No deduzcas un resultado vacío o cero, la ausencia de registros ni el estado del despliegue.`;
+  return {
+    content: [{ type: "text", text: `Error: ${message}`, annotations: ERROR_CONTENT_ANNOTATIONS }],
+    structuredContent: {
+      error: "lookup_unavailable", code: "LOOKUP_UNAVAILABLE", tool: toolName, message,
+      ...(endpoint ? { endpoint } : {}),
+    },
+    isError: true,
+  };
+}
+
 export function notDeployedError(
   toolName: string,
   endpoint: string,
@@ -116,6 +111,7 @@ export function notDeployedError(
   return result;
 }
 
+/** Keep application denials intact; ambiguous HTTP 404s are never empty data. */
 export async function withBackendGuard<T extends { content: unknown[] }>(
   toolName: string,
   endpoint: string | undefined,
@@ -125,7 +121,8 @@ export async function withBackendGuard<T extends { content: unknown[] }>(
     return await fn();
   } catch (err) {
     if (isBackendNotFound(err)) {
-      return backendUnavailableError(toolName, endpoint);
+      if ((err as { errorCode?: unknown }).errorCode === "NOT_FOUND") throw err;
+      return lookupUnavailableError(toolName, endpoint);
     }
     throw err;
   }
