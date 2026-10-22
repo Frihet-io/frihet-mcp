@@ -63,6 +63,19 @@ const OAUTH_CALLBACK_MAX_BODY_BYTES = 20 * 1024;
 
 const app = new Hono<{ Bindings: AuthEnv }>();
 
+// full-oauth-release-contract.json holds new full-profile grants until their
+// own credential authority exists. Disclose that before login or consent:
+// showing broad read/write consent for a request for `read` cannot fix it.
+function fullOAuthUnavailableResponse(): Response {
+  return Response.json({
+    error: "temporarily_unavailable",
+    error_description: "New OAuth connections to the general Frihet MCP are temporarily unavailable. No permissions have been granted. A read-only request will not be upgraded to read/write access.",
+  }, {
+    status: 503,
+    headers: { "Cache-Control": "no-store", Pragma: "no-cache" },
+  });
+}
+
 /** Grants the user already holds for this client, listed before a new one exists. */
 async function listClientGrantIds(
   helpers: OAuthHelpers,
@@ -204,7 +217,8 @@ app.get("/userinfo", async (c) => {
 
 app.get("/authorize", async (c) => {
   const accessProfile = resolveWorkerAccessProfile(c.env);
-  const boundaryProfile = accessProfile === "full" ? undefined : boundOAuthProfile(accessProfile);
+  if (accessProfile === "full") return fullOAuthUnavailableResponse();
+  const boundaryProfile = boundOAuthProfile(accessProfile);
   if (boundaryProfile) {
     const queryError = validateReviewedAuthorizeQuery(c.req.raw);
     if (queryError) {
@@ -307,6 +321,7 @@ app.get("/authorize", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.post("/callback", async (c) => {
+  if (resolveWorkerAccessProfile(c.env) === "full") return fullOAuthUnavailableResponse();
   let body: {
     stateKey: string;
     idToken: string;
