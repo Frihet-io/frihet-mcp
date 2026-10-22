@@ -47,8 +47,8 @@ A profile is not evidence that every endpoint works for every tenant.
 
 | Composition | Canonical operations | Fiscal aliases | Discovery names | Total tool names | Resources | Prompts |
 |---|---:|---:|---:|---:|---:|---:|
-| Local full candidate | 125 | 4 | 0 | 129 | 5 | 2 |
-| Local grouped candidate | 125 | 4 | 3 | 132 | 5 | 2 |
+| Local full candidate | 125 | 4 | 0 | 129 | 1 | 2 |
+| Local grouped candidate | 125 | 4 | 3 | 132 | 1 | 2 |
 | Reusable remote full composition | 125 | 4 | 0 | 129 | 1 | 2 |
 | Reusable remote grouped composition | 125 | 4 | 3 | 132 | 1 | 2 |
 
@@ -86,13 +86,13 @@ not a blanket prohibition on accounting, taxes, email or payroll.
 
 ## Resources and prompts
 
-Retained shared resource: `frihet://config/currencies`, display formatting
-examples and historical codes, not payment precision or FX authority. Local
-only: `frihet://business-profile`, `frihet://monthly-snapshot`,
-`frihet://overdue-invoices`, `frihet://status/plan-limits`. The dynamic resources
-return the authenticated API's records/plan fields, without new fiscal rules.
-The overdue resource is explicitly a bounded, status-filtered first page; it
-does not derive unpaid balances or days overdue and is not a complete ledger.
+Retained in both local and remote compositions: `frihet://config/currencies`,
+display formatting examples and historical codes, not payment precision or FX
+authority. Business and plan context use `get_business_context`; monthly data
+uses `get_monthly_summary`. Use paginated `list_invoices` and `get_invoice` for
+receivables. The former local-only business-profile, monthly-snapshot,
+overdue-invoices and plan-limits resources are excluded so both compositions
+have the same bounded context.
 
 | Excluded resource | Content-review reason |
 |---|---|
@@ -176,3 +176,8 @@ resources/prompts and a real stdio process with an injected environment map.
 - [Connector authentication](https://claude.com/docs/connectors/building/authentication)
 - [Directory submission](https://claude.com/docs/connectors/building/submission)
 - [Hosted directory preparation](../../docs/directory-readiness.md)
+
+The generated contract retains `status: local-candidate-only` intentionally:
+its generator proves source composition, not deployment or provider status.
+The dated submission status above comes from the Directory portal; do not
+change that generated status to manufacture release acceptance.
