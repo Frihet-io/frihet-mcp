@@ -290,7 +290,7 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/oauth-token-family.ts": "fd5b46bd1cf104beeb48ed07cc5dad29789f47d8c208b2473db4dd791a460f30", // #246: reversible policy pause checks the existing internal status without credential rotation; #205: supersede tombstones a replaced grant's family on the same internal Durable Object origin; OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "62bcc09846f3544ea75d682bc53a8b944f0f525abdf64fa7e0459046fecefbab",
+  "package-lock.json": "56f576d63fbd42f9a587040ee7dbe8f17653e40bd641df7862184e69accdcd40",
   "workers/remote-mcp/package-lock.json": "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
@@ -303,7 +303,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
   "docs/agent-onboarding.json": "0cf30d7ef2e1b33256dda5ecb71773873d8867d032c4af8d4c0f2969f6ca97b3", // Task 1 recurring confirmation and declared fiscal/webhook effects; no new emitter
-  "README.md": "57d06af263e1ccf3bac9c237460e304fcd3719f6527798ccba3687b8293c4bc9", // GitHub Registry discovery links + static badge on existing img.shields.io host, unreleased local candidate flag and corrected deposit/recurring semantics, portable Claude preview link, skill install path and removal of fictional /frihet subcommands; no new runtime emitter or destination
+  "README.md": "6226ef232dff5e5cfbffb9b5270d08414e0b1d94197228f131fef6ff382d2531", // GitHub Registry discovery links + static badge on existing img.shields.io host, unreleased local candidate flag and corrected deposit/recurring semantics, portable Claude preview link, skill install path and removal of fictional /frihet subcommands; no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
@@ -317,7 +317,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
-  ".github/workflows/ci.yml": "30ab02839e195501fdc1b701d028d68d473da83f61cb51e5e0a7bfe60f7c4ed2",
+  ".github/workflows/ci.yml": "f658bea3678a3d42168072e3f5e9c551fcf1877c5495d7a646c0ab612de1fe90",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",

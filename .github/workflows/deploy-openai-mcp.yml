@@ -63,7 +63,7 @@ jobs:
       - name: Setup exact Node toolchain
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.22.2
+          node-version: 22.23.4
 
       - name: Assert exact current origin/main + workflow + reviewed profile source
         id: identity
@@ -306,7 +306,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.22.2
+          node-version: 22.23.4
           cache: npm
 
       - name: Assert exact-source lockfiles before install
@@ -372,7 +372,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.22.2
+          node-version: 22.23.4
           cache: npm
 
       - name: Assert exact-source lockfiles before install
@@ -522,7 +522,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.22.2
+          node-version: 22.23.4
           cache: npm
 
       - name: Assert exact-source lockfiles before install
@@ -731,7 +731,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.22.2
+          node-version: 22.23.4
           cache: npm
 
       - name: Assert exact-source lockfiles before install
@@ -1204,7 +1204,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.22.2
+          node-version: 22.23.4
 
       - name: Bounded public production readback
         env:
@@ -1465,7 +1465,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.22.2
+          node-version: 22.23.4
           cache: npm
 
       - name: Assert exact-source lockfiles before install

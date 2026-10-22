@@ -23,7 +23,7 @@
   <a href="https://github.com/mcp/io.frihet/erp"><img src="https://img.shields.io/badge/GitHub_MCP_Registry-Listed-18181b?style=flat&labelColor=09090b&logo=github" alt="Listed in GitHub MCP Registry"></a>
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
   <img src="https://img.shields.io/badge/catalogue-156_operations-18181b?style=flat&labelColor=09090b" alt="156 canonical catalogue operations">
-  <img src="https://img.shields.io/badge/node-%3E%3D20-18181b?style=flat&labelColor=09090b" alt="node >=20">
+  <img src="https://img.shields.io/badge/node-22.23.4%2B%20%7C%2024.22.1%2B%20%7C%2026.12.1%2B-18181b?style=flat&labelColor=09090b" alt="Node 22.23.4+ (22.x), 24.22.1+ (24.x), or 26.12.1+ (26.x)">
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-18181b?style=flat&labelColor=09090b" alt="TypeScript"></a>
 </p>
 
@@ -107,6 +107,10 @@ Three rules the contract encodes, in short:
 ---
 
 ## Install
+
+Local npm/stdio installs require Node **22.23.4+ (22.x), 24.22.1+ (24.x), or 26.12.1+ (26.x)**, covering the [October 2026 Node security fixes](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases). Node 20 is end-of-life: upgrade the Node runtime used by your MCP client before starting the server. CI uses Node 22.23.4.
+
+This source change does not update previously published npm package metadata or users' installed Node runtimes. Updated package metadata requires a separate npm release; users can upgrade their runtime now. The remote Cloudflare Worker has a separate runtime and release process.
 
 ### One-line (Claude Code, Cursor, Copilot, Codex, Windsurf, Gemini CLI, and more)
 
