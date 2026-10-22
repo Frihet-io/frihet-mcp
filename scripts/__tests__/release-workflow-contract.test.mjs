@@ -76,6 +76,19 @@ const ANCHOR = "scripts/assert-publish-anchor.mjs";
 const NO_LEAK = "scripts/no-public-leak.sh";
 const ANALYTICS = "scripts/check-no-analytics-emitters.mjs";
 
+test("Node security policy — package metadata and every workflow use patched supported releases", () => {
+  const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+  const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
+  assert.equal(manifest.engines.node, "^22.23.4 || ^24.22.1 || ^26.12.1");
+  assert.deepEqual(lock.packages[""].engines, manifest.engines);
+  for (const name of readdirSync(".github/workflows").filter((file) => /\.ya?ml$/.test(file))) {
+    const workflow = readFileSync(join(".github/workflows", name), "utf8");
+    for (const match of workflow.matchAll(/^\s+node-version:\s*["']?([^\s"'#]+)/gm)) {
+      assert.equal(match[1], "22.23.4", `${name} must use the reviewed security patch`);
+    }
+  }
+});
+
 const REVIEWED_ACTIONS = new Set([
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
@@ -170,7 +183,7 @@ function validateOpenAIWorkflowSupplyChain(yaml) {
   }
   const nodeVersions = [...yaml.matchAll(/^\s+node-version:\s*([^\s#]+)/gm)]
     .map((match) => match[1]);
-  if (nodeVersions.length === 0 || nodeVersions.some((version) => version !== "22.22.2")) {
+  if (nodeVersions.length === 0 || nodeVersions.some((version) => version !== "22.23.4")) {
     errors.push("floating-node-toolchain");
   }
   return errors;
@@ -965,7 +978,7 @@ test("Release workflow — hostile case 8: token fallback (id-token ONLY, NPM_TO
   const buildPack = findStage(stages, "build-pack");
   assert.ok(buildPack, "build-pack must exist");
   for (const stage of [buildPack, publish]) {
-    assert.match(stage.body, /node-version:\s*22\.23\.2/, `${stage.id} must pin Node 22.23.2`);
+    assert.match(stage.body, /node-version:\s*22\.23\.4/, `${stage.id} must pin Node 22.23.4`);
     assert.match(
       stage.body,
       /npm install --global --ignore-scripts npm@11\.19\.1/,
@@ -1372,7 +1385,7 @@ test("OpenAI release workflow — privileged runner and actions are immutable in
   );
   const floatingRunner = workflow.replace("runs-on: ubuntu-24.04", "runs-on: ubuntu-latest");
   assert.ok(validateOpenAIWorkflowSupplyChain(floatingRunner).some((error) => error.startsWith("floating-runner:")));
-  const floatingNode = workflow.replace("node-version: 22.22.2", "node-version: 22");
+  const floatingNode = workflow.replace("node-version: 22.23.4", "node-version: 22");
   assert.ok(validateOpenAIWorkflowSupplyChain(floatingNode).includes("floating-node-toolchain"));
 });
 

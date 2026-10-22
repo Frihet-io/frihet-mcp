@@ -31,7 +31,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.23.4
 
       # Compares the committed derived artifacts AND what api.frihet.io,
       # mcp.frihet.io and openai-mcp.frihet.io actually serve against the

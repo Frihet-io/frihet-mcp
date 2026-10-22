@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: npm
 
       # This runs before npm reads either lockfile. The parser-backed gate also
@@ -36,7 +36,7 @@ jobs:
           test ! -e .npmrc
           test ! -e workers/remote-mcp/npm-shrinkwrap.json
           test ! -e workers/remote-mcp/.npmrc
-          echo "62bcc09846f3544ea75d682bc53a8b944f0f525abdf64fa7e0459046fecefbab  package-lock.json" | sha256sum --check --strict -
+          echo "56f576d63fbd42f9a587040ee7dbe8f17653e40bd641df7862184e69accdcd40  package-lock.json" | sha256sum --check --strict -
           echo "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b  workers/remote-mcp/package-lock.json" | sha256sum --check --strict -
 
       - name: Install

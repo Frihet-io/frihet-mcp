@@ -232,7 +232,7 @@ jobs:
         if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.23.4
 
       - name: Install Worker dependencies (inert) for the topology config reader
         if: inputs.dry_run != true && inputs.release_target == 'npm-and-worker'
@@ -275,13 +275,10 @@ jobs:
       - name: Setup Node (pinned to MCP CI authority)
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          # MCP CI pins Node 22. The lockfile integrity check below consumes
+          # MCP CI pins Node 22.23.4. The lockfile integrity check below consumes
           # the exact byte digests frozen by preflight from this source SHA.
-          # Pinning the major prevents a future
-          # "let's upgrade to 24 because it is faster" from silently
-          # changing npm publish behavior (npm 10 / Node 22 is the tested
-          # combination).
-          node-version: 22
+          # Pin the security patch so gates and release tooling use the same runtime.
+          node-version: 22.23.4
           cache: npm
 
       - name: Lockfile integrity (pre-install)
@@ -362,14 +359,14 @@ jobs:
       - name: Setup Node (pinned to MCP CI authority)
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.23.2
+          node-version: 22.23.4
           cache: npm
 
       - name: Pin OIDC-capable npm CLI
         run: |
           set -euo pipefail
           npm install --global --ignore-scripts npm@11.19.1
-          test "$(node --version)" = "v22.23.2"
+          test "$(node --version)" = "v22.23.4"
           test "$(npm --version)" = "11.19.1"
 
       - name: Lockfile integrity (pre-install)
@@ -494,7 +491,7 @@ jobs:
         if: inputs.release_target == 'npm-and-worker'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: npm
           cache-dependency-path: workers/remote-mcp/package-lock.json
 
@@ -568,7 +565,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.23.2
+          node-version: 22.23.4
           cache: npm
 
       - name: Pin OIDC-capable npm CLI
@@ -578,7 +575,7 @@ jobs:
         run: |
           set -euo pipefail
           npm install --global --ignore-scripts npm@11.19.1
-          test "$(node --version)" = "v22.23.2"
+          test "$(node --version)" = "v22.23.4"
           test "$(npm --version)" = "11.19.1"
 
       - name: Lockfile integrity (pre-install)
@@ -652,7 +649,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.23.4
 
       - name: Download deterministic package evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -741,7 +738,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: npm
 
       - name: Lockfile integrity (pre-install)
@@ -847,7 +844,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 22.23.4
 
       - name: Fetch /health, assert releaseSha + version
         env:
