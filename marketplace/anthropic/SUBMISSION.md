@@ -1,6 +1,19 @@
-# Claude Directory candidate
+# Frihet for Claude — Directory submission
 
-**Local candidate implemented; hosted candidate integration and Directory submission are not complete.**
+**Connector and plugin submitted on 22 October 2026; both are in review. Neither is published.**
+
+The hosted connector is `https://claude-mcp.frihet.io/mcp`, under the name
+**Frihet** and the official black-circle icon. Its submitted source is
+`d6258b42481a0dfb33708848f6409f81a8f894bf`: 132 tool names, 2 prompts and 1 resource.
+The plugin submission uses `plugins/claude/frihet-erp`, version
+`1.18.0-preview.4`, with 8 skills and 1 remote MCP. Its security scan passed;
+publication remains a separate action and automatic publication is disabled.
+
+Review access is restricted to dedicated synthetic accounts. General customer
+admission is not enabled. Submission and a passing scan do not establish
+Anthropic approval, public availability, or successful business execution of
+every tool. Review credentials and private operational receipts are not part
+of this repository.
 
 The existing full MCP service at [mcp.frihet.io](https://mcp.frihet.io/) and
 [GitHub MCP Registry entry](https://github.com/mcp/io.frihet/erp) are real,
@@ -39,7 +52,8 @@ A profile is not evidence that every endpoint works for every tenant.
 | Reusable remote full composition | 125 | 4 | 0 | 129 | 1 | 2 |
 | Reusable remote grouped composition | 125 | 4 | 3 | 132 | 1 | 2 |
 
-Remote rows describe SDK composition tests, **not a deployed Claude endpoint**.
+Remote rows also match the submitted hosted catalogue. SDK composition tests
+remain separate from authenticated operation coverage.
 Filtering happens before SDK registration and discovery indexing; future
 canonical names are denied until explicitly reviewed. Aliases reference only
 permitted canonical handlers. Group/search counts count operations, not aliases.
@@ -113,8 +127,12 @@ These are content defects/dependencies, not policy bans on those workflows.
 This source includes reusable remote composition and a dedicated Claude Worker
 configuration with Claude mode. It requires isolated storage, separate OAuth
 authority, QA-only authorization and a verified ERP write-ceiling release receipt.
-No deployed Claude-profile endpoint or live acceptance is established here.
-Existing full-host discovery does not establish a fresh Claude OAuth login.
+The isolated hosted Claude endpoint above was exercised with synthetic accounts
+before submission. Accumulated coverage invokes all 132 tool names; 102 have
+a successful response within their tested scope and 30 do not yet have a
+positive business result. This is not a complete populated acceptance run of
+every operation on one source revision. Existing full-host discovery does not
+establish a fresh Claude OAuth login.
 The OpenAI profile and its frozen descriptor remain separate and unchanged.
 
 The Claude output boundary removes shared sensitive-field categories from
@@ -125,8 +143,14 @@ response metadata are withheld; known authentication/outcome/retry flags remain.
 The boundary does not classify every identifier embedded in arbitrary free text.
 It does not change tool inputs, confirmation requirements or write retry behavior.
 
-The local stdio package is not a hosted Directory listing. Provider review and
-publication are not established by the SDK checks or demo fixtures.
+The local stdio package is not a hosted Directory listing. Provider approval
+and publication are not established by the SDK checks or demo fixtures.
+
+The generic `connector/manifest.json` describes `io.frihet/erp` at
+`mcp.frihet.io` and the npm package; it is not the Claude submission manifest.
+Do not repoint it to the isolated Claude service or change OpenAI metadata to
+record this submission. Improvements to shared code require a separate release;
+they do not alter the submitted source automatically.
 
 ## Reproducible local checks
 
