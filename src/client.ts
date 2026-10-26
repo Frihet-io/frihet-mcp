@@ -25,7 +25,7 @@ import { safeRequestId, sanitizeServerRemediation } from "./redaction.js";
 import { logApiCall, logRetry } from "./logger.js";
 import { parseRetryAfter } from "./retry-after.js";
 import { fiscalModeloQuery } from "./fiscal-period.js";
-import { normalizeDepositBody } from "./deposit-contract.js";
+import { normalizeApplyDepositBody, normalizeDepositBody } from "./deposit-contract.js";
 
 const BASE_URL = "https://api.frihet.io/v1";
 
@@ -1622,7 +1622,7 @@ export class FrihetClient {
   }
 
   async applyDeposit(id: string, data?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.requestUnwrapped("POST", `/deposits/${pathSegment(id)}/apply`, data ?? {});
+    return this.requestUnwrapped("POST", `/deposits/${pathSegment(id)}/apply`, normalizeApplyDepositBody(data));
   }
 
   async refundDeposit(id: string, data?: Record<string, unknown>): Promise<Record<string, unknown>> {

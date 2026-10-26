@@ -22,6 +22,35 @@ export const depositFields = {
   paymentReference: z.string().max(200).optional(),
 };
 
+/** Writable fields accepted by publicApi v132's strict /deposits/:id/apply schema. */
+export const applyDepositFields = {
+  invoiceId: z.string().min(1).max(128),
+  invoiceNumber: z.string().min(1).max(200),
+  amount: z.number().positive(),
+};
+
+const applyDepositBody = z.object(applyDepositFields).strict();
+
+/** Validate deposit application payload against the strict backend contract before request I/O. */
+export function normalizeApplyDepositBody(
+  input: Record<string, unknown> = {},
+): Record<string, unknown> {
+  if (Object.prototype.hasOwnProperty.call(input, "notes")) {
+    throw new DepositInputError("Deposit application field 'notes' is not writable; the API does not accept it. / El campo 'notes' no se puede guardar al aplicar el depósito.");
+  }
+  const parsed = applyDepositBody.safeParse(input);
+  if (!parsed.success) {
+    const known = new Set(Object.keys(applyDepositFields));
+    const fields = [...new Set(parsed.error.issues.map((issue) => issue.path[0]).filter(
+      (field): field is string => typeof field === "string" && known.has(field),
+    ))];
+    throw new DepositInputError(
+      `Invalid deposit application input${fields.length ? ` (${fields.join(", ")})` : ""}. Provide invoiceId, invoiceNumber and a positive amount. / Indica invoiceId, invoiceNumber y un importe positivo.`,
+    );
+  }
+  return parsed.data;
+}
+
 const createDepositBody = z.object({
   ...depositFields,
   currency: depositFields.currency.default("EUR"),

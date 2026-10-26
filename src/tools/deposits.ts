@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { depositFields, DepositInputError } from "../deposit-contract.js";
+import { applyDepositFields, depositFields, DepositInputError } from "../deposit-contract.js";
 import { withToolLogging, confirmationRequiredError, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, ERROR_CONTENT_ANNOTATIONS, paginatedOutput, deleteResultOutput, depositItemOutput, actionResultOutput } from "./shared.js";
 
 function depositValidationResponse(error: DepositInputError) {
@@ -208,31 +208,32 @@ export function registerDepositTools(server: McpServer, client: IFrihetClient): 
       description:
         "Apply a deposit to an invoice or mark it as used. " +
         "Transitions the deposit status to 'applied'. " +
-        "ERP requires invoiceId + invoiceNumber + amount on the body; id is the deposit ID. " +
+        "ERP requires invoiceId + invoiceNumber + amount on the body; id is the deposit ID; notes is not writable. " +
         "Example: id='dep_abc123', invoiceId='inv_xyz', invoiceNumber='F-2026-007', amount=150 " +
-        "/ Aplica un deposito a una factura o lo marca como utilizado. Requiere invoiceId, invoiceNumber y amount.",
+        "/ Aplica un deposito a una factura o lo marca como utilizado. Requiere invoiceId, invoiceNumber y amount; notes no se puede guardar.",
       annotations: UPDATE_ANNOTATIONS,
-      inputSchema: {
-        id: z.string().describe("Deposit ID / ID del deposito"),
-        invoiceId: z
-          .string()
+      inputSchema: z.object({
+        id: z.string().min(1).describe("Deposit ID / ID del deposito"),
+        invoiceId: applyDepositFields.invoiceId
           .describe("Invoice ID to apply the deposit to / ID de la factura a la que aplicar el deposito"),
-        invoiceNumber: z
-          .string()
+        invoiceNumber: applyDepositFields.invoiceNumber
           .describe("Invoice number (document number) the deposit applies to / Numero de la factura"),
-        amount: z
-          .number()
+        amount: applyDepositFields.amount
           .describe("Amount of the deposit to apply in EUR / Importe del deposito a aplicar en EUR"),
-        notes: z.string().optional().describe("Application notes / Notas de aplicacion"),
-      },
+      }).strict(),
       outputSchema: actionResultOutput,
     },
     async ({ id, ...data }) => withToolLogging("apply_deposit", async () => {
-      const result = await client.applyDeposit(id, data);
-      return {
-        content: [mutateContent(formatRecord("Deposit applied", result))],
-        structuredContent: result as unknown as Record<string, unknown>,
-      };
+      try {
+        const result = await client.applyDeposit(id, data);
+        return {
+          content: [mutateContent(formatRecord("Deposit applied", result))],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      } catch (error) {
+        if (error instanceof DepositInputError) return depositValidationResponse(error);
+        throw error;
+      }
     }),
   );
 

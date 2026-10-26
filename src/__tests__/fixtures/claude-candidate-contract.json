@@ -230,29 +230,31 @@
       {
         "name": "apply_deposit",
         "title": "Apply Deposit",
-        "description": "Apply a deposit to an invoice or mark it as used. Transitions the deposit status to 'applied'. ERP requires invoiceId + invoiceNumber + amount on the body; id is the deposit ID. Example: id='dep_abc123', invoiceId='inv_xyz', invoiceNumber='F-2026-007', amount=150 / Aplica un deposito a una factura o lo marca como utilizado. Requiere invoiceId, invoiceNumber y amount. Claude omits sensitive output fields under the shared redaction policy.",
+        "description": "Apply a deposit to an invoice or mark it as used. Transitions the deposit status to 'applied'. ERP requires invoiceId + invoiceNumber + amount on the body; id is the deposit ID; notes is not writable. Example: id='dep_abc123', invoiceId='inv_xyz', invoiceNumber='F-2026-007', amount=150 / Aplica un deposito a una factura o lo marca como utilizado. Requiere invoiceId, invoiceNumber y amount; notes no se puede guardar. Claude omits sensitive output fields under the shared redaction policy.",
         "inputSchema": {
           "type": "object",
           "properties": {
             "id": {
               "description": "Deposit ID / ID del deposito",
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "invoiceId": {
               "description": "Invoice ID to apply the deposit to / ID de la factura a la que aplicar el deposito",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             },
             "invoiceNumber": {
               "description": "Invoice number (document number) the deposit applies to / Numero de la factura",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
             },
             "amount": {
               "description": "Amount of the deposit to apply in EUR / Importe del deposito a aplicar en EUR",
-              "type": "number"
-            },
-            "notes": {
-              "description": "Application notes / Notas de aplicacion",
-              "type": "string"
+              "type": "number",
+              "exclusiveMinimum": 0
             }
           },
           "required": [
@@ -261,7 +263,8 @@
             "invoiceNumber",
             "amount"
           ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false
         },
         "outputSchema": {
           "type": "object",
@@ -17819,23 +17822,25 @@
           "properties": {
             "id": {
               "description": "Deposit ID / ID del deposito",
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "invoiceId": {
               "description": "Invoice ID to apply the deposit to / ID de la factura a la que aplicar el deposito",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             },
             "invoiceNumber": {
               "description": "Invoice number (document number) the deposit applies to / Numero de la factura",
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
             },
             "amount": {
               "description": "Amount of the deposit to apply in EUR / Importe del deposito a aplicar en EUR",
-              "type": "number"
-            },
-            "notes": {
-              "description": "Application notes / Notas de aplicacion",
-              "type": "string"
+              "type": "number",
+              "exclusiveMinimum": 0
             }
           },
           "required": [
@@ -17844,7 +17849,8 @@
             "invoiceNumber",
             "amount"
           ],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false
         },
         "outputSchema": {
           "type": "object",
