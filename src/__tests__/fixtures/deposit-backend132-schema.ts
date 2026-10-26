@@ -13,3 +13,10 @@ export const backend132DepositSchema = z.object({
   paymentMethod: z.string().max(200).optional(),
   paymentReference: z.string().max(200).optional(),
 }).strict();
+
+// Independent wire oracle copied from deployed publicApi v132 (/v1/deposits/:id/apply).
+export const backend132ApplyDepositSchema = z.object({
+  invoiceId: z.string().min(1).max(128),
+  invoiceNumber: z.string().min(1).max(200),
+  amount: z.number().positive(),
+}).strict();

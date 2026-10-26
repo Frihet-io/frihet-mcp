@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { FrihetClient } from "../client.js";
 import { registerDepositTools } from "../tools/deposits.js";
-import { backend132DepositSchema } from "./fixtures/deposit-backend132-schema.js";
+import { backend132ApplyDepositSchema, backend132DepositSchema } from "./fixtures/deposit-backend132-schema.js";
 import { DepositInputError } from "../deposit-contract.js";
 
 async function connect(t: TestContext, api = new FrihetClient("fri_test_deposit", "https://api.frihet.io/v1")): Promise<Client> {
@@ -34,7 +34,10 @@ test("deposit descriptors expose only writable fields and retain the seven tool 
   assert.deepEqual(tools.map(({ name }) => name).sort(), ["apply_deposit", "create_deposit", "delete_deposit", "get_deposit", "list_deposits", "refund_deposit", "update_deposit"]);
   const create = tools.find(({ name }) => name === "create_deposit")!;
   assert.deepEqual(create.inputSchema.required?.slice().sort(), ["amount", "clientId", "clientName", "date", "description"]);
-  for (const name of ["create_deposit", "update_deposit"]) {
+  const apply = tools.find(({ name }) => name === "apply_deposit")!;
+  assert.deepEqual(Object.keys(apply.inputSchema.properties!).sort(), ["amount", "id", "invoiceId", "invoiceNumber"]);
+  assert.deepEqual(apply.inputSchema.required?.slice().sort(), ["amount", "id", "invoiceId", "invoiceNumber"]);
+  for (const name of ["apply_deposit", "create_deposit", "update_deposit"]) {
     const schema = tools.find((tool) => tool.name === name)!.inputSchema;
     assert.equal(schema.additionalProperties, false);
     assert.equal(schema.properties?.notes, undefined);
@@ -223,6 +226,60 @@ test("direct createDeposit validation names missing canonical fields without exp
     assert.doesNotMatch(error.message, /private customer name/);
     return true;
   });
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
+test("apply_deposit maps arguments into the exact backend132 wire contract without notes", async (t) => {
+  const input = { id: "dep_apply_1", invoiceId: "inv_1", invoiceNumber: "F-2026-007", amount: 150 };
+  const expectedWire = { invoiceId: "inv_1", invoiceNumber: "F-2026-007", amount: 150 };
+  const fetchMock = t.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    assert.equal(url, "https://api.frihet.io/v1/deposits/dep_apply_1/apply");
+    assert.equal(init?.method, "POST");
+    const wire = JSON.parse(String(init?.body));
+    assert.deepEqual(wire, expectedWire);
+    assert.deepEqual(backend132ApplyDepositSchema.parse(wire), expectedWire);
+    assert.ok(new Headers(init?.headers).get("Idempotency-Key"));
+    return Response.json({ data: { success: true, depositId: "dep_apply_1", appliedAmount: 150, remainingBalance: 0, status: "fully_applied" } });
+  });
+  const client = await connect(t);
+  const result = await client.callTool({ name: "apply_deposit", arguments: input });
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(result.structuredContent, { success: true, depositId: "dep_apply_1", appliedAmount: 150, remainingBalance: 0, status: "fully_applied" });
+  assert.equal(fetchMock.mock.callCount(), 1);
+});
+
+for (const [label, args] of [
+  ["unsupported notes", { id: "dep_1", invoiceId: "inv_1", invoiceNumber: "F-2026-007", amount: 150, notes: "must not reach backend" }],
+  ["missing invoiceId", { id: "dep_1", invoiceNumber: "F-2026-007", amount: 150 }],
+  ["empty invoiceId", { id: "dep_1", invoiceId: "", invoiceNumber: "F-2026-007", amount: 150 }],
+  ["oversized invoiceId", { id: "dep_1", invoiceId: "x".repeat(129), invoiceNumber: "F-2026-007", amount: 150 }],
+  ["missing invoiceNumber", { id: "dep_1", invoiceId: "inv_1", amount: 150 }],
+  ["empty invoiceNumber", { id: "dep_1", invoiceId: "inv_1", invoiceNumber: "", amount: 150 }],
+  ["oversized invoiceNumber", { id: "dep_1", invoiceId: "inv_1", invoiceNumber: "x".repeat(201), amount: 150 }],
+  ["zero amount", { id: "dep_1", invoiceId: "inv_1", invoiceNumber: "F-2026-007", amount: 0 }],
+  ["negative amount", { id: "dep_1", invoiceId: "inv_1", invoiceNumber: "F-2026-007", amount: -10 }],
+  ["empty deposit id", { id: "", invoiceId: "inv_1", invoiceNumber: "F-2026-007", amount: 150 }],
+] as const) {
+  test(`apply_deposit rejects ${label} before the API`, async (t) => {
+    const fetchMock = t.mock.method(globalThis, "fetch", async () => { throw new Error("Unexpected API call"); });
+    const client = await connect(t);
+    const result = await client.callTool({ name: "apply_deposit", arguments: args });
+    assert.equal(result.isError, true);
+    assert.equal(fetchMock.mock.callCount(), 0);
+    assert.doesNotMatch(JSON.stringify(result.content), /must not reach backend/);
+  });
+}
+
+test("apply_deposit keeps local validation guidance visible through the real SDK when client.applyDeposit rejects unsupported fields", async (t) => {
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => { throw new Error("Unexpected API call"); });
+  const api = new FrihetClient("fri_test_deposit", "https://api.frihet.io/v1");
+  const original = api.applyDeposit.bind(api);
+  t.mock.method(api, "applyDeposit", (id: string, data?: Record<string, unknown>) => original(id, { ...data, notes: "private value must stay local" }));
+  const client = await connect(t, api);
+  const result = await client.callTool({ name: "apply_deposit", arguments: { id: "dep_1", invoiceId: "inv_1", invoiceNumber: "F-2026-007", amount: 150 } });
+  assert.equal(result.isError, true);
+  assert.match(JSON.stringify(result.content), /notes.*not writable/);
+  assert.doesNotMatch(JSON.stringify(result), /unexpected error|Contact support|private value must stay local/);
   assert.equal(fetchMock.mock.callCount(), 0);
 });
 

@@ -273,7 +273,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "d500939d75c839d819a59dddf45e2d649c1a7386e544baa5b67e8d19ea06336c", // reviewed local validation provenance before request I/O; existing sinks, authorities and payloads unchanged
+  "src/client.ts": "0bc4802c6bc780bb7916382330a1496136306b21fcfc5f59c64d1ad3b8cffbbc", // #251: reviewed applyDeposit body validation before request I/O; existing sinks, authorities and payloads unchanged
   "workers/remote-mcp/src/claude-public-surface.ts": "4333358ffe7688d888c0c81401f9c40f8f24123740f94f8072870da8f622c3b8", // #246: mode-neutral support wording; isolated Claude host and authorization boundary preserved, no new sink
   "workers/remote-mcp/src/oauth-profile.ts": "d404aaf7c51a6fe675e7d1daae2317f7ea72b9e70b83f687b9359f857e6107b8", // #246: strict versioned admission policy and verified identity boundary, no new sink
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
