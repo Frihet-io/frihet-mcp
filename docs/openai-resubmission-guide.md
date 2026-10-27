@@ -73,7 +73,7 @@ The portal options available in the verified 2026-09-04 draft include the
 values to select: Identity `Business — Frihet` and Plugin Author `Frihet`.
 They must match the live connector privacy/support ownership statement,
 JSON-LD publisher evidence, and
-generated submission description before a draft is submitted. The public
+reviewer release notes before a draft is submitted. The public
 evidence must keep the legal chain explicit: Frihet is the trade name owned and
 operated in Spain by `VICTOR BERTHELIUS PATO`. Do not substitute the Individual
 identity, rely on the display name alone as ownership evidence, or search for a
@@ -86,7 +86,7 @@ not merely portal copy to complete at submission time:
 
 | Prior review issue | Required evidence before resubmission |
 | --- | --- |
-| Developer or business identity did not match | Select Identity `Business — Frihet` and Plugin Author `Frihet`; keep the exact legal owner/controller `VICTOR BERTHELIUS PATO` in the generated description and on the live website, connector support, privacy, terms, JSON-LD, agent, and MCP publisher surfaces. |
+| Developer or business identity did not match | Select Identity `Business — Frihet` and Plugin Author `Frihet`; keep the exact legal owner/controller `VICTOR BERTHELIUS PATO` in the reviewer release notes (`publication.release_notes`) and on the live website, connector support, privacy, terms, JSON-LD, agent, and MCP publisher surfaces, while keeping the user-facing `About` description focused on `Frihet` capabilities and boundaries. |
 | App or trademark ownership could not be confirmed | Keep the public chain explicit: the legal person owns and operates the Frihet trade name, and the live Frihet privacy policy and terms identify the same controller and service provider. Do not rely on logo or display-name similarity. |
 | `openWorldHint` values were missing or inconsistent | All 33 tools must carry explicit boolean `readOnlyHint`, `openWorldHint`, and `destructiveHint` values, with tool-specific external-effect explanations enforced by the descriptor and submission gates. |
 | Test cases were incorrect or inconsistent | Generate exactly five positive and three negative cases from the frozen descriptor, seed deterministic review data, and execute every case successfully in both ChatGPT web and mobile against the release candidate. Record the expected and observed outcomes. |

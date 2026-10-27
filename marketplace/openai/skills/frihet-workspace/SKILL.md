@@ -21,28 +21,34 @@ Respond in the user's language (English or Spanish). Use the connected Frihet MC
 - **Product & service catalogue (write, requires `confirm: true`):** `create_product`, `update_product`
 - **Cross-workspace read helpers (when a broader overview is requested):** `list_invoices`, `list_quotes`, `list_expenses`, `list_clients`, `list_vendors`
 
-## 1. Onboarding & workspace overview workflow
+## 1. Capability orientation vs. workspace data inspection
 
-When invoked as the plugin onboarding/setup workflow (`onboardingSkill`) or when the user asks for an overview of their business or what the Frihet plugin can do:
+Always distinguish a **generic capability question** from an **authenticated workspace query**:
 
-1. Call `get_business_context` (takes no arguments) to verify the OAuth connection and retrieve `business`, `defaults`, `plan`, `currentMonth`, `recentActivity`, and `topClients`.
-2. Present a concise, factual summary of the connected workspace:
-   - **Workspace & defaults:** business name and configured defaults (`defaults`) when present.
-   - **Current month & plan usage:** current-month totals (`currentMonth`) and plan usage (`plan`).
-   - **Recent activity & top clients:** highlight recent items from `recentActivity` and `topClients` without inventing fields omitted by the reviewed DTO.
-3. Offer concrete next prompts tailored to the four workflows included in this plugin:
-   - **Workspace & Catalogue (`frihet-workspace`):** *"Show me my active products and services."* / *"Muéstrame mis productos y servicios activos."*
-   - **Invoices & Quotes (`invoices-and-quotes`):** *"Show me my draft invoices."* / *"Prepara un borrador de factura para Acme SL."*
-   - **Expenses & Vendors (`expenses-and-vendors`):** *"List my expenses from this month."* / *"Registra un gasto de material de oficina."*
-   - **Clients & CRM (`clients-crm`):** *"List my clients and show recent CRM activity."* / *"Muestra mis clientes y sus notas."*
-4. State the operational boundary briefly: read tools run without modifying data; write tools require explicit authorization (`confirm: true`) and only create or update internal records and drafts.
+### A. Generic capability & welcome questions (*"What can Frihet do?"*, *"How do I use this plugin?"*, *"¿Qué puede hacer Frihet?"*)
+- **Do NOT call `get_business_context` or any other MCP tool.** A generic question about plugin capabilities, setup, or limits must never read private workspace records.
+- Answer directly by summarizing the four guided workflows and offering ready-to-use prompts:
+  1. **Workspace & Catalogue (`frihet-workspace`):** *"Give me an overview of my business this month."* / *"Show me my active products and services."*
+  2. **Invoices & Quotes (`invoices-and-quotes`):** *"Show me my draft invoices."* / *"Prepare an invoice draft for Acme SL."*
+  3. **Expenses & Vendors (`expenses-and-vendors`):** *"List my expenses from this month."* / *"Record an office supplies expense."*
+  4. **Clients & CRM (`clients-crm`):** *"List my clients and show recent CRM activity."* / *"Show notes for client Acme SL."*
+- State the operational boundary briefly: read tools run only when you ask to inspect workspace records; write tools require explicit authorization (`confirm: true`) and only create or update internal records and drafts.
+
+### B. Workspace overview requests (*"Give me an overview of my business this month"*, *"Give me my current Frihet business context overview"*, *"Check my workspace plan usage and defaults"*)
+- When the user explicitly asks to inspect their connected business, monthly summary, plan usage, or workspace defaults (or asks during `onboardingSkill` setup to verify their connected workspace):
+  1. Call `get_business_context` (takes no arguments) to retrieve `business`, `defaults`, `plan`, `currentMonth`, `recentActivity`, and `topClients`.
+  2. Present a concise, factual summary of the connected workspace:
+     - **Workspace & defaults:** business name and configured defaults (`defaults`) when present.
+     - **Current month & plan usage:** current-month totals (`currentMonth`) and plan usage (`plan`).
+     - **Recent activity & top clients:** highlight recent items from `recentActivity` and `topClients` without inventing fields omitted by the reviewed DTO.
+  3. Do not call additional `list_*` tools unless the user asks to drill into a specific area.
 
 ## 2. Product & service catalogue workflow
 
 ### Reading catalogue items
-1. Call `list_products` using optional filters (`isActive`, `q`, `limit`, `offset`, `after`).
+1. Call `list_products` once using optional filters (`isActive`, `q`, `limit`, `offset`, `after`). Do not call `get_business_context` when the user only asked to list products.
 2. When the user needs the full description or details of a specific item, call `get_product` with `id`.
-3. **Pagination truth:** Check `total`, `limit`, `offset`, and `nextCursor` on `list_products`. Never present a single page as the entire catalogue when `nextCursor` is present or `total` exceeds the returned `data.length`; either fetch subsequent pages or state clearly that the list is a partial page (for example, `Showing 20 of 54 products`).
+3. **Pagination truth (single-page default):** Check `total`, `limit`, `offset`, and `nextCursor` on `list_products`. Never present a single page as the entire catalogue when `nextCursor` is present or `total` exceeds the returned `data.length`. By default, return the first page immediately without looping through subsequent pages, and state clearly that the list is a partial page (for example, `Showing 2 of 54 products — ask if you want the next page`); only fetch subsequent pages when the user explicitly asks for more pages.
 
 ### Creating or updating a product or service
 1. **Required inputs:**

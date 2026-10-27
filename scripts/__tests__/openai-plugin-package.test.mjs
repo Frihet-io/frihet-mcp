@@ -77,7 +77,11 @@ test("portable listing preserves identity, reviewed scope, onboardingSkill and p
   }
   assert.equal(listing.category, "Business & Operations");
   assert.equal(listing.developerName, "Frihet");
-  assert.match(listing.longDescription, /VICTOR BERTHELIUS PATO/);
+  assert.doesNotMatch(
+    listing.longDescription,
+    /VICTOR BERTHELIUS PATO/i,
+    "User-facing English About description must not expose personal legal-owner string",
+  );
   assert.match(listing.longDescription, /four guided skills/i);
   assert.equal(listing.longDescription, submission.app_info.description);
   for (const key of ["websiteURL", "supportURL", "privacyPolicyURL", "termsOfServiceURL"]) {
@@ -97,10 +101,19 @@ test("portable listing preserves identity, reviewed scope, onboardingSkill and p
   assert.deepEqual(openai.publication.countries, ["ES"]);
   assert.match(openai.publication.release_notes, /package 1\.0\.2/);
   assert.match(openai.publication.release_notes, /onboardingSkill/);
+  assert.match(
+    openai.publication.release_notes,
+    /VICTOR BERTHELIUS PATO/,
+    "Reviewer release_notes must accredit the legal owner alongside /privacy, /support, and /es/terms",
+  );
   const spanish = openai.publication.translations["es-ES"];
   textWithin(spanish.subtitle, 30);
   textWithin(spanish.description, 4000);
-  assert.match(spanish.description, /VICTOR BERTHELIUS PATO/);
+  assert.doesNotMatch(
+    spanish.description,
+    /VICTOR BERTHELIUS PATO/i,
+    "User-facing Spanish About description must not expose personal legal-owner string",
+  );
   assert.match(spanish.description, /cuatro skills guiadas/i);
   assert.deepEqual(mcp, {
     $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
@@ -124,23 +137,81 @@ test("portable listing preserves identity, reviewed scope, onboardingSkill and p
   assert.doesNotMatch(JSON.stringify({ plugin, mcp }), /"(?:test_credentials|reviewer_instructions|headers|env|apps|hooks)"/);
 });
 
-test("packaged skills cover the exact 33-tool contract, onboarding workflow, and mandatory safety regressions", () => {
+const EXPLICITLY_NAMED_OUT_OF_SCOPE_TOOLS = new Set([
+  "delete_product",
+  "update_invoice",
+  "delete_invoice",
+  "send_invoice",
+  "mark_invoice_paid",
+  "update_quote",
+  "delete_expense",
+  "delete_vendor",
+  "delete_client",
+  "list_transactions",
+  "list_bank_accounts",
+]);
+
+function validateSkillToolReferences(body, approvedToolSet, relPath) {
+  const [supportedSection = "", ...restSections] = body.split(/^## 1\./mu);
+  const workflowSection = restSections.join("## 1.");
+  const coveredInSkill = new Set();
+
+  for (const [, token] of supportedSection.matchAll(/`([a-z]+_[a-z_*]+)`/gu)) {
+    if (token.endsWith("_*")) continue;
+    assert.ok(
+      approvedToolSet.has(token),
+      `${relPath} Supported tools section lists unapproved tool: ${token}`,
+    );
+    coveredInSkill.add(token);
+  }
+
+  // Split workflow body into sentences/clauses and lines so every unapproved tool mention
+  // is validated in its local syntactic context.
+  const lines = workflowSection.split("\n");
+  for (const line of lines) {
+    const clauses = line.split(/(?<=[.!?;])\s+/u);
+    for (const clause of clauses) {
+      for (const [, token] of clause.matchAll(/`([a-z]+_[a-z_*]+)`/gu)) {
+        if (token.endsWith("_*") || approvedToolSet.has(token)) continue;
+        assert.ok(
+          EXPLICITLY_NAMED_OUT_OF_SCOPE_TOOLS.has(token),
+          `${relPath} references unknown/unapproved tool \`${token}\``,
+        );
+        const hasExplicitProhibition =
+          /\b(?:not\s+available|not\s+exposed|not\s+included|does\s+not\s+include|does\s+not\s+access|no\s+`[a-z_]+`(?:\s+tool)?|outside\s+(?:this\s+connector|scope)|never\s+(?:call|use|invoke)|do\s+not\s+(?:call|use|invoke))\b/iu.test(
+            clause,
+          );
+        assert.ok(
+          hasExplicitProhibition,
+          `${relPath} mentions excluded tool \`${token}\` outside an explicit prohibition clause: "${clause.trim()}"`,
+        );
+
+        // Reject any positive/imperative instruction to call/use/invoke/run/try the excluded tool,
+        // even if another part of the sentence contains a negative marker.
+        const escaped = token.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+        const imperativeBeforeTool = new RegExp(
+          `\\b(?!never\\s+|not\\s+|no\\s+|without\\s+)(?:call|calling|use|using|invoke|invoking|run|running|execute|executing|trigger|triggering|recommend|try)\\b[^.!?;\\n]*\`${escaped}\``,
+          "iu",
+        );
+        const negatedImperative = new RegExp(
+          `\\b(?:never|do\\s+not|don't|cannot|can't|without)\\s+(?:ever\\s+)?(?:call|calling|use|using|invoke|invoking|run|running|execute|executing|trigger|triggering)\\b[^.!?;\\n]*\`${escaped}\``,
+          "iu",
+        );
+        if (imperativeBeforeTool.test(clause) && !negatedImperative.test(clause)) {
+          assert.fail(
+            `${relPath} instructs or recommends calling excluded tool \`${token}\`: "${clause.trim()}"`,
+          );
+        }
+      }
+    }
+  }
+
+  return coveredInSkill;
+}
+
+test("packaged skills cover the exact 33-tool contract, onboarding workflow, and mandatory safety rules", () => {
   const approvedToolSet = new Set(descriptor.tools.map((tool) => tool.name));
   assert.equal(approvedToolSet.size, 33);
-
-  const ExplicitlyNamedOutOfScopeTools = new Set([
-    "delete_product",
-    "update_invoice",
-    "delete_invoice",
-    "send_invoice",
-    "mark_invoice_paid",
-    "update_quote",
-    "delete_expense",
-    "delete_vendor",
-    "delete_client",
-    "list_transactions",
-    "list_bank_accounts",
-  ]);
 
   const coveredApprovedTools = new Set();
   const parsedSkills = new Map();
@@ -165,25 +236,8 @@ test("packaged skills cover the exact 33-tool contract, onboarding workflow, and
       );
     }
 
-    // Extract Supported tools section and verify every tool listed there is in the 33-tool contract.
-    const supportedSection = parsed.body.split("## 1.")[0] ?? "";
-    for (const [, token] of supportedSection.matchAll(/`([a-z]+_[a-z_]+)`/gu)) {
-      if (token.endsWith("_*")) continue;
-      assert.ok(
-        approvedToolSet.has(token),
-        `${relPath} Supported tools section lists unapproved tool: ${token}`,
-      );
-      coveredApprovedTools.add(token);
-    }
-
-    // Verify no unapproved tool is ever referenced outside explicit negative/out-of-scope warnings.
-    for (const [, token] of parsed.body.matchAll(/`([a-z]+_[a-z_]+)`/gu)) {
-      if (approvedToolSet.has(token)) continue;
-      assert.ok(
-        ExplicitlyNamedOutOfScopeTools.has(token),
-        `${relPath} references unknown/unapproved tool ${token} without an explicit out-of-scope guard`,
-      );
-    }
+    const skillCovered = validateSkillToolReferences(parsed.body, approvedToolSet, relPath);
+    for (const toolName of skillCovered) coveredApprovedTools.add(toolName);
 
     // Every skill must enforce pagination truth and unknown-write timeout recovery.
     assert.match(parsed.body, /nextCursor/, `${relPath} must instruct checking nextCursor pagination`);
@@ -201,6 +255,8 @@ test("packaged skills cover the exact 33-tool contract, onboarding workflow, and
   // Specific regression checks per skill:
   const workspaceSkill = parsedSkills.get("frihet-workspace").body;
   assert.match(workspaceSkill, /onboardingSkill/);
+  assert.match(workspaceSkill, /Do NOT call `get_business_context` or any other MCP tool/);
+  assert.match(workspaceSkill, /generic question about plugin capabilities, setup, or limits must never read private workspace records/i);
   assert.match(workspaceSkill, /get_business_context/);
   assert.match(workspaceSkill, /Never invent prices or tax rates/i);
 
@@ -223,6 +279,67 @@ test("packaged skills cover the exact 33-tool contract, onboarding workflow, and
   assert.match(clientsSkill, /permanent and cannot be undone/i);
 });
 
+test("skill tool-reference validator rejects imperative or positive references to excluded or unknown tools", () => {
+  const approvedToolSet = new Set(descriptor.tools.map((tool) => tool.name));
+
+  // 1. Valid negative disclosure passes:
+  const validBody = [
+    "## Supported tools in this workflow",
+    "- `create_invoice`, `get_invoice`",
+    "## 1. Workflow",
+    "- This connector does not include `send_invoice` or `delete_product`.",
+    "- Do not call `delete_invoice` in this connector.",
+  ].join("\n");
+  assert.deepEqual(
+    [...validateSkillToolReferences(validBody, approvedToolSet, "synthetic/SKILL.md")].sort(),
+    ["create_invoice", "get_invoice"],
+  );
+
+  // 2. Excluded tool listed in Supported tools is rejected:
+  assert.throws(
+    () =>
+      validateSkillToolReferences(
+        "## Supported tools\n- `create_invoice`, `send_invoice`\n## 1. Workflow\n",
+        approvedToolSet,
+        "synthetic/SKILL.md",
+      ),
+    /Supported tools section lists unapproved tool: send_invoice/,
+  );
+
+  // 3. Direct imperative instruction to call an excluded tool is rejected:
+  assert.throws(
+    () =>
+      validateSkillToolReferences(
+        "## Supported tools\n- `create_invoice`\n## 1. Workflow\nCall `send_invoice` to email the invoice.\n",
+        approvedToolSet,
+        "synthetic/SKILL.md",
+      ),
+    /mentions excluded tool `send_invoice` outside an explicit prohibition clause/,
+  );
+
+  // 4. Mixed clause that has a negative phrase AND recommends calling an excluded tool is rejected:
+  assert.throws(
+    () =>
+      validateSkillToolReferences(
+        "## Supported tools\n- `create_invoice`\n## 1. Workflow\nAlthough `update_invoice` is not available in this connector, call `send_invoice` to deliver the draft.\n",
+        approvedToolSet,
+        "synthetic/SKILL.md",
+      ),
+    /instructs or recommends calling excluded tool `send_invoice`/,
+  );
+
+  // 5. Unknown/invented tool name is rejected even inside a negative clause:
+  assert.throws(
+    () =>
+      validateSkillToolReferences(
+        "## Supported tools\n- `create_invoice`\n## 1. Workflow\nNote that `invented_magic_tool` is not available in this connector.\n",
+        approvedToolSet,
+        "synthetic/SKILL.md",
+      ),
+    /references unknown\/unapproved tool `invented_magic_tool`/,
+  );
+});
+
 test("ZIP is reproducible, contains only reviewed files + 4 skills and leaves npm built artifacts clean", () => {
   const archive = () => execFileSync("python3", ["scripts/package-openai-plugin.py"], { cwd: root, encoding: "utf8" }).trim();
   const archivePath = archive();
@@ -230,9 +347,23 @@ test("ZIP is reproducible, contains only reviewed files + 4 skills and leaves np
   const first = readFileSync(archivePath);
   assert.deepEqual(readFileSync(archive()), first);
   execFileSync("python3", ["-c", `
-import json, pathlib, sys, zipfile
+import hashlib, json, pathlib, sys, zipfile
 root = pathlib.Path(sys.argv[1])
-with zipfile.ZipFile(sys.argv[2]) as bundle:
+archive_path = pathlib.Path(sys.argv[2])
+checksum_path = archive_path.with_name(f"{archive_path.name}.sha256")
+inventory_path = archive_path.with_name(f"{archive_path.stem}-inventory.json")
+assert checksum_path.exists(), "Missing .sha256 sidecar file"
+assert inventory_path.exists(), "Missing -inventory.json sidecar file"
+archive_sha256 = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+assert checksum_path.read_text(encoding='utf-8') == f"{archive_sha256}  {archive_path.name}\\n"
+inventory = json.loads(inventory_path.read_text(encoding='utf-8'))
+assert inventory['name'] == 'frihet'
+assert inventory['version'] == '1.0.2'
+assert inventory['zipFile'] == archive_path.name
+assert inventory['zipSizeBytes'] == len(archive_path.read_bytes())
+assert inventory['zipSha256'] == archive_sha256
+assert inventory['fileCount'] == 9
+with zipfile.ZipFile(archive_path) as bundle:
     expected = {
         'plugin.json',
         'mcp.json',
@@ -246,10 +377,14 @@ with zipfile.ZipFile(sys.argv[2]) as bundle:
     }
     assert set(bundle.namelist()) == expected, f"Unexpected ZIP contents: {set(bundle.namelist())}"
     assert bundle.testzip() is None
+    inv_by_path = {item['path']: item for item in inventory['files']}
+    assert set(inv_by_path.keys()) == expected
     for entry in bundle.infolist():
         assert entry.date_time == (1980, 1, 1, 0, 0, 0)
         assert entry.external_attr >> 16 == 0o100644
         data = bundle.read(entry)
+        assert inv_by_path[entry.filename]['sizeBytes'] == len(data)
+        assert inv_by_path[entry.filename]['sha256'] == hashlib.sha256(data).hexdigest()
         if entry.filename.startswith('assets/'):
             source_path = root / 'marketplace/openai' / pathlib.Path(entry.filename).name
         else:
@@ -269,7 +404,9 @@ with zipfile.ZipFile(sys.argv[2]) as bundle:
   execFileSync(process.execPath, ["scripts/check-no-analytics-emitters.mjs", "--built"], { cwd: root, stdio: "pipe" });
 });
 
-test("mocked OpenAI MCP runtime validates the 4 skill workflows and 4 mandatory safety regressions", async () => {
+// Integration test of the MCP server surface (InMemoryTransport + McpServer) with programmed client.callTool requests.
+// This verifies server-side schema/contract invariants; conversational model tool-selection is evaluated separately.
+test("MCP server integration test: OpenAI 33-tool surface enforces schema, draft status, pagination, and write-confirmation contracts", async () => {
   const calls = [];
   let invoiceTimeoutSimulated = false;
 

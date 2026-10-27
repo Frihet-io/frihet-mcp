@@ -6,7 +6,7 @@ source change) has this MCP contract:
 - Release `1.16.6`;
 - portal Identity `Business — Frihet` and Plugin Author `Frihet`, matching
   the Frihet trade name; the live website, connector privacy/support,
-  submission-description, terms, and JSON-LD surfaces must preserve the legal
+  reviewer release notes, terms, and JSON-LD surfaces must preserve the legal
   ownership chain to controller and operator `VICTOR BERTHELIUS PATO`;
 - endpoint `https://openai-mcp.frihet.io/mcp`;
 - OAuth issuer/resource `https://openai-mcp.frihet.io` and exact scopes

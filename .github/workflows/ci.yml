@@ -119,3 +119,19 @@ jobs:
       # package.json SoT. Cross-repo drift is caught by the local pre-publish run.
       - name: Drift audit (self)
         run: npm run audit:mcp-refs -- --repo frihet-mcp
+
+      - name: Package OpenAI portable plugin bundle
+        run: |
+          npm run package:openai-plugin
+          (cd marketplace/openai/dist && sha256sum --check --strict frihet-1.0.2.zip.sha256)
+
+      - name: Upload OpenAI portable plugin artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openai-plugin-1.0.2-${{ github.sha }}
+          path: |
+            marketplace/openai/dist/frihet-1.0.2.zip
+            marketplace/openai/dist/frihet-1.0.2.zip.sha256
+            marketplace/openai/dist/frihet-1.0.2-inventory.json
+          if-no-files-found: error
+          retention-days: 90
