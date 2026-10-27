@@ -316,13 +316,13 @@ after the evidence has been reviewed.
 
 Run `npm run generate:openai-submission` after editing the generator, then
 `npm run package:openai-plugin` (Python 3 required, no Python dependencies).
-Upload `marketplace/openai/dist/frihet-1.0.1.zip` as a new plugin
-(**Upload new or existing plugin**, identity **Business — Frihet**); the legacy
+Upload `marketplace/openai/dist/frihet-1.0.2.zip` to update the `frihet` plugin
+(following the published `1.0.1` baseline under **Upload new or existing plugin**, identity **Business — Frihet**); the legacy
 record `plugin_asdk_app_69b6147ce32c81918680c89bfa7c9b36` has no MCP server and
-cannot gain one, so it is not updated. The ZIP includes root `plugin.json`, root `mcp.json` and three existing
+cannot gain one, so it is not updated. The ZIP includes root `plugin.json`, root `mcp.json`, four reviewed workflow skills under `skills/` (`frihet-workspace`, `invoices-and-quotes`, `expenses-and-vendors`, `clients-crm`, with `extensions.com.openai.onboardingSkill` pointing to `./skills/frihet-workspace/SKILL.md`) and three existing
 512 px PNG assets; its reviewed endpoint is `https://openai-mcp.frihet.io/mcp`.
 It contains no credentials, reviewer instructions, placeholder video,
-screenshots, skills or full-profile MCP connection. Packaging does not deploy
+screenshots or full-profile MCP connection. Packaging does not deploy
 or validate the live server. All five positive and three negative cases still
 require execution in ChatGPT web and mobile against the actual candidate.
 
@@ -352,9 +352,8 @@ confirmation.
 
 **Release notes**
 
-The package release notes describe version `1.0.1`: the reviewed MCP connection,
-existing light/dark icons, corrected listing, three read-only starters, Spanish
-listing text and five positive plus three negative cases. They explicitly
+The package release notes describe version `1.0.2` (building on `1.0.1`): the reviewed MCP connection,
+four guided skills (`frihet-workspace`, `invoices-and-quotes`, `expenses-and-vendors`, `clients-crm`), `onboardingSkill`, existing light/dark icons, refined English and Spanish listing text, three read-only starters, and five positive plus three negative cases. They explicitly
 separate package changes from the hosted server and the outstanding live tests
 and video. The source of truth is the generated manifest.
 

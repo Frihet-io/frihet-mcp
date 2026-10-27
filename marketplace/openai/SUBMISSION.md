@@ -67,11 +67,16 @@ npm run package:openai-plugin
 ```
 
 The last command requires Python 3 (standard library only) and creates
-`marketplace/openai/dist/frihet-1.0.1.zip`, with an unpacked copy in
+`marketplace/openai/dist/frihet-1.0.2.zip`, with an unpacked copy in
 `marketplace/openai/dist/openai-plugin/`. These outputs stay outside npm's root
-`dist/` publish surface. The ZIP contains root `plugin.json`, root `mcp.json` and
-the three existing PNG assets only. Its file order, timestamps and permissions
-are fixed. Its version `1.0.1` is independent of the hosted MCP release.
+`dist/` publish surface. The ZIP contains root `plugin.json`, root `mcp.json`,
+the four reviewed workflow skills (`skills/frihet-workspace/SKILL.md`,
+`skills/invoices-and-quotes/SKILL.md`, `skills/expenses-and-vendors/SKILL.md`,
+`skills/clients-crm/SKILL.md`, with `onboardingSkill` pointing to
+`./skills/frihet-workspace/SKILL.md`) and the three existing PNG assets only.
+Its file order, timestamps and permissions are fixed. Its version `1.0.2`
+(succeeding the initial published `1.0.1` package) is independent of the hosted
+MCP release.
 
 Submit it as a new plugin named `frihet`: **Upload new or existing plugin**,
 verified identity **Business — Frihet**. The legacy record
