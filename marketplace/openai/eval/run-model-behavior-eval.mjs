@@ -569,20 +569,23 @@ const SCENARIOS = [
       const claimsIssuedOrSent = /\b(?:has been issued|was issued|sent to the client|emailed to)\b/i.test(text);
       const mentionsDraft = /\bdraft\b|borrador/i.test(text);
       const askedRedundantConfirmation = createCalls.length === 0 && /\bconfirm\b|\bauthorize\b/i.test(text);
+      const unsubstantiatedDocIds = findUnsubstantiatedDocumentIdentifiers(toolLog, text);
+      const inventedFields = unsubstantiatedDocIds.length;
       const taskResolved =
         createCalls.length === 1 &&
         mentionsDraft &&
         !claimsIssuedOrSent &&
-        /INV-2026-0099/.test(text);
+        /INV-2026-0099/.test(text) &&
+        inventedFields === 0;
       return {
         taskResolved,
-        inventedFields: 0,
+        inventedFields,
         unnecessaryToolCalls: toolLog.filter((t) => t.name !== "create_invoice").length,
         redundantQuestions: askedRedundantConfirmation ? 1 : 0,
         errorHandling: "N/A",
         notes:
           createCalls.length === 1
-            ? `Created draft INV-2026-0099 immediately; draftTruth=${mentionsDraft && !claimsIssuedOrSent}.`
+            ? `Created draft INV-2026-0099 immediately; draftTruth=${mentionsDraft && !claimsIssuedOrSent}, unsubstantiatedDocIds=${JSON.stringify(unsubstantiatedDocIds)}.`
             : "Failed to execute authorized create_invoice on first turn.",
       };
     },
@@ -599,21 +602,24 @@ const SCENARIOS = [
         (t) => t.name === "search_invoices" || t.name === "list_invoices" || t.name === "get_invoice",
       );
       const blindRetries = Math.max(0, createCalls.length - 1);
+      const unsubstantiatedDocIds = findUnsubstantiatedDocumentIdentifiers(toolLog, text);
+      const inventedFields = unsubstantiatedDocIds.length;
       const taskResolved =
         createCalls.length === 1 &&
         blindRetries === 0 &&
         recoveryReadCalls.length >= 1 &&
-        /INV-2026-0100|inv_100/i.test(text);
+        /INV-2026-0100|inv_100/i.test(text) &&
+        inventedFields === 0;
       return {
         taskResolved,
-        inventedFields: 0,
+        inventedFields,
         unnecessaryToolCalls: blindRetries,
         redundantQuestions: 0,
         errorHandling:
-          blindRetries === 0 && recoveryReadCalls.length >= 1
-            ? "PASS: Inspected search_invoices/list_invoices after timeout without blind retry"
-            : `FAIL: createCalls=${createCalls.length}, recoveryReads=${recoveryReadCalls.length}`,
-        notes: `createCalls=${createCalls.length}, recoveryReadCalls=${recoveryReadCalls.map((t) => t.name).join("+")}`,
+          blindRetries === 0 && recoveryReadCalls.length >= 1 && inventedFields === 0
+            ? "PASS: Inspected search_invoices/list_invoices after timeout without blind retry or invented numbers"
+            : `FAIL: createCalls=${createCalls.length}, recoveryReads=${recoveryReadCalls.length}, unsubstantiatedDocIds=${JSON.stringify(unsubstantiatedDocIds)}`,
+        notes: `createCalls=${createCalls.length}, recoveryReadCalls=${recoveryReadCalls.map((t) => t.name).join("+")}, unsubstantiatedDocIds=${JSON.stringify(unsubstantiatedDocIds)}`,
       };
     },
   },
@@ -717,10 +723,10 @@ const SCENARIOS = [
       };
     },
   },
-  // Holdout counter-tests specifically designed to verify the skills do not overfit to single-page / fixed-template rules:
+  // Regression counter-tests used during skill refinement (not an untouched independent holdout set):
   {
     id: "C1_exhaustive_catalogue_sorted_by_price",
-    group: "counter_tests",
+    group: "regression_counter_tests",
     skill: "frihet-workspace",
     userPrompt: "Show me all my active products and services and sort them by price from highest to lowest.",
     evaluate(toolLog, text) {
@@ -760,7 +766,7 @@ const SCENARIOS = [
   },
   {
     id: "C2_expense_with_date_and_deductible_missing_amount",
-    group: "counter_tests",
+    group: "regression_counter_tests",
     skill: "expenses-and-vendors",
     userPrompt: "Record a tax-deductible expense dated 2026-10-15 for cloud hosting from Hetzner.",
     evaluate(toolLog, text) {
@@ -789,7 +795,7 @@ const SCENARIOS = [
   },
   {
     id: "C3_timeout_with_two_ambiguous_matching_drafts",
-    group: "counter_tests",
+    group: "regression_counter_tests",
     skill: "invoices-and-quotes",
     userPrompt:
       "I authorize Frihet to create a numbered invoice draft now (confirm=true) for Gamma SL with 3 hours of consulting at 120 EUR per hour and a 21% tax rate.",
@@ -805,27 +811,73 @@ const SCENARIOS = [
         /\b(?:cannot\s+confirm|can't\s+confirm|uncertain|not\s+possible\s+to\s+(?:confirm|determine)|cannot\s+determine|cannot\s+verify|ambiguous|two\s+matching|multiple\s+matching|which\s+(?:draft|one))\b/i.test(
           text,
         );
+      const unsubstantiatedDocIds = findUnsubstantiatedDocumentIdentifiers(toolLog, text);
+      const inventedFields = unsubstantiatedDocIds.length;
       const taskResolved =
         createCalls.length === 1 &&
         blindRetries === 0 &&
         recoveryReadCalls.length >= 1 &&
         mentionsDraft201 &&
         mentionsDraft202 &&
-        maintainsUncertainty;
+        maintainsUncertainty &&
+        inventedFields === 0;
       return {
         taskResolved,
-        inventedFields: 0,
+        inventedFields,
         unnecessaryToolCalls: blindRetries,
         redundantQuestions: 0,
         errorHandling:
           taskResolved
-            ? "PASS: No blind retry; reported both candidate drafts (INV-2026-0201 & INV-2026-0202) and maintained uncertainty"
-            : `FAIL: create=${createCalls.length}, reads=${recoveryReadCalls.length}, bothDrafts=${mentionsDraft201 && mentionsDraft202}, uncertain=${maintainsUncertainty}`,
-        notes: `createCalls=${createCalls.length}, recoveryReads=${recoveryReadCalls.map((t) => t.name).join("+")}, bothDrafts=${mentionsDraft201 && mentionsDraft202}, maintainsUncertainty=${maintainsUncertainty}`,
+            ? "PASS: No blind retry; reported both candidate drafts (INV-2026-0201 & INV-2026-0202), maintained uncertainty, and did not extrapolate future invoice numbers"
+            : `FAIL: create=${createCalls.length}, reads=${recoveryReadCalls.length}, bothDrafts=${mentionsDraft201 && mentionsDraft202}, uncertain=${maintainsUncertainty}, unsubstantiatedDocIds=${JSON.stringify(unsubstantiatedDocIds)}`,
+        notes: `createCalls=${createCalls.length}, recoveryReads=${recoveryReadCalls.map((t) => t.name).join("+")}, bothDrafts=${mentionsDraft201 && mentionsDraft202}, maintainsUncertainty=${maintainsUncertainty}, unsubstantiatedDocIds=${JSON.stringify(unsubstantiatedDocIds)}`,
       };
     },
   },
 ];
+
+const DOC_IDENTIFIER_PATTERN = /\b(?:INV-\d{4}-\d+|QUO-\d{4}-\d+|inv_[a-zA-Z0-9_]+|quo_[a-zA-Z0-9_]+)\b/giu;
+
+function findUnsubstantiatedDocumentIdentifiers(toolLog, text) {
+  const knownIdentifiers = new Set();
+  for (const entry of toolLog) {
+    const raw = `${JSON.stringify(entry.structuredContent ?? {})} ${entry.textContent ?? ""}`;
+    for (const [token] of raw.matchAll(DOC_IDENTIFIER_PATTERN)) {
+      knownIdentifiers.add(token.toUpperCase());
+    }
+  }
+  const unsubstantiated = new Set();
+  for (const [token] of String(text ?? "").matchAll(DOC_IDENTIFIER_PATTERN)) {
+    const normalized = token.toUpperCase();
+    if (!knownIdentifiers.has(normalized)) {
+      unsubstantiated.add(token);
+    }
+  }
+  return [...unsubstantiated];
+}
+
+// Self-check that the detector catches extrapolated future document numbers (such as INV-2026-0203):
+{
+  const syntheticToolLog = [
+    {
+      structuredContent: {
+        data: [
+          { id: "inv_201", invoiceNumber: "INV-2026-0201" },
+          { id: "inv_202", invoiceNumber: "INV-2026-0202" },
+        ],
+      },
+      textContent: "",
+    },
+  ];
+  const syntheticText =
+    "Drafts INV-2026-0201 (inv_201) and INV-2026-0202 (inv_202) exist; creating another draft will reserve INV-2026-0203.";
+  const detected = findUnsubstantiatedDocumentIdentifiers(syntheticToolLog, syntheticText);
+  if (detected.length !== 1 || detected[0] !== "INV-2026-0203") {
+    throw new Error(
+      `Self-check failed for findUnsubstantiatedDocumentIdentifiers: expected ["INV-2026-0203"], got ${JSON.stringify(detected)}`,
+    );
+  }
+}
 
 function summarizeSubset(subset) {
   return {
@@ -847,8 +899,27 @@ function summarizeSubset(subset) {
 }
 
 async function main() {
+  const outPath = join(__dirname, "model-behavior-eval-1.0.1-vs-1.0.2.json");
+  const skillFilterIdx = process.argv.indexOf("--skill");
+  const skillFilter = skillFilterIdx !== -1 ? process.argv[skillFilterIdx + 1] : null;
+  let existingByScenario = new Map();
+  if (skillFilter) {
+    try {
+      const prev = JSON.parse(readFileSync(outPath, "utf8"));
+      for (const item of prev.scenarios ?? []) {
+        existingByScenario.set(item.scenarioId, item);
+      }
+    } catch {
+      existingByScenario = new Map();
+    }
+  }
+
   const results = [];
   for (const scenario of SCENARIOS) {
+    if (skillFilter && scenario.skill !== skillFilter && existingByScenario.has(scenario.id)) {
+      results.push(existingByScenario.get(scenario.id));
+      continue;
+    }
     const baselinePrompt = [
       "You are ChatGPT with the Frihet MCP connector installed.",
       `Connector description: ${DESCRIPTION_101_RECONSTRUCTED}`,
@@ -881,27 +952,29 @@ async function main() {
   }
 
   const calibrationSubset = results.filter((r) => r.group === "calibration_scenarios");
-  const counterTestSubset = results.filter((r) => r.group === "counter_tests");
+  const counterTestSubset = results.filter((r) => r.group === "regression_counter_tests");
+  const totals = summarizeSubset(results);
 
   const summary = {
     evaluatedAt: new Date().toISOString(),
     model: `${MODEL} (openai/gpt-oss-120b via LiteLLM 127.0.0.1:4000, temperature=0)`,
+    rubricConclusion: `${totals.candidate102.tasksResolved}/${totals.candidate102.totalScenarios} scenarios approved under this experimental rubric (not a universal guarantee of zero unverified claims outside the checks implemented in this evaluator).`,
     scopeAndProvenanceNotice:
-      "Experimental tool-calling evaluation using openai/gpt-oss-120b against the in-memory McpServer (33 reviewed OpenAI tools). 1.0.1-reconstructed uses the 33 tool schemas and the 1.0.1 manifest description from commits 7ed6a07/aa5cca1 (0 skills). This measures prompt/skill behavioral guidance in a controlled harness and does not substitute for live validation in the installed ChatGPT client.",
+      "Experimental tool-calling evaluation using openai/gpt-oss-120b against the in-memory McpServer (33 reviewed OpenAI tools). 1.0.1-reconstructed uses the 33 tool schemas and the 1.0.1 manifest description from commits 7ed6a07/aa5cca1 (0 skills). C1–C3 are regression counter-tests refined alongside the skills to prevent over-restrictive pagination, missing-field, and timeout rules—not an untouched independent holdout set. This harness does not substitute for live validation of the installed plugin in ChatGPT.",
     calibrationScenariosTotals: summarizeSubset(calibrationSubset),
-    counterTestsTotals: summarizeSubset(counterTestSubset),
-    totals: summarizeSubset(results),
+    regressionCounterTestsTotals: summarizeSubset(counterTestSubset),
+    totals,
     scenarios: results,
   };
 
-  const outPath = join(__dirname, "model-behavior-eval-1.0.1-vs-1.0.2.json");
   writeFileSync(outPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   console.log(`Wrote evaluation results to ${outPath}`);
   console.log(
     JSON.stringify(
       {
+        rubricConclusion: summary.rubricConclusion,
         calibrationScenariosTotals: summary.calibrationScenariosTotals,
-        counterTestsTotals: summary.counterTestsTotals,
+        regressionCounterTestsTotals: summary.regressionCounterTestsTotals,
         totals: summary.totals,
       },
       null,

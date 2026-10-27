@@ -265,7 +265,8 @@ test("packaged skills cover the exact 33-tool contract, onboarding workflow, and
   const invoicesSkill = parsedSkills.get("invoices-and-quotes").body;
   assert.match(invoicesSkill, /status:\s*"draft"/);
   assert.match(invoicesSkill, /Never claim.*issued, finalized, emailed/i);
-  assert.match(invoicesSkill, /Never invent amounts, quantities, dates, discounts, or tax treatment/i);
+  assert.match(invoicesSkill, /Never invent amounts, quantities, dates, discounts, document numbers, or tax treatment/i);
+  assert.match(invoicesSkill, /never predict, extrapolate, or promise the next `invoiceNumber`/i);
   assert.match(invoicesSkill, /Minimum necessary calls/i);
   assert.match(invoicesSkill, /disambiguate an incomplete input/i);
   assert.match(invoicesSkill, /maintain uncertainty/i);
