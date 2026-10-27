@@ -79,7 +79,12 @@ Its file order, timestamps and permissions are fixed. Its version `1.0.2`
 MCP release.
 
 Submit it as a new plugin named `frihet`: **Upload new or existing plugin**,
-verified identity **Business — Frihet**. The legacy record
+verified identity **Business — Frihet**. Once `1.0.1` is `Published` in the
+OpenAI Developer Portal, create subsequent version drafts (`1.0.2`) by opening
+`Plugins > Frihet` (`1.0.1 - Published`, Developer `Frihet`, Package name
+`frihet`) directly in the authenticated dashboard and clicking **`Create draft
+from ZIP`**—do not target or select a plugin by copying and pasting a
+transcribed `plugin_asdk_app_...` identifier string. The legacy record
 `plugin_asdk_app_69b6147ce32c81918680c89bfa7c9b36` stays unpublished and is not
 updated: its exported package has no MCP server, and adding an MCP server to an
 existing plugin without one is not supported

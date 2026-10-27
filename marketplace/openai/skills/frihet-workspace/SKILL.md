@@ -48,7 +48,9 @@ Always distinguish a **generic capability question** from an **authenticated wor
 ### Reading catalogue items
 1. Call `list_products` once using optional filters (`isActive`, `q`, `limit`, `offset`, `after`). Do not call `get_business_context` when the user only asked to list products.
 2. When the user needs the full description or details of a specific item, call `get_product` with `id`.
-3. **Pagination truth (single-page default):** Check `total`, `limit`, `offset`, and `nextCursor` on `list_products`. Never present a single page as the entire catalogue when `nextCursor` is present or `total` exceeds the returned `data.length`. By default, return the first page immediately without looping through subsequent pages, and state clearly that the list is a partial page (for example, `Showing 2 of 54 products — ask if you want the next page`); only fetch subsequent pages when the user explicitly asks for more pages.
+3. **Pagination truth (exploratory single-page default vs. exhaustive requests):** Check `total`, `limit`, `offset`, and `nextCursor` on `list_products`. Never present a single page as the entire catalogue when `nextCursor` is present or `total` exceeds the returned `data.length`.
+   - **Exploratory browsing (default):** For general listing requests, return the first page immediately without looping through subsequent pages, and state clearly that the list is a partial page (for example, `Showing 2 of 54 products — ask if you want the next page`).
+   - **Exhaustive, full-sort, or aggregate requests (exception):** Make the minimum calls needed to complete the user's task. When the user explicitly asks for **all** items, the **complete** catalogue, a **full sort** across all products (for example, *"Show me all my active products and services and sort them by price"*), or an aggregate across the entire set, paginate using `after` (set to `nextCursor`) or `offset` until all pages are retrieved (or until a clear safety limit is reached, disclosing the exact number of records fetched out of `total`) before sorting or summarizing.
 
 ### Creating or updating a product or service
 1. **Required inputs:**
@@ -57,7 +59,7 @@ Always distinguish a **generic capability question** from an **authenticated wor
 2. **Never invent prices or tax rates:** Do not guess `unitPrice` or `taxRate`. If the user asks to add a product without specifying `unitPrice`, or asks for tax advice without specifying `taxRate`, ask for the exact values before calling the tool.
 3. **Authorization & external effects:**
    - If the user has not yet authorized the write, present the exact fields to be saved (`name`, `unitPrice`, `taxRate`, `description`) and disclose that `create_product` or `update_product` modifies the workspace catalogue and can deliver a `product.created` or `product.updated` event to active webhooks configured by the workspace owner (which cannot be recalled).
-   - If the user's message already supplies complete parameters and explicit authorization to create or update the catalogue item, call `create_product` or `update_product` with `confirm: true` directly without adding a redundant confirmation question.
+   - **Minimum necessary calls:** If the user's message already supplies complete parameters and explicit authorization to create or update the catalogue item, call `create_product` or `update_product` with `confirm: true` directly without adding a redundant confirmation question or unnecessary pre/post reads, unless a lookup (`list_products` / `get_product`) is needed to disambiguate the target `id`, verify an uncertain write outcome, or satisfy an explicit verification request.
 4. **No product deletion in this connector:** `delete_product` is not available in the ChatGPT connector. If the user asks to delete a product, explain that product deletion is not exposed in this connector and can be managed in the Frihet web application.
 
 ## 3. Unknown write outcomes & timeout recovery

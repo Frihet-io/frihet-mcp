@@ -128,10 +128,12 @@ jobs:
       - name: Upload OpenAI portable plugin artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: openai-plugin-1.0.2-${{ github.sha }}
+          name: openai-plugin-1.0.2-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             marketplace/openai/dist/frihet-1.0.2.zip
             marketplace/openai/dist/frihet-1.0.2.zip.sha256
             marketplace/openai/dist/frihet-1.0.2-inventory.json
+            marketplace/openai/eval/model-behavior-eval-1.0.1-vs-1.0.2.json
+            marketplace/openai/eval/run-model-behavior-eval.mjs
           if-no-files-found: error
           retention-days: 90

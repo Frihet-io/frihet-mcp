@@ -28,9 +28,9 @@ Respond in the user's language (English or Spanish). Keep expense proposals and 
 2. **Vendor queries:**
    - Call `list_vendors` (`limit`, `offset`, `after`) and `get_vendor` (`id`) to inspect supplier records (`id`, `name`, `email`, `phone`).
    - Dedicated government-identifier fields (NIF/CIF/VAT) and precise street addresses are intentionally omitted from the reviewed vendor DTOs.
-3. **Pagination truth:**
+3. **Pagination truth (exploratory single-page default vs. exhaustive requests):**
    - Always check `total`, `limit`, `offset`, and `nextCursor` on `list_expenses` and `list_vendors`.
-   - Never present a single page as the complete set of expenses or vendors when `nextCursor` is present or `total > data.length`. Either paginate through the remaining pages or state clearly that the response is a partial page (e.g., `Showing 20 of 65 expenses`).
+   - Never present a single page as the complete set of expenses or vendors when `nextCursor` is present or `total > data.length`. For general browsing, return the first page immediately and state clearly that the response is a partial page (e.g., `Showing 20 of 65 expenses`); when the user explicitly requests all records, a full sort, or an exact sum across all pages, paginate using `after` (`nextCursor`) or `offset` until all pages are retrieved (or until a clear safety limit is reached, disclosing the exact coverage).
 
 ## 2. Recording a new expense (`create_expense`)
 
@@ -42,13 +42,13 @@ Respond in the user's language (English or Spanish). Keep expense proposals and 
      - `taxDeductible` (`boolean` — records an explicit internal tax-deductible classification without filing any return)
      - `confirm: true`
    - Optional fields: `category`, `vendor` (supplier name).
-   - **Never invent `amount`, `date`, or `taxDeductible`.** Do not assume an expense is tax-deductible (`taxDeductible: true`) or non-deductible (`false`) by default, and do not guess the expense date if the user did not state it. If any of `description`, `amount`, `date`, or `taxDeductible` is missing, do not call `list_vendors`, `list_expenses`, or `get_business_context` first—ask the user directly for the missing `date`, `taxDeductible` classification, and confirmation before calling `create_expense`.
+   - **Never invent `description`, `amount`, `date`, or `taxDeductible`.** Do not assume an expense is tax-deductible (`taxDeductible: true`) or non-deductible (`false`) by default, and do not guess the expense date or amount if the user did not state them. If any of `description`, `amount`, `date`, or `taxDeductible` is missing, do not call `list_vendors`, `list_expenses`, or `get_business_context` first—ask the user directly for **only the specific required fields that are actually missing** (for example, if the user already provided `date` and `taxDeductible` but omitted `amount` or `description`, ask only for the missing `amount` / `description` and confirmation without re-asking for `date` or `taxDeductible`) before calling `create_expense`.
 2. **Authorization & lasting/external effects disclosure:**
    - Before executing an unauthorized `create_expense`, disclose:
      - The `date` selects the accounting and future tax-report period (no tax return is filed, and the connector does not mark the expense paid).
      - When `vendor` is provided and no exact vendor match exists, Frihet may create and link the vendor in a **separate backend step** that can remain even if the subsequent expense write fails.
      - `create_expense` can deliver `expense.created` events to active owner-configured webhooks, notify eligible workspace admins or accountants in-app and via Novu, and award first-use referral activation credits.
-   - **No redundant confirmation:** When the user's prompt already supplies `description`, `amount`, `date`, and an explicit `taxDeductible` choice along with authorization to record the expense, call `create_expense` with `confirm: true` directly without asking a second confirmation question.
+   - **Minimum necessary calls:** Make the minimum calls needed to complete the user's task. When the user's prompt already supplies `description`, `amount`, `date`, and an explicit `taxDeductible` choice along with authorization to record the expense, call `create_expense` with `confirm: true` directly without asking a second confirmation question or performing redundant pre/post reads, unless a lookup (`list_vendors` / `get_expense`) is needed to disambiguate an incomplete input, verify an uncertain write outcome, or satisfy an explicit verification request.
 3. **Post-creation reporting:**
    - Report the new `id`, `description`, `amount`, `date`, `taxDeductible`, `category` / `vendor` / `vendorId` (when stored), and `externalEffects`. Do not claim the expense was paid, reimbursed, or filed with a tax authority.
 

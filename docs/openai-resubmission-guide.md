@@ -317,7 +317,7 @@ after the evidence has been reviewed.
 Run `npm run generate:openai-submission` after editing the generator, then
 `npm run package:openai-plugin` (Python 3 required, no Python dependencies).
 Upload `marketplace/openai/dist/frihet-1.0.2.zip` to update the `frihet` plugin
-(following the published `1.0.1` baseline under **Upload new or existing plugin**, identity **Business — Frihet**); the legacy
+(following the published `1.0.1` baseline under **Upload new or existing plugin**, identity **Business — Frihet**): open `Plugins > Frihet` (`1.0.1 - Published`, Developer `Frihet`, Package name `frihet`) directly in the authenticated OpenAI Developer Portal and click **`Create draft from ZIP`** rather than targeting a plugin by copying and pasting a transcribed `plugin_asdk_app_...` identifier string; the legacy
 record `plugin_asdk_app_69b6147ce32c81918680c89bfa7c9b36` has no MCP server and
 cannot gain one, so it is not updated. The ZIP includes root `plugin.json`, root `mcp.json`, four reviewed workflow skills under `skills/` (`frihet-workspace`, `invoices-and-quotes`, `expenses-and-vendors`, `clients-crm`, with `extensions.com.openai.onboardingSkill` pointing to `./skills/frihet-workspace/SKILL.md`) and three existing
 512 px PNG assets; its reviewed endpoint is `https://openai-mcp.frihet.io/mcp`.

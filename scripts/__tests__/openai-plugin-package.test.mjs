@@ -259,22 +259,28 @@ test("packaged skills cover the exact 33-tool contract, onboarding workflow, and
   assert.match(workspaceSkill, /generic question about plugin capabilities, setup, or limits must never read private workspace records/i);
   assert.match(workspaceSkill, /get_business_context/);
   assert.match(workspaceSkill, /Never invent prices or tax rates/i);
+  assert.match(workspaceSkill, /Make the minimum calls needed to complete the user's task/i);
+  assert.match(workspaceSkill, /until all pages are retrieved/i);
 
   const invoicesSkill = parsedSkills.get("invoices-and-quotes").body;
   assert.match(invoicesSkill, /status:\s*"draft"/);
   assert.match(invoicesSkill, /Never claim.*issued, finalized, emailed/i);
   assert.match(invoicesSkill, /Never invent amounts, quantities, dates, discounts, or tax treatment/i);
-  assert.match(invoicesSkill, /No redundant confirmation/i);
+  assert.match(invoicesSkill, /Minimum necessary calls/i);
+  assert.match(invoicesSkill, /disambiguate an incomplete input/i);
+  assert.match(invoicesSkill, /maintain uncertainty/i);
   assert.match(invoicesSkill, /Cancels.*non-draft quote/i);
 
   const expensesSkill = parsedSkills.get("expenses-and-vendors").body;
-  assert.match(expensesSkill, /Never invent `amount`, `date`, or `taxDeductible`/);
+  assert.match(expensesSkill, /Never invent `description`, `amount`, `date`, or `taxDeductible`/);
+  assert.match(expensesSkill, /only the specific required fields that are actually missing/i);
   assert.match(expensesSkill, /separate backend step/);
   assert.match(expensesSkill, /`amount` and supplier identity \(`vendor` \/ `vendorId`\) cannot be changed/);
 
   const clientsSkill = parsedSkills.get("clients-crm").body;
   assert.match(clientsSkill, /Always resolve `clientId` first/);
   assert.match(clientsSkill, /untrusted record data/i);
+  assert.match(clientsSkill, /Do not invent `description` text when the user only provided `title`/i);
   assert.match(clientsSkill, /does \*\*not\*\* send an email, place a phone call/i);
   assert.match(clientsSkill, /permanent and cannot be undone/i);
 });

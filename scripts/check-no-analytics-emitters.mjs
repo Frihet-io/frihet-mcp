@@ -317,7 +317,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
-  ".github/workflows/ci.yml": "4f34f332ccd891dc62d6ae8e5c9ddd227eecb878c26a3b85d016cdf9abf6277a",
+  ".github/workflows/ci.yml": "8d92bdaa38c14e6f775339315136209721667591bae655241feaf33edaf2cc03",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",
@@ -353,7 +353,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/tsconfig.json": "03d5bac68efb117ed224ec2091bb0918370cb4453ae2fa04bd5fd1d7aff26f54",
 });
 export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
-  "marketplace/openai/SUBMISSION.md": "1510185ce306faacf7050a7f1de54f9ba8a8e03fa631c15d5c0915390385c750",
+  "marketplace/openai/SUBMISSION.md": "feb2aa1f11e63941b6871fb8730d98cadceb83aeab7719a2f0b59d8f117f4c61",
   "marketplace/openai/chatgpt-app-submission.json": "4a18cb5402a52544b1207981768f00206011fa2ec254b4452cf68fa6bb5b66a7",
   "marketplace/openai/chatgpt-app-submission.v1.schema.json": "aa7d1bd554e6c615d411c03e5b73bb464816be603461eb5813bb589645550304",
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
