@@ -32,7 +32,7 @@ export interface ProvenancedAmount {
 }
 
 export interface ResourceCoverage {
-  resource: "invoices" | "quotes" | "expenses" | "clients" | "client_activities";
+  collection: "invoices" | "quotes" | "expenses" | "clients" | "client_activities";
   sourceTool: string;
   inspected: number;
   total: number;
@@ -225,35 +225,35 @@ export async function generateDailyOperationalBrief(
   );
 
   const invoicesCoverage: ResourceCoverage = {
-    resource: "invoices",
+    collection: "invoices",
     sourceTool: "list_invoices",
     inspected: invoicesPage.data.length,
     total: invoicesPage.total,
     complete: invoicesPage.data.length >= invoicesPage.total,
   };
   const quotesCoverage: ResourceCoverage = {
-    resource: "quotes",
+    collection: "quotes",
     sourceTool: "list_quotes",
     inspected: quotesPage.data.length,
     total: quotesPage.total,
     complete: quotesPage.data.length >= quotesPage.total,
   };
   const expensesCoverage: ResourceCoverage = {
-    resource: "expenses",
+    collection: "expenses",
     sourceTool: "list_expenses",
     inspected: expensesPage.data.length,
     total: expensesPage.total,
     complete: expensesPage.data.length >= expensesPage.total,
   };
   const clientsCoverage: ResourceCoverage = {
-    resource: "clients",
+    collection: "clients",
     sourceTool: "list_clients",
     inspected: clientsPage.data.length,
     total: clientsPage.total,
     complete: clientsPage.data.length >= clientsPage.total,
   };
   const clientActivitiesCoverage: ResourceCoverage = {
-    resource: "client_activities",
+    collection: "client_activities",
     sourceTool: "list_client_activities",
     inspected: clientsToInspect.length,
     total: clientsPage.total,
@@ -487,7 +487,7 @@ export async function generateDailyOperationalBrief(
   if (isPartial) {
     const partialLabels = Object.values(coverage.resources)
       .filter((r) => !r.complete)
-      .map((r) => `${r.resource} (${r.inspected}/${r.total} vía ${r.sourceTool})`);
+      .map((r) => `${r.collection} (${r.inspected}/${r.total} vía ${r.sourceTool})`);
     knownUnknowns.unshift(
       `Cobertura parcial del espacio de trabajo: solo se ha inspeccionado una página en ${partialLabels.join(", ")}. Los importes agregados reflejan únicamente los registros leídos en esta muestra y no el total histórico del negocio.`,
     );
