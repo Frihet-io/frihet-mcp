@@ -93,8 +93,18 @@ export function buildScenario1CompleteWorkspaceClient(callLog: string[]): Pick<
             total: 847,
             currency: "EUR",
           },
+          {
+            id: "inv_paid_3",
+            documentNumber: "F20260003",
+            status: "paid",
+            clientName: "Acme SL",
+            issueDate: "2026-10-05",
+            dueDate: "2026-10-20",
+            total: 500,
+            currency: "EUR",
+          },
         ],
-        total: 4,
+        total: 5,
         limit: 20,
         offset: 0,
       };
@@ -141,8 +151,16 @@ export function buildScenario1CompleteWorkspaceClient(callLog: string[]): Pick<
             taxDeductible: true,
             date: "2026-10-27",
           },
+          {
+            id: "exp_incomplete_1",
+            description: "Recibo taxi sin categorizar",
+            amount: 32.5,
+            category: "",
+            vendor: "",
+            date: "2026-10-27",
+          },
         ],
-        total: 2,
+        total: 3,
         limit: 20,
         offset: 0,
       };
@@ -278,20 +296,43 @@ describe("Daily Operational Brief — '¿Qué debería revisar hoy en mi negocio
 
     assert.equal(brief.coverage.isPartial, false);
     assert.equal(brief.coverage.resources.invoices.complete, true);
-    assert.equal(brief.coverage.resources.invoices.inspected, 4);
-    assert.equal(brief.coverage.resources.invoices.total, 4);
+    assert.equal(brief.coverage.resources.invoices.inspected, 5);
+    assert.equal(brief.coverage.resources.invoices.total, 5);
 
-    // Strict separation between drafts and issued invoices
+    // Strict separation between drafts, issued invoices, paid, and outstanding (overdue vs on-time)
     assert.equal(brief.activitySeparation.draftActivity.invoiceDraftsCount, 2);
     assert.equal(brief.activitySeparation.draftActivity.invoiceDraftsTotal.amount, 1161.6);
     assert.equal(brief.activitySeparation.draftActivity.invoiceDraftsTotal.provenance, "stored_field");
 
-    assert.equal(brief.activitySeparation.issuedActivity.issuedInvoicesCount, 2);
-    assert.equal(brief.activitySeparation.issuedActivity.issuedInvoicesTotal.amount, 1452);
+    assert.equal(brief.activitySeparation.issuedActivity.issuedInvoicesCount, 3);
+    assert.equal(brief.activitySeparation.issuedActivity.issuedInvoicesTotal.amount, 1952);
+    assert.equal(brief.activitySeparation.issuedActivity.paidInvoicesCount, 1);
+    assert.equal(brief.activitySeparation.issuedActivity.paidInvoicesTotal.amount, 500);
+    assert.equal(brief.activitySeparation.issuedActivity.outstandingInvoicesCount, 2);
+    assert.equal(brief.activitySeparation.issuedActivity.outstandingInvoicesTotal.amount, 1452);
+    assert.equal(brief.activitySeparation.issuedActivity.overdueInvoicesCount, 1);
+    assert.equal(brief.activitySeparation.issuedActivity.overdueInvoicesTotal.amount, 605);
+    assert.equal(brief.activitySeparation.issuedActivity.onTimePendingCount, 1);
+    assert.equal(brief.activitySeparation.issuedActivity.onTimePendingTotal.amount, 847);
     assert.deepEqual(brief.activitySeparation.issuedActivity.issuedInvoicesByStatus, {
       overdue: 1,
       sent: 1,
+      paid: 1,
     });
+
+    // Non-deductible expense with complete vendor/category is NOT treated as an error by default
+    assert.equal(brief.activitySeparation.recordedExpenses.expensesCount, 3);
+    assert.equal(brief.activitySeparation.recordedExpenses.deductibleCount, 1);
+    assert.equal(brief.activitySeparation.recordedExpenses.deductibleTotal.amount, 121);
+    assert.equal(brief.activitySeparation.recordedExpenses.nonDeductibleCount, 1);
+    assert.equal(brief.activitySeparation.recordedExpenses.nonDeductibleTotal.amount, 45.99);
+    assert.equal(brief.activitySeparation.recordedExpenses.pendingReviewCount, 1);
+    const expensePriority = brief.priorities.find((p) => p.category === "expense_review");
+    assert.ok(expensePriority);
+    assert.deepEqual(
+      expensePriority.recordRefs.map((r) => r.id),
+      ["exp_incomplete_1"],
+    );
 
     // Priorities include overdue invoice, draft invoices, expense review, CRM follow-up, and plan quota
     const categories = brief.priorities.map((p) => p.category);

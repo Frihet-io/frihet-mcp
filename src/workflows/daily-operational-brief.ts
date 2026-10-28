@@ -103,10 +103,25 @@ export interface DailyOperationalBrief {
       issuedInvoicesByStatus: Record<string, number>;
       issuedInvoicesTotal: ProvenancedAmount;
       issuedInvoices: BriefDocumentSummary[];
+      paidInvoicesCount: number;
+      paidInvoicesTotal: ProvenancedAmount;
+      paidInvoices: BriefDocumentSummary[];
+      outstandingInvoicesCount: number;
+      outstandingInvoicesTotal: ProvenancedAmount;
+      overdueInvoicesCount: number;
+      overdueInvoicesTotal: ProvenancedAmount;
+      onTimePendingCount: number;
+      onTimePendingTotal: ProvenancedAmount;
+      outstandingInvoices: BriefDocumentSummary[];
     };
     recordedExpenses: {
+      note: string;
       expensesCount: number;
       expensesTotal: ProvenancedAmount;
+      deductibleCount: number;
+      deductibleTotal: ProvenancedAmount;
+      nonDeductibleCount: number;
+      nonDeductibleTotal: ProvenancedAmount;
       pendingReviewCount: number;
     };
   };
@@ -282,9 +297,11 @@ export async function generateDailyOperationalBrief(
     },
   };
 
-  // Separate draft invoices vs issued invoices
+  // Separate draft invoices vs issued invoices (and inside issued: paid vs outstanding [overdue vs on-time])
   const invoiceDrafts: BriefDocumentSummary[] = [];
   const issuedInvoices: BriefDocumentSummary[] = [];
+  const paidInvoices: BriefDocumentSummary[] = [];
+  const outstandingInvoices: BriefDocumentSummary[] = [];
   const issuedInvoicesByStatus: Record<string, number> = {};
 
   for (const rawInv of invoicesPage.data) {
@@ -300,9 +317,14 @@ export async function generateDailyOperationalBrief(
     };
     if (status === "draft") {
       invoiceDrafts.push(summary);
-    } else {
+    } else if (status !== "cancelled") {
       issuedInvoices.push(summary);
       issuedInvoicesByStatus[status] = (issuedInvoicesByStatus[status] ?? 0) + 1;
+      if (status === "paid") {
+        paidInvoices.push(summary);
+      } else {
+        outstandingInvoices.push(summary);
+      }
     }
   }
 
@@ -330,20 +352,29 @@ export async function generateDailyOperationalBrief(
   }
 
   const expenseAmounts = expensesPage.data.map((exp) => resolveDocumentAmount(exp, defaultCurrency));
+  const deductibleExpenses = expensesPage.data.filter((exp) => exp.taxDeductible === true);
+  const nonDeductibleExpenses = expensesPage.data.filter((exp) => exp.taxDeductible === false);
+  // Only flag expenses as needing review when vendor/category is missing or taxDeductible is not a boolean.
+  // A non-deductible expense (taxDeductible === false) with complete metadata is a valid fiscal choice, not an error.
   const expensesNeedingReview = expensesPage.data.filter((exp) => {
     const missingVendor = typeof exp.vendor !== "string" || !exp.vendor.trim();
     const missingCategory = typeof exp.category !== "string" || !exp.category.trim();
-    const nonDeductibleOrUnset = exp.taxDeductible !== true;
-    return missingVendor || missingCategory || nonDeductibleOrUnset;
+    const unsetDeductibility = typeof exp.taxDeductible !== "boolean";
+    return missingVendor || missingCategory || unsetDeductibility;
   });
 
   const priorities: BriefPriorityItem[] = [];
 
-  // 1. Overdue or past-due issued invoices (high priority)
-  const overdueInvoices = issuedInvoices.filter(
+  // 1. Overdue or past-due outstanding invoices (high priority)
+  const overdueInvoices = outstandingInvoices.filter(
     (inv) =>
       inv.status === "overdue" ||
-      (inv.status === "sent" && inv.dueDate !== null && inv.dueDate < asOfDate),
+      (inv.dueDate !== null && inv.dueDate < asOfDate),
+  );
+  const onTimePendingInvoices = outstandingInvoices.filter(
+    (inv) =>
+      inv.status !== "overdue" &&
+      (inv.dueDate === null || inv.dueDate >= asOfDate),
   );
   if (overdueInvoices.length > 0) {
     const overdueTotal = sumProvenancedAmounts(
@@ -398,15 +429,15 @@ export async function generateDailyOperationalBrief(
     });
   }
 
-  // 3. Expenses with pending fiscal/vendor metadata or marked non-deductible
+  // 3. Expenses with incomplete metadata (missing vendor, category, or boolean taxDeductible)
   if (expensesNeedingReview.length > 0) {
     const reviewAmounts = expensesNeedingReview.map((e) => resolveDocumentAmount(e, defaultCurrency));
     const reviewTotal = sumProvenancedAmounts(reviewAmounts, defaultCurrency);
     priorities.push({
       priority: "medium",
       category: "expense_review",
-      title: `${expensesNeedingReview.length} gasto(s) con deducibilidad desactivada o datos incompletos`,
-      why: `Los gastos (${expensesNeedingReview.map((e) => `${String(e.id)} · ${String(e.description ?? "Sin descripción")}`).join(", ")}) figuran con taxDeductible=${expensesNeedingReview.map((e) => String(e.taxDeductible)).join("/")} o sin proveedor/categoría completa.`,
+      title: `${expensesNeedingReview.length} gasto(s) con datos incompletos (proveedor, categoría o deducibilidad sin definir)`,
+      why: `Los gastos (${expensesNeedingReview.map((e) => `${String(e.id)} · ${String(e.description ?? "Sin descripción")}`).join(", ")}) carecen de proveedor, categoría o valor booleano en taxDeductible. (Nota: los gastos con taxDeductible=false y metadatos completos se contabilizan normalmente como no deducibles sin marcarse como error).`,
       recordRefs: expensesNeedingReview.map((e) => ({
         type: "expense",
         id: String(e.id ?? ""),
@@ -415,7 +446,7 @@ export async function generateDailyOperationalBrief(
       amount: reviewTotal,
       suggestedNextAction: {
         description:
-          "Comprobar cada gasto con get_expense y, si procede corregir categoría, proveedor o taxDeductible, solicitar confirmación antes de llamar a update_expense.",
+          "Comprobar cada gasto incompleto con get_expense y, si procede completar categoría, proveedor o taxDeductible, solicitar confirmación antes de llamar a update_expense.",
         recommendedTool: "get_expense",
         requiresConfirmation: true,
         autoExecuted: false,
@@ -505,7 +536,31 @@ export async function generateDailyOperationalBrief(
     issuedInvoices.map((d) => d.amount),
     defaultCurrency,
   );
+  const paidInvoicesTotal = sumProvenancedAmounts(
+    paidInvoices.map((d) => d.amount),
+    defaultCurrency,
+  );
+  const outstandingInvoicesTotal = sumProvenancedAmounts(
+    outstandingInvoices.map((d) => d.amount),
+    defaultCurrency,
+  );
+  const overdueInvoicesTotal = sumProvenancedAmounts(
+    overdueInvoices.map((d) => d.amount),
+    defaultCurrency,
+  );
+  const onTimePendingTotal = sumProvenancedAmounts(
+    onTimePendingInvoices.map((d) => d.amount),
+    defaultCurrency,
+  );
   const expensesTotal = sumProvenancedAmounts(expenseAmounts, defaultCurrency);
+  const deductibleTotal = sumProvenancedAmounts(
+    deductibleExpenses.map((e) => resolveDocumentAmount(e, defaultCurrency)),
+    defaultCurrency,
+  );
+  const nonDeductibleTotal = sumProvenancedAmounts(
+    nonDeductibleExpenses.map((e) => resolveDocumentAmount(e, defaultCurrency)),
+    defaultCurrency,
+  );
 
   const markdownLines: string[] = [
     `# Brief Operativo Diario (${asOfDate} · Periodo ${periodMonth})`,
@@ -518,11 +573,13 @@ export async function generateDailyOperationalBrief(
     `- **Clientes** (\`list_clients\`): ${clientsCoverage.inspected}/${clientsCoverage.total} (${clientsCoverage.complete ? "completo" : "parcial"})`,
     `- **Actividades CRM** (\`list_client_activities\`): ${clientActivitiesCoverage.inspected}/${clientActivitiesCoverage.total} clientes inspeccionados (${clientActivitiesCoverage.complete ? "completo" : "parcial"})`,
     "",
-    "## 2. Separación entre Borradores y Actividad Emitida/Registrada",
-    `- **Borradores de factura (NO emitidos / NO computan como ingresos)**: ${invoiceDrafts.length} documento(s) por **${draftInvoicesTotal.amount.toFixed(2)} ${draftInvoicesTotal.currency}** (procedencia: \`${draftInvoicesTotal.provenance}\` — ${draftInvoicesTotal.fieldOrFormula}).`,
+    "## 2. Separación entre Borrador, Ingreso Facturado, Cobro Registrado y Saldo Pendiente",
+    `- **Borradores de factura (NO emitidos / NO computan como ingreso ni saldo por cobrar)**: ${invoiceDrafts.length} documento(s) por **${draftInvoicesTotal.amount.toFixed(2)} ${draftInvoicesTotal.currency}** (procedencia: \`${draftInvoicesTotal.provenance}\` — ${draftInvoicesTotal.fieldOrFormula}).`,
     `- **Presupuestos en borrador/enviados**: ${quoteDrafts.length} documento(s) por **${draftQuotesTotal.amount.toFixed(2)} ${draftQuotesTotal.currency}** (procedencia: \`${draftQuotesTotal.provenance}\`).`,
-    `- **Facturas emitidas (no borrador)**: ${issuedInvoices.length} documento(s) por **${issuedInvoicesTotal.amount.toFixed(2)} ${issuedInvoicesTotal.currency}** (procedencia: \`${issuedInvoicesTotal.provenance}\` — ${issuedInvoicesTotal.fieldOrFormula}).`,
-    `- **Gastos registrados en la muestra**: ${expensesPage.data.length} registro(s) por **${expensesTotal.amount.toFixed(2)} ${expensesTotal.currency}** (procedencia: \`${expensesTotal.provenance}\`), con ${expensesNeedingReview.length} pendiente(s) de revisión.`,
+    `- **Ingreso facturado (facturas emitidas, no borrador)**: ${issuedInvoices.length} documento(s) por **${issuedInvoicesTotal.amount.toFixed(2)} ${issuedInvoicesTotal.currency}** (procedencia: \`${issuedInvoicesTotal.provenance}\` — ${issuedInvoicesTotal.fieldOrFormula}):`,
+    `  - **Cobro registrado en ERP (\`paid\`)**: ${paidInvoices.length} documento(s) por **${paidInvoicesTotal.amount.toFixed(2)} ${paidInvoicesTotal.currency}**.`,
+    `  - **Saldo pendiente de cobro**: ${outstandingInvoices.length} documento(s) por **${outstandingInvoicesTotal.amount.toFixed(2)} ${outstandingInvoicesTotal.currency}** (${overdueInvoices.length} vencida(s) por **${overdueInvoicesTotal.amount.toFixed(2)} ${overdueInvoicesTotal.currency}**; ${onTimePendingInvoices.length} en plazo por **${onTimePendingTotal.amount.toFixed(2)} ${onTimePendingTotal.currency}**).`,
+    `- **Gastos registrados en la muestra**: ${expensesPage.data.length} registro(s) por **${expensesTotal.amount.toFixed(2)} ${expensesTotal.currency}** (${deductibleExpenses.length} deducible(s) por ${deductibleTotal.amount.toFixed(2)} ${deductibleTotal.currency}; ${nonDeductibleExpenses.length} no deducible(s) por ${nonDeductibleTotal.amount.toFixed(2)} ${nonDeductibleTotal.currency}; ${expensesNeedingReview.length} con datos incompletos pendientes de revisión).`,
     "",
     "## 3. Qué Deberías Revisar Hoy y Por Qué (Priorizado)",
     ...(priorities.length > 0
@@ -556,15 +613,30 @@ export async function generateDailyOperationalBrief(
         quoteDrafts,
       },
       issuedActivity: {
-        note: "Incluye únicamente facturas cuyo estado almacenado no es 'draft'.",
+        note: "Incluye únicamente facturas emitidas (estado distinto de 'draft' y 'cancelled'), separando cobro registrado ('paid') de saldo pendiente ('overdue' vs en plazo).",
         issuedInvoicesCount: issuedInvoices.length,
         issuedInvoicesByStatus,
         issuedInvoicesTotal,
         issuedInvoices,
+        paidInvoicesCount: paidInvoices.length,
+        paidInvoicesTotal,
+        paidInvoices,
+        outstandingInvoicesCount: outstandingInvoices.length,
+        outstandingInvoicesTotal,
+        overdueInvoicesCount: overdueInvoices.length,
+        overdueInvoicesTotal,
+        onTimePendingCount: onTimePendingInvoices.length,
+        onTimePendingTotal,
+        outstandingInvoices,
       },
       recordedExpenses: {
+        note: "Los gastos con taxDeductible=false y proveedor/categoría completos se desglosan como no deducibles sin tratarse como error; solo se marcan para revisión los registros con proveedor, categoría o deducibilidad sin especificar.",
         expensesCount: expensesPage.data.length,
         expensesTotal,
+        deductibleCount: deductibleExpenses.length,
+        deductibleTotal,
+        nonDeductibleCount: nonDeductibleExpenses.length,
+        nonDeductibleTotal,
         pendingReviewCount: expensesNeedingReview.length,
       },
     },
