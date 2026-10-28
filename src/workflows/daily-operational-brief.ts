@@ -10,11 +10,20 @@
  * - list_client_activities
  *
  * Enforces:
- * 1. Explicit period and per-resource coverage (inspected vs total records).
+ * 1. Explicit temporal scope (`unfiltered_operational_sample_as_of_date` vs `currentMonthActivity`)
+ *    and per-resource coverage (inspected vs total records).
  * 2. Strict separation between draft documents (non-issued) and real/issued activity.
- * 3. Explicit amount provenance (`stored_field`, `derived_from_items`, or `business_context_summary`).
- * 4. Record-backed prioritized review items and suggested next actions without auto-executing writes.
- * 5. Explicit declaration of what cannot be determined ("knownUnknowns").
+ * 3. Explicit amount provenance (`stored_field`, `derived_from_items`, `business_context_summary`,
+ *    `unavailable`, or `mixed_currency_unconverted`).
+ *    - Absent/corrupt amounts NEVER coerce to 0 (`amount: null`, `provenance: "unavailable"`).
+ *    - Multi-currency totals NEVER sum across currencies without conversion (`totalsByCurrency`, `currency: "MIXED"`).
+ *    - Derived line-item totals apply canonical per-line `discount`, document `discountRate`,
+ *      `taxRate`, `equivalenceSurchargeRate`, and `irpfRate` over the discounted tax-exclusive base.
+ * 4. Honest unpaid invoice semantics: full nominal totals of unpaid invoices are labeled
+ *    "importe nominal de facturas no marcadas como pagadas; saldo pendiente real no determinable
+ *    sin desglose de cobros parciales ni conciliación bancaria" (`realOutstandingBalanceDeterminable: false`).
+ * 5. Record-backed prioritized review items and suggested next actions without auto-executing writes.
+ * 6. Explicit declaration of what cannot be determined ("knownUnknowns").
  */
 
 import type { IFrihetClient } from "../client-interface.js";
@@ -22,13 +31,24 @@ import type { IFrihetClient } from "../client-interface.js";
 export type AmountProvenanceKind =
   | "stored_field"
   | "derived_from_items"
-  | "business_context_summary";
+  | "business_context_summary"
+  | "unavailable"
+  | "mixed_currency_unconverted";
+
+export interface CurrencyBucketAmount {
+  amount: number;
+  currency: string;
+  provenance: "stored_field" | "derived_from_items";
+  documentCount: number;
+}
 
 export interface ProvenancedAmount {
-  amount: number;
+  amount: number | null;
   currency: string;
   provenance: AmountProvenanceKind;
   fieldOrFormula: string;
+  totalsByCurrency?: Record<string, CurrencyBucketAmount>;
+  unavailableCount?: number;
 }
 
 export interface ResourceCoverage {
@@ -42,6 +62,9 @@ export interface ResourceCoverage {
 export interface BriefCoverageSummary {
   asOfDate: string;
   periodMonth: string;
+  referenceMonth: string;
+  temporalScope: "unfiltered_operational_sample_as_of_date";
+  temporalScopeNote: string;
   isPartial: boolean;
   resources: Record<
     "invoices" | "quotes" | "expenses" | "clients" | "client_activities",
@@ -99,6 +122,8 @@ export interface DailyOperationalBrief {
     };
     issuedActivity: {
       note: string;
+      realOutstandingBalanceDeterminable: false;
+      unpaidNominalSemantics: "nominal_unpaid_invoice_totals_without_partial_payments";
       issuedInvoicesCount: number;
       issuedInvoicesByStatus: Record<string, number>;
       issuedInvoicesTotal: ProvenancedAmount;
@@ -106,6 +131,13 @@ export interface DailyOperationalBrief {
       paidInvoicesCount: number;
       paidInvoicesTotal: ProvenancedAmount;
       paidInvoices: BriefDocumentSummary[];
+      unpaidNominalInvoicesCount: number;
+      unpaidNominalTotal: ProvenancedAmount;
+      unpaidNominalTotalsByCurrency: Record<string, CurrencyBucketAmount>;
+      overdueNominalInvoicesCount: number;
+      overdueNominalTotal: ProvenancedAmount;
+      onTimeNominalPendingCount: number;
+      onTimeNominalPendingTotal: ProvenancedAmount;
       outstandingInvoicesCount: number;
       outstandingInvoicesTotal: ProvenancedAmount;
       overdueInvoicesCount: number;
@@ -124,6 +156,16 @@ export interface DailyOperationalBrief {
       nonDeductibleTotal: ProvenancedAmount;
       pendingReviewCount: number;
     };
+    currentMonthActivity: {
+      referenceMonth: string;
+      note: string;
+      issuedInvoicesInMonthCount: number;
+      issuedInvoicesInMonthTotal: ProvenancedAmount;
+      invoiceDraftsInMonthCount: number;
+      invoiceDraftsInMonthTotal: ProvenancedAmount;
+      expensesInMonthCount: number;
+      expensesInMonthTotal: ProvenancedAmount;
+    };
   };
   priorities: BriefPriorityItem[];
   knownUnknowns: string[];
@@ -141,11 +183,39 @@ function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function isFiniteRateInRange(value: unknown, min = 0, max = 100): boolean {
+  if (value === undefined || value === null) return true;
+  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+}
+
+export function formatProvenancedAmount(p: ProvenancedAmount): string {
+  if (p.provenance === "mixed_currency_unconverted" && p.totalsByCurrency) {
+    const parts = Object.values(p.totalsByCurrency).map(
+      (bucket) => `${bucket.amount.toFixed(2)} ${bucket.currency}`,
+    );
+    return `MIXED (${parts.join(" + ")})`;
+  }
+  if (p.amount === null || p.provenance === "unavailable") {
+    const unavailableCount = p.unavailableCount ?? 1;
+    const knownParts = p.totalsByCurrency
+      ? Object.values(p.totalsByCurrency).map((b) => `${b.amount.toFixed(2)} ${b.currency}`)
+      : [];
+    if (knownParts.length > 0) {
+      return `NO DETERMINADO (${unavailableCount} doc(s) sin importe válido; parcial conocido: ${knownParts.join(" + ")})`;
+    }
+    return `NO DETERMINADO (${unavailableCount} doc(s) sin importe válido)`;
+  }
+  return `${p.amount.toFixed(2)} ${p.currency}`;
+}
+
 export function resolveDocumentAmount(
   doc: Record<string, unknown>,
   defaultCurrency = "EUR",
 ): ProvenancedAmount {
-  const currency = typeof doc.currency === "string" && doc.currency.trim() ? doc.currency : defaultCurrency;
+  const currency =
+    typeof doc.currency === "string" && doc.currency.trim()
+      ? doc.currency.trim().toUpperCase()
+      : defaultCurrency.trim().toUpperCase();
 
   if (typeof doc.total === "number" && Number.isFinite(doc.total)) {
     return {
@@ -165,34 +235,212 @@ export function resolveDocumentAmount(
     };
   }
 
-  const items = Array.isArray(doc.items) ? (doc.items as Array<Record<string, unknown>>) : [];
-  const subtotal = items.reduce((acc, item) => {
-    const qty = typeof item.quantity === "number" && Number.isFinite(item.quantity) ? item.quantity : 0;
-    const price = typeof item.unitPrice === "number" && Number.isFinite(item.unitPrice) ? item.unitPrice : 0;
-    return acc + qty * price;
-  }, 0);
-  const taxRate = typeof doc.taxRate === "number" && Number.isFinite(doc.taxRate) ? doc.taxRate : 0;
-  const irpfRate = typeof doc.irpfRate === "number" && Number.isFinite(doc.irpfRate) ? doc.irpfRate : 0;
-  const total = subtotal * (1 + taxRate / 100 - irpfRate / 100);
+  // Absent != 0: if neither stored total nor stored amount exists, we require a non-empty
+  // items array where every line item has finite non-negative quantity and unitPrice, and no
+  // unsupported calculation modifiers are present.
+  if (!Array.isArray(doc.items) || doc.items.length === 0) {
+    return {
+      amount: null,
+      currency,
+      provenance: "unavailable",
+      fieldOrFormula: "unavailable (missing total, amount, and valid line items)",
+      unavailableCount: 1,
+    };
+  }
 
-  return {
-    amount: roundCurrency(total),
-    currency,
-    provenance: "derived_from_items",
-    fieldOrFormula: "sum(items.quantity * items.unitPrice) * (1 + taxRate/100 - irpfRate/100)",
-  };
-}
+  // Reject unsupported or invalid document-level calculation modifiers when stored total is missing
+  if (
+    doc.pricesIncludeTax === true ||
+    doc.deductLineDiscountAmounts === true ||
+    (Array.isArray(doc.compoundTaxes) && doc.compoundTaxes.length > 0) ||
+    (doc.prepayment !== undefined && doc.prepayment !== null && doc.prepayment !== 0) ||
+    !isFiniteRateInRange(doc.discountRate, 0, 100) ||
+    !isFiniteRateInRange(doc.taxRate, 0, 100) ||
+    !isFiniteRateInRange(doc.irpfRate, 0, 100) ||
+    !isFiniteRateInRange(doc.equivalenceSurchargeRate, 0, 100)
+  ) {
+    return {
+      amount: null,
+      currency,
+      provenance: "unavailable",
+      fieldOrFormula: "unavailable (unsupported or invalid calculation modifiers without stored total)",
+      unavailableCount: 1,
+    };
+  }
 
-function sumProvenancedAmounts(amounts: ProvenancedAmount[], currency = "EUR"): ProvenancedAmount {
-  const total = roundCurrency(amounts.reduce((acc, item) => acc + item.amount, 0));
-  const anyDerived = amounts.some((item) => item.provenance === "derived_from_items");
+  const items = doc.items as Array<Record<string, unknown>>;
+  const docTaxRate = typeof doc.taxRate === "number" ? doc.taxRate : 0;
+  const docDiscountPct = typeof doc.discountRate === "number" ? doc.discountRate : 0;
+  const docIrpfRate = typeof doc.irpfRate === "number" ? doc.irpfRate : 0;
+  const docSurchargeRate =
+    typeof doc.equivalenceSurchargeRate === "number" ? doc.equivalenceSurchargeRate : 0;
+
+  const baseByRate = new Map<number, number>();
+  let subtotalBeforeDiscount = 0;
+
+  for (const item of items) {
+    if (
+      !item ||
+      typeof item !== "object" ||
+      typeof item.quantity !== "number" ||
+      !Number.isFinite(item.quantity) ||
+      item.quantity < 0 ||
+      typeof item.unitPrice !== "number" ||
+      !Number.isFinite(item.unitPrice) ||
+      item.unitPrice < 0 ||
+      (item.discountAmount !== undefined && item.discountAmount !== null && item.discountAmount !== 0) ||
+      !isFiniteRateInRange(item.discount, 0, 100) ||
+      !isFiniteRateInRange(item.taxRate, 0, 100)
+    ) {
+      return {
+        amount: null,
+        currency,
+        provenance: "unavailable",
+        fieldOrFormula: "unavailable (corrupt or incomplete line item without stored total)",
+        unavailableCount: 1,
+      };
+    }
+
+    const effectiveRate = typeof item.taxRate === "number" ? item.taxRate : docTaxRate;
+    const lineDiscountPct = typeof item.discount === "number" ? item.discount : 0;
+    const effectiveUnitPrice = roundCurrency(item.unitPrice * (1 - lineDiscountPct / 100));
+    const lineBase = roundCurrency(item.quantity * effectiveUnitPrice);
+
+    subtotalBeforeDiscount = roundCurrency(subtotalBeforeDiscount + lineBase);
+    baseByRate.set(effectiveRate, roundCurrency((baseByRate.get(effectiveRate) ?? 0) + lineBase));
+  }
+
+  const documentDiscount = roundCurrency(subtotalBeforeDiscount * (docDiscountPct / 100));
+  const subtotal = roundCurrency(subtotalBeforeDiscount - documentDiscount);
+
+  if (docDiscountPct > 0 && subtotalBeforeDiscount > 0) {
+    const rates = [...baseByRate.keys()].sort((a, b) => b - a);
+    for (let i = 0; i < rates.length; i++) {
+      const rate = rates[i];
+      const originalBase = baseByRate.get(rate)!;
+      if (i === rates.length - 1) {
+        let otherGroupsTotal = 0;
+        for (let j = 0; j < i; j++) {
+          otherGroupsTotal = roundCurrency(otherGroupsTotal + baseByRate.get(rates[j])!);
+        }
+        baseByRate.set(rate, roundCurrency(subtotal - otherGroupsTotal));
+      } else {
+        const groupDiscount = roundCurrency(originalBase * (docDiscountPct / 100));
+        baseByRate.set(rate, roundCurrency(originalBase - groupDiscount));
+      }
+    }
+  }
+
+  let totalTax = 0;
+  for (const [rate, base] of [...baseByRate.entries()].sort((a, b) => b[0] - a[0])) {
+    const tax = roundCurrency(base * (rate / 100));
+    totalTax = roundCurrency(totalTax + tax);
+  }
+
+  const irpf = roundCurrency(subtotal * (docIrpfRate / 100));
+  const surcharge = roundCurrency(subtotal * (docSurchargeRate / 100));
+  const total = roundCurrency(subtotal + totalTax + surcharge - irpf);
+
   return {
     amount: total,
     currency,
+    provenance: "derived_from_items",
+    fieldOrFormula:
+      "canonical_invoice_calculation(items[qty*round(unitPrice*(1-lineDiscount))], docDiscountRate, taxRate, equivalenceSurchargeRate, irpfRate)",
+  };
+}
+
+export function sumProvenancedAmounts(
+  amounts: ProvenancedAmount[],
+  defaultCurrency = "EUR",
+): ProvenancedAmount {
+  const normalizedDefault = defaultCurrency.trim().toUpperCase();
+  if (amounts.length === 0) {
+    return {
+      amount: 0,
+      currency: normalizedDefault,
+      provenance: "stored_field",
+      fieldOrFormula: "sum(0 documents)",
+      totalsByCurrency: {},
+      unavailableCount: 0,
+    };
+  }
+
+  const totalsByCurrency: Record<string, CurrencyBucketAmount> = {};
+  let unavailableCount = 0;
+
+  for (const item of amounts) {
+    if (
+      item.amount === null ||
+      !Number.isFinite(item.amount) ||
+      item.provenance === "unavailable"
+    ) {
+      unavailableCount += item.unavailableCount ?? 1;
+      continue;
+    }
+
+    const curr = (item.currency || normalizedDefault).trim().toUpperCase();
+    const existing = totalsByCurrency[curr];
+    const itemProv: "stored_field" | "derived_from_items" =
+      item.provenance === "derived_from_items" ? "derived_from_items" : "stored_field";
+
+    if (!existing) {
+      totalsByCurrency[curr] = {
+        amount: roundCurrency(item.amount),
+        currency: curr,
+        provenance: itemProv,
+        documentCount: 1,
+      };
+    } else {
+      existing.amount = roundCurrency(existing.amount + item.amount);
+      existing.documentCount += 1;
+      if (itemProv === "derived_from_items") {
+        existing.provenance = "derived_from_items";
+      }
+    }
+  }
+
+  const currencies = Object.keys(totalsByCurrency);
+
+  if (unavailableCount > 0) {
+    return {
+      amount: null,
+      currency: currencies.length === 1 ? currencies[0] : currencies.length > 1 ? "MIXED" : normalizedDefault,
+      provenance: "unavailable",
+      fieldOrFormula: `unavailable (${unavailableCount} document(s) missing valid amount; never coerced to 0)`,
+      totalsByCurrency,
+      unavailableCount,
+    };
+  }
+
+  if (currencies.length > 1) {
+    const breakdownText = currencies
+      .sort()
+      .map((c) => `${c}: ${totalsByCurrency[c].amount.toFixed(2)}`)
+      .join(", ");
+    return {
+      amount: null,
+      currency: "MIXED",
+      provenance: "mixed_currency_unconverted",
+      fieldOrFormula: `unconverted multi-currency totals (${breakdownText})`,
+      totalsByCurrency,
+      unavailableCount: 0,
+    };
+  }
+
+  const singleCurr = currencies[0] ?? normalizedDefault;
+  const bucket = totalsByCurrency[singleCurr];
+  const anyDerived = bucket?.provenance === "derived_from_items";
+
+  return {
+    amount: bucket ? bucket.amount : 0,
+    currency: singleCurr,
     provenance: anyDerived ? "derived_from_items" : "stored_field",
     fieldOrFormula: anyDerived
-      ? "sum(stored doc.total/amount + derived item totals)"
+      ? "sum(stored doc.total/amount + canonical derived item totals)"
       : "sum(stored doc.total/amount)",
+    totalsByCurrency,
+    unavailableCount: 0,
   };
 }
 
@@ -287,6 +535,10 @@ export async function generateDailyOperationalBrief(
   const coverage: BriefCoverageSummary = {
     asOfDate,
     periodMonth,
+    referenceMonth: periodMonth,
+    temporalScope: "unfiltered_operational_sample_as_of_date",
+    temporalScopeNote:
+      `Las consultas list_invoices, list_quotes y list_expenses leen los registros recientes/abiertos a fecha de corte (${asOfDate}) sin filtro mensual para no ocultar impagos vencidos ni borradores de meses anteriores. La actividad específica del mes de referencia (${periodMonth}) se desglosa por separado en currentMonthActivity.`,
     isPartial,
     resources: {
       invoices: invoicesCoverage,
@@ -297,7 +549,7 @@ export async function generateDailyOperationalBrief(
     },
   };
 
-  // Separate draft invoices vs issued invoices (and inside issued: paid vs outstanding [overdue vs on-time])
+  // Separate draft invoices vs issued invoices (and inside issued: paid vs unpaid nominal [overdue vs on-time])
   const invoiceDrafts: BriefDocumentSummary[] = [];
   const issuedInvoices: BriefDocumentSummary[] = [];
   const paidInvoices: BriefDocumentSummary[] = [];
@@ -308,9 +560,11 @@ export async function generateDailyOperationalBrief(
     const status = typeof rawInv.status === "string" ? rawInv.status : "draft";
     const summary: BriefDocumentSummary = {
       id: String(rawInv.id ?? ""),
-      documentNumber: typeof rawInv.documentNumber === "string" && rawInv.documentNumber ? rawInv.documentNumber : null,
+      documentNumber:
+        typeof rawInv.documentNumber === "string" && rawInv.documentNumber ? rawInv.documentNumber : null,
       status,
-      counterpartyName: typeof rawInv.clientName === "string" && rawInv.clientName ? rawInv.clientName : "Cliente sin nombre",
+      counterpartyName:
+        typeof rawInv.clientName === "string" && rawInv.clientName ? rawInv.clientName : "Cliente sin nombre",
       issueDate: typeof rawInv.issueDate === "string" ? rawInv.issueDate : null,
       dueDate: typeof rawInv.dueDate === "string" ? rawInv.dueDate : null,
       amount: resolveDocumentAmount(rawInv, defaultCurrency),
@@ -354,8 +608,6 @@ export async function generateDailyOperationalBrief(
   const expenseAmounts = expensesPage.data.map((exp) => resolveDocumentAmount(exp, defaultCurrency));
   const deductibleExpenses = expensesPage.data.filter((exp) => exp.taxDeductible === true);
   const nonDeductibleExpenses = expensesPage.data.filter((exp) => exp.taxDeductible === false);
-  // Only flag expenses as needing review when vendor/category is missing or taxDeductible is not a boolean.
-  // A non-deductible expense (taxDeductible === false) with complete metadata is a valid fiscal choice, not an error.
   const expensesNeedingReview = expensesPage.data.filter((exp) => {
     const missingVendor = typeof exp.vendor !== "string" || !exp.vendor.trim();
     const missingCategory = typeof exp.category !== "string" || !exp.category.trim();
@@ -363,18 +615,25 @@ export async function generateDailyOperationalBrief(
     return missingVendor || missingCategory || unsetDeductibility;
   });
 
+  // Current month (`periodMonth`) subset explicitly filtered by document date prefix
+  const issuedInvoicesInMonth = issuedInvoices.filter(
+    (inv) => typeof inv.issueDate === "string" && inv.issueDate.startsWith(periodMonth),
+  );
+  const invoiceDraftsInMonth = invoiceDrafts.filter(
+    (inv) => typeof inv.issueDate === "string" && inv.issueDate.startsWith(periodMonth),
+  );
+  const expensesInMonth = expensesPage.data.filter(
+    (exp) => typeof exp.date === "string" && String(exp.date).startsWith(periodMonth),
+  );
+
   const priorities: BriefPriorityItem[] = [];
 
-  // 1. Overdue or past-due outstanding invoices (high priority)
+  // 1. Overdue or past-due unpaid invoices (high priority)
   const overdueInvoices = outstandingInvoices.filter(
-    (inv) =>
-      inv.status === "overdue" ||
-      (inv.dueDate !== null && inv.dueDate < asOfDate),
+    (inv) => inv.status === "overdue" || (inv.dueDate !== null && inv.dueDate < asOfDate),
   );
   const onTimePendingInvoices = outstandingInvoices.filter(
-    (inv) =>
-      inv.status !== "overdue" &&
-      (inv.dueDate === null || inv.dueDate >= asOfDate),
+    (inv) => inv.status !== "overdue" && (inv.dueDate === null || inv.dueDate >= asOfDate),
   );
   if (overdueInvoices.length > 0) {
     const overdueTotal = sumProvenancedAmounts(
@@ -385,7 +644,7 @@ export async function generateDailyOperationalBrief(
       priority: "high",
       category: "overdue_invoice",
       title: `${overdueInvoices.length} factura(s) emitida(s) vencida(s) o fuera de plazo`,
-      why: `Las facturas emitidas (${overdueInvoices.map((i) => `${i.documentNumber ?? i.id} · ${i.counterpartyName}`).join(", ")}) tienen vencimiento anterior a ${asOfDate} o estado 'overdue'.`,
+      why: `Las facturas emitidas (${overdueInvoices.map((i) => `${i.documentNumber ?? i.id} · ${i.counterpartyName}`).join(", ")}) tienen vencimiento anterior a ${asOfDate} o estado 'overdue' (importe nominal total de documentos no marcados como pagados; saldo pendiente real no determinado sin cobros parciales).`,
       recordRefs: overdueInvoices.map((i) => ({
         type: "invoice",
         id: i.id,
@@ -513,7 +772,7 @@ export async function generateDailyOperationalBrief(
   // Known unknowns ("esto es lo que no puedo determinar")
   const knownUnknowns: string[] = [
     "Saldo bancario real y posición de tesorería: las herramientas de banca y conciliación bancaria no forman parte de esta consulta y la existencia de facturas no implica cobro efectivo en banco.",
-    "Saldos parciales o cobros fuera de Frihet: solo se observan los estados almacenados en cada documento (p. ej. 'draft', 'sent', 'overdue', 'paid'), no movimientos de cuenta ni pasarelas de pago.",
+    "Saldos pendientes reales o cobros parciales: solo se observan los importes nominales íntegros y los estados de cada documento (p. ej. 'draft', 'sent', 'overdue', 'paid'), por lo que el importe de facturas no pagadas es un nominal bruto y no un saldo vivo conciliado.",
   ];
   if (isPartial) {
     const partialLabels = Object.values(coverage.resources)
@@ -562,10 +821,24 @@ export async function generateDailyOperationalBrief(
     defaultCurrency,
   );
 
+  const issuedInvoicesInMonthTotal = sumProvenancedAmounts(
+    issuedInvoicesInMonth.map((d) => d.amount),
+    defaultCurrency,
+  );
+  const invoiceDraftsInMonthTotal = sumProvenancedAmounts(
+    invoiceDraftsInMonth.map((d) => d.amount),
+    defaultCurrency,
+  );
+  const expensesInMonthTotal = sumProvenancedAmounts(
+    expensesInMonth.map((e) => resolveDocumentAmount(e, defaultCurrency)),
+    defaultCurrency,
+  );
+
   const markdownLines: string[] = [
-    `# Brief Operativo Diario (${asOfDate} · Periodo ${periodMonth})`,
+    `# Brief Operativo Diario (Corte operativo a ${asOfDate} · Muestra abierta/reciente sin filtro mensual)`,
     "",
-    `## 1. Cobertura y Fuentes Inspeccionadas (${isPartial ? "COBERTURA PARCIAL" : "COBERTURA COMPLETA"})`,
+    `## 1. Cobertura y Alcance Temporal (${isPartial ? "COBERTURA PARCIAL" : "COBERTURA COMPLETA"})`,
+    `- **Alcance temporal de la consulta**: muestra operativa a fecha \`${asOfDate}\` sobre los registros abiertos/recientes devueltos por \`list_invoices\`, \`list_quotes\` y \`list_expenses\` (incluye documentos de meses previos, como vencimientos pendientes, para no ocultar riesgos operativos). El subconjunto emitido/registrado en el mes \`${periodMonth}\` se desglosa aparte.`,
     `- **Contexto del negocio**: \`get_business_context\``,
     `- **Facturas** (\`list_invoices\`): ${invoicesCoverage.inspected}/${invoicesCoverage.total} (${invoicesCoverage.complete ? "completo" : "parcial"})`,
     `- **Presupuestos** (\`list_quotes\`): ${quotesCoverage.inspected}/${quotesCoverage.total} (${quotesCoverage.complete ? "completo" : "parcial"})`,
@@ -573,13 +846,14 @@ export async function generateDailyOperationalBrief(
     `- **Clientes** (\`list_clients\`): ${clientsCoverage.inspected}/${clientsCoverage.total} (${clientsCoverage.complete ? "completo" : "parcial"})`,
     `- **Actividades CRM** (\`list_client_activities\`): ${clientActivitiesCoverage.inspected}/${clientActivitiesCoverage.total} clientes inspeccionados (${clientActivitiesCoverage.complete ? "completo" : "parcial"})`,
     "",
-    "## 2. Separación entre Borrador, Ingreso Facturado, Cobro Registrado y Saldo Pendiente",
-    `- **Borradores de factura (NO emitidos / NO computan como ingreso ni saldo por cobrar)**: ${invoiceDrafts.length} documento(s) por **${draftInvoicesTotal.amount.toFixed(2)} ${draftInvoicesTotal.currency}** (procedencia: \`${draftInvoicesTotal.provenance}\` — ${draftInvoicesTotal.fieldOrFormula}).`,
-    `- **Presupuestos en borrador/enviados**: ${quoteDrafts.length} documento(s) por **${draftQuotesTotal.amount.toFixed(2)} ${draftQuotesTotal.currency}** (procedencia: \`${draftQuotesTotal.provenance}\`).`,
-    `- **Ingreso facturado (facturas emitidas, no borrador)**: ${issuedInvoices.length} documento(s) por **${issuedInvoicesTotal.amount.toFixed(2)} ${issuedInvoicesTotal.currency}** (procedencia: \`${issuedInvoicesTotal.provenance}\` — ${issuedInvoicesTotal.fieldOrFormula}):`,
-    `  - **Cobro registrado en ERP (\`paid\`)**: ${paidInvoices.length} documento(s) por **${paidInvoicesTotal.amount.toFixed(2)} ${paidInvoicesTotal.currency}**.`,
-    `  - **Saldo pendiente de cobro**: ${outstandingInvoices.length} documento(s) por **${outstandingInvoicesTotal.amount.toFixed(2)} ${outstandingInvoicesTotal.currency}** (${overdueInvoices.length} vencida(s) por **${overdueInvoicesTotal.amount.toFixed(2)} ${overdueInvoicesTotal.currency}**; ${onTimePendingInvoices.length} en plazo por **${onTimePendingTotal.amount.toFixed(2)} ${onTimePendingTotal.currency}**).`,
-    `- **Gastos registrados en la muestra**: ${expensesPage.data.length} registro(s) por **${expensesTotal.amount.toFixed(2)} ${expensesTotal.currency}** (${deductibleExpenses.length} deducible(s) por ${deductibleTotal.amount.toFixed(2)} ${deductibleTotal.currency}; ${nonDeductibleExpenses.length} no deducible(s) por ${nonDeductibleTotal.amount.toFixed(2)} ${nonDeductibleTotal.currency}; ${expensesNeedingReview.length} con datos incompletos pendientes de revisión).`,
+    "## 2. Separación entre Borrador, Facturación Emitida, Cobro Registrado e Importe Nominal No Pagado",
+    `- **Borradores de factura (NO emitidos / NO computan como ingreso ni saldo por cobrar)**: ${invoiceDrafts.length} documento(s) por **${formatProvenancedAmount(draftInvoicesTotal)}** (procedencia: \`${draftInvoicesTotal.provenance}\` — ${draftInvoicesTotal.fieldOrFormula}).`,
+    `- **Presupuestos en borrador/enviados**: ${quoteDrafts.length} documento(s) por **${formatProvenancedAmount(draftQuotesTotal)}** (procedencia: \`${draftQuotesTotal.provenance}\`).`,
+    `- **Facturación emitida en la muestra operativa (no borrador, incluye meses previos si siguen en la muestra)**: ${issuedInvoices.length} documento(s) por **${formatProvenancedAmount(issuedInvoicesTotal)}** (procedencia: \`${issuedInvoicesTotal.provenance}\` — ${issuedInvoicesTotal.fieldOrFormula}):`,
+    `  - **Cobro registrado en ERP (\`paid\`)**: ${paidInvoices.length} documento(s) por **${formatProvenancedAmount(paidInvoicesTotal)}**.`,
+    `  - **Importe nominal de facturas no marcadas como pagadas (saldo pendiente real no determinable sin cobros parciales)**: ${outstandingInvoices.length} documento(s) por **${formatProvenancedAmount(outstandingInvoicesTotal)}** (${overdueInvoices.length} vencida(s) por **${formatProvenancedAmount(overdueInvoicesTotal)}**; ${onTimePendingInvoices.length} en plazo por **${formatProvenancedAmount(onTimePendingTotal)}**).`,
+    `- **Gastos registrados en la muestra operativa**: ${expensesPage.data.length} registro(s) por **${formatProvenancedAmount(expensesTotal)}** (${deductibleExpenses.length} deducible(s) por ${formatProvenancedAmount(deductibleTotal)}; ${nonDeductibleExpenses.length} no deducible(s) por ${formatProvenancedAmount(nonDeductibleTotal)}; ${expensesNeedingReview.length} con datos incompletos pendientes de revisión).`,
+    `- **Subconjunto acotado al mes ${periodMonth} (filtrado por fecha del documento)**: ${issuedInvoicesInMonth.length} factura(s) emitida(s) por **${formatProvenancedAmount(issuedInvoicesInMonthTotal)}**, ${invoiceDraftsInMonth.length} borrador(es) de factura por **${formatProvenancedAmount(invoiceDraftsInMonthTotal)}** y ${expensesInMonth.length} gasto(s) por **${formatProvenancedAmount(expensesInMonthTotal)}**.`,
     "",
     "## 3. Qué Deberías Revisar Hoy y Por Qué (Priorizado)",
     ...(priorities.length > 0
@@ -589,7 +863,7 @@ export async function generateDailyOperationalBrief(
             `   - **Por qué**: ${p.why}\n` +
             `   - **Registros**: ${p.recordRefs.map((r) => `\`${r.id}\` (${r.label})`).join(", ")}\n` +
             (p.amount
-              ? `   - **Importe y procedencia**: ${p.amount.amount.toFixed(2)} ${p.amount.currency} (\`${p.amount.provenance}\`: ${p.amount.fieldOrFormula})\n`
+              ? `   - **Importe y procedencia**: ${formatProvenancedAmount(p.amount)} (\`${p.amount.provenance}\`: ${p.amount.fieldOrFormula})\n`
               : "") +
             `   - **Siguiente acción sugerida (no ejecutada automáticamente)**: ${p.suggestedNextAction.description} (herramienta: \`${p.suggestedNextAction.recommendedTool}\`)`,
         )
@@ -613,7 +887,9 @@ export async function generateDailyOperationalBrief(
         quoteDrafts,
       },
       issuedActivity: {
-        note: "Incluye únicamente facturas emitidas (estado distinto de 'draft' y 'cancelled'), separando cobro registrado ('paid') de saldo pendiente ('overdue' vs en plazo).",
+        note: "Incluye únicamente facturas emitidas (estado distinto de 'draft' y 'cancelled'), separando cobro registrado ('paid') del importe nominal de facturas no marcadas como pagadas ('overdue' vs en plazo). El saldo pendiente real no es determinable sin desglose de cobros parciales ni conciliación bancaria.",
+        realOutstandingBalanceDeterminable: false,
+        unpaidNominalSemantics: "nominal_unpaid_invoice_totals_without_partial_payments",
         issuedInvoicesCount: issuedInvoices.length,
         issuedInvoicesByStatus,
         issuedInvoicesTotal,
@@ -621,6 +897,13 @@ export async function generateDailyOperationalBrief(
         paidInvoicesCount: paidInvoices.length,
         paidInvoicesTotal,
         paidInvoices,
+        unpaidNominalInvoicesCount: outstandingInvoices.length,
+        unpaidNominalTotal: outstandingInvoicesTotal,
+        unpaidNominalTotalsByCurrency: outstandingInvoicesTotal.totalsByCurrency ?? {},
+        overdueNominalInvoicesCount: overdueInvoices.length,
+        overdueNominalTotal: overdueInvoicesTotal,
+        onTimeNominalPendingCount: onTimePendingInvoices.length,
+        onTimeNominalPendingTotal: onTimePendingTotal,
         outstandingInvoicesCount: outstandingInvoices.length,
         outstandingInvoicesTotal,
         overdueInvoicesCount: overdueInvoices.length,
@@ -638,6 +921,16 @@ export async function generateDailyOperationalBrief(
         nonDeductibleCount: nonDeductibleExpenses.length,
         nonDeductibleTotal,
         pendingReviewCount: expensesNeedingReview.length,
+      },
+      currentMonthActivity: {
+        referenceMonth: periodMonth,
+        note: `Subconjunto de documentos cuya fecha de emisión (issueDate) o fecha de gasto (date) pertenece explícitamente al mes ${periodMonth}, separado de los registros de meses previos presentes en la muestra operativa.`,
+        issuedInvoicesInMonthCount: issuedInvoicesInMonth.length,
+        issuedInvoicesInMonthTotal,
+        invoiceDraftsInMonthCount: invoiceDraftsInMonth.length,
+        invoiceDraftsInMonthTotal,
+        expensesInMonthCount: expensesInMonth.length,
+        expensesInMonthTotal,
       },
     },
     priorities,
@@ -661,7 +954,7 @@ export function buildScenario1CompleteWorkspaceClient(callLog: string[]): Pick<
       callLog.push("get_business_context");
       return {
         company: { name: "Estudio Atlántico SL", currency: "EUR", taxRegime: "iva" },
-        monthlySummary: { invoiced: 1952, expenses: 199.49 },
+        monthlySummary: { invoiced: 1347, expenses: 153.5 },
         plan: {
           tier: "free",
           usage: {
