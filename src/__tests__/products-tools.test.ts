@@ -240,6 +240,74 @@ describe("list_products tool & FrihetClient — isActive filter and pagination c
     assert.equal(schema.safeParse({ isActive: false, limit: 3 }).success, true);
   });
 
+  test("preserves nextCursor and instructs after= continuation when a scan window truncates with data.length < limit", async () => {
+    const frontierCursor = Buffer.from(
+      JSON.stringify({ __id: "prod-a-inactive-0500", __offset: 2 }),
+    ).toString("base64url");
+
+    let callCount = 0;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url = new URL(rawUrl);
+      callCount += 1;
+
+      if (callCount === 1) {
+        assert.equal(url.searchParams.get("isActive"), "true");
+        assert.equal(url.searchParams.get("cursor"), null);
+        // Simulate 500 inactive docs scanned first before reaching the active doc:
+        // data is empty, total is 1, and nextCursor points to the 500th scanned doc.
+        return new Response(
+          JSON.stringify({
+            data: [],
+            total: 1,
+            limit: 20,
+            offset: 0,
+            truncated: true,
+            nextCursor: frontierCursor,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      assert.equal(url.searchParams.get("isActive"), "true");
+      assert.equal(url.searchParams.get("cursor"), frontierCursor);
+      return new Response(
+        JSON.stringify({
+          data: [{ id: "prod-z-active-0501", name: "Active After 500 Inactive", unitPrice: 99, taxRate: 21, isActive: true }],
+          total: 1,
+          limit: 20,
+          offset: 0,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const server = buildToolHarness();
+    const listTool = server.tools.get("list_products")!;
+
+    const page1 = await listTool.handler({ isActive: true, limit: 20 });
+    const sc1 = page1.structuredContent as {
+      data: ProductFixture[];
+      total: number;
+      nextCursor?: string;
+    };
+    assert.deepEqual(sc1.data, []);
+    assert.equal(sc1.total, 1);
+    assert.equal(sc1.nextCursor, frontierCursor);
+    assert.match(page1.content[0].text, new RegExp(`after='${frontierCursor}'`));
+    assert.doesNotMatch(page1.content[0].text, /Use offset=0/);
+
+    const page2 = await listTool.handler({ isActive: true, limit: 20, after: sc1.nextCursor });
+    const sc2 = page2.structuredContent as {
+      data: ProductFixture[];
+      total: number;
+      nextCursor?: string;
+    };
+    assert.equal(sc2.data.length, 1);
+    assert.equal(sc2.data[0].id, "prod-z-active-0501");
+    assert.equal(sc2.nextCursor, undefined);
+  });
+
   test("create_product sends Idempotency-Key header on mutation", async () => {
     const server = buildToolHarness();
     const createTool = server.tools.get("create_product")!;

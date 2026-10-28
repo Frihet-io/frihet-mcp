@@ -272,7 +272,16 @@ export function formatPaginatedResponse(
     lines.push("---");
   }
 
-  if (response.total > response.offset + response.data.length) {
+  const hasMoreByTotal = response.total > response.offset + response.data.length;
+  const isTruncatedScanWindow = Boolean(
+    response.nextCursor && response.data.length < response.limit,
+  );
+
+  if (isTruncatedScanWindow && response.nextCursor) {
+    lines.push(
+      `More results available beyond the current scan window. Continue with after='${response.nextCursor}' to fetch the next page.`,
+    );
+  } else if (hasMoreByTotal) {
     const nextOffset = response.offset + response.data.length;
     lines.push(
       `More results available. Use offset=${nextOffset} to see the next page.`,
@@ -282,6 +291,10 @@ export function formatPaginatedResponse(
         `Cursor pagination: use after='${response.nextCursor}' for efficient cursor-based pagination.`,
       );
     }
+  } else if (response.nextCursor) {
+    lines.push(
+      `Cursor pagination: use after='${response.nextCursor}' for efficient cursor-based pagination.`,
+    );
   }
 
   return truncateResponse(lines.join("\n"));
