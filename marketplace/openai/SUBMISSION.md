@@ -6,7 +6,7 @@ source change) has this MCP contract:
 - Release `1.16.6`;
 - portal Identity `Business — Frihet` and Plugin Author `Frihet`, matching
   the Frihet trade name; the live website, connector privacy/support,
-  submission-description, terms, and JSON-LD surfaces must preserve the legal
+  reviewer release notes, terms, and JSON-LD surfaces must preserve the legal
   ownership chain to controller and operator `VICTOR BERTHELIUS PATO`;
 - endpoint `https://openai-mcp.frihet.io/mcp`;
 - OAuth issuer/resource `https://openai-mcp.frihet.io` and exact scopes
@@ -67,14 +67,24 @@ npm run package:openai-plugin
 ```
 
 The last command requires Python 3 (standard library only) and creates
-`marketplace/openai/dist/frihet-1.0.1.zip`, with an unpacked copy in
+`marketplace/openai/dist/frihet-1.0.2.zip`, with an unpacked copy in
 `marketplace/openai/dist/openai-plugin/`. These outputs stay outside npm's root
-`dist/` publish surface. The ZIP contains root `plugin.json`, root `mcp.json` and
-the three existing PNG assets only. Its file order, timestamps and permissions
-are fixed. Its version `1.0.1` is independent of the hosted MCP release.
+`dist/` publish surface. The ZIP contains root `plugin.json`, root `mcp.json`,
+the four reviewed workflow skills (`skills/frihet-workspace/SKILL.md`,
+`skills/invoices-and-quotes/SKILL.md`, `skills/expenses-and-vendors/SKILL.md`,
+`skills/clients-crm/SKILL.md`, with `onboardingSkill` pointing to
+`./skills/frihet-workspace/SKILL.md`) and the three existing PNG assets only.
+Its file order, timestamps and permissions are fixed. Its version `1.0.2`
+(succeeding the initial published `1.0.1` package) is independent of the hosted
+MCP release.
 
 Submit it as a new plugin named `frihet`: **Upload new or existing plugin**,
-verified identity **Business — Frihet**. The legacy record
+verified identity **Business — Frihet**. Once `1.0.1` is `Published` in the
+OpenAI Developer Portal, create subsequent version drafts (`1.0.2`) by opening
+`Plugins > Frihet` (`1.0.1 - Published`, Developer `Frihet`, Package name
+`frihet`) directly in the authenticated dashboard and clicking **`Create draft
+from ZIP`**—do not target or select a plugin by copying and pasting a
+transcribed `plugin_asdk_app_...` identifier string. The legacy record
 `plugin_asdk_app_69b6147ce32c81918680c89bfa7c9b36` stays unpublished and is not
 updated: its exported package has no MCP server, and adding an MCP server to an
 existing plugin without one is not supported
