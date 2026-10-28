@@ -14,8 +14,8 @@ import { FrihetClient } from "../dist/client.js";
 import {
   buildScenario1CompleteWorkspaceClient,
   buildScenario2PartialCoverageClient,
-} from "../dist/__tests__/daily-operational-brief.test.js";
-import { generateDailyOperationalBrief } from "../dist/workflows/daily-operational-brief.js";
+  generateDailyOperationalBrief,
+} from "../dist/workflows/daily-operational-brief.js";
 
 const isLive = process.argv.includes("--live");
 const isJson = process.argv.includes("--json");
