@@ -358,31 +358,67 @@ const singlePeriodSummarySchema = z.object({
     total: provenancedAmountSchema,
   }),
   issuedInvoices: z.object({
+    selectionBasis: z
+      .literal("issue_date_cohort_not_payment_date")
+      .describe(
+        "Invoices are selected by issueDate within the period; paid figures reflect current status=paid of that issueDate cohort, not cash collected during the month",
+      ),
     note: z.string(),
     realOutstandingBalanceDeterminable: z.literal(false),
     count: z.number().int().nonnegative(),
-    paidCount: z.number().int().nonnegative(),
+    currentlyMarkedPaidCount: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("Count of invoices issued in this period that are currently marked as paid (not payment-date collections)"),
     unpaidNominalCount: z.number().int().nonnegative(),
     overdueNominalCount: z.number().int().nonnegative(),
     issuedTotal: provenancedAmountSchema,
-    paidTotal: provenancedAmountSchema,
+    currentlyMarkedPaidTotal: provenancedAmountSchema.describe(
+      "Total of invoices issued in this period that are currently marked as paid (issueDate cohort, NOT cash collected during the period)",
+    ),
     unpaidNominalTotal: provenancedAmountSchema,
     overdueNominalTotal: provenancedAmountSchema,
   }),
   expenses: z.object({
+    note: z
+      .string()
+      .describe("Explains strict separation of taxDeductible === true, false, and undetermined (absent/null)"),
     count: z.number().int().nonnegative(),
     total: provenancedAmountSchema,
-    deductibleCount: z.number().int().nonnegative(),
+    deductibleCount: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("Expenses explicitly classified with taxDeductible === true"),
     deductibleTotal: provenancedAmountSchema,
-    nonDeductibleCount: z.number().int().nonnegative(),
+    nonDeductibleCount: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("Expenses explicitly classified with taxDeductible === false"),
     nonDeductibleTotal: provenancedAmountSchema,
+    undeterminedDeductibilityCount: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("Expenses where taxDeductible is absent, null, or non-boolean"),
+    undeterminedDeductibilityTotal: provenancedAmountSchema,
     byCategory: z.array(periodCategoryBucketSchema).max(30),
   }),
   netOperatingByCurrency: z.array(
     z.object({
       currency: z.string(),
-      issuedRevenueMinusExpenses: z.number().nullable(),
-      paidRevenueMinusExpenses: z.number().nullable(),
+      issuedRevenueMinusExpenses: z
+        .number()
+        .nullable()
+        .describe("Issued invoice cohort total minus recorded expenses for this period"),
+      issuedCohortCurrentlyPaidMinusExpenses: z
+        .number()
+        .nullable()
+        .describe(
+          "Invoices issued in this period currently marked as paid minus recorded expenses in this period (issueDate cohort difference, NOT treasury cash flow or accounting profit)",
+        ),
       completeAndDeterminable: z.boolean(),
     }),
   ).max(10),
@@ -393,9 +429,18 @@ const periodComparisonDeltaByCurrencySchema = z.object({
   primaryIssuedRevenue: z.number().nullable(),
   comparisonIssuedRevenue: z.number().nullable(),
   issuedRevenueDelta: z.number().nullable(),
-  primaryPaidRevenue: z.number().nullable(),
-  comparisonPaidRevenue: z.number().nullable(),
-  paidRevenueDelta: z.number().nullable(),
+  primaryIssuedCurrentlyPaid: z
+    .number()
+    .nullable()
+    .describe("Invoices issued in primaryMonth currently marked as paid (issueDate cohort, not cash collected in primaryMonth)"),
+  comparisonIssuedCurrentlyPaid: z
+    .number()
+    .nullable()
+    .describe("Invoices issued in compareWithMonth currently marked as paid (issueDate cohort, not cash collected in compareWithMonth)"),
+  issuedCurrentlyPaidDelta: z
+    .number()
+    .nullable()
+    .describe("Delta between primaryMonth and compareWithMonth cohorts of issued invoices currently marked as paid (not a cash-flow collection delta)"),
   primaryExpenses: z.number().nullable(),
   comparisonExpenses: z.number().nullable(),
   expensesDelta: z.number().nullable(),
@@ -711,8 +756,11 @@ async function computeSinglePeriodSummary(
   const unpaidInvoices = issuedInvoices.filter((inv) => getNormStatus(inv) !== "paid");
   const overdueInvoices = unpaidInvoices.filter((inv) => getNormStatus(inv) === "overdue");
 
-  const deductibleExpenses = expenses.filter((exp) => exp.taxDeductible !== false);
+  const deductibleExpenses = expenses.filter((exp) => exp.taxDeductible === true);
   const nonDeductibleExpenses = expenses.filter((exp) => exp.taxDeductible === false);
+  const undeterminedDeductibilityExpenses = expenses.filter(
+    (exp) => typeof exp.taxDeductible !== "boolean",
+  );
 
   const categoryBuckets = new Map<string, { category: string; currency: string; amount: number; count: number }>();
   for (const exp of expenses) {
@@ -731,16 +779,25 @@ async function computeSinglePeriodSummary(
 
   const draftTotal = aggregateAmounts(draftInvoices, defaultCurrency, "sum(draft_invoices)");
   const issuedTotal = aggregateAmounts(issuedInvoices, defaultCurrency, "sum(issued_invoices)");
-  const paidTotal = aggregateAmounts(paidInvoices, defaultCurrency, "sum(paid_invoices)");
+  const currentlyMarkedPaidTotal = aggregateAmounts(
+    paidInvoices,
+    defaultCurrency,
+    "sum(issued_invoices_currently_marked_paid)",
+  );
   const unpaidNominalTotal = aggregateAmounts(unpaidInvoices, defaultCurrency, "sum(unpaid_nominal_invoices)");
   const overdueNominalTotal = aggregateAmounts(overdueInvoices, defaultCurrency, "sum(overdue_nominal_invoices)");
   const expTotal = aggregateAmounts(expenses, defaultCurrency, "sum(expenses)");
   const dedTotal = aggregateAmounts(deductibleExpenses, defaultCurrency, "sum(deductible_expenses)");
   const nonDedTotal = aggregateAmounts(nonDeductibleExpenses, defaultCurrency, "sum(non_deductible_expenses)");
+  const undeterminedDedTotal = aggregateAmounts(
+    undeterminedDeductibilityExpenses,
+    defaultCurrency,
+    "sum(undetermined_deductibility_expenses)",
+  );
 
   const allCurrencies = new Set<string>([
     ...issuedTotal.totalsByCurrency.map((b) => b.currency),
-    ...paidTotal.totalsByCurrency.map((b) => b.currency),
+    ...currentlyMarkedPaidTotal.totalsByCurrency.map((b) => b.currency),
     ...expTotal.totalsByCurrency.map((b) => b.currency),
   ]);
 
@@ -748,17 +805,17 @@ async function computeSinglePeriodSummary(
   const determinable =
     isComplete &&
     issuedTotal.unavailableCount === 0 &&
-    paidTotal.unavailableCount === 0 &&
+    currentlyMarkedPaidTotal.unavailableCount === 0 &&
     expTotal.unavailableCount === 0;
 
   const netOperatingByCurrency = [...allCurrencies].sort().map((currency) => {
     const issuedBucket = issuedTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
-    const paidBucket = paidTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
+    const paidBucket = currentlyMarkedPaidTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
     const expBucket = expTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
     return {
       currency,
       issuedRevenueMinusExpenses: determinable ? roundCurrency(issuedBucket - expBucket) : null,
-      paidRevenueMinusExpenses: determinable ? roundCurrency(paidBucket - expBucket) : null,
+      issuedCohortCurrentlyPaidMinusExpenses: determinable ? roundCurrency(paidBucket - expBucket) : null,
       completeAndDeterminable: determinable,
     };
   });
@@ -787,24 +844,30 @@ async function computeSinglePeriodSummary(
       total: draftTotal,
     },
     issuedInvoices: {
-      note: "Unpaid totals represent nominal invoice amounts not marked as paid; real outstanding balance cannot be determined without partial-payment or bank-reconciliation records.",
+      selectionBasis: "issue_date_cohort_not_payment_date" as const,
+      note:
+        "Invoices are selected by issueDate within the period. currentlyMarkedPaidTotal sums invoices issued in this period that are currently marked as paid; it does NOT measure cash collected during this calendar month (e.g. an invoice issued in September and paid in October belongs to the September issueDate cohort). Unpaid totals represent nominal invoice amounts not marked as paid; real outstanding balance cannot be determined without partial-payment or bank-reconciliation records.",
       realOutstandingBalanceDeterminable: false,
       count: issuedInvoices.length,
-      paidCount: paidInvoices.length,
+      currentlyMarkedPaidCount: paidInvoices.length,
       unpaidNominalCount: unpaidInvoices.length,
       overdueNominalCount: overdueInvoices.length,
       issuedTotal,
-      paidTotal,
+      currentlyMarkedPaidTotal,
       unpaidNominalTotal,
       overdueNominalTotal,
     },
     expenses: {
+      note:
+        "Expenses are partitioned into deductible (taxDeductible === true), non-deductible (taxDeductible === false), and undetermined classification (taxDeductible absent, null, or non-boolean) without assuming deductibility by default.",
       count: expenses.length,
       total: expTotal,
       deductibleCount: deductibleExpenses.length,
       deductibleTotal: dedTotal,
       nonDeductibleCount: nonDeductibleExpenses.length,
       nonDeductibleTotal: nonDedTotal,
+      undeterminedDeductibilityCount: undeterminedDeductibilityExpenses.length,
+      undeterminedDeductibilityTotal: undeterminedDedTotal,
       byCategory: [...categoryBuckets.values()]
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 30)
@@ -1042,10 +1105,15 @@ export function registerOpenAI103CandidateTools(
       title: "Get Business Period Summary",
       description:
         "Get an operational summary of issued invoices, draft invoices, and recorded expenses for a calendar month (YYYY-MM), " +
-        "with optional side-by-side comparison against another month. Aggregates strictly by currency without cross-currency " +
-        "conversion, separates drafts from issued revenue and collected cash, reports coverage telemetry, and excludes regulated tax-return calculations. " +
-        "/ Obtiene el resumen operativo de un mes (YYYY-MM) y permite compararlo con otro mes por moneda, " +
-        "separando borradores de facturacion emitida y cobrada, con telemetria de cobertura y sin calculos de declaraciones fiscales.",
+        "with optional side-by-side comparison against another month. Selects invoices by issueDate and expenses by date, " +
+        "aggregates strictly by currency without cross-currency conversion, separates drafts from issued invoices (reporting how much " +
+        "of that period's issued invoice cohort is currently marked as paid vs unpaid nominal, without claiming payment-date cash collections " +
+        "or treasury cash flow), partitions expenses into deductible (true), non-deductible (false), and undetermined classification, " +
+        "reports coverage telemetry, and excludes regulated tax-return calculations. " +
+        "/ Obtiene el resumen operativo de un mes (YYYY-MM) y permite compararlo con otro mes por moneda, seleccionando facturas por " +
+        "fecha de emision (issueDate) y gastos por fecha (date), separando borradores de facturas emitidas (indicando cuantas de las emitidas " +
+        "en ese mes estan actualmente marcadas como pagadas frente a pendientes nominales, sin atribuirlo a cobros por fecha de pago ni tesoreria), " +
+        "y separando gastos deducibles, no deducibles y de clasificacion no determinada.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         period: z
@@ -1083,16 +1151,16 @@ export function registerOpenAI103CandidateTools(
 
           const pIssuedUnavail = primaryPeriod.issuedInvoices.issuedTotal.unavailableCount > 0;
           const cIssuedUnavail = comparisonPeriod.issuedInvoices.issuedTotal.unavailableCount > 0;
-          const pPaidUnavail = primaryPeriod.issuedInvoices.paidTotal.unavailableCount > 0;
-          const cPaidUnavail = comparisonPeriod.issuedInvoices.paidTotal.unavailableCount > 0;
+          const pPaidUnavail = primaryPeriod.issuedInvoices.currentlyMarkedPaidTotal.unavailableCount > 0;
+          const cPaidUnavail = comparisonPeriod.issuedInvoices.currentlyMarkedPaidTotal.unavailableCount > 0;
           const pExpUnavail = primaryPeriod.expenses.total.unavailableCount > 0;
           const cExpUnavail = comparisonPeriod.expenses.total.unavailableCount > 0;
 
           const currencies = new Set<string>([
             ...primaryPeriod.issuedInvoices.issuedTotal.totalsByCurrency.map((b) => b.currency),
             ...comparisonPeriod.issuedInvoices.issuedTotal.totalsByCurrency.map((b) => b.currency),
-            ...primaryPeriod.issuedInvoices.paidTotal.totalsByCurrency.map((b) => b.currency),
-            ...comparisonPeriod.issuedInvoices.paidTotal.totalsByCurrency.map((b) => b.currency),
+            ...primaryPeriod.issuedInvoices.currentlyMarkedPaidTotal.totalsByCurrency.map((b) => b.currency),
+            ...comparisonPeriod.issuedInvoices.currentlyMarkedPaidTotal.totalsByCurrency.map((b) => b.currency),
             ...primaryPeriod.expenses.total.totalsByCurrency.map((b) => b.currency),
             ...comparisonPeriod.expenses.total.totalsByCurrency.map((b) => b.currency),
           ]);
@@ -1110,9 +1178,11 @@ export function registerOpenAI103CandidateTools(
             const cIssuedRaw =
               comparisonPeriod!.issuedInvoices.issuedTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
             const pPaidRaw =
-              primaryPeriod.issuedInvoices.paidTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
+              primaryPeriod.issuedInvoices.currentlyMarkedPaidTotal.totalsByCurrency.find((b) => b.currency === currency)
+                ?.amount ?? 0;
             const cPaidRaw =
-              comparisonPeriod!.issuedInvoices.paidTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
+              comparisonPeriod!.issuedInvoices.currentlyMarkedPaidTotal.totalsByCurrency.find((b) => b.currency === currency)
+                ?.amount ?? 0;
             const pExpRaw =
               primaryPeriod.expenses.total.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
             const cExpRaw =
@@ -1130,9 +1200,9 @@ export function registerOpenAI103CandidateTools(
               primaryIssuedRevenue: pIssued,
               comparisonIssuedRevenue: cIssued,
               issuedRevenueDelta: pIssued !== null && cIssued !== null ? roundCurrency(pIssued - cIssued) : null,
-              primaryPaidRevenue: pPaid,
-              comparisonPaidRevenue: cPaid,
-              paidRevenueDelta: pPaid !== null && cPaid !== null ? roundCurrency(pPaid - cPaid) : null,
+              primaryIssuedCurrentlyPaid: pPaid,
+              comparisonIssuedCurrentlyPaid: cPaid,
+              issuedCurrentlyPaidDelta: pPaid !== null && cPaid !== null ? roundCurrency(pPaid - cPaid) : null,
               primaryExpenses: pExp,
               comparisonExpenses: cExp,
               expensesDelta: pExp !== null && cExp !== null ? roundCurrency(pExp - cExp) : null,
@@ -1140,7 +1210,9 @@ export function registerOpenAI103CandidateTools(
             };
           });
 
-          const notes: string[] = [];
+          const notes: string[] = [
+            "Invoice figures compare issueDate cohorts for each period; issuedCurrentlyPaidDelta compares invoices issued in each period that are currently marked as paid, not cash collections by payment date.",
+          ];
           if (compareWithPeriod === period) {
             notes.push("Primary and comparison periods are identical; all deltas are zero.");
           }
@@ -1177,7 +1249,7 @@ export function registerOpenAI103CandidateTools(
 
         const output: z.infer<typeof businessPeriodSummaryOutputSchema> = {
           accountingSemanticsNote:
-            "Operational period summary based on invoice issueDate and expense date. Draft and cancelled invoices are excluded from issued revenue. Multi-currency totals are kept in separate currency buckets without conversion. Regulated tax-filing figures are omitted.",
+            "Operational period summary based on invoice issueDate and expense date. Draft and cancelled invoices are excluded from issued revenue. currentlyMarkedPaidTotal sums invoices issued in the period whose current status is 'paid'; it does NOT measure cash collected during that calendar month (e.g. an invoice issued in September and paid in October belongs to the September issueDate cohort). issuedCohortCurrentlyPaidMinusExpenses is an issueDate-cohort difference, not treasury cash flow or accounting profit. Expenses are partitioned into deductible (taxDeductible === true), non-deductible (taxDeductible === false), and undetermined classification (taxDeductible absent/null) without assuming deductibility by default. Multi-currency totals are kept in separate currency buckets without conversion. Regulated tax-filing figures are omitted.",
           primaryPeriod,
           ...(comparisonPeriod ? { comparisonPeriod } : {}),
           ...(comparison ? { comparison } : {}),
