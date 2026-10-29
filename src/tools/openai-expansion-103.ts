@@ -4,11 +4,28 @@
  * Developed in isolation (branch `feat/openai-1.0.3-candidate`) without mutating
  * the live 1.0.2 production endpoint (`https://openai-mcp.frihet.io/mcp`, 33 tools).
  *
- * Includes:
- * - Four read-only candidate tools (`get_daily_operational_brief`,
- *   `get_business_period_summary`, `search_clients`, `search_vendors`)
- * - One optional phase-2 draft-only mutation candidate (`update_draft_invoice`),
- *   gated separately so it never blocks the four read-only capabilities.
+ * Exposes four read-only operational intelligence & commercial-search capabilities
+ * (expanding the surface from 33 to 37 tools):
+ * 1. `get_daily_operational_brief` — Prioritized daily brief with record provenance
+ * 2. `get_business_period_summary` — Period & month-over-month comparison by currency
+ * 3. `search_clients` — Multi-page commercial-name client search with ambiguity & coverage truth
+ * 4. `search_vendors` — Multi-page commercial-name vendor search with ambiguity & coverage truth
+ *
+ * Architectural note on `update_draft_invoice` (excluded from 1.0.3):
+ * Inspection of `Frihet-ERP/functions/src/publicApi.ts:10175-10350` (`updateResource`)
+ * shows that an MCP-only pre-flight (`getInvoice` + `updateInvoice`) is NOT atomic
+ * end-to-end:
+ * - `PATCH /v1/invoices/:id` runs a Firestore transaction (`db.runTransaction`),
+ *   but does not accept an `expectedStatus: "draft"` or `expectedUpdatedAt`
+ *   precondition inside that transaction.
+ * - `documentNumber` is assigned at draft creation (`POST /v1/invoices`), so
+ *   `expectedDocumentNumber` is not a revision token.
+ * - If a concurrent session transitions a draft invoice to `'sent'` (prior to
+ *   `verifactu.hash` or `documentNumberFinal`) between the MCP's `GET` and `PATCH`,
+ *   sending `{ status: "draft", ... }` is permitted by `publicApi.ts:10323-10333`,
+ *   which would demote an unhashed `'sent'` invoice back to `'draft'`.
+ * Therefore, draft editing is intentionally kept outside 1.0.3 until the ERP
+ * backend enforces `ifStatus === "draft"` + `ifUpdatedAt` inside `updateResource`.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -17,10 +34,8 @@ import type { IFrihetClient } from "../client-interface.js";
 import {
   withToolLogging,
   getContent,
-  mutateContent,
   formatRecord,
   READ_ONLY_ANNOTATIONS,
-  UPDATE_ANNOTATIONS,
 } from "./shared.js";
 import {
   generateDailyOperationalBrief,
@@ -31,22 +46,57 @@ import { OPENAI_REVIEW_FREE_TEXT_WARNING } from "../openai-profile.js";
 
 const CALENDAR_MONTH_REGEX = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
-/**
- * Rejects queries that look like Spanish NIF/NIE/CIF or EU VAT numbers so
- * name-only search tools can never be used as government-ID lookup oracles.
- */
-export function isLikelyGovernmentIdQuery(raw: string): boolean {
-  const compact = raw.replace(/[\s.-]+/g, "").toUpperCase();
+export const CLIENT_SEARCH_SERVER_PROJECTION = "id,name,stage,email,phone" as const;
+export const VENDOR_SEARCH_SERVER_PROJECTION = "id,name,email,phone" as const;
+
+const LEGAL_SUFFIX_STOPWORDS = new Set([
+  "sl",
+  "slu",
+  "sa",
+  "sau",
+  "sll",
+  "scp",
+  "cb",
+  "coop",
+  "inc",
+  "llc",
+  "ltd",
+  "gmbh",
+  "bv",
+  "sarl",
+  "sas",
+  "plc",
+  "corp",
+]);
+
+function isSingleTokenGovernmentId(token: string): boolean {
+  const compact = token.replace(/[\s.\-:/,()]+/g, "").toUpperCase();
   if (compact.length < 7 || compact.length > 15) return false;
+  // Bare 7..11 digit sequence (e.g. 8-digit Spanish DNI/NIF stem)
+  if (/^[0-9]{7,11}$/.test(compact)) return true;
   // Spanish NIF (8 digits + letter), NIE (X/Y/Z + 7 digits + letter), CIF (letter + 7 digits + control)
   if (/^[0-9]{8}[A-Z]$/.test(compact)) return true;
   if (/^[XYZ][0-9]{7}[A-Z]$/.test(compact)) return true;
   if (/^[ABCDEFGHJNPQRSUVW][0-9]{7}[0-9A-J]$/.test(compact)) return true;
+  // Partial CIF/NIE stem (letter + 6..7 digits)
+  if (/^[ABCDEFGHJNPQRSUVWXYZ][0-9]{6,7}$/.test(compact)) return true;
   // EU VAT prefix + 7..12 alphanumeric with at least 5 digits
   if (/^[A-Z]{2}[A-Z0-9]{7,12}$/.test(compact) && (compact.match(/[0-9]/g)?.length ?? 0) >= 5) {
     return true;
   }
   return false;
+}
+
+/**
+ * Rejects queries that look like Spanish NIF/NIE/CIF or EU VAT numbers
+ * (including labeled forms like "NIF: B87654321" or numeric stems) so
+ * name-only search tools can never be used as government-ID lookup oracles.
+ */
+export function isLikelyGovernmentIdQuery(raw: string): boolean {
+  const withoutLabel = raw.replace(/^\s*(?:nif|nie|cif|vat|tax\s*id|id\s*fiscal)\s*[:#\-/]?\s*/i, "");
+  if (isSingleTokenGovernmentId(withoutLabel)) return true;
+  const tokens = withoutLabel.split(/[\s,;:/()]+/).filter(Boolean);
+  return tokens.some((t) => isSingleTokenGovernmentId(t));
 }
 
 function normalizeSearchText(value: string): string {
@@ -75,18 +125,23 @@ export function matchCommercialName(
   if (normName === normQuery) {
     return { matched: true, rank: "exact", score: 100 };
   }
-  if (normName.startsWith(`${normQuery} `) || normName.startsWith(normQuery)) {
+  const queryTokens = normQuery.split(" ").filter(Boolean);
+  const nonStopwordQueryTokens = queryTokens.filter((t) => !LEGAL_SUFFIX_STOPWORDS.has(t));
+  if (nonStopwordQueryTokens.length === 0 || nonStopwordQueryTokens.every((t) => t.length < 2)) {
+    return { matched: false, score: 0 };
+  }
+  // Whole-word prefix at start of commercial name (e.g. "Acme" in "Acme Iberia SL")
+  if (normName.startsWith(`${normQuery} `)) {
     return { matched: true, rank: "prefix", score: 85 };
   }
-  const queryTokens = normQuery.split(" ").filter(Boolean);
   const nameTokens = normName.split(" ").filter(Boolean);
   if (
     queryTokens.length > 0 &&
-    queryTokens.every((qt) => nameTokens.some((nt) => nt === qt || nt.startsWith(qt)))
+    queryTokens.every((qt) => nameTokens.some((nt) => nt === qt || (qt.length >= 2 && nt.startsWith(qt))))
   ) {
     return { matched: true, rank: "token", score: 70 };
   }
-  if (normName.includes(normQuery)) {
+  if (normQuery.length >= 3 && normName.includes(normQuery)) {
     return { matched: true, rank: "substring", score: 50 };
   }
   return { matched: false, score: 0 };
@@ -103,6 +158,14 @@ function lastCalendarDayOfMonth(period: string): string {
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function approxJsonBytes(value: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(value ?? {}), "utf8");
+  } catch {
+    return 0;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -281,6 +344,13 @@ const singlePeriodSummarySchema = z.object({
     expensesTotal: z.number().int().nonnegative(),
     expensesComplete: z.boolean(),
     isComplete: z.boolean(),
+    telemetry: z.object({
+      invoicePagesFetched: z.number().int().nonnegative(),
+      expensePagesFetched: z.number().int().nonnegative(),
+      totalApiRequests: z.number().int().nonnegative(),
+      recordsInspected: z.number().int().nonnegative(),
+      approximatePayloadBytes: z.number().int().nonnegative(),
+    }),
   }),
   draftInvoices: z.object({
     note: z.string(),
@@ -320,15 +390,16 @@ const singlePeriodSummarySchema = z.object({
 
 const periodComparisonDeltaByCurrencySchema = z.object({
   currency: z.string(),
-  primaryIssuedRevenue: z.number(),
-  comparisonIssuedRevenue: z.number(),
-  issuedRevenueDelta: z.number(),
-  primaryPaidRevenue: z.number(),
-  comparisonPaidRevenue: z.number(),
-  paidRevenueDelta: z.number(),
-  primaryExpenses: z.number(),
-  comparisonExpenses: z.number(),
-  expensesDelta: z.number(),
+  primaryIssuedRevenue: z.number().nullable(),
+  comparisonIssuedRevenue: z.number().nullable(),
+  issuedRevenueDelta: z.number().nullable(),
+  primaryPaidRevenue: z.number().nullable(),
+  comparisonPaidRevenue: z.number().nullable(),
+  paidRevenueDelta: z.number().nullable(),
+  primaryExpenses: z.number().nullable(),
+  comparisonExpenses: z.number().nullable(),
+  expensesDelta: z.number().nullable(),
+  completeAndDeterminable: z.boolean(),
 });
 
 export const businessPeriodSummaryOutputSchema = z.object({
@@ -346,6 +417,36 @@ export const businessPeriodSummaryOutputSchema = z.object({
     notes: z.array(z.string()).max(10),
   }).optional(),
 }).describe("Operational period summary and month-over-month comparison without regulated tax filing fields");
+
+const searchTelemetrySchema = z.object({
+  directoryPagesFetched: z.number().int().nonnegative().describe("Number of paginated directory requests issued"),
+  contextRequestsMade: z.number().int().nonnegative().describe("Follow-up requests issued for matched record context"),
+  totalApiRequests: z.number().int().nonnegative().describe("Total upstream API requests issued by this tool call"),
+  recordsInspected: z.number().int().nonnegative().describe("Directory records inspected across fetched pages"),
+  approximatePayloadBytes: z.number().int().nonnegative().describe("Approximate UTF-8 JSON bytes received across upstream calls"),
+  serverProjectionFields: z.string().describe("Server-side fields projection passed to strip taxId/address/searchTokens before serialization"),
+});
+
+const searchCoverageSchema = z.object({
+  inspected: z.number().int().nonnegative().describe("Records inspected in this call"),
+  total: z.number().int().nonnegative().describe("Total records reported by the workspace directory"),
+  uninspectedCount: z.number().int().nonnegative().describe("Directory records not inspected in this call"),
+  complete: z.boolean().describe("True only when all directory records from offset 0 through total were inspected in this call"),
+  nextCursor: z.string().nullable().describe("Continuation token to pass as 'after' to scan the next forward page window, or null when forward scan reached the end"),
+  telemetry: searchTelemetrySchema,
+});
+
+export const searchMatchStatusSchema = z.enum([
+  "exact",
+  "unambiguous",
+  "ambiguous",
+  "none",
+  "partial_scan_single_match",
+  "partial_scan_no_match",
+]).describe(
+  "Match certainty status. 'exact', 'unambiguous', and 'none' require coverage.complete===true. " +
+  "When coverage.complete===false, a single match is reported as 'partial_scan_single_match' and 0 matches as 'partial_scan_no_match' because uninspected pages may contain additional matches.",
+);
 
 const matchedClientInvoicePreviewSchema = z.object({
   id: z.string(),
@@ -378,15 +479,11 @@ const matchedClientItemSchema = z.object({
 export const searchClientsOutputSchema = z.object({
   query: z.string(),
   searchedFields: z.array(z.literal("name")).max(1),
-  matchStatus: z.enum(["exact", "unambiguous", "ambiguous", "none"]),
+  matchStatus: searchMatchStatusSchema,
   disambiguationNote: z.string(),
-  coverage: z.object({
-    inspected: z.number().int().nonnegative(),
-    total: z.number().int().nonnegative(),
-    complete: z.boolean(),
-  }),
+  coverage: searchCoverageSchema,
   matches: z.array(matchedClientItemSchema).max(20),
-}).describe("Commercial-name client search with ambiguity detection and optional meeting-prep context");
+}).describe("Commercial-name client search with multi-page coverage truth, ambiguity detection, and meeting-prep context");
 
 const matchedVendorExpensePreviewSchema = z.object({
   id: z.string(),
@@ -409,38 +506,11 @@ const matchedVendorItemSchema = z.object({
 export const searchVendorsOutputSchema = z.object({
   query: z.string(),
   searchedFields: z.array(z.literal("name")).max(1),
-  matchStatus: z.enum(["exact", "unambiguous", "ambiguous", "none"]),
+  matchStatus: searchMatchStatusSchema,
   disambiguationNote: z.string(),
-  coverage: z.object({
-    inspected: z.number().int().nonnegative(),
-    total: z.number().int().nonnegative(),
-    complete: z.boolean(),
-  }),
+  coverage: searchCoverageSchema,
   matches: z.array(matchedVendorItemSchema).max(20),
-}).describe("Commercial-name vendor search with ambiguity detection and recent expense context");
-
-export const updateDraftInvoiceOutputSchema = z.object({
-  id: z.string(),
-  invoiceNumber: z.string(),
-  status: z.literal("draft"),
-  clientName: z.string(),
-  issueDate: z.string(),
-  dueDate: z.string().optional(),
-  currency: z.string().optional(),
-  taxRate: z.number().optional(),
-  discountRate: z.number().optional(),
-  notes: z.string().optional(),
-  items: z.array(
-    z.object({
-      description: z.string(),
-      quantity: z.number(),
-      unitPrice: z.number(),
-      taxRate: z.number().optional(),
-      discount: z.number().optional(),
-    }),
-  ).max(100),
-  externalEffects: z.array(z.string()),
-}).describe("Updated draft invoice after atomic draft-state verification");
+}).describe("Commercial-name vendor search with multi-page coverage truth, ambiguity detection, and recent expense context");
 
 /* ------------------------------------------------------------------ */
 /*  Helper: Aggregate a list of documents into ProvenancedAmount       */
@@ -540,50 +610,106 @@ async function computeSinglePeriodSummary(
   const to = lastCalendarDayOfMonth(period);
   const pageSize = 100;
 
-  const invoices: Array<Record<string, unknown>> = [];
+  let invoicePagesFetched = 0;
+  let expensePagesFetched = 0;
+  let approximatePayloadBytes = 0;
+
+  const rawInvoices: Array<Record<string, unknown>> = [];
+  const seenInvoiceIds = new Set<string>();
   let invoicesTotal = 0;
   let invoicesComplete = true;
+  let invAfter: string | undefined;
   for (let page = 0; page < maxPages; page++) {
-    const res = await client.listInvoices({ from, to, limit: pageSize, offset: page * pageSize });
+    const res = await client.listInvoices({
+      from,
+      to,
+      limit: pageSize,
+      ...(invAfter ? { after: invAfter } : { offset: page * pageSize }),
+    });
+    invoicePagesFetched++;
+    approximatePayloadBytes += approxJsonBytes(res);
     const rows = Array.isArray(res?.data) ? res.data : [];
     if (page === 0) {
       invoicesTotal = typeof res?.total === "number" ? res.total : rows.length;
     }
-    invoices.push(...rows);
-    const hasMore = Boolean(res?.nextCursor) || invoices.length < invoicesTotal;
-    if (!hasMore || rows.length < pageSize) break;
-    if (page === maxPages - 1 && invoices.length < invoicesTotal) {
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const rec = row as Record<string, unknown>;
+      const id = typeof rec.id === "string" ? rec.id : "";
+      if (id && seenInvoiceIds.has(id)) continue;
+      if (id) seenInvoiceIds.add(id);
+      rawInvoices.push(rec);
+    }
+    const nextCursor = typeof res?.nextCursor === "string" && res.nextCursor ? res.nextCursor : undefined;
+    const hasMore = Boolean(nextCursor) || rawInvoices.length < invoicesTotal;
+    if (!hasMore || rows.length === 0 || (rows.length < pageSize && !nextCursor)) break;
+    invAfter = nextCursor;
+    if (page === maxPages - 1 && (Boolean(nextCursor) || rawInvoices.length < invoicesTotal)) {
       invoicesComplete = false;
     }
   }
-  if (invoices.length < invoicesTotal) invoicesComplete = false;
+  if (rawInvoices.length < invoicesTotal) invoicesComplete = false;
 
-  const expenses: Array<Record<string, unknown>> = [];
+  const rawExpenses: Array<Record<string, unknown>> = [];
+  const seenExpenseIds = new Set<string>();
   let expensesTotal = 0;
   let expensesComplete = true;
+  let expAfter: string | undefined;
   for (let page = 0; page < maxPages; page++) {
-    const res = await client.listExpenses({ from, to, limit: pageSize, offset: page * pageSize });
+    const res = await client.listExpenses({
+      from,
+      to,
+      limit: pageSize,
+      ...(expAfter ? { after: expAfter } : { offset: page * pageSize }),
+    });
+    expensePagesFetched++;
+    approximatePayloadBytes += approxJsonBytes(res);
     const rows = Array.isArray(res?.data) ? res.data : [];
     if (page === 0) {
       expensesTotal = typeof res?.total === "number" ? res.total : rows.length;
     }
-    expenses.push(...rows);
-    const hasMore = Boolean(res?.nextCursor) || expenses.length < expensesTotal;
-    if (!hasMore || rows.length < pageSize) break;
-    if (page === maxPages - 1 && expenses.length < expensesTotal) {
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const rec = row as Record<string, unknown>;
+      const id = typeof rec.id === "string" ? rec.id : "";
+      if (id && seenExpenseIds.has(id)) continue;
+      if (id) seenExpenseIds.add(id);
+      rawExpenses.push(rec);
+    }
+    const nextCursor = typeof res?.nextCursor === "string" && res.nextCursor ? res.nextCursor : undefined;
+    const hasMore = Boolean(nextCursor) || rawExpenses.length < expensesTotal;
+    if (!hasMore || rows.length === 0 || (rows.length < pageSize && !nextCursor)) break;
+    expAfter = nextCursor;
+    if (page === maxPages - 1 && (Boolean(nextCursor) || rawExpenses.length < expensesTotal)) {
       expensesComplete = false;
     }
   }
-  if (expenses.length < expensesTotal) expensesComplete = false;
+  if (rawExpenses.length < expensesTotal) expensesComplete = false;
 
-  const draftInvoices = invoices.filter((inv) => (inv.status ?? "draft") === "draft");
-  const issuedInvoices = invoices.filter((inv) => {
-    const st = String(inv.status ?? "draft");
-    return st !== "draft" && st !== "cancelled" && st !== "void";
+  const isDateWithinPeriod = (rawDate: unknown): boolean => {
+    if (typeof rawDate !== "string" || !rawDate.trim()) return true;
+    const d = rawDate.trim().slice(0, 10);
+    return d >= from && d <= to;
+  };
+
+  const getNormStatus = (doc: Record<string, unknown>, fallback = "draft"): string =>
+    typeof doc.status === "string" && doc.status.trim() ? doc.status.trim().toLowerCase() : fallback;
+
+  const invoices = rawInvoices.filter((inv) => isDateWithinPeriod(inv.issueDate));
+  const expenses = rawExpenses.filter((exp) => {
+    const st = getNormStatus(exp, "recorded");
+    if (st === "cancelled" || st === "canceled" || st === "void") return false;
+    return isDateWithinPeriod(exp.date);
   });
-  const paidInvoices = issuedInvoices.filter((inv) => inv.status === "paid");
-  const unpaidInvoices = issuedInvoices.filter((inv) => inv.status !== "paid");
-  const overdueInvoices = unpaidInvoices.filter((inv) => inv.status === "overdue");
+
+  const draftInvoices = invoices.filter((inv) => getNormStatus(inv) === "draft");
+  const issuedInvoices = invoices.filter((inv) => {
+    const st = getNormStatus(inv);
+    return st !== "draft" && st !== "cancelled" && st !== "canceled" && st !== "void";
+  });
+  const paidInvoices = issuedInvoices.filter((inv) => getNormStatus(inv) === "paid");
+  const unpaidInvoices = issuedInvoices.filter((inv) => getNormStatus(inv) !== "paid");
+  const overdueInvoices = unpaidInvoices.filter((inv) => getNormStatus(inv) === "overdue");
 
   const deductibleExpenses = expenses.filter((exp) => exp.taxDeductible !== false);
   const nonDeductibleExpenses = expenses.filter((exp) => exp.taxDeductible === false);
@@ -640,13 +766,20 @@ async function computeSinglePeriodSummary(
   return {
     period,
     coverage: {
-      invoicesInspected: invoices.length,
+      invoicesInspected: rawInvoices.length,
       invoicesTotal,
       invoicesComplete,
-      expensesInspected: expenses.length,
+      expensesInspected: rawExpenses.length,
       expensesTotal,
       expensesComplete,
       isComplete,
+      telemetry: {
+        invoicePagesFetched,
+        expensePagesFetched,
+        totalApiRequests: invoicePagesFetched + expensePagesFetched,
+        recordsInspected: rawInvoices.length + rawExpenses.length,
+        approximatePayloadBytes,
+      },
     },
     draftInvoices: {
       note: "Draft invoices are non-issued working documents and are excluded from issued revenue.",
@@ -688,6 +821,10 @@ async function computeSinglePeriodSummary(
 
 const OPENAI_ALLOWED_NEXT_TOOLS = new Set([
   "get_business_context",
+  "get_daily_operational_brief",
+  "get_business_period_summary",
+  "search_clients",
+  "search_vendors",
   "list_invoices",
   "get_invoice",
   "search_invoices",
@@ -727,18 +864,28 @@ function mapRecommendedToolToOpenAISurface(toolName: string, category: string): 
   if (category === "overdue_invoice" || category === "draft_invoice") return "get_invoice";
   if (category === "draft_or_expiring_quote") return "get_quote";
   if (category === "expense_review") return "get_expense";
-  if (category === "client_followup") return "get_client";
+  if (category === "client_followup") return "search_clients";
   return "get_business_context";
 }
 
-export interface RegisterOpenAI103Options {
-  includeDraftInvoiceEdit?: boolean;
+function resolveMatchStatusWithCoverageTruth(
+  matchCount: number,
+  exactCount: number,
+  complete: boolean,
+): z.infer<typeof searchMatchStatusSchema> {
+  if (matchCount >= 2) {
+    return "ambiguous";
+  }
+  if (matchCount === 1) {
+    if (!complete) return "partial_scan_single_match";
+    return exactCount === 1 ? "exact" : "unambiguous";
+  }
+  return complete ? "none" : "partial_scan_no_match";
 }
 
 export function registerOpenAI103CandidateTools(
   server: McpServer,
   client: IFrihetClient,
-  options: RegisterOpenAI103Options = {},
 ): void {
   /* ---------------------------------------------------------------- */
   /*  1. get_daily_operational_brief                                  */
@@ -896,9 +1043,9 @@ export function registerOpenAI103CandidateTools(
       description:
         "Get an operational summary of issued invoices, draft invoices, and recorded expenses for a calendar month (YYYY-MM), " +
         "with optional side-by-side comparison against another month. Aggregates strictly by currency without cross-currency " +
-        "conversion, separates drafts from issued revenue, and excludes regulated tax-return calculations. " +
+        "conversion, separates drafts from issued revenue and collected cash, reports coverage telemetry, and excludes regulated tax-return calculations. " +
         "/ Obtiene el resumen operativo de un mes (YYYY-MM) y permite compararlo con otro mes por moneda, " +
-        "separando borradores de facturacion emitida y sin incluir calculos de declaraciones fiscales.",
+        "separando borradores de facturacion emitida y cobrada, con telemetria de cobertura y sin calculos de declaraciones fiscales.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         period: z
@@ -929,47 +1076,82 @@ export function registerOpenAI103CandidateTools(
         let comparison: z.infer<typeof businessPeriodSummaryOutputSchema>["comparison"];
 
         if (compareWithPeriod) {
-          comparisonPeriod = await computeSinglePeriodSummary(client, compareWithPeriod, defaultCurrency);
+          comparisonPeriod =
+            compareWithPeriod === period
+              ? primaryPeriod
+              : await computeSinglePeriodSummary(client, compareWithPeriod, defaultCurrency);
+
+          const pIssuedUnavail = primaryPeriod.issuedInvoices.issuedTotal.unavailableCount > 0;
+          const cIssuedUnavail = comparisonPeriod.issuedInvoices.issuedTotal.unavailableCount > 0;
+          const pPaidUnavail = primaryPeriod.issuedInvoices.paidTotal.unavailableCount > 0;
+          const cPaidUnavail = comparisonPeriod.issuedInvoices.paidTotal.unavailableCount > 0;
+          const pExpUnavail = primaryPeriod.expenses.total.unavailableCount > 0;
+          const cExpUnavail = comparisonPeriod.expenses.total.unavailableCount > 0;
+
           const currencies = new Set<string>([
             ...primaryPeriod.issuedInvoices.issuedTotal.totalsByCurrency.map((b) => b.currency),
             ...comparisonPeriod.issuedInvoices.issuedTotal.totalsByCurrency.map((b) => b.currency),
+            ...primaryPeriod.issuedInvoices.paidTotal.totalsByCurrency.map((b) => b.currency),
+            ...comparisonPeriod.issuedInvoices.paidTotal.totalsByCurrency.map((b) => b.currency),
             ...primaryPeriod.expenses.total.totalsByCurrency.map((b) => b.currency),
             ...comparisonPeriod.expenses.total.totalsByCurrency.map((b) => b.currency),
           ]);
+          if (currencies.size === 0) {
+            currencies.add(defaultCurrency);
+          }
+
+          const bothComplete = primaryPeriod.coverage.isComplete && comparisonPeriod.coverage.isComplete;
+          const anyUnavailable =
+            pIssuedUnavail || cIssuedUnavail || pPaidUnavail || cPaidUnavail || pExpUnavail || cExpUnavail;
 
           const deltasByCurrency = [...currencies].sort().map((currency) => {
-            const pIssued =
+            const pIssuedRaw =
               primaryPeriod.issuedInvoices.issuedTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
-            const cIssued =
+            const cIssuedRaw =
               comparisonPeriod!.issuedInvoices.issuedTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
-            const pPaid =
+            const pPaidRaw =
               primaryPeriod.issuedInvoices.paidTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
-            const cPaid =
+            const cPaidRaw =
               comparisonPeriod!.issuedInvoices.paidTotal.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
-            const pExp =
+            const pExpRaw =
               primaryPeriod.expenses.total.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
-            const cExp =
+            const cExpRaw =
               comparisonPeriod!.expenses.total.totalsByCurrency.find((b) => b.currency === currency)?.amount ?? 0;
+
+            const pIssued = pIssuedUnavail ? null : pIssuedRaw;
+            const cIssued = cIssuedUnavail ? null : cIssuedRaw;
+            const pPaid = pPaidUnavail ? null : pPaidRaw;
+            const cPaid = cPaidUnavail ? null : cPaidRaw;
+            const pExp = pExpUnavail ? null : pExpRaw;
+            const cExp = cExpUnavail ? null : cExpRaw;
 
             return {
               currency,
               primaryIssuedRevenue: pIssued,
               comparisonIssuedRevenue: cIssued,
-              issuedRevenueDelta: roundCurrency(pIssued - cIssued),
+              issuedRevenueDelta: pIssued !== null && cIssued !== null ? roundCurrency(pIssued - cIssued) : null,
               primaryPaidRevenue: pPaid,
               comparisonPaidRevenue: cPaid,
-              paidRevenueDelta: roundCurrency(pPaid - cPaid),
+              paidRevenueDelta: pPaid !== null && cPaid !== null ? roundCurrency(pPaid - cPaid) : null,
               primaryExpenses: pExp,
               comparisonExpenses: cExp,
-              expensesDelta: roundCurrency(pExp - cExp),
+              expensesDelta: pExp !== null && cExp !== null ? roundCurrency(pExp - cExp) : null,
+              completeAndDeterminable: bothComplete && !anyUnavailable,
             };
           });
 
-          const bothComplete = primaryPeriod.coverage.isComplete && comparisonPeriod.coverage.isComplete;
           const notes: string[] = [];
+          if (compareWithPeriod === period) {
+            notes.push("Primary and comparison periods are identical; all deltas are zero.");
+          }
           if (!bothComplete) {
             notes.push(
               "One or both periods exceeded the bounded inspection cap; deltas reflect only the inspected sample.",
+            );
+          }
+          if (anyUnavailable) {
+            notes.push(
+              "One or more documents have missing or corrupt amounts; affected revenue or expense deltas are null instead of coercing missing amounts to 0.",
             );
           }
           if (currencies.size > 1) {
@@ -1016,10 +1198,13 @@ export function registerOpenAI103CandidateTools(
     {
       title: "Search Clients by Name",
       description:
-        "Search clients by commercial name only, detect ambiguous matches, and optionally retrieve meeting-prep context " +
-        "(recent invoices and recent CRM activities). Does not query or expose government tax identifiers or street addresses. " +
-        "/ Busca clientes exclusivamente por nombre comercial, detecta coincidencias ambiguas y recupera contexto " +
-        "de facturas y actividades recientes sin consultar ni exponer identificadores fiscales ni direcciones.",
+        "Search clients by commercial name only across paginated directory windows, report exact coverage and uninspected " +
+        "record counts, distinguish complete single matches from partial-scan single matches or ambiguous matches, and optionally " +
+        "retrieve meeting-prep context (recent invoices and CRM activities). Uses server-side field projection so government tax " +
+        "identifiers and street addresses are never queried or serialized. " +
+        "/ Busca clientes exclusivamente por nombre comercial en paginas sucesivas del directorio, informa la cobertura exacta " +
+        "y registros no inspeccionados, distingue coincidencias unicas completas de muestras parciales o ambiguas, y recupera " +
+        "contexto para reuniones sin consultar ni exponer identificadores fiscales ni direcciones.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         query: z
@@ -1045,10 +1230,24 @@ export function registerOpenAI103CandidateTools(
           .max(20)
           .optional()
           .describe("Maximum matches to return (1-20, default 10) / Maximo de coincidencias"),
+        maxPages: z
+          .number()
+          .int()
+          .min(1)
+          .max(5)
+          .optional()
+          .describe("Maximum directory pages (100 records/page) to scan in this call (1-5, default 3 = 300 records) / Paginas maximas a escanear (1-5, por defecto 3)"),
+        after: z
+          .string()
+          .trim()
+          .min(1)
+          .max(256)
+          .optional()
+          .describe("Optional continuation token from a previous coverage.nextCursor to scan subsequent directory pages / Cursor de continuacion coverage.nextCursor"),
       },
       outputSchema: searchClientsOutputSchema,
     },
-    async ({ query, stage, includeContext, limit }) =>
+    async ({ query, stage, includeContext, limit, maxPages, after: initialAfter }) =>
       withToolLogging("search_clients", async () => {
         const cleanQuery = query.trim();
         if (isLikelyGovernmentIdQuery(cleanQuery)) {
@@ -1064,61 +1263,149 @@ export function registerOpenAI103CandidateTools(
 
         const maxMatches = Math.min(limit ?? 10, 20);
         const pageSize = 100;
-        const maxPages = 5;
-        let after: string | undefined;
+        const pagesToScan = Math.min(Math.max(maxPages ?? 3, 1), 5);
+
+        let currentCursor: string | undefined;
+        let startOffset = 0;
+        if (typeof initialAfter === "string" && initialAfter.trim()) {
+          const trimmedAfter = initialAfter.trim();
+          const offsetMatch = /^offset:(\d+)$/.exec(trimmedAfter);
+          if (offsetMatch) {
+            startOffset = Number(offsetMatch[1]);
+          } else {
+            currentCursor = trimmedAfter;
+            const trailingDigits = /(?:^|[_:])(\d+)$/.exec(trimmedAfter);
+            if (trailingDigits) {
+              startOffset = Number(trailingDigits[1]);
+            }
+          }
+        }
+
+        let currentOffset = startOffset;
         let inspected = 0;
         let total = 0;
-        let complete = true;
+        let reachedEndOfDirectory = false;
+        let lastNextCursor: string | null = null;
+        let directoryPagesFetched = 0;
+        let contextRequestsMade = 0;
+        let approximatePayloadBytes = 0;
+
         const scored: Array<{
           record: Record<string, unknown>;
           rank: NameMatchRank;
           score: number;
         }> = [];
+        const seenIds = new Set<string>();
 
-        // Do NOT pass `q` to `client.listClients` because backend `q` searches `taxId`.
-        // Instead, scan pages and match exclusively on `record.name`.
-        for (let page = 0; page < maxPages; page++) {
-          const res = await client.listClients({ limit: pageSize, after, stage });
+        // Do NOT pass `q` to `client.listClients` because backend `q` searches `taxId` / `searchTokens`.
+        // Pass `fields: CLIENT_SEARCH_SERVER_PROJECTION` so the backend projects only id,name,stage,email,phone
+        // before serializing the response over HTTP.
+        for (let page = 0; page < pagesToScan; page++) {
+          const reqParams: {
+            limit: number;
+            fields: string;
+            stage?: string;
+            after?: string;
+            offset?: number;
+          } = {
+            limit: pageSize,
+            fields: CLIENT_SEARCH_SERVER_PROJECTION,
+            ...(stage ? { stage } : {}),
+          };
+          if (currentCursor !== undefined) {
+            reqParams.after = currentCursor;
+          } else if (currentOffset > 0) {
+            reqParams.offset = currentOffset;
+          }
+
+          const res = await client.listClients(reqParams);
+          directoryPagesFetched++;
+          approximatePayloadBytes += approxJsonBytes(res);
+
           const rows = Array.isArray(res?.data) ? res.data : [];
           if (page === 0) {
-            total = typeof res?.total === "number" ? res.total : rows.length;
+            if (typeof res?.offset === "number") {
+              startOffset = res.offset;
+            }
+            total = typeof res?.total === "number" ? res.total : startOffset + rows.length;
           }
           inspected += rows.length;
+
           for (const row of rows) {
             if (!row || typeof row !== "object") continue;
-            const m = matchCommercialName((row as Record<string, unknown>).name, cleanQuery);
+            const rec = row as Record<string, unknown>;
+            const recId = typeof rec.id === "string" ? rec.id : "";
+            if (recId && seenIds.has(recId)) continue;
+            if (recId) seenIds.add(recId);
+            const m = matchCommercialName(rec.name, cleanQuery);
             if (m.matched && m.rank) {
-              scored.push({ record: row as Record<string, unknown>, rank: m.rank, score: m.score });
+              scored.push({ record: rec, rank: m.rank, score: m.score });
             }
           }
-          const nextCursor = typeof res?.nextCursor === "string" && res.nextCursor ? res.nextCursor : undefined;
-          const hasMore = Boolean(nextCursor);
-          if (!hasMore || rows.length < pageSize) break;
-          after = nextCursor;
-          if (page === maxPages - 1 && inspected < total) {
-            complete = false;
+
+          const nextCursorFromRes = typeof res?.nextCursor === "string" && res.nextCursor ? res.nextCursor : undefined;
+          const cumulativePosition = startOffset + inspected;
+          const moreByTotal = total > cumulativePosition;
+          const hasMore = Boolean(nextCursorFromRes) || (rows.length >= pageSize && moreByTotal);
+
+          if (!hasMore || rows.length === 0) {
+            reachedEndOfDirectory = !nextCursorFromRes && cumulativePosition >= total;
+            lastNextCursor = nextCursorFromRes ?? (reachedEndOfDirectory ? null : `offset:${cumulativePosition}`);
+            break;
+          }
+
+          if (nextCursorFromRes) {
+            currentCursor = nextCursorFromRes;
+            lastNextCursor = nextCursorFromRes;
+          } else {
+            currentCursor = undefined;
+            currentOffset = cumulativePosition;
+            lastNextCursor = `offset:${cumulativePosition}`;
           }
         }
-        if (inspected < total) complete = false;
+
+        // Epistemic truth: `complete` is true ONLY when this call inspected the entire directory
+        // (startOffset === 0, inspected >= total, and no forward cursor remains).
+        // When continuing from `after` (startOffset > 0), reaching the end of the directory means
+        // `nextCursor` is null (no forward pages remain), while `uninspectedCount` reflects the
+        // `total - inspected` records not inspected in this stateless call.
+        const complete = startOffset === 0 && reachedEndOfDirectory && inspected >= total && lastNextCursor === null;
+        const uninspectedCount = complete ? 0 : Math.max(1, total - inspected);
+        const nextCursor = reachedEndOfDirectory ? null : lastNextCursor;
 
         scored.sort((a, b) => b.score - a.score || String(a.record.name ?? "").localeCompare(String(b.record.name ?? "")));
-        const top = scored.slice(0, maxMatches);
-        const exactCount = top.filter((x) => x.rank === "exact").length;
-        const matchStatus: "exact" | "unambiguous" | "ambiguous" | "none" =
-          top.length === 0
-            ? "none"
-            : exactCount === 1 && top.length === 1
-              ? "exact"
-              : top.length === 1
-                ? "unambiguous"
-                : "ambiguous";
+        // F-02: When ambiguous (scored.length >= 2), always surface at least 2 candidates so
+        // callers never receive matchStatus="ambiguous" with only 1 candidate in `matches`.
+        const effectiveLimit = scored.length >= 2 ? Math.min(20, Math.max(maxMatches, 2)) : maxMatches;
+        const top = scored.slice(0, effectiveLimit);
+        const exactCount = scored.filter((x) => x.rank === "exact").length;
+        const matchStatus = resolveMatchStatusWithCoverageTruth(scored.length, exactCount, complete);
 
         const shouldFetchContext = (includeContext ?? true) && top.length >= 1 && top.length <= 3;
+
+        let defaultCurrency: string | undefined;
+        const getWorkspaceDefaultCurrency = async (): Promise<string> => {
+          if (defaultCurrency) return defaultCurrency;
+          defaultCurrency = "EUR";
+          try {
+            const ctx = await client.getBusinessContext();
+            contextRequestsMade++;
+            approximatePayloadBytes += approxJsonBytes(ctx);
+            const cur = (ctx?.defaults as Record<string, unknown> | undefined)?.currency;
+            if (typeof cur === "string" && cur.trim()) {
+              defaultCurrency = cur.trim().toUpperCase();
+            }
+          } catch {
+            // Keep EUR fallback if context call fails
+          }
+          return defaultCurrency;
+        };
 
         const matches: Array<z.infer<typeof matchedClientItemSchema>> = [];
         for (const item of top) {
           const id = String(item.record.id ?? "");
           const name = String(item.record.name ?? "");
+          const normTargetName = normalizeSearchText(name);
           const entry: z.infer<typeof matchedClientItemSchema> = {
             id,
             name,
@@ -1133,17 +1420,38 @@ export function registerOpenAI103CandidateTools(
               client.searchInvoices(name, { limit: 5 }).catch(() => ({ data: [] })),
               client.listClientActivities(id, { limit: 5 }).catch(() => ({ data: [] })),
             ]);
-            const invRows = Array.isArray(invRes?.data) ? invRes.data : [];
+            contextRequestsMade += 2;
+            approximatePayloadBytes += approxJsonBytes(invRes) + approxJsonBytes(actRes);
+
+            const rawInvRows = Array.isArray(invRes?.data) ? invRes.data : [];
+            // F-05: Strict entity isolation: if inv.clientId is present, require exact ID equality
+            // (never fall through to prefix matching!). If absent, require exact normalized name equality.
+            const invRows = rawInvRows.filter((inv) => {
+              if (typeof inv.clientId === "string" && inv.clientId.trim()) {
+                return inv.clientId.trim() === id;
+              }
+              return typeof inv.clientName === "string" && normalizeSearchText(inv.clientName) === normTargetName;
+            });
             const actRows = Array.isArray(actRes?.data) ? actRes.data : [];
+
+            const needsFallbackCurrency = invRows.slice(0, 5).some(
+              (inv) => typeof inv.currency !== "string" || !inv.currency.trim(),
+            );
+            const fallbackCur = needsFallbackCurrency ? await getWorkspaceDefaultCurrency() : "EUR";
 
             entry.context = {
               recentInvoices: invRows.slice(0, 5).map((inv) => ({
                 id: String(inv.id ?? ""),
-                invoiceNumber: typeof inv.documentNumber === "string" ? inv.documentNumber : null,
+                invoiceNumber:
+                  typeof inv.documentNumber === "string"
+                    ? inv.documentNumber
+                    : typeof inv.invoiceNumber === "string"
+                      ? inv.invoiceNumber
+                      : null,
                 status: typeof inv.status === "string" ? inv.status : "draft",
                 issueDate: typeof inv.issueDate === "string" ? inv.issueDate : null,
                 dueDate: typeof inv.dueDate === "string" ? inv.dueDate : null,
-                amount: serializeProvenancedAmount(resolveDocumentAmount(inv, "EUR")),
+                amount: serializeProvenancedAmount(resolveDocumentAmount(inv, fallbackCur)),
               })),
               recentActivities: actRows.slice(0, 5).map((act) => ({
                 type: typeof act.type === "string" ? act.type : "note",
@@ -1158,10 +1466,14 @@ export function registerOpenAI103CandidateTools(
 
         const disambiguationNote =
           matchStatus === "none"
-            ? "No clients matched the commercial name query in the inspected directory window."
-            : matchStatus === "ambiguous"
-              ? `Found ${scored.length} clients matching '${cleanQuery}'. Ask the user to confirm which client ID/name they mean before mutating records.`
-              : `Resolved a single client match ('${matches[0].name}', id=${matches[0].id}).`;
+            ? `No clients matched '${cleanQuery}' across the complete workspace directory (${inspected}/${total} records inspected).`
+            : matchStatus === "partial_scan_no_match"
+              ? `No clients matched '${cleanQuery}' in the inspected directory window (${inspected} of ${total} records inspected; ${uninspectedCount} records remain uninspected). ${nextCursor ? `Continue scanning with after='${nextCursor}' or increase maxPages` : "Scan from offset 0 with higher maxPages"} before concluding the client does not exist.`
+              : matchStatus === "partial_scan_single_match"
+                ? `Found 1 matching client ('${matches[0].name}', id=${matches[0].id}) in the inspected window (${inspected} of ${total} records), but ${uninspectedCount} directory records were not inspected in this call. Do not assume this is the only match in the workspace; confirm with the user${nextCursor ? ` or continue scanning with after='${nextCursor}'` : ""} before mutating records.`
+                : matchStatus === "ambiguous"
+                  ? `Found ${scored.length} clients matching '${cleanQuery}'${complete ? "" : ` across ${inspected}/${total} inspected records (${uninspectedCount} uninspected)`} (showing ${matches.length} of ${scored.length} matches). Present all candidate IDs/names and ask the user which client they mean before mutating records.`
+                  : `Resolved a unique client match ('${matches[0].name}', id=${matches[0].id}) across the complete directory (${inspected}/${total} records inspected).`;
 
         const output: z.infer<typeof searchClientsOutputSchema> = {
           query: cleanQuery,
@@ -1171,7 +1483,17 @@ export function registerOpenAI103CandidateTools(
           coverage: {
             inspected,
             total,
+            uninspectedCount,
             complete,
+            nextCursor,
+            telemetry: {
+              directoryPagesFetched,
+              contextRequestsMade,
+              totalApiRequests: directoryPagesFetched + contextRequestsMade,
+              recordsInspected: inspected,
+              approximatePayloadBytes,
+              serverProjectionFields: CLIENT_SEARCH_SERVER_PROJECTION,
+            },
           },
           matches,
         };
@@ -1191,10 +1513,13 @@ export function registerOpenAI103CandidateTools(
     {
       title: "Search Vendors by Name",
       description:
-        "Search vendors/suppliers by commercial name only, detect ambiguous matches, and optionally include recent expenses " +
-        "recorded for matched suppliers. Does not query or expose government tax identifiers or street addresses. " +
-        "/ Busca proveedores exclusivamente por nombre comercial, detecta coincidencias ambiguas y muestra gastos recientes " +
-        "asociados sin consultar ni exponer identificadores fiscales ni direcciones.",
+        "Search vendors/suppliers by commercial name only across paginated directory windows, report exact coverage and " +
+        "uninspected record counts, distinguish complete single matches from partial-scan single matches or ambiguous matches, " +
+        "and optionally include recent expenses recorded for matched suppliers. Uses server-side field projection so government " +
+        "tax identifiers and street addresses are never queried or serialized. " +
+        "/ Busca proveedores exclusivamente por nombre comercial en paginas sucesivas del directorio, informa la cobertura exacta " +
+        "y registros no inspeccionados, distingue coincidencias unicas completas de muestras parciales o ambiguas, y muestra gastos " +
+        "recientes sin consultar ni exponer identificadores fiscales ni direcciones.",
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: {
         query: z
@@ -1216,10 +1541,24 @@ export function registerOpenAI103CandidateTools(
           .max(20)
           .optional()
           .describe("Maximum matches to return (1-20, default 10) / Maximo de coincidencias"),
+        maxPages: z
+          .number()
+          .int()
+          .min(1)
+          .max(5)
+          .optional()
+          .describe("Maximum directory pages (100 records/page) to scan in this call (1-5, default 3 = 300 records) / Paginas maximas a escanear (1-5, por defecto 3)"),
+        after: z
+          .string()
+          .trim()
+          .min(1)
+          .max(256)
+          .optional()
+          .describe("Optional continuation token from a previous coverage.nextCursor to scan subsequent directory pages / Cursor de continuacion coverage.nextCursor"),
       },
       outputSchema: searchVendorsOutputSchema,
     },
-    async ({ query, includeRecentExpenses, limit }) =>
+    async ({ query, includeRecentExpenses, limit, maxPages, after: initialAfter }) =>
       withToolLogging("search_vendors", async () => {
         const cleanQuery = query.trim();
         if (isLikelyGovernmentIdQuery(cleanQuery)) {
@@ -1235,70 +1574,151 @@ export function registerOpenAI103CandidateTools(
 
         const maxMatches = Math.min(limit ?? 10, 20);
         const pageSize = 100;
-        const maxPages = 5;
-        let after: string | undefined;
+        const pagesToScan = Math.min(Math.max(maxPages ?? 3, 1), 5);
+
+        let currentCursor: string | undefined;
+        let startOffset = 0;
+        if (typeof initialAfter === "string" && initialAfter.trim()) {
+          const trimmedAfter = initialAfter.trim();
+          const offsetMatch = /^offset:(\d+)$/.exec(trimmedAfter);
+          if (offsetMatch) {
+            startOffset = Number(offsetMatch[1]);
+          } else {
+            currentCursor = trimmedAfter;
+            const trailingDigits = /(?:^|[_:])(\d+)$/.exec(trimmedAfter);
+            if (trailingDigits) {
+              startOffset = Number(trailingDigits[1]);
+            }
+          }
+        }
+
+        let currentOffset = startOffset;
         let inspected = 0;
         let total = 0;
-        let complete = true;
+        let reachedEndOfDirectory = false;
+        let lastNextCursor: string | null = null;
+        let directoryPagesFetched = 0;
+        let contextRequestsMade = 0;
+        let approximatePayloadBytes = 0;
+
         const scored: Array<{
           record: Record<string, unknown>;
           rank: NameMatchRank;
           score: number;
         }> = [];
+        const seenIds = new Set<string>();
 
-        // Do NOT pass `q` to `client.listVendors` because backend `q` searches `taxId`.
-        // Scan pages and match exclusively on `record.name`.
-        for (let page = 0; page < maxPages; page++) {
-          const res = await client.listVendors({ limit: pageSize, after });
+        // Do NOT pass `q` to `client.listVendors` because backend `q` searches `taxId` / `searchTokens`.
+        // Pass `fields: VENDOR_SEARCH_SERVER_PROJECTION` so the backend strips taxId/address/iban before serialization.
+        for (let page = 0; page < pagesToScan; page++) {
+          const reqParams: {
+            limit: number;
+            fields: string;
+            after?: string;
+            offset?: number;
+          } = {
+            limit: pageSize,
+            fields: VENDOR_SEARCH_SERVER_PROJECTION,
+          };
+          if (currentCursor !== undefined) {
+            reqParams.after = currentCursor;
+          } else if (currentOffset > 0) {
+            reqParams.offset = currentOffset;
+          }
+
+          const res = await client.listVendors(reqParams);
+          directoryPagesFetched++;
+          approximatePayloadBytes += approxJsonBytes(res);
+
           const rows = Array.isArray(res?.data) ? res.data : [];
           if (page === 0) {
-            total = typeof res?.total === "number" ? res.total : rows.length;
+            if (typeof res?.offset === "number") {
+              startOffset = res.offset;
+            }
+            total = typeof res?.total === "number" ? res.total : startOffset + rows.length;
           }
           inspected += rows.length;
+
           for (const row of rows) {
             if (!row || typeof row !== "object") continue;
-            const m = matchCommercialName((row as Record<string, unknown>).name, cleanQuery);
+            const rec = row as Record<string, unknown>;
+            const recId = typeof rec.id === "string" ? rec.id : "";
+            if (recId && seenIds.has(recId)) continue;
+            if (recId) seenIds.add(recId);
+            const m = matchCommercialName(rec.name, cleanQuery);
             if (m.matched && m.rank) {
-              scored.push({ record: row as Record<string, unknown>, rank: m.rank, score: m.score });
+              scored.push({ record: rec, rank: m.rank, score: m.score });
             }
           }
-          const nextCursor = typeof res?.nextCursor === "string" && res.nextCursor ? res.nextCursor : undefined;
-          const hasMore = Boolean(nextCursor);
-          if (!hasMore || rows.length < pageSize) break;
-          after = nextCursor;
-          if (page === maxPages - 1 && inspected < total) {
-            complete = false;
+
+          const nextCursorFromRes = typeof res?.nextCursor === "string" && res.nextCursor ? res.nextCursor : undefined;
+          const cumulativePosition = startOffset + inspected;
+          const moreByTotal = total > cumulativePosition;
+          const hasMore = Boolean(nextCursorFromRes) || (rows.length >= pageSize && moreByTotal);
+
+          if (!hasMore || rows.length === 0) {
+            reachedEndOfDirectory = !nextCursorFromRes && cumulativePosition >= total;
+            lastNextCursor = nextCursorFromRes ?? (reachedEndOfDirectory ? null : `offset:${cumulativePosition}`);
+            break;
+          }
+
+          if (nextCursorFromRes) {
+            currentCursor = nextCursorFromRes;
+            lastNextCursor = nextCursorFromRes;
+          } else {
+            currentCursor = undefined;
+            currentOffset = cumulativePosition;
+            lastNextCursor = `offset:${cumulativePosition}`;
           }
         }
-        if (inspected < total) complete = false;
+
+        const complete = startOffset === 0 && reachedEndOfDirectory && inspected >= total && lastNextCursor === null;
+        const uninspectedCount = complete ? 0 : Math.max(1, total - inspected);
+        const nextCursor = reachedEndOfDirectory ? null : lastNextCursor;
 
         scored.sort((a, b) => b.score - a.score || String(a.record.name ?? "").localeCompare(String(b.record.name ?? "")));
-        const top = scored.slice(0, maxMatches);
-        const exactCount = top.filter((x) => x.rank === "exact").length;
-        const matchStatus: "exact" | "unambiguous" | "ambiguous" | "none" =
-          top.length === 0
-            ? "none"
-            : exactCount === 1 && top.length === 1
-              ? "exact"
-              : top.length === 1
-                ? "unambiguous"
-                : "ambiguous";
+        const effectiveLimit = scored.length >= 2 ? Math.min(20, Math.max(maxMatches, 2)) : maxMatches;
+        const top = scored.slice(0, effectiveLimit);
+        const exactCount = scored.filter((x) => x.rank === "exact").length;
+        const matchStatus = resolveMatchStatusWithCoverageTruth(scored.length, exactCount, complete);
 
         const shouldFetchExpenses = (includeRecentExpenses ?? true) && top.length >= 1 && top.length <= 3;
         let recentExpensePool: Array<Record<string, unknown>> = [];
+        let fallbackExpenseCurrency = "EUR";
         if (shouldFetchExpenses) {
           const expRes = await client.listExpenses({ limit: 50, offset: 0 }).catch(() => ({ data: [] }));
+          contextRequestsMade++;
+          approximatePayloadBytes += approxJsonBytes(expRes);
           recentExpensePool = Array.isArray(expRes?.data) ? expRes.data : [];
+
+          const anyMissingCur = recentExpensePool.some((exp) => typeof exp.currency !== "string" || !exp.currency.trim());
+          if (anyMissingCur) {
+            try {
+              const ctx = await client.getBusinessContext();
+              contextRequestsMade++;
+              approximatePayloadBytes += approxJsonBytes(ctx);
+              const cur = (ctx?.defaults as Record<string, unknown> | undefined)?.currency;
+              if (typeof cur === "string" && cur.trim()) {
+                fallbackExpenseCurrency = cur.trim().toUpperCase();
+              }
+            } catch {
+              // Keep EUR fallback
+            }
+          }
         }
 
         const matches: Array<z.infer<typeof matchedVendorItemSchema>> = top.map((item) => {
           const id = String(item.record.id ?? "");
           const name = String(item.record.name ?? "");
+          const normTargetVendorName = normalizeSearchText(name);
           const vendorExpenses = shouldFetchExpenses
             ? recentExpensePool
                 .filter((exp) => {
-                  if (typeof exp.vendorId === "string" && exp.vendorId === id) return true;
-                  return matchCommercialName(exp.vendor, name).matched;
+                  // F-05: Strict entity isolation on vendorId vs exact normalized vendor name
+                  if (typeof exp.vendorId === "string" && exp.vendorId.trim()) {
+                    return exp.vendorId.trim() === id;
+                  }
+                  return typeof exp.vendor === "string" && normalizeSearchText(exp.vendor) === normTargetVendorName;
                 })
                 .slice(0, 5)
                 .map((exp) => ({
@@ -1307,7 +1727,7 @@ export function registerOpenAI103CandidateTools(
                   date: typeof exp.date === "string" ? exp.date : null,
                   category: typeof exp.category === "string" ? exp.category : null,
                   taxDeductible: typeof exp.taxDeductible === "boolean" ? exp.taxDeductible : null,
-                  amount: serializeProvenancedAmount(resolveDocumentAmount(exp, "EUR")),
+                  amount: serializeProvenancedAmount(resolveDocumentAmount(exp, fallbackExpenseCurrency)),
                 }))
             : undefined;
 
@@ -1323,10 +1743,14 @@ export function registerOpenAI103CandidateTools(
 
         const disambiguationNote =
           matchStatus === "none"
-            ? "No vendors matched the commercial name query in the inspected directory window."
-            : matchStatus === "ambiguous"
-              ? `Found ${scored.length} vendors matching '${cleanQuery}'. Ask the user to confirm which vendor ID/name they mean before mutating records.`
-              : `Resolved a single vendor match ('${matches[0].name}', id=${matches[0].id}).`;
+            ? `No vendors matched '${cleanQuery}' across the complete workspace directory (${inspected}/${total} records inspected).`
+            : matchStatus === "partial_scan_no_match"
+              ? `No vendors matched '${cleanQuery}' in the inspected directory window (${inspected} of ${total} records inspected; ${uninspectedCount} records remain uninspected). ${nextCursor ? `Continue scanning with after='${nextCursor}' or increase maxPages` : "Scan from offset 0 with higher maxPages"} before concluding the vendor does not exist.`
+              : matchStatus === "partial_scan_single_match"
+                ? `Found 1 matching vendor ('${matches[0].name}', id=${matches[0].id}) in the inspected window (${inspected} of ${total} records), but ${uninspectedCount} directory records were not inspected in this call. Do not assume this is the only match in the workspace; confirm with the user${nextCursor ? ` or continue scanning with after='${nextCursor}'` : ""} before mutating records.`
+                : matchStatus === "ambiguous"
+                  ? `Found ${scored.length} vendors matching '${cleanQuery}'${complete ? "" : ` across ${inspected}/${total} inspected records (${uninspectedCount} uninspected)`} (showing ${matches.length} of ${scored.length} matches). Present all candidate IDs/names and ask the user which vendor they mean before mutating records.`
+                  : `Resolved a unique vendor match ('${matches[0].name}', id=${matches[0].id}) across the complete directory (${inspected}/${total} records inspected).`;
 
         const output: z.infer<typeof searchVendorsOutputSchema> = {
           query: cleanQuery,
@@ -1336,7 +1760,17 @@ export function registerOpenAI103CandidateTools(
           coverage: {
             inspected,
             total,
+            uninspectedCount,
             complete,
+            nextCursor,
+            telemetry: {
+              directoryPagesFetched,
+              contextRequestsMade,
+              totalApiRequests: directoryPagesFetched + contextRequestsMade,
+              recordsInspected: inspected,
+              approximatePayloadBytes,
+              serverProjectionFields: VENDOR_SEARCH_SERVER_PROJECTION,
+            },
           },
           matches,
         };
@@ -1347,231 +1781,4 @@ export function registerOpenAI103CandidateTools(
         };
       }),
   );
-
-  /* ---------------------------------------------------------------- */
-  /*  5. Optional Phase-2 Study: update_draft_invoice                 */
-  /* ---------------------------------------------------------------- */
-  if (options.includeDraftInvoiceEdit) {
-    server.registerTool(
-      "update_draft_invoice",
-      {
-        title: "Update Draft Invoice",
-        description:
-          "Update an existing invoice ONLY if it is currently in 'draft' status and has no fiscal hash or e-invoice submission. " +
-          "Verifies expectedDocumentNumber and draft state before applying changes, forces status='draft', and cannot issue, send, " +
-          "mark paid, or alter fiscal series. Active owner-configured webhooks may receive the resulting invoice.updated event. " +
-          "Requires confirm=true. [openWorldHint: true — may deliver a business event to owner-configured webhook endpoints.] " +
-          "/ Actualiza una factura UNICAMENTE si esta en estado borrador ('draft') y sin huella fiscal. Verifica expectedDocumentNumber " +
-          "y mantiene status='draft'; no puede emitir, enviar ni marcar como pagada la factura.",
-        annotations: {
-          ...UPDATE_ANNOTATIONS,
-          destructiveHint: true,
-          idempotentHint: false,
-          openWorldHint: true,
-        },
-        inputSchema: {
-          id: z.string().min(1).describe("Invoice ID to update / ID de la factura en borrador"),
-          expectedDocumentNumber: z
-            .string()
-            .min(1)
-            .describe("Current documentNumber read via get_invoice to prevent concurrent overwrite / Numero de borrador esperado"),
-          clientName: z
-            .string()
-            .trim()
-            .min(1)
-            .max(200)
-            .optional()
-            .describe(`Updated client commercial name / Nombre del cliente — ${OPENAI_REVIEW_FREE_TEXT_WARNING}`),
-          issueDate: z
-            .string()
-            .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format")
-            .optional()
-            .describe("Updated issue date (YYYY-MM-DD) / Fecha de emision"),
-          dueDate: z
-            .string()
-            .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format")
-            .optional()
-            .describe("Updated due date (YYYY-MM-DD) / Fecha de vencimiento"),
-          currency: z
-            .string()
-            .regex(/^[A-Z]{3}$/, "Use 3-letter ISO currency code")
-            .optional()
-            .describe("3-letter ISO currency code (e.g. EUR) / Moneda ISO"),
-          taxRate: z.number().min(0).max(100).optional().describe("Default tax rate % / Tipo de IVA %"),
-          discountRate: z.number().min(0).max(100).optional().describe("Document discount % / Descuento %"),
-          notes: z
-            .string()
-            .max(1000)
-            .optional()
-            .describe(`Updated draft notes / Notas — ${OPENAI_REVIEW_FREE_TEXT_WARNING}`),
-          items: z
-            .array(
-              z.object({
-                description: z
-                  .string()
-                  .min(1)
-                  .max(500)
-                  .describe(`Line item description / Concepto — ${OPENAI_REVIEW_FREE_TEXT_WARNING}`),
-                quantity: z.number().positive().describe("Quantity / Cantidad"),
-                unitPrice: z.number().nonnegative().describe("Unit price / Precio unitario"),
-                taxRate: z.number().min(0).max(100).optional().describe("Line tax rate % / IVA %"),
-                discount: z.number().min(0).max(100).optional().describe("Line discount % / Descuento %"),
-              }),
-            )
-            .min(1)
-            .max(100)
-            .optional()
-            .describe("Replacement line items array (1-100 items) / Conceptos del borrador"),
-          idempotencyKey: z
-            .string()
-            .min(8)
-            .max(128)
-            .optional()
-            .describe("Optional idempotency key / Clave de idempotencia"),
-        },
-        outputSchema: updateDraftInvoiceOutputSchema,
-      },
-      async (input) =>
-        withToolLogging("update_draft_invoice", async () => {
-          const {
-            id,
-            expectedDocumentNumber,
-            clientName,
-            issueDate,
-            dueDate,
-            currency,
-            taxRate,
-            discountRate,
-            notes,
-            items,
-            idempotencyKey,
-          } = input;
-
-          const hasEditableField =
-            clientName !== undefined ||
-            issueDate !== undefined ||
-            dueDate !== undefined ||
-            currency !== undefined ||
-            taxRate !== undefined ||
-            discountRate !== undefined ||
-            notes !== undefined ||
-            items !== undefined;
-
-          if (!hasEditableField) {
-            return {
-              content: [{
-                type: "text" as const,
-                text: "Error: provide at least one editable draft field (clientName, issueDate, dueDate, currency, taxRate, discountRate, notes, or items).",
-              }],
-              isError: true,
-            };
-          }
-
-          // Pre-flight state check: verify the invoice is a clean draft and matches expectedDocumentNumber.
-          const current = await client.getInvoice(id);
-          if (!current || typeof current !== "object") {
-            return {
-              content: [{ type: "text" as const, text: `Error: invoice '${id}' was not found.` }],
-              isError: true,
-            };
-          }
-
-          const currentStatus = String(current.status ?? "");
-          if (currentStatus !== "draft") {
-            return {
-              content: [{
-                type: "text" as const,
-                text: `Error: update_draft_invoice only edits invoices in 'draft' status (current status is '${currentStatus}'). Issued, sent, paid, overdue, or cancelled invoices cannot be modified through this tool.`,
-              }],
-              isError: true,
-            };
-          }
-
-          if (
-            current.fiscalStage === "shopify_order_staged" ||
-            current.fiscalIssuanceAuthorized === false ||
-            Boolean(current.verifactu) ||
-            Boolean(current.einvoiceStatus)
-          ) {
-            return {
-              content: [{
-                type: "text" as const,
-                text: "Error: this invoice has fiscal containment or e-invoicing metadata and cannot be edited via update_draft_invoice.",
-              }],
-              isError: true,
-            };
-          }
-
-          const currentDocNumber = typeof current.documentNumber === "string" ? current.documentNumber : "";
-          if (currentDocNumber !== expectedDocumentNumber.trim()) {
-            return {
-              content: [{
-                type: "text" as const,
-                text: `Error: expectedDocumentNumber mismatch (expected '${expectedDocumentNumber.trim()}', found '${currentDocNumber || "none"}'). Re-read the invoice with get_invoice before editing.`,
-              }],
-              isError: true,
-            };
-          }
-
-          const patchPayload: Record<string, unknown> = {
-            status: "draft",
-            ...(clientName !== undefined ? { clientName } : {}),
-            ...(issueDate !== undefined ? { issueDate } : {}),
-            ...(dueDate !== undefined ? { dueDate } : {}),
-            ...(currency !== undefined ? { currency } : {}),
-            ...(taxRate !== undefined ? { taxRate } : {}),
-            ...(discountRate !== undefined ? { discountRate } : {}),
-            ...(notes !== undefined ? { notes } : {}),
-            ...(items !== undefined ? { items } : {}),
-            ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
-          };
-
-          const updated = await client.updateInvoice(id, patchPayload);
-          const resultObj: z.infer<typeof updateDraftInvoiceOutputSchema> = {
-            id: String(updated.id ?? id),
-            invoiceNumber: String(updated.documentNumber ?? currentDocNumber),
-            status: "draft",
-            clientName: String(updated.clientName ?? clientName ?? current.clientName ?? ""),
-            issueDate: String(updated.issueDate ?? issueDate ?? current.issueDate ?? ""),
-            ...(typeof (updated.dueDate ?? dueDate ?? current.dueDate) === "string"
-              ? { dueDate: String(updated.dueDate ?? dueDate ?? current.dueDate) }
-              : {}),
-            ...(typeof (updated.currency ?? currency ?? current.currency) === "string"
-              ? { currency: String(updated.currency ?? currency ?? current.currency) }
-              : {}),
-            ...(typeof (updated.taxRate ?? taxRate ?? current.taxRate) === "number"
-              ? { taxRate: Number(updated.taxRate ?? taxRate ?? current.taxRate) }
-              : {}),
-            ...(typeof (updated.discountRate ?? discountRate ?? current.discountRate) === "number"
-              ? { discountRate: Number(updated.discountRate ?? discountRate ?? current.discountRate) }
-              : {}),
-            ...(typeof (updated.notes ?? notes ?? current.notes) === "string"
-              ? { notes: String(updated.notes ?? notes ?? current.notes) }
-              : {}),
-            items: (Array.isArray(updated.items)
-              ? updated.items
-              : Array.isArray(items)
-                ? items
-                : Array.isArray(current.items)
-                  ? current.items
-                  : []
-            ).slice(0, 100).map((it: Record<string, unknown>) => ({
-              description: String(it.description ?? ""),
-              quantity: Number(it.quantity ?? 1),
-              unitPrice: Number(it.unitPrice ?? 0),
-              ...(typeof it.taxRate === "number" ? { taxRate: it.taxRate } : {}),
-              ...(typeof it.discount === "number" ? { discount: it.discount } : {}),
-            })),
-            externalEffects: [
-              "One or more active webhook endpoints previously configured by the workspace owner may receive the full resulting invoice.updated event.",
-            ],
-          };
-
-          return {
-            content: [mutateContent(formatRecord("Updated Draft Invoice", resultObj as unknown as Record<string, unknown>))],
-            structuredContent: resultObj as unknown as Record<string, unknown>,
-          };
-        }),
-    );
-  }
 }

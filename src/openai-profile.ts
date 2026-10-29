@@ -571,16 +571,12 @@ export const OPENAI_103_READ_ONLY_CANDIDATE_TOOLS: ReadonlySet<string> = new Set
   "search_vendors",
 ]);
 
-export const OPENAI_103_OPTIONAL_DRAFT_EDIT_TOOL = "update_draft_invoice" as const;
-
 export interface ApplyOpenAIProfileOptions {
   candidateVersion?: "1.0.2" | "1.0.3";
-  includeDraftInvoiceEdit?: boolean;
 }
 
 export const OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS: ReadonlySet<string> = new Set([
   "create_invoice",
-  "update_draft_invoice",
   "create_expense",
   "update_expense",
   "create_quote",
@@ -1443,9 +1439,6 @@ export function applyOpenAIProfile(server: any, options?: ApplyOpenAIProfileOpti
   if (options?.candidateVersion === "1.0.3") {
     for (const tool of OPENAI_103_READ_ONLY_CANDIDATE_TOOLS) {
       activeIncludeTools.add(tool);
-    }
-    if (options.includeDraftInvoiceEdit) {
-      activeIncludeTools.add(OPENAI_103_OPTIONAL_DRAFT_EDIT_TOOL);
     }
   }
 
