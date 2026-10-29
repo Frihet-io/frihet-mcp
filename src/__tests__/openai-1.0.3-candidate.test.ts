@@ -1,23 +1,31 @@
 /**
- * Isolated verification suite for the ChatGPT 1.0.3 capability expansion candidate.
+ * Verification suite for the ChatGPT 1.0.3 product expansion candidate.
  *
  * Tests:
  * 1. 1.0.2 baseline preservation (33 tools unchanged when candidateVersion is omitted)
  * 2. 1.0.3 read-only candidate surface (37 tools: +get_daily_operational_brief,
- *    +get_business_period_summary, +search_clients, +search_vendors)
+ *    +get_business_period_summary, +search_clients, +search_vendors; update_draft_invoice
+ *    excluded due to non-atomic backend PATCH precondition gap)
  * 3. Wire-level OAuth securitySchemes, closed inputSchema, and zero tax-ID /
  *    tax-return fields in inputSchema or outputSchema
- * 4. Task-level product behavior:
- *    - Daily operational brief with partial coverage, multi-currency, and unavailable amount
- *    - Month-over-month period comparison (Sept vs Oct) with multi-currency separation
- *    - Ambiguous and unambiguous commercial-name client search + tax-ID query rejection
- *    - Commercial-name vendor search + tax-ID query rejection
- * 5. Phase-2 optional draft-only edit study (`update_draft_invoice`): atomic status,
- *    fiscal-containment, and expectedDocumentNumber checks.
+ * 4. Multi-page directory search coverage, server-side projection, cursor/offset
+ *    continuation, epistemic honesty on matchStatus ('partial_scan_single_match',
+ *    'partial_scan_no_match', 'ambiguous', 'exact', 'unambiguous', 'none'), and
+ *    request/payload telemetry
+ * 5. Chained 3-turn end-to-end product journey:
+ *    - Turn 1: «¿Qué merece mi atención hoy?» -> get_daily_operational_brief
+ *    - Turn 2: «Compáralo con el mes anterior» -> get_business_period_summary
+ *    - Turn 3: «Tengo una reunión con este cliente; prepárame» -> search_clients
+ * 6. 1.0.3 plugin bundle & 4 skills contract verification (all 37 tools covered,
+ *    deterministic ZIP build).
  */
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -26,13 +34,175 @@ import {
   applyOpenAIProfile,
   OPENAI_103_READ_ONLY_CANDIDATE_TOOLS,
   OPENAI_REVIEWED_TOOL_ALLOWLIST,
-   type ApplyOpenAIProfileOptions,
+  type ApplyOpenAIProfileOptions,
 } from "../openai-profile.js";
 import { registerAllTools } from "../tools/register-all.js";
 import {
+  CLIENT_SEARCH_SERVER_PROJECTION,
+  VENDOR_SEARCH_SERVER_PROJECTION,
   registerOpenAI103CandidateTools,
-  type RegisterOpenAI103Options,
 } from "../tools/openai-expansion-103.js";
+
+const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
+
+/**
+ * Builds a multi-page synthetic workspace with 320 clients across 4 pages
+ * (100, 100, 100, 20) and 220 vendors across 3 pages (100, 100, 20):
+ * - Page 1 of clients contains "Acme Iberia SL" (id=cli_acme_es) and "Acme Global Consulting" (id=cli_acme_us)
+ * - Page 3 of clients (index 240) contains "Acme Canarias SL" (id=cli_acme_canarias) and "Norte Digital Studio SL" (id=cli_norte_p3)
+ * - Page 1 of clients also contains "Norte Logistica SL" (id=cli_norte_p1)
+ */
+function buildMultiPageClientDirectory(): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < 320; i++) {
+    if (i === 0) {
+      rows.push({
+        id: "cli_acme_es",
+        name: "Acme Iberia SL",
+        stage: "active",
+        email: "facturacion@acme-iberia.example",
+        phone: "+34910001122",
+        taxId: "B87654321",
+        address: { street: "Calle Mayor 10", city: "Madrid" },
+      });
+    } else if (i === 1) {
+      rows.push({
+        id: "cli_acme_us",
+        name: "Acme Global Consulting",
+        stage: "proposal",
+        email: "ap@acmeglobal.example",
+        taxId: "US99887766",
+      });
+    } else if (i === 2) {
+      rows.push({
+        id: "cli_beta",
+        name: "Beta Retail SL",
+        stage: "lead",
+        email: "hola@betaretail.example",
+        taxId: "B11223344",
+      });
+    } else if (i === 3) {
+      rows.push({
+        id: "cli_sol_unico",
+        name: "Soluciones Atlantida SL",
+        stage: "active",
+        email: "admin@atlantida.example",
+        taxId: "B44556677",
+      });
+    } else if (i === 240) {
+      rows.push({
+        id: "cli_acme_canarias",
+        name: "Acme Canarias SL",
+        stage: "active",
+        email: "administracion@acmecanarias.example",
+        phone: "+34928001122",
+        taxId: "B76543210",
+      });
+    } else if (i === 250) {
+      rows.push({
+        id: "cli_page3_only",
+        name: "Zeta Industrial SL",
+        stage: "active",
+        email: "contacto@zetaindustrial.example",
+        taxId: "B99881122",
+      });
+    } else {
+      rows.push({
+        id: `cli_filler_${i}`,
+        name: `Cliente Directorio ${String(i).padStart(3, "0")} SL`,
+        stage: "active",
+        email: `cliente${i}@directorio.example`,
+        taxId: `B${String(10000000 + i)}`,
+      });
+    }
+  }
+  return rows;
+}
+
+function buildMultiPageVendorDirectory(): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < 220; i++) {
+    if (i === 0) {
+      rows.push({
+        id: "ven_1",
+        name: "Cloud Hosting EU",
+        email: "billing@cloudhosting.example",
+        taxId: "DE123456789",
+        address: { street: "Hauptstr 1", city: "Berlin" },
+      });
+    } else if (i === 1) {
+      rows.push({
+        id: "ven_2",
+        name: "Restaurante Puerto",
+        taxId: "B55667788",
+      });
+    } else if (i === 150) {
+      rows.push({
+        id: "ven_cloud_us",
+        name: "Cloud Hosting Americas Inc",
+        email: "ar@cloudamericas.example",
+        taxId: "US12345678",
+      });
+    } else {
+      rows.push({
+        id: `ven_filler_${i}`,
+        name: `Proveedor Suministros ${String(i).padStart(3, "0")} SL`,
+        email: `proveedor${i}@suministros.example`,
+        taxId: `B${String(20000000 + i)}`,
+      });
+    }
+  }
+  return rows;
+}
+
+const ALL_CLIENTS = buildMultiPageClientDirectory();
+const ALL_VENDORS = buildMultiPageVendorDirectory();
+
+function projectRecordFields(
+  rec: Record<string, unknown>,
+  fieldsCsv: unknown,
+): Record<string, unknown> {
+  if (typeof fieldsCsv !== "string" || !fieldsCsv.trim()) return rec;
+  const allowed = fieldsCsv
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const projected: Record<string, unknown> = { id: rec.id };
+  for (const f of allowed) {
+    if (f in rec) projected[f] = rec[f];
+  }
+  return projected;
+}
+
+function paginateSyntheticCollection(
+  allRows: Array<Record<string, unknown>>,
+  params: Record<string, unknown>,
+  cursorPrefix: string,
+) {
+  const limit = typeof params.limit === "number" ? params.limit : 100;
+  let startIndex = 0;
+  if (typeof params.after === "string" && params.after.startsWith(cursorPrefix)) {
+    startIndex = Number(params.after.slice(cursorPrefix.length)) || 0;
+  } else if (typeof params.offset === "number") {
+    startIndex = params.offset;
+  }
+  const filtered =
+    typeof params.stage === "string"
+      ? allRows.filter((r) => r.stage === params.stage)
+      : allRows;
+  const slice = filtered
+    .slice(startIndex, startIndex + limit)
+    .map((r) => projectRecordFields(r, params.fields));
+  const nextIndex = startIndex + slice.length;
+  const nextCursor = nextIndex < filtered.length ? `${cursorPrefix}${nextIndex}` : undefined;
+  return {
+    data: slice,
+    total: filtered.length,
+    limit,
+    offset: startIndex,
+    ...(nextCursor ? { nextCursor } : {}),
+  };
+}
 
 function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[] }> = []): IFrihetClient {
   const handlers: Record<string, (...args: unknown[]) => Promise<unknown>> = {
@@ -62,13 +232,75 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
           unpaidCount: 2,
         },
         topClients: [{ name: "Acme Iberia SL", totalRevenue: 5400, invoiceCount: 3 }],
-        currentMonth: { revenue: 4200, expenses: 620, profit: 3580, invoiceCount: 3, expenseCount: 2 },
+        currentMonth: { revenue: 4235, expenses: 205, profit: 4030, invoiceCount: 3, expenseCount: 2 },
       };
     },
 
     async listInvoices(params?: unknown) {
       const p = (params ?? {}) as Record<string, unknown>;
       const from = typeof p.from === "string" ? p.from : undefined;
+      if (from?.startsWith("2026-08")) {
+        return {
+          data: [
+            {
+              id: "inv_aug_1",
+              documentNumber: "F-2026-007",
+              clientName: "Acme Iberia SL",
+              issueDate: "2026-08-12",
+              dueDate: "2026-08-27",
+              status: "paid",
+              currency: "EUR",
+              total: 1000,
+            },
+            // Duplicate of inv_aug_1 (F-06 dedup check)
+            {
+              id: "inv_aug_1",
+              documentNumber: "F-2026-007",
+              clientName: "Acme Iberia SL",
+              issueDate: "2026-08-12",
+              dueDate: "2026-08-27",
+              status: "paid",
+              currency: "EUR",
+              total: 1000,
+            },
+            // Out-of-period record (F-06 date boundary check)
+            {
+              id: "inv_july_leaked",
+              documentNumber: "F-2026-006",
+              clientName: "Acme Iberia SL",
+              issueDate: "2026-07-31",
+              dueDate: "2026-08-15",
+              status: "paid",
+              currency: "EUR",
+              total: 9999,
+            },
+            // American-spelled canceled invoice (F-06 status check)
+            {
+              id: "inv_aug_canceled",
+              documentNumber: "F-2026-008A",
+              clientName: "Acme Iberia SL",
+              issueDate: "2026-08-15",
+              dueDate: "2026-08-30",
+              status: "canceled",
+              currency: "EUR",
+              total: 5000,
+            },
+            // Invoice with unavailable amount (F-04 non-fabricating delta check)
+            {
+              id: "inv_aug_unavailable",
+              documentNumber: "F-2026-008B",
+              clientName: "Beta Retail SL",
+              issueDate: "2026-08-20",
+              dueDate: "2026-09-05",
+              status: "sent",
+              currency: "EUR",
+            },
+          ],
+          total: 5,
+          limit: 100,
+          offset: 0,
+        };
+      }
       if (from?.startsWith("2026-09")) {
         return {
           data: [
@@ -98,7 +330,6 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
           total: 2,
           limit: 100,
           offset: 0,
-          hasMore: false,
         };
       }
 
@@ -152,7 +383,6 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
         total: 4,
         limit: 100,
         offset: 0,
-        hasMore: false,
       };
     },
 
@@ -162,6 +392,7 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
         {
           id: "inv_oct_overdue",
           documentNumber: "F-2026-011",
+          clientId: "cli_acme_es",
           clientName: "Acme Iberia SL",
           issueDate: "2026-10-01",
           dueDate: "2026-10-15",
@@ -170,8 +401,20 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
           total: 1815,
         },
         {
+          id: "inv_oct_paid",
+          documentNumber: "F-2026-012",
+          clientId: "cli_acme_es",
+          clientName: "Acme Iberia SL",
+          issueDate: "2026-10-20",
+          dueDate: "2026-11-05",
+          status: "paid",
+          currency: "EUR",
+          total: 2420,
+        },
+        {
           id: "inv_oct_usd",
           documentNumber: "F-2026-013",
+          clientId: "cli_acme_us",
           clientName: "Acme Global Consulting",
           issueDate: "2026-10-22",
           dueDate: "2026-11-06",
@@ -179,9 +422,20 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
           currency: "USD",
           total: 800,
         },
+        {
+          id: "inv_oct_canarias",
+          documentNumber: "F-2026-014",
+          clientId: "cli_acme_canarias",
+          clientName: "Acme Canarias SL",
+          issueDate: "2026-10-24",
+          dueDate: "2026-11-08",
+          status: "sent",
+          currency: "EUR",
+          total: 963,
+        },
       ];
       const filtered = all.filter((i) => i.clientName.toLowerCase().includes(q));
-      return { data: filtered, total: filtered.length, limit: 5, offset: 0, hasMore: false };
+      return { data: filtered, total: filtered.length, limit: 5, offset: 0 };
     },
 
     async listQuotes() {
@@ -201,7 +455,6 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
         total: 1,
         limit: 25,
         offset: 0,
-        hasMore: false,
       };
     },
 
@@ -226,7 +479,6 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
           total: 1,
           limit: 100,
           offset: 0,
-          hasMore: false,
         };
       }
       return {
@@ -257,42 +509,12 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
         total: 2,
         limit: 100,
         offset: 0,
-        hasMore: false,
       };
     },
 
-    async listClients() {
-      return {
-        data: [
-          {
-            id: "cli_acme_es",
-            name: "Acme Iberia SL",
-            stage: "active",
-            email: "facturacion@acme-iberia.es",
-            phone: "+34910001122",
-            taxId: "B87654321",
-            address: { street: "Calle Mayor 10", city: "Madrid" },
-          },
-          {
-            id: "cli_acme_us",
-            name: "Acme Global Consulting",
-            stage: "proposal",
-            email: "ap@acmeglobal.example",
-            taxId: "US99887766",
-          },
-          {
-            id: "cli_beta",
-            name: "Beta Retail SL",
-            stage: "lead",
-            email: "hola@betaretail.es",
-            taxId: "B11223344",
-          },
-        ],
-        total: 3,
-        limit: 100,
-        offset: 0,
-        hasMore: false,
-      };
+    async listClients(params?: unknown) {
+      const p = (params ?? {}) as Record<string, unknown>;
+      return paginateSyntheticCollection(ALL_CLIENTS, p, "cli_cursor_");
     },
 
     async listClientActivities(clientId: unknown) {
@@ -309,91 +531,29 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
           total: 1,
           limit: 5,
           offset: 0,
-          hasMore: false,
         };
       }
-      return { data: [], total: 0, limit: 5, offset: 0, hasMore: false };
+      if (clientId === "cli_acme_canarias") {
+        return {
+          data: [
+            {
+              id: "act_can_1",
+              type: "meeting",
+              title: "Revision despliegue Las Palmas",
+              timestamp: "2026-10-26T15:00:00Z",
+            },
+          ],
+          total: 1,
+          limit: 5,
+          offset: 0,
+        };
+      }
+      return { data: [], total: 0, limit: 5, offset: 0 };
     },
 
-    async listVendors() {
-      return {
-        data: [
-          {
-            id: "ven_1",
-            name: "Cloud Hosting EU",
-            email: "billing@cloudhosting.eu",
-            taxId: "DE123456789",
-            address: { street: "Hauptstr 1", city: "Berlin" },
-          },
-          {
-            id: "ven_2",
-            name: "Restaurante Puerto",
-            taxId: "B55667788",
-          },
-        ],
-        total: 2,
-        limit: 100,
-        offset: 0,
-        hasMore: false,
-      };
-    },
-
-    async getInvoice(id: unknown) {
-      if (id === "inv_oct_draft") {
-        return {
-          id: "inv_oct_draft",
-          documentNumber: "DRAFT-2026-004",
-          status: "draft",
-          clientName: "Beta Retail SL",
-          issueDate: "2026-10-27",
-          dueDate: "2026-11-27",
-          currency: "EUR",
-          taxRate: 21,
-          items: [{ description: "Propuesta inicial", quantity: 1, unitPrice: 500, taxRate: 21 }],
-        };
-      }
-      if (id === "inv_oct_paid") {
-        return {
-          id: "inv_oct_paid",
-          documentNumber: "F-2026-012",
-          status: "paid",
-          clientName: "Acme Iberia SL",
-          issueDate: "2026-10-20",
-          dueDate: "2026-11-05",
-          currency: "EUR",
-          taxRate: 21,
-          items: [{ description: "Implementacion ERP", quantity: 1, unitPrice: 2000, taxRate: 21 }],
-        };
-      }
-      if (id === "inv_shopify_staged") {
-        return {
-          id: "inv_shopify_staged",
-          documentNumber: "SHOP-1001",
-          status: "draft",
-          fiscalStage: "shopify_order_staged",
-          fiscalIssuanceAuthorized: false,
-          clientName: "Shopify Customer",
-          issueDate: "2026-10-28",
-          items: [{ description: "Item", quantity: 1, unitPrice: 50 }],
-        };
-      }
-      return null;
-    },
-
-    async updateInvoice(id: unknown, payload: unknown) {
-      const p = (payload ?? {}) as Record<string, unknown>;
-      return {
-        id: String(id),
-        documentNumber: "DRAFT-2026-004",
-        status: "draft",
-        clientName: p.clientName ?? "Beta Retail SL",
-        issueDate: p.issueDate ?? "2026-10-27",
-        dueDate: p.dueDate ?? "2026-11-27",
-        currency: p.currency ?? "EUR",
-        taxRate: p.taxRate ?? 21,
-        notes: p.notes,
-        items: p.items ?? [{ description: "Propuesta inicial", quantity: 1, unitPrice: 500, taxRate: 21 }],
-      };
+    async listVendors(params?: unknown) {
+      const p = (params ?? {}) as Record<string, unknown>;
+      return paginateSyntheticCollection(ALL_VENDORS, p, "ven_cursor_");
     },
   };
 
@@ -410,7 +570,6 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
 
 async function withOpenAICandidateClient<T>(
   profileOptions: ApplyOpenAIProfileOptions | undefined,
-  registerOptions: RegisterOpenAI103Options | undefined,
   fn: (mcpClient: Client, spyCalls: Array<{ method: string; args: unknown[] }>) => Promise<T>,
 ): Promise<T> {
   const spyCalls: Array<{ method: string; args: unknown[] }> = [];
@@ -419,7 +578,7 @@ async function withOpenAICandidateClient<T>(
   const apiClient = createSyntheticClient(spyCalls);
   registerAllTools(server, apiClient);
   if (profileOptions?.candidateVersion === "1.0.3") {
-    registerOpenAI103CandidateTools(server, apiClient, registerOptions);
+    registerOpenAI103CandidateTools(server, apiClient);
   }
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const mcpClient = new Client({ name: "openai-103-test", version: "1.0.0" });
@@ -433,9 +592,9 @@ async function withOpenAICandidateClient<T>(
   }
 }
 
-describe("ChatGPT 1.0.2 baseline vs 1.0.3 candidate profile", () => {
+describe("ChatGPT 1.0.2 baseline vs 1.0.3 product candidate", () => {
   test("1.0.2 default profile stays frozen at exactly 33 tools", async () => {
-    await withOpenAICandidateClient(undefined, undefined, async (mcpClient) => {
+    await withOpenAICandidateClient(undefined, async (mcpClient) => {
       const { tools } = await mcpClient.listTools();
       assert.equal(tools.length, 33);
       assert.deepEqual(
@@ -445,10 +604,9 @@ describe("ChatGPT 1.0.2 baseline vs 1.0.3 candidate profile", () => {
     });
   });
 
-  test("1.0.3 read-only candidate exposes 37 tools with full OAuth schemes and zero tax-ID / tax-filing schema fields", async () => {
+  test("1.0.3 candidate exposes exactly 37 tools (33 + 4 read-only) with OAuth schemes and zero tax-ID / tax-filing schema fields", async () => {
     await withOpenAICandidateClient(
       { candidateVersion: "1.0.3" },
-      { includeDraftInvoiceEdit: false },
       async (mcpClient) => {
         const { tools } = await mcpClient.listTools();
         assert.equal(tools.length, 37);
@@ -456,7 +614,10 @@ describe("ChatGPT 1.0.2 baseline vs 1.0.3 candidate profile", () => {
         for (const candidate of OPENAI_103_READ_ONLY_CANDIDATE_TOOLS) {
           assert.ok(names.has(candidate), `missing 1.0.3 candidate tool ${candidate}`);
         }
-        assert.ok(!names.has("update_draft_invoice"), "phase-2 draft edit must be off by default");
+        assert.ok(
+          !names.has("update_draft_invoice"),
+          "update_draft_invoice must remain excluded until backend PATCH supports atomic draft preconditions",
+        );
 
         const forbiddenSchemaKeys = new Set([
           "taxId",
@@ -498,75 +659,8 @@ describe("ChatGPT 1.0.2 baseline vs 1.0.3 candidate profile", () => {
     );
   });
 
-  test("Task 1: get_daily_operational_brief separates drafts from issued receivables, preserves multi-currency, and maps recommended tools to the OpenAI surface", async () => {
-    await withOpenAICandidateClient({ candidateVersion: "1.0.3" }, undefined, async (mcpClient) => {
-      const res = await mcpClient.callTool({
-        name: "get_daily_operational_brief",
-        arguments: { asOfDate: "2026-10-28", pageLimit: 25 },
-      });
-      assert.notEqual(res.isError, true);
-      const sc = res.structuredContent as Record<string, unknown>;
-      assert.ok(sc);
-      const sep = sc.activitySeparation as Record<string, unknown>;
-      const draftAct = sep.draftActivity as Record<string, unknown>;
-      const issuedAct = sep.issuedActivity as Record<string, unknown>;
-
-      assert.equal(draftAct.invoiceDraftsCount, 1);
-      assert.equal(issuedAct.realOutstandingBalanceDeterminable, false);
-      assert.equal(issuedAct.issuedInvoicesCount, 3);
-      assert.equal(issuedAct.overdueNominalInvoicesCount, 1);
-
-      const unpaidTotal = issuedAct.unpaidNominalTotal as Record<string, unknown>;
-      assert.equal(unpaidTotal.currency, "MIXED");
-      assert.equal(unpaidTotal.amount, null);
-
-      const priorities = sc.priorities as Array<Record<string, unknown>>;
-      assert.ok(priorities.length > 0);
-      for (const p of priorities) {
-        const next = p.suggestedNextAction as Record<string, unknown>;
-        assert.ok(
-          OPENAI_REVIEWED_TOOL_ALLOWLIST.has(String(next.recommendedTool)),
-          `recommendedTool ${String(next.recommendedTool)} must exist in OpenAI allowlist`,
-        );
-      }
-    });
-  });
-
-  test("Task 2: get_business_period_summary compares September vs October by currency without cross-currency addition or fiscal-return fields", async () => {
-    await withOpenAICandidateClient({ candidateVersion: "1.0.3" }, undefined, async (mcpClient) => {
-      const res = await mcpClient.callTool({
-        name: "get_business_period_summary",
-        arguments: { period: "2026-10", compareWithPeriod: "2026-09" },
-      });
-      assert.notEqual(res.isError, true);
-      const sc = res.structuredContent as Record<string, unknown>;
-      assert.ok(sc);
-      assert.equal("taxLiability" in sc, false);
-
-      const primary = sc.primaryPeriod as Record<string, unknown>;
-      const primaryIssued = (primary.issuedInvoices as Record<string, unknown>).issuedTotal as Record<string, unknown>;
-      assert.equal(primaryIssued.currency, "MIXED");
-      assert.equal(primaryIssued.amount, null);
-
-      const comparison = sc.comparison as Record<string, unknown>;
-      assert.equal(comparison.primaryMonth, "2026-10");
-      assert.equal(comparison.compareWithMonth, "2026-09");
-      const deltas = comparison.deltasByCurrency as Array<Record<string, unknown>>;
-      const eurDelta = deltas.find((d) => d.currency === "EUR")!;
-      const usdDelta = deltas.find((d) => d.currency === "USD")!;
-      // Oct EUR issued = 1815 + 2420 = 4235 (draft 605 excluded!); Sep EUR issued = 1210 -> delta = +3025
-      assert.equal(eurDelta.primaryIssuedRevenue, 4235);
-      assert.equal(eurDelta.comparisonIssuedRevenue, 1210);
-      assert.equal(eurDelta.issuedRevenueDelta, 3025);
-      // Oct USD issued = 800; Sep USD issued = 500 -> delta = +300
-      assert.equal(usdDelta.primaryIssuedRevenue, 800);
-      assert.equal(usdDelta.comparisonIssuedRevenue, 500);
-      assert.equal(usdDelta.issuedRevenueDelta, 300);
-    });
-  });
-
-  test("Task 3: search_clients resolves commercial names, flags ambiguity for 'Acme', includes meeting context, never passes q to listClients, and rejects tax IDs", async () => {
-    await withOpenAICandidateClient({ candidateVersion: "1.0.3" }, undefined, async (mcpClient, spyCalls) => {
+  test("Multi-page search_clients enforces server-side projection, cursor continuation, telemetry, and epistemic honesty on partial vs complete coverage", async () => {
+    await withOpenAICandidateClient({ candidateVersion: "1.0.3" }, async (mcpClient, spyCalls) => {
       // 1. Tax ID rejection before touching backend
       const taxIdRes = await mcpClient.callTool({
         name: "search_clients",
@@ -575,43 +669,89 @@ describe("ChatGPT 1.0.2 baseline vs 1.0.3 candidate profile", () => {
       assert.equal(taxIdRes.isError, true);
       assert.equal(spyCalls.length, 0, "tax ID query must be rejected before calling backend");
 
-      // 2. Ambiguous commercial query 'Acme' -> 2 matches ('Acme Iberia SL' and 'Acme Global Consulting')
-      const ambigRes = await mcpClient.callTool({
+      // 2. Partial scan (maxPages=1 => 100 of 320 inspected) for a client that has 1 match on Page 1:
+      // Must return 'partial_scan_single_match' (NEVER 'exact' or 'unambiguous' when 220 records remain uninspected!)
+      const partialSingleRes = await mcpClient.callTool({
         name: "search_clients",
-        arguments: { query: "Acme", includeContext: true },
+        arguments: { query: "Soluciones Atlantida SL", maxPages: 1 },
       });
-      assert.notEqual(ambigRes.isError, true);
+      assert.notEqual(partialSingleRes.isError, true);
+      const partialSingleSc = partialSingleRes.structuredContent as Record<string, unknown>;
+      assert.equal(
+        partialSingleSc.matchStatus,
+        "partial_scan_single_match",
+        "1 match on partial scan must be partial_scan_single_match, never exact/unambiguous",
+      );
+      const partialCoverage = partialSingleSc.coverage as Record<string, unknown>;
+      assert.equal(partialCoverage.inspected, 100);
+      assert.equal(partialCoverage.total, 320);
+      assert.equal(partialCoverage.uninspectedCount, 220);
+      assert.equal(partialCoverage.complete, false);
+      assert.equal(partialCoverage.nextCursor, "cli_cursor_100");
+      const partialTelemetry = partialCoverage.telemetry as Record<string, unknown>;
+      assert.equal(partialTelemetry.directoryPagesFetched, 1);
+      assert.equal(partialTelemetry.serverProjectionFields, CLIENT_SEARCH_SERVER_PROJECTION);
+      assert.ok(Number(partialTelemetry.approximatePayloadBytes) > 0);
+
+      // Verify server-side fields projection and absence of q on listClients call
       const listClientsCall = spyCalls.find((c) => c.method === "listClients");
       assert.ok(listClientsCall);
-      assert.equal(
-        (listClientsCall.args[0] as Record<string, unknown> | undefined)?.q,
-        undefined,
-        "search_clients must never pass q to backend listClients",
-      );
+      const listClientsArgs = listClientsCall.args[0] as Record<string, unknown>;
+      assert.equal(listClientsArgs.q, undefined, "search_clients must never pass q to backend listClients");
+      assert.equal(listClientsArgs.fields, CLIENT_SEARCH_SERVER_PROJECTION);
 
-      const sc = ambigRes.structuredContent as Record<string, unknown>;
-      assert.equal(sc.matchStatus, "ambiguous");
-      const matches = sc.matches as Array<Record<string, unknown>>;
-      assert.equal(matches.length, 2);
-      for (const m of matches) {
-        assert.equal("taxId" in m, false);
-        assert.equal("address" in m, false);
-        assert.ok(m.context, "meeting-prep context should be populated for <= 3 matches");
-      }
-
-      // 3. Exact query 'Acme Iberia SL' -> exact single match
-      const exactRes = await mcpClient.callTool({
+      // 3. Partial scan (maxPages=1) for a client located on Page 3 ("Zeta Industrial SL"):
+      // Must return 'partial_scan_no_match' (NEVER 'none' when 220 records remain uninspected!)
+      const partialNoMatchRes = await mcpClient.callTool({
         name: "search_clients",
-        arguments: { query: "Acme Iberia SL" },
+        arguments: { query: "Zeta Industrial", maxPages: 1 },
       });
-      const exactSc = exactRes.structuredContent as Record<string, unknown>;
-      assert.equal(exactSc.matchStatus, "exact");
-      assert.equal((exactSc.matches as Array<Record<string, unknown>>).length, 1);
+      const partialNoMatchSc = partialNoMatchRes.structuredContent as Record<string, unknown>;
+      assert.equal(partialNoMatchSc.matchStatus, "partial_scan_no_match");
+      const pnmCoverage = partialNoMatchSc.coverage as Record<string, unknown>;
+      assert.equal(pnmCoverage.complete, false);
+      assert.equal(pnmCoverage.uninspectedCount, 220);
+      assert.equal(pnmCoverage.nextCursor, "cli_cursor_100");
+
+      // Continue scanning using after=pnmCoverage.nextCursor across the remaining 3 pages (maxPages=3):
+      // Finds "Zeta Industrial SL" on Page 3 and reaches the end of the directory (nextCursor=null),
+      // while honestly reporting partial_scan_single_match because this stateless call only inspected
+      // 220 of 320 records (page 1's 100 records were outside this call's scan window).
+      const continuedRes = await mcpClient.callTool({
+        name: "search_clients",
+        arguments: {
+          query: "Zeta Industrial",
+          after: String(pnmCoverage.nextCursor),
+          maxPages: 3,
+        },
+      });
+      const continuedSc = continuedRes.structuredContent as Record<string, unknown>;
+      assert.equal(continuedSc.matchStatus, "partial_scan_single_match");
+      const contCoverage = continuedSc.coverage as Record<string, unknown>;
+      assert.equal(contCoverage.inspected, 220);
+      assert.equal(contCoverage.total, 320);
+      assert.equal(contCoverage.uninspectedCount, 100);
+      assert.equal(contCoverage.complete, false);
+      assert.equal(contCoverage.nextCursor, null);
+
+      // 4. Complete scan (maxPages=4 => all 320 records) for "Soluciones Atlantida SL":
+      // Now coverage.complete === true, so matchStatus upgrades to 'exact'!
+      const completeSingleRes = await mcpClient.callTool({
+        name: "search_clients",
+        arguments: { query: "Soluciones Atlantida SL", maxPages: 4 },
+      });
+      const completeSingleSc = completeSingleRes.structuredContent as Record<string, unknown>;
+      assert.equal(completeSingleSc.matchStatus, "exact");
+      const completeCov = completeSingleSc.coverage as Record<string, unknown>;
+      assert.equal(completeCov.inspected, 320);
+      assert.equal(completeCov.uninspectedCount, 0);
+      assert.equal(completeCov.complete, true);
+      assert.equal(completeCov.nextCursor, null);
     });
   });
 
-  test("Task 4: search_vendors searches commercial vendor names, includes recent expenses, never passes q to listVendors, and rejects tax IDs", async () => {
-    await withOpenAICandidateClient({ candidateVersion: "1.0.3" }, undefined, async (mcpClient, spyCalls) => {
+  test("Multi-page search_vendors detects cross-page ambiguity (Page 1 + Page 2) and enforces server projection", async () => {
+    await withOpenAICandidateClient({ candidateVersion: "1.0.3" }, async (mcpClient, spyCalls) => {
       const taxIdRes = await mcpClient.callTool({
         name: "search_vendors",
         arguments: { query: "DE123456789" },
@@ -619,89 +759,275 @@ describe("ChatGPT 1.0.2 baseline vs 1.0.3 candidate profile", () => {
       assert.equal(taxIdRes.isError, true);
       assert.equal(spyCalls.length, 0);
 
-      const res = await mcpClient.callTool({
+      // Scanning default maxPages=3 (all 220 vendors across 3 pages) for "Cloud Hosting":
+      // Finds "Cloud Hosting EU" on Page 1 (index 0) AND "Cloud Hosting Americas Inc" on Page 2 (index 150)!
+      const ambigVendorRes = await mcpClient.callTool({
         name: "search_vendors",
         arguments: { query: "Cloud Hosting", includeRecentExpenses: true },
       });
-      assert.notEqual(res.isError, true);
+      assert.notEqual(ambigVendorRes.isError, true);
       const listVendorsCall = spyCalls.find((c) => c.method === "listVendors");
       assert.ok(listVendorsCall);
-      assert.equal(
-        (listVendorsCall.args[0] as Record<string, unknown> | undefined)?.q,
-        undefined,
-        "search_vendors must never pass q to backend listVendors",
-      );
+      const lvArgs = listVendorsCall.args[0] as Record<string, unknown>;
+      assert.equal(lvArgs.q, undefined);
+      assert.equal(lvArgs.fields, VENDOR_SEARCH_SERVER_PROJECTION);
 
-      const sc = res.structuredContent as Record<string, unknown>;
-      assert.equal(sc.matchStatus, "unambiguous");
+      const sc = ambigVendorRes.structuredContent as Record<string, unknown>;
+      assert.equal(sc.matchStatus, "ambiguous");
+      const cov = sc.coverage as Record<string, unknown>;
+      assert.equal(cov.inspected, 220);
+      assert.equal(cov.total, 220);
+      assert.equal(cov.uninspectedCount, 0);
+      assert.equal(cov.complete, true);
       const matches = sc.matches as Array<Record<string, unknown>>;
-      assert.equal(matches.length, 1);
-      assert.equal(matches[0].name, "Cloud Hosting EU");
-      assert.equal("taxId" in matches[0], false);
-      const recentExpenses = matches[0].recentExpenses as Array<Record<string, unknown>>;
-      assert.equal(recentExpenses.length, 1);
-      assert.equal(recentExpenses[0].id, "exp_oct_1");
+      assert.equal(matches.length, 2);
+      assert.deepEqual(
+        matches.map((m) => m.id),
+        ["ven_cloud_us", "ven_1"],
+      );
+      for (const m of matches) {
+        assert.equal("taxId" in m, false);
+        assert.equal("address" in m, false);
+      }
     });
   });
 
-  test("Task 5 (Phase-2 Study): update_draft_invoice enforces confirm=true, draft-only status, Shopify fiscal-containment guard, and expectedDocumentNumber", async () => {
-    await withOpenAICandidateClient(
-      { candidateVersion: "1.0.3", includeDraftInvoiceEdit: true },
-      { includeDraftInvoiceEdit: true },
-      async (mcpClient) => {
-        // 1. Refuse non-draft invoice ('paid')
-        const paidAttempt = await mcpClient.callTool({
-          name: "update_draft_invoice",
-          arguments: {
-            id: "inv_oct_paid",
-            expectedDocumentNumber: "F-2026-012",
-            notes: "Intento de editar factura pagada",
-            confirm: true,
-          },
+  test("Adversarial regressions (F-01..F-08): limit=1 ambiguity floor, legal suffix stopwords, labeled tax IDs, strict ID context isolation, and non-numeric comparison deltas on unavailable amounts", async () => {
+    await withOpenAICandidateClient({ candidateVersion: "1.0.3" }, async (mcpClient, spyCalls) => {
+      // F-07: Labeled and numeric-stem government IDs are rejected before calling backend
+      for (const badQuery of ["NIF: B87654321", "CIF B/87654321", "VAT DE123456789", "87654321"]) {
+        const res = await mcpClient.callTool({
+          name: "search_clients",
+          arguments: { query: badQuery },
         });
-        assert.equal(paidAttempt.isError, true);
+        assert.equal(res.isError, true, `Expected tax-ID guard rejection for "${badQuery}"`);
+      }
+      assert.equal(spyCalls.length, 0, "No backend calls should occur on rejected tax-ID queries");
 
-        // 2. Refuse Shopify staged order draft
-        const shopifyAttempt = await mcpClient.callTool({
-          name: "update_draft_invoice",
-          arguments: {
-            id: "inv_shopify_staged",
-            expectedDocumentNumber: "SHOP-1001",
-            notes: "Intento de editar pedido Shopify en cuarentena",
-            confirm: true,
-          },
-        });
-        assert.equal(shopifyAttempt.isError, true);
+      // F-03: Searching legal suffix stopword "SL" alone returns 0 matches instead of matching the whole directory
+      const slRes = await mcpClient.callTool({
+        name: "search_clients",
+        arguments: { query: "SL", maxPages: 4 },
+      });
+      const slSc = slRes.structuredContent as Record<string, unknown>;
+      assert.equal(slSc.matchStatus, "none");
+      assert.equal((slSc.matches as unknown[]).length, 0);
 
-        // 3. Refuse mismatched expectedDocumentNumber
-        const mismatchAttempt = await mcpClient.callTool({
-          name: "update_draft_invoice",
-          arguments: {
-            id: "inv_oct_draft",
-            expectedDocumentNumber: "WRONG-NUMBER",
-            notes: "Cambio con numero obsoleto",
-            confirm: true,
-          },
-        });
-        assert.equal(mismatchAttempt.isError, true);
+      // F-02: Ambiguous query with limit=1 still returns >=2 matches so the user can disambiguate
+      const limitOneAmbig = await mcpClient.callTool({
+        name: "search_clients",
+        arguments: { query: "Acme", limit: 1, maxPages: 4, includeContext: false },
+      });
+      const limitOneSc = limitOneAmbig.structuredContent as Record<string, unknown>;
+      assert.equal(limitOneSc.matchStatus, "ambiguous");
+      const limitOneMatches = limitOneSc.matches as Array<Record<string, unknown>>;
+      assert.equal(
+        limitOneMatches.length,
+        2,
+        "Ambiguous result with limit=1 must return at least 2 candidates so disambiguation is possible",
+      );
+      assert.ok(String(limitOneSc.disambiguationNote).includes("showing 2 of 3 matches"));
 
-        // 4. Succeed on clean draft with matching expectedDocumentNumber and confirm=true
-        const validAttempt = await mcpClient.callTool({
-          name: "update_draft_invoice",
-          arguments: {
-            id: "inv_oct_draft",
-            expectedDocumentNumber: "DRAFT-2026-004",
-            notes: "Descuento acordado en llamada",
-            items: [{ description: "Propuesta ajustada", quantity: 2, unitPrice: 450, taxRate: 21 }],
-            confirm: true,
-          },
-        });
-        assert.notEqual(validAttempt.isError, true);
-        const sc = validAttempt.structuredContent as Record<string, unknown>;
-        assert.equal(sc.status, "draft");
-        assert.equal(sc.invoiceNumber, "DRAFT-2026-004");
-        assert.equal(sc.notes, "Descuento acordado en llamada");
-      },
-    );
+      // F-05: Strict clientId context isolation — Acme Iberia SL (cli_acme_es) must never inherit
+      // invoices belonging to Acme Canarias SL (cli_acme_canarias) or Acme Global Consulting (cli_acme_us)
+      const acmeContextRes = await mcpClient.callTool({
+        name: "search_clients",
+        arguments: { query: "Acme Iberia SL", includeContext: true, maxPages: 4 },
+      });
+      const acmeMatches = (acmeContextRes.structuredContent as Record<string, unknown>).matches as Array<
+        Record<string, unknown>
+      >;
+      const acmeInvoices = (acmeMatches[0].context as Record<string, unknown>).recentInvoices as Array<
+        Record<string, unknown>
+      >;
+      assert.deepEqual(
+        acmeInvoices.map((i) => i.id),
+        ["inv_oct_overdue", "inv_oct_paid"],
+      );
+
+      // F-04 & F-06: Comparing 2026-10 against 2026-08 (which contains duplicate IDs, a leaked July
+      // record, an American-spelled "canceled" invoice, and an invoice with unavailable amount)
+      // deduplicates/filters 2026-08 down to 2 valid issued invoices (1000 EUR + 1 unavailable)
+      // and refuses to fabricate numeric deltas (issuedRevenueDelta === null, completeAndDeterminable === false).
+      const augCompareRes = await mcpClient.callTool({
+        name: "get_business_period_summary",
+        arguments: { period: "2026-10", compareWithPeriod: "2026-08" },
+      });
+      assert.notEqual(augCompareRes.isError, true);
+      const augSc = augCompareRes.structuredContent as Record<string, unknown>;
+      const augComparison = augSc.comparison as Record<string, unknown>;
+      const augPeriod = augSc.comparisonPeriod as Record<string, unknown>;
+      const augIssued = augPeriod.issuedInvoices as Record<string, unknown>;
+      assert.equal(
+        augIssued.count,
+        2,
+        "2026-08 must exclude the duplicate ID, the leaked 2026-07 record, and the canceled invoice",
+      );
+      const augIssuedTotal = augIssued.issuedTotal as Record<string, unknown>;
+      assert.equal(augIssuedTotal.unavailableCount, 1);
+      const augDeltas = augComparison.deltasByCurrency as Array<Record<string, unknown>>;
+      const augEurDelta = augDeltas.find((d) => d.currency === "EUR")!;
+      assert.equal(augEurDelta.completeAndDeterminable, false);
+      assert.equal(augEurDelta.issuedRevenueDelta, null);
+    });
+  });
+
+  test("Chained 3-turn end-to-end product journey: Daily Brief -> Period Comparison -> Client Meeting Prep", async () => {
+    await withOpenAICandidateClient({ candidateVersion: "1.0.3" }, async (mcpClient) => {
+      /* -------------------------------------------------------------- */
+      /*  Turn 1: «¿Qué merece mi atención hoy?»                        */
+      /* -------------------------------------------------------------- */
+      const turn1Res = await mcpClient.callTool({
+        name: "get_daily_operational_brief",
+        arguments: { asOfDate: "2026-10-28", pageLimit: 25 },
+      });
+      assert.notEqual(turn1Res.isError, true);
+      const turn1 = turn1Res.structuredContent as Record<string, unknown>;
+      const turn1Coverage = turn1.coverage as Record<string, unknown>;
+      assert.equal(turn1Coverage.referenceMonth, "2026-10");
+      assert.equal(turn1Coverage.isPartial, true, "320 clients > pageLimit=25 must mark brief coverage as partial");
+
+      const sep = turn1.activitySeparation as Record<string, unknown>;
+      const draftAct = sep.draftActivity as Record<string, unknown>;
+      const issuedAct = sep.issuedActivity as Record<string, unknown>;
+      assert.equal(draftAct.invoiceDraftsCount, 1);
+      assert.equal(issuedAct.issuedInvoicesCount, 3);
+      assert.equal(issuedAct.overdueNominalInvoicesCount, 1);
+      assert.equal(issuedAct.realOutstandingBalanceDeterminable, false);
+
+      const priorities = turn1.priorities as Array<Record<string, unknown>>;
+      const overduePriority = priorities.find((p) => p.category === "overdue_invoice");
+      assert.ok(overduePriority, "Turn 1 must surface the overdue invoice priority");
+      const overdueRefs = overduePriority.recordRefs as Array<Record<string, unknown>>;
+      assert.equal(overdueRefs[0].id, "inv_oct_overdue");
+      assert.ok(String(overdueRefs[0].label).includes("Acme Iberia SL"));
+
+      /* -------------------------------------------------------------- */
+      /*  Turn 2: «Compáralo con el mes anterior» (2026-10 vs 2026-09)  */
+      /* -------------------------------------------------------------- */
+      const referenceMonth = String(turn1Coverage.referenceMonth);
+      const turn2Res = await mcpClient.callTool({
+        name: "get_business_period_summary",
+        arguments: { period: referenceMonth, compareWithPeriod: "2026-09" },
+      });
+      assert.notEqual(turn2Res.isError, true);
+      const turn2 = turn2Res.structuredContent as Record<string, unknown>;
+      const oct = turn2.primaryPeriod as Record<string, unknown>;
+      const octIssued = oct.issuedInvoices as Record<string, unknown>;
+      const octDrafts = oct.draftInvoices as Record<string, unknown>;
+      const octCoverage = oct.coverage as Record<string, unknown>;
+      const octTelemetry = octCoverage.telemetry as Record<string, unknown>;
+      assert.equal(octTelemetry.invoicePagesFetched, 1);
+      assert.equal(octTelemetry.expensePagesFetched, 1);
+      assert.ok(Number(octTelemetry.approximatePayloadBytes) > 0);
+
+      // Verify strict separation between billed (issuedTotal), collected (paidTotal), unpaid nominal, and drafts:
+      assert.equal((octDrafts.total as Record<string, unknown>).amount, 605);
+      const issuedByCur = (octIssued.issuedTotal as Record<string, unknown>).totalsByCurrency as Array<Record<string, unknown>>;
+      const paidByCur = (octIssued.paidTotal as Record<string, unknown>).totalsByCurrency as Array<Record<string, unknown>>;
+      const unpaidByCur = (octIssued.unpaidNominalTotal as Record<string, unknown>).totalsByCurrency as Array<Record<string, unknown>>;
+
+      assert.equal(issuedByCur.find((b) => b.currency === "EUR")?.amount, 4235);
+      assert.equal(paidByCur.find((b) => b.currency === "EUR")?.amount, 2420);
+      assert.equal(unpaidByCur.find((b) => b.currency === "EUR")?.amount, 1815);
+      assert.equal(issuedByCur.find((b) => b.currency === "USD")?.amount, 800);
+      assert.equal(paidByCur.find((b) => b.currency === "USD")?.amount, undefined);
+      assert.equal(unpaidByCur.find((b) => b.currency === "USD")?.amount, 800);
+
+      const comparison = turn2.comparison as Record<string, unknown>;
+      const deltas = comparison.deltasByCurrency as Array<Record<string, unknown>>;
+      const eurDelta = deltas.find((d) => d.currency === "EUR")!;
+      // Oct EUR billed = 4235 vs Sep EUR billed = 1210 (+3025); Oct EUR paid = 2420 vs Sep EUR paid = 1210 (+1210)
+      assert.equal(eurDelta.issuedRevenueDelta, 3025);
+      assert.equal(eurDelta.paidRevenueDelta, 1210);
+
+      /* -------------------------------------------------------------- */
+      /*  Turn 3: «Tengo una reunión con este cliente; prepárame»       */
+      /* -------------------------------------------------------------- */
+      // Step 3a: Searching "Acme" across the 4-page directory discovers 3 Acme entities across Page 1 and Page 3
+      const turn3AmbigRes = await mcpClient.callTool({
+        name: "search_clients",
+        arguments: { query: "Acme", includeContext: true, maxPages: 4 },
+      });
+      assert.notEqual(turn3AmbigRes.isError, true);
+      const turn3Ambig = turn3AmbigRes.structuredContent as Record<string, unknown>;
+      assert.equal(turn3Ambig.matchStatus, "ambiguous");
+      const ambigMatches = turn3Ambig.matches as Array<Record<string, unknown>>;
+      assert.equal(ambigMatches.length, 3);
+      assert.deepEqual(
+        ambigMatches.map((m) => m.id),
+        ["cli_acme_canarias", "cli_acme_us", "cli_acme_es"],
+      );
+
+      // Step 3b: Preparing the specific briefing for "Acme Iberia SL" (from Turn 1's overdue invoice ref)
+      const turn3ExactRes = await mcpClient.callTool({
+        name: "search_clients",
+        arguments: { query: "Acme Iberia SL", includeContext: true, maxPages: 4 },
+      });
+      const turn3Exact = turn3ExactRes.structuredContent as Record<string, unknown>;
+      assert.equal(turn3Exact.matchStatus, "exact");
+      const acmeEs = (turn3Exact.matches as Array<Record<string, unknown>>)[0];
+      assert.equal(acmeEs.id, "cli_acme_es");
+      const acmeContext = acmeEs.context as Record<string, unknown>;
+      const recentInvoices = acmeContext.recentInvoices as Array<Record<string, unknown>>;
+      const recentActivities = acmeContext.recentActivities as Array<Record<string, unknown>>;
+      assert.equal(recentInvoices.length, 2);
+      assert.equal(recentInvoices[0].invoiceNumber, "F-2026-011");
+      assert.equal(recentActivities.length, 1);
+      assert.equal(recentActivities[0].title, "Confirmada renovacion anual Q4");
+    });
+  });
+
+  test("1.0.3 candidate plugin bundle & 4 skills cover all 37 tools and package deterministically", async () => {
+    await withOpenAICandidateClient({ candidateVersion: "1.0.3" }, async (mcpClient) => {
+      const { tools } = await mcpClient.listTools();
+      const approved103ToolSet = new Set(tools.map((t) => t.name));
+      assert.equal(approved103ToolSet.size, 37);
+
+      const plugin103 = JSON.parse(
+        readFileSync(join(REPO_ROOT, "marketplace/openai-1.0.3/plugin.json"), "utf8"),
+      );
+      assert.equal(plugin103.version, "1.0.3");
+
+      const skillNames = [
+        "frihet-workspace",
+        "invoices-and-quotes",
+        "expenses-and-vendors",
+        "clients-crm",
+      ];
+      const coveredTools = new Set<string>();
+      for (const skillName of skillNames) {
+        const skillPath = join(REPO_ROOT, `marketplace/openai-1.0.3/skills/${skillName}/SKILL.md`);
+        assert.ok(existsSync(skillPath), `Missing 1.0.3 skill: ${skillPath}`);
+        const md = readFileSync(skillPath, "utf8");
+        const [supportedSection = ""] = md.split(/^## 1\./mu);
+        for (const [, token] of supportedSection.matchAll(/`([a-z0-9_]+)`/gu)) {
+          if (approved103ToolSet.has(token)) {
+            coveredTools.add(token);
+          }
+        }
+      }
+
+      assert.deepEqual(
+        [...coveredTools].sort(),
+        [...approved103ToolSet].sort(),
+        "The 4 skills in marketplace/openai-1.0.3 must cover all 37 tools in the 1.0.3 candidate surface",
+      );
+
+      // Build deterministic 1.0.3 candidate ZIP
+      const zipPath = execFileSync("python3", ["scripts/package-openai-plugin-103.py"], {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      }).trim();
+      assert.ok(existsSync(zipPath), `Expected 1.0.3 candidate ZIP at ${zipPath}`);
+      const firstBytes = readFileSync(zipPath);
+      const secondBytes = readFileSync(
+        execFileSync("python3", ["scripts/package-openai-plugin-103.py"], {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+        }).trim(),
+      );
+      assert.deepEqual(firstBytes, secondBytes, "1.0.3 candidate ZIP build must be bit-for-bit reproducible");
+    });
   });
 });
