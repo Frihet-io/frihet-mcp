@@ -1,0 +1,1253 @@
+{
+  "generatedAt": "2026-10-29T20:13:18.100Z",
+  "environmentDistinctionNotice": {
+    "automatedModelEvaluationAndPrivateRuntime": "Executed in this receipt: (1) Real 37-tool 1.0.3 MCP candidate runtime connected to live https://api.frihet.io/v1 on QA workspace hnVCrCb9Pxf8BgLP0ijz84iuntt2 verifying server-side fields projection over the wire, and (2) Real LLM multi-turn tool-calling evaluation (via LiteLLM 127.0.0.1:4000, temperature=0) using the exact 4 skills unpacked from frihet-1.0.3.zip without hardcoding the model's tool sequence.",
+    "installedChatGptWebClientStatus": "Not executed in chatgpt.com UI for 1.0.3 because https://openai-mcp.frihet.io/mcp is intentionally kept on the published 1.0.2 release (33 tools, releaseSha fd59f0aea90c872a029ba574d046d33181ae6407). Testing 1.0.3 inside the chatgpt.com web UI will occur when Viktor authorizes deploying the 1.0.3 Worker or staging a dedicated preview Worker URL in OpenAI Developer Portal."
+  },
+  "candidatePackage": {
+    "version": "1.0.3",
+    "zipSha256": "04e70112abe8b49e41893cf4b3cf504227f0c47e422cada37abb0d6296699ec2",
+    "zipSizeBytes": 72631,
+    "skillsLoadedFromZip": [
+      "frihet-workspace",
+      "invoices-and-quotes",
+      "expenses-and-vendors",
+      "clients-crm"
+    ],
+    "registeredMcpToolCount": 37
+  },
+  "liveBackendProjectionAndRuntimeVerification": {
+    "executedAgainstLiveApi": false,
+    "reason": "Ephemeral QA API key provisioning skipped: Command failed: node -e \nconst admin = require(\"firebase-admin\");\nif (!admin.apps.length) admin.initializeApp({ projectId: \"gen-lang-client-0335716041\" });\nconst db = admin.firestore();\nconst action = process.argv[1];\nconst keyId = process.argv[2];\nconst uid = process.argv[3];\nconst keyHash = process.argv[4];\nconst prefix = process.argv[5];\n(async () => {\n  const ref = db.collection(\"apiKeys\").doc(keyId);\n  if (action === \"create\") {\n    await ref.set({\n      userId: uid,\n      name: \"Ephemeral 1.0.3 Candidate Runtime & Projection Check\",\n      keyHash,\n      prefix,\n      scopes: [\"read\"],\n      active: true,\n      accessProfile: \"openai-103-qa-ephemeral\",\n      createdAt: admin.firestore.FieldValue.serverTimestamp(),\n    });\n    console.log(\"CREATED\");\n  } else if (action === \"delete\") {\n    await ref.update({ active: false });\n    await ref.delete();\n    console.log(\"DELETED\");\n  }\n})().catch((e) => { console.error(e); process.exit(1); });\n create qa_103_eval_1793304255824 hnVCrCb9Pxf8BgLP0ijz84iuntt2 fd120b77b4132f81f6ee446925c5ce463c2b6f2e524026622087ba2986599b79 fri_qa103_7a\nError: 2 UNKNOWN: Getting metadata from plugin failed with error: invalid_grant\n    at callErrorFromStatus (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/call.js:32:19)\n    at Object.onReceiveStatus (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/client.js:193:76)\n    at Object.onReceiveStatus (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/client-interceptors.js:367:141)\n    at Object.onReceiveStatus (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/client-interceptors.js:327:181)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/resolving-call.js:135:78\n    at process.processTicksAndRejections (node:internal/process/task_queues:84:11)\nfor call at\n    at ServiceClientImpl.makeUnaryRequest (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/client.js:161:32)\n    at ServiceClientImpl.<anonymous> (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/make-client.js:105:19)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/v1/firestore_client.js:242:33\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/normalCalls/timeout.js:44:16\n    at repeat (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/normalCalls/retries.js:82:25)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/normalCalls/retries.js:125:13\n    at OngoingCallPromise.call (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/call.js:67:27)\n    at NormalApiCaller.call (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/normalCalls/normalApiCaller.js:34:19)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/createApiCall.js:112:30\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\nCaused by: Error\n    at _firestore._traceUtil.startActiveSpan (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/write-batch.js:438:27)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/telemetry/enabled-trace-util.js:110:30\n    at NoopContextManager.with (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@opentelemetry/api/build/src/context/NoopContextManager.js:14:19)\n    at ContextAPI.with (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@opentelemetry/api/build/src/api/context.js:51:46)\n    at NoopTracer.startActiveSpan (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@opentelemetry/api/build/src/trace/NoopTracer.js:54:31)\n    at ProxyTracer.startActiveSpan (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@opentelemetry/api/build/src/trace/ProxyTracer.js:27:24)\n    at EnabledTraceUtil.startActiveSpan (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/telemetry/enabled-trace-util.js:102:28)\n    at WriteBatch.commit (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/write-batch.js:436:43)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/reference/document-reference.js:350:31\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/telemetry/enabled-trace-util.js:110:30 {\n  code: 2,\n  details: 'Getting metadata from plugin failed with error: invalid_grant',\n  metadata: Metadata {\n    internalRepr: Map(0) {},\n    opaqueData: Map(0) {},\n    options: {}\n  },\n  note: 'Exception occurred in retry method that was not classified as transient'\n}\n. Local ADC credentials require fresh login or are restricted in this environment.",
+    "targetApiBaseUrl": "https://api.frihet.io/v1",
+    "qaWorkspaceUid": "hnVCrCb9Pxf8BgLP0ijz84iuntt2"
+  },
+  "conversationalEvaluation": {
+    "llmRouterEndpoint": "http://127.0.0.1:4000/v1/chat/completions",
+    "requestedModelAlias": "local-code",
+    "temperature": 0,
+    "systemPromptIncludedFullZipSkills": true,
+    "evaluationChecks": {
+      "convA_turn1_calledDailyBrief": true,
+      "convA_turn1_identifiedOverdueAcmeIberia": true,
+      "convA_turn1_separatedDraftsAndCoverage": true,
+      "convA_turn2_calledPeriodSummary": true,
+      "convA_turn2_reportedMultiCurrencyAndPaidCohortSemantics": true,
+      "convA_turn2_reportedTriStateExpensesWithoutInventingDeductibility": true,
+      "convA_turn3_resolvedThisClientToAcmeIberia": true,
+      "convB_turn1_detectedThreeAcmeCandidatesAndAskedDisambiguation": true,
+      "convB_turn2_reportedPartialScanSingleMatchUncertainty": true
+    },
+    "allChecksPassed": true,
+    "conversations": [
+      {
+        "conversationId": "conv_A_chained_3_turn_executive_journey",
+        "surfaceToolCount": 37,
+        "turns": [
+          {
+            "turnNumber": 1,
+            "userPrompt": "¿Qué merece mi atención hoy en mi negocio y por qué?",
+            "modelReportedByRouter": "local-code",
+            "toolCallsSelectedByModel": [
+              {
+                "step": 1,
+                "tool": "get_daily_operational_brief",
+                "arguments": {},
+                "isError": false,
+                "durationMs": 159,
+                "structuredContentSummary": {
+                  "coverage": {
+                    "referenceMonth": "2026-10",
+                    "isPartial": true,
+                    "temporalScopeNote": "Las consultas list_invoices, list_quotes y list_expenses leen los registros recientes/abiertos a fecha de corte (2026-10-29) sin filtro mensual para no ocultar impagos vencidos ni borradores de meses anteriores. La actividad específica del mes de referencia (2026-10) se desglosa por separado en currentMonthActivity.",
+                    "resources": [
+                      {
+                        "collection": "invoices",
+                        "inspected": 4,
+                        "total": 4,
+                        "complete": true
+                      },
+                      {
+                        "collection": "quotes",
+                        "inspected": 1,
+                        "total": 1,
+                        "complete": true
+                      },
+                      {
+                        "collection": "expenses",
+                        "inspected": 3,
+                        "total": 3,
+                        "complete": true
+                      },
+                      {
+                        "collection": "clients",
+                        "inspected": 25,
+                        "total": 320,
+                        "complete": false
+                      },
+                      {
+                        "collection": "client_activities",
+                        "inspected": 3,
+                        "total": 320,
+                        "complete": false
+                      }
+                    ]
+                  },
+                  "draftActivity": {
+                    "note": "Los borradores reservan numeración pero no han sido emitidos ni enviados al cliente; no representan ingresos devengados ni cobrados.",
+                    "invoiceDraftsCount": 1,
+                    "invoiceDraftsTotal": {
+                      "amount": 605,
+                      "currency": "EUR",
+                      "provenance": "stored_field",
+                      "fieldOrFormula": "sum(stored doc.total/amount)",
+                      "totalsByCurrency": [
+                        {
+                          "currency": "EUR",
+                          "amount": 605,
+                          "documentCount": 1,
+                          "provenance": "stored_field"
+                        }
+                      ],
+                      "unavailableCount": 0
+                    },
+                    "invoiceDrafts": [
+                      {
+                        "id": "inv_oct_draft",
+                        "status": "draft",
+                        "counterpartyName": "Beta Retail SL",
+                        "issueDate": "2026-10-27",
+                        "dueDate": "2026-11-27",
+                        "amount": {
+                          "amount": 605,
+                          "currency": "EUR",
+                          "provenance": "stored_field",
+                          "fieldOrFormula": "doc.total",
+                          "totalsByCurrency": [
+                            {
+                              "currency": "EUR",
+                              "amount": 605,
+                              "documentCount": 1,
+                              "provenance": "stored_field"
+                            }
+                          ],
+                          "unavailableCount": 0
+                        }
+                      }
+                    ],
+                    "quoteDraftsCount": 1,
+                    "quoteDraftsTotal": {
+                      "amount": 1210,
+                      "currency": "EUR",
+                      "provenance": "stored_field",
+                      "fieldOrFormula": "sum(stored doc.total/amount)",
+                      "totalsByCurrency": [
+                        {
+                          "currency": "EUR",
+                          "amount": 1210,
+                          "documentCount": 1,
+                          "provenance": "stored_field"
+                        }
+                      ],
+                      "unavailableCount": 0
+                    },
+                    "quoteDrafts": [
+                      {
+                        "id": "quo_1",
+                        "status": "sent",
+                        "counterpartyName": "Acme Iberia SL",
+                        "issueDate": "2026-10-20",
+                        "dueDate": "2026-11-01",
+                        "amount": {
+                          "amount": 1210,
+                          "currency": "EUR",
+                          "provenance": "stored_field",
+                          "fieldOrFormula": "doc.total",
+                          "totalsByCurrency": [
+                            {
+                              "currency": "EUR",
+                              "amount": 1210,
+                              "documentCount": 1,
+                              "provenance": "stored_field"
+                            }
+                          ],
+                          "unavailableCount": 0
+                        }
+                      }
+                    ]
+                  },
+                  "issuedActivity": {
+                    "note": "Incluye únicamente facturas emitidas (estado distinto de 'draft' y 'cancelled'), separando cobro registrado ('paid') del importe nominal de facturas no marcadas como pagadas ('overdue' vs en plazo). El saldo pendiente real no es determinable sin desglose de cobros parciales ni conciliación bancaria.",
+                    "realOutstandingBalanceDeterminable": false,
+                    "unpaidNominalSemantics": "nominal_unpaid_invoice_totals_without_partial_payments",
+                    "issuedInvoicesCount": 3,
+                    "paidInvoicesCount": 1,
+                    "paidInvoicesTotal": {
+                      "amount": 2420,
+                      "currency": "EUR",
+                      "provenance": "stored_field",
+                      "fieldOrFormula": "sum(stored doc.total/amount)",
+                      "totalsByCurrency": [
+                        {
+                          "currency": "EUR",
+                          "amount": 2420,
+                          "documentCount": 1,
+                          "provenance": "stored_field"
+                        }
+                      ],
+                      "unavailableCount": 0
+                    },
+                    "unpaidNominalInvoicesCount": 2,
+                    "unpaidNominalTotal": {
+                      "amount": null,
+                      "currency": "MIXED",
+                      "provenance": "mixed_currency_unconverted",
+                      "fieldOrFormula": "unconverted multi-currency totals (EUR: 1815.00, USD: 800.00)",
+                      "totalsByCurrency": [
+                        {
+                          "currency": "EUR",
+                          "amount": 1815,
+                          "documentCount": 1,
+                          "provenance": "stored_field"
+                        },
+                        {
+                          "currency": "USD",
+                          "amount": 800,
+                          "documentCount": 1,
+                          "provenance": "stored_field"
+                        }
+                      ],
+                      "unavailableCount": 0
+                    },
+                    "overdueNominalInvoicesCount": 1,
+                    "overdueNominalTotal": {
+                      "amount": 1815,
+                      "currency": "EUR",
+                      "provenance": "stored_field",
+                      "fieldOrFormula": "sum(stored doc.total/amount)",
+                      "totalsByCurrency": [
+                        {
+                          "currency": "EUR",
+                          "amount": 1815,
+                          "documentCount": 1,
+                          "provenance": "stored_field"
+                        }
+                      ],
+                      "unavailableCount": 0
+                    },
+                    "onTimeNominalPendingCount": 1,
+                    "onTimeNominalPendingTotal": {
+                      "amount": 800,
+                      "currency": "USD",
+                      "provenance": "stored_field",
+                      "fieldOrFormula": "sum(stored doc.total/amount)",
+                      "totalsByCurrency": [
+                        {
+                          "currency": "USD",
+                          "amount": 800,
+                          "documentCount": 1,
+                          "provenance": "stored_field"
+                        }
+                      ],
+                      "unavailableCount": 0
+                    },
+                    "outstandingInvoices": [
+                      {
+                        "id": "inv_oct_overdue",
+                        "status": "overdue",
+                        "counterpartyName": "Acme Iberia SL",
+                        "issueDate": "2026-10-01",
+                        "dueDate": "2026-10-15",
+                        "amount": {
+                          "amount": 1815,
+                          "currency": "EUR",
+                          "provenance": "stored_field",
+                          "fieldOrFormula": "doc.total",
+                          "totalsByCurrency": [
+                            {
+                              "currency": "EUR",
+                              "amount": 1815,
+                              "documentCount": 1,
+                              "provenance": "stored_field"
+                            }
+                          ],
+                          "unavailableCount": 0
+                        }
+                      },
+                      {
+                        "id": "inv_oct_usd",
+                        "status": "sent",
+                        "counterpartyName": "Acme Global Consulting",
+                        "issueDate": "2026-10-22",
+                        "dueDate": "2026-11-06",
+                        "amount": {
+                          "amount": 800,
+                          "currency": "USD",
+                          "provenance": "stored_field",
+                          "fieldOrFormula": "doc.total",
+                          "totalsByCurrency": [
+                            {
+                              "currency": "USD",
+                              "amount": 800,
+                              "documentCount": 1,
+                              "provenance": "stored_field"
+                            }
+                          ],
+                          "unavailableCount": 0
+                        }
+                      }
+                    ]
+                  },
+                  "priorities": [
+                    {
+                      "priority": "high",
+                      "category": "overdue_invoice",
+                      "title": "1 factura(s) emitida(s) vencida(s) o fuera de plazo",
+                      "why": "Las facturas emitidas (F-2026-011 · Acme Iberia SL) tienen vencimiento anterior a 2026-10-29 o estado 'overdue' (importe nominal total de documentos no marcados como pagados; saldo pendiente real no determinado sin cobros parciales).",
+                      "recordRefs": [
+                        {
+                          "type": "invoice",
+                          "id": "inv_oct_overdue",
+                          "label": "F-2026-011 (Acme Iberia SL)"
+                        }
+                      ],
+                      "amount": {
+                        "amount": 1815,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(stored doc.total/amount)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 1815,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "suggestedNextAction": {
+                        "description": "Inspeccionar el detalle con get_invoice y registrar seguimiento comercial con log_client_activity (previa confirmación).",
+                        "recommendedTool": "get_invoice",
+                        "requiresConfirmation": false,
+                        "autoExecuted": false
+                      }
+                    },
+                    {
+                      "priority": "high",
+                      "category": "draft_invoice",
+                      "title": "1 borrador(es) de factura pendientes de revisión",
+                      "why": "Existen 1 borradores (DRAFT-2026-004 · Beta Retail SL) que ya reservaron numeración pero siguen en estado 'draft' (no constituyen facturación emitida ni enviada).",
+                      "recordRefs": [
+                        {
+                          "type": "invoice",
+                          "id": "inv_oct_draft",
+                          "label": "DRAFT-2026-004 (Beta Retail SL)"
+                        }
+                      ],
+                      "amount": {
+                        "amount": 605,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(stored doc.total/amount)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 605,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "suggestedNextAction": {
+                        "description": "Revisar líneas e importes de cada borrador con get_invoice antes de decidir su emisión en la aplicación web de Frihet.",
+                        "recommendedTool": "get_invoice",
+                        "requiresConfirmation": false,
+                        "autoExecuted": false
+                      }
+                    },
+                    {
+                      "priority": "medium",
+                      "category": "expense_review",
+                      "title": "1 gasto(s) con datos incompletos (proveedor, categoría o deducibilidad sin definir)",
+                      "why": "Los gastos (exp_oct_3 · Dominio anual sin clasificacion de deducibilidad) carecen de proveedor, categoría o valor booleano en taxDeductible. (Nota: los gastos con taxDeductible=false y metadatos completos se contabilizan normalmente como no deducibles sin marcarse como error).",
+                      "recordRefs": [
+                        {
+                          "type": "expense",
+                          "id": "exp_oct_3",
+                          "label": "Dominio anual sin clasificacion de deducibilidad (Cloud Hosting EU)"
+                        }
+                      ],
+                      "amount": {
+                        "amount": 50,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(stored doc.total/amount)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 50,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "suggestedNextAction": {
+                        "description": "Comprobar cada gasto incompleto con get_expense y, si procede completar categoría, proveedor o taxDeductible, solicitar confirmación antes de llamar a update_expense.",
+                        "recommendedTool": "get_expense",
+                        "requiresConfirmation": true,
+                        "autoExecuted": false
+                      }
+                    },
+                    {
+                      "priority": "medium",
+                      "category": "client_followup",
+                      "title": "Seguimiento comercial registrado en Acme Iberia SL",
+                      "why": "Última actividad registrada (call): \"Confirmada renovacion anual Q4\" (act_1). Conviene verificar si requiere respuesta, presupuesto o nota de seguimiento.",
+                      "recordRefs": [
+                        {
+                          "type": "client",
+                          "id": "cli_acme_es",
+                          "label": "Acme Iberia SL"
+                        },
+                        {
+                          "type": "client_activity",
+                          "id": "act_1",
+                          "label": "call: Confirmada renovacion anual Q4"
+                        }
+                      ],
+                      "suggestedNextAction": {
+                        "description": "Revisar fichas y notas del cliente con list_client_notes / list_client_contacts antes de registrar una nueva actividad confirmada.",
+                        "recommendedTool": "list_client_notes",
+                        "requiresConfirmation": false,
+                        "autoExecuted": false
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "assistantResponse": "Basado en el análisis de tu negocio hoy, estas son las prioridades que requieren tu atención, ordenadas por importancia:\n\n### 🚨 Prioridades Altas (Acción Inmediata)\n\n1.  **Factura Vencida (Acme Iberia SL):**\n    *   **Por qué:** La factura **F-2026-011** (1.815,00 €) está marcada como vencida o fuera de plazo.\n    *   **Acción sugerida:** Revisar el detalle de esta factura y registrar una nota de seguimiento comercial para intentar recuperar el pago.\n\n2.  **Borrador de Factura Pendiente (Beta Retail SL):**\n    *   **Por qué:** Tienes un borrador (**DRAFT-2026-004**) por 605,00 € que ya tiene número asignado pero aún no ha sido emitido ni enviado.\n    *   **Acción sugerida:** Revisar las líneas y los importes de este borrador antes de proceder a su emisión definitiva en la plataforma.\n\n### ⚠️ Prioridades Medias (Seguimiento)\n\n3.  **Gasto con Información Incompleta:**\n    *   **Por qué:** El gasto **\"Dominio anual\"** (50,00 €) no tiene definida su categoría, proveedor o si es deducible de impuestos.\n    *   **Acción sugerida:** Completar estos datos para asegurar que tu contabilidad esté en orden.\n\n4.  **Seguimiento de Cliente (Acme Iberia SL):**\n    *   **Por qué:** Se registró una actividad reciente (llamada) con el título *\"Confirmada renovacion anual Q4\"*.\n    *   **Acción sugerida:** Revisar las notas y contactos de este cliente para ver si necesitas preparar un nuevo presupuesto o añadir alguna nota de seguimiento.\n\n---\n**Resumen de situación actual:**\n*   **Facturas emitidas:** 3 (1 pagada, 2 pendientes de cobro).\n*   **Borradores:** 1 factura y 1 presupuesto (en estado de preparación).\n*   **Gastos registrados:** 3."
+          },
+          {
+            "turnNumber": 2,
+            "userPrompt": "Compáralo con el mes anterior.",
+            "modelReportedByRouter": "local-code",
+            "toolCallsSelectedByModel": [
+              {
+                "step": 1,
+                "tool": "get_business_period_summary",
+                "arguments": {
+                  "compareWithPeriod": "2026-09",
+                  "period": "2026-10"
+                },
+                "isError": false,
+                "durationMs": 224,
+                "structuredContentSummary": {
+                  "accountingSemanticsNote": "Operational period summary based on invoice issueDate and expense date. Draft and cancelled invoices are excluded from issued revenue. currentlyMarkedPaidTotal sums invoices issued in the period whose current status is 'paid'; it does NOT measure cash collected during that calendar month (e.g. an invoice issued in September and paid in October belongs to the September issueDate cohort). issuedCohortCurrentlyPaidMinusExpenses is an issueDate-cohort difference, not treasury cash flow or accounting profit. Expenses are partitioned into deductible (taxDeductible === true), non-deductible (taxDeductible === false), and undetermined classification (taxDeductible absent/null) without assuming deductibility by default. Multi-currency totals are kept in separate currency buckets without conversion. Regulated tax-filing figures are omitted.",
+                  "primaryPeriod": {
+                    "period": "2026-10",
+                    "coverage": {
+                      "invoicesInspected": 4,
+                      "invoicesTotal": 4,
+                      "invoicesComplete": true,
+                      "expensesInspected": 3,
+                      "expensesTotal": 3,
+                      "expensesComplete": true,
+                      "isComplete": true,
+                      "telemetry": {
+                        "invoicePagesFetched": 1,
+                        "expensePagesFetched": 1,
+                        "totalApiRequests": 2,
+                        "recordsInspected": 7,
+                        "approximatePayloadBytes": 1877
+                      }
+                    },
+                    "draftInvoices": {
+                      "note": "Draft invoices are non-issued working documents and are excluded from issued revenue.",
+                      "count": 1,
+                      "total": {
+                        "amount": 605,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(draft_invoices)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 605,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      }
+                    },
+                    "issuedInvoices": {
+                      "selectionBasis": "issue_date_cohort_not_payment_date",
+                      "note": "Invoices are selected by issueDate within the period. currentlyMarkedPaidTotal sums invoices issued in this period that are currently marked as paid; it does NOT measure cash collected during this calendar month (e.g. an invoice issued in September and paid in October belongs to the September issueDate cohort). Unpaid totals represent nominal invoice amounts not marked as paid; real outstanding balance cannot be determined without partial-payment or bank-reconciliation records.",
+                      "realOutstandingBalanceDeterminable": false,
+                      "count": 3,
+                      "currentlyMarkedPaidCount": 1,
+                      "unpaidNominalCount": 2,
+                      "overdueNominalCount": 1,
+                      "issuedTotal": {
+                        "amount": null,
+                        "currency": "MIXED",
+                        "provenance": "mixed_currency_unconverted",
+                        "fieldOrFormula": "sum(issued_invoices) (multi-currency buckets without conversion)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 4235,
+                            "documentCount": 2,
+                            "provenance": "stored_field"
+                          },
+                          {
+                            "currency": "USD",
+                            "amount": 800,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "currentlyMarkedPaidTotal": {
+                        "amount": 2420,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(issued_invoices_currently_marked_paid)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 2420,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "unpaidNominalTotal": {
+                        "amount": null,
+                        "currency": "MIXED",
+                        "provenance": "mixed_currency_unconverted",
+                        "fieldOrFormula": "sum(unpaid_nominal_invoices) (multi-currency buckets without conversion)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 1815,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          },
+                          {
+                            "currency": "USD",
+                            "amount": 800,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "overdueNominalTotal": {
+                        "amount": 1815,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(overdue_nominal_invoices)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 1815,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      }
+                    },
+                    "expenses": {
+                      "note": "Expenses are partitioned into deductible (taxDeductible === true), non-deductible (taxDeductible === false), and undetermined classification (taxDeductible absent, null, or non-boolean) without assuming deductibility by default.",
+                      "count": 3,
+                      "total": {
+                        "amount": 255,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(expenses)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 255,
+                            "documentCount": 3,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "deductibleCount": 1,
+                      "deductibleTotal": {
+                        "amount": 120,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(deductible_expenses)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 120,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "nonDeductibleCount": 1,
+                      "nonDeductibleTotal": {
+                        "amount": 85,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(non_deductible_expenses)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 85,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "undeterminedDeductibilityCount": 1,
+                      "undeterminedDeductibilityTotal": {
+                        "amount": 50,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(undetermined_deductibility_expenses)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 50,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "byCategory": [
+                        {
+                          "category": "software",
+                          "currency": "EUR",
+                          "amount": 170,
+                          "expenseCount": 2
+                        },
+                        {
+                          "category": "meals",
+                          "currency": "EUR",
+                          "amount": 85,
+                          "expenseCount": 1
+                        }
+                      ]
+                    },
+                    "netOperatingByCurrency": [
+                      {
+                        "currency": "EUR",
+                        "issuedRevenueMinusExpenses": 3980,
+                        "issuedCohortCurrentlyPaidMinusExpenses": 2165,
+                        "completeAndDeterminable": true
+                      },
+                      {
+                        "currency": "USD",
+                        "issuedRevenueMinusExpenses": 800,
+                        "issuedCohortCurrentlyPaidMinusExpenses": 0,
+                        "completeAndDeterminable": true
+                      }
+                    ]
+                  },
+                  "comparisonPeriod": {
+                    "period": "2026-09",
+                    "coverage": {
+                      "invoicesInspected": 2,
+                      "invoicesTotal": 2,
+                      "invoicesComplete": true,
+                      "expensesInspected": 1,
+                      "expensesTotal": 1,
+                      "expensesComplete": true,
+                      "isComplete": true,
+                      "telemetry": {
+                        "invoicePagesFetched": 1,
+                        "expensePagesFetched": 1,
+                        "totalApiRequests": 2,
+                        "recordsInspected": 3,
+                        "approximatePayloadBytes": 908
+                      }
+                    },
+                    "draftInvoices": {
+                      "note": "Draft invoices are non-issued working documents and are excluded from issued revenue.",
+                      "count": 0,
+                      "total": {
+                        "amount": 0,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(draft_invoices) (0 documents)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 0,
+                            "documentCount": 0,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      }
+                    },
+                    "issuedInvoices": {
+                      "selectionBasis": "issue_date_cohort_not_payment_date",
+                      "note": "Invoices are selected by issueDate within the period. currentlyMarkedPaidTotal sums invoices issued in this period that are currently marked as paid; it does NOT measure cash collected during this calendar month (e.g. an invoice issued in September and paid in October belongs to the September issueDate cohort). Unpaid totals represent nominal invoice amounts not marked as paid; real outstanding balance cannot be determined without partial-payment or bank-reconciliation records.",
+                      "realOutstandingBalanceDeterminable": false,
+                      "count": 2,
+                      "currentlyMarkedPaidCount": 2,
+                      "unpaidNominalCount": 0,
+                      "overdueNominalCount": 0,
+                      "issuedTotal": {
+                        "amount": null,
+                        "currency": "MIXED",
+                        "provenance": "mixed_currency_unconverted",
+                        "fieldOrFormula": "sum(issued_invoices) (multi-currency buckets without conversion)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 1210,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          },
+                          {
+                            "currency": "USD",
+                            "amount": 500,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "currentlyMarkedPaidTotal": {
+                        "amount": null,
+                        "currency": "MIXED",
+                        "provenance": "mixed_currency_unconverted",
+                        "fieldOrFormula": "sum(issued_invoices_currently_marked_paid) (multi-currency buckets without conversion)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 1210,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          },
+                          {
+                            "currency": "USD",
+                            "amount": 500,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "unpaidNominalTotal": {
+                        "amount": 0,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(unpaid_nominal_invoices) (0 documents)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 0,
+                            "documentCount": 0,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "overdueNominalTotal": {
+                        "amount": 0,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(overdue_nominal_invoices) (0 documents)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 0,
+                            "documentCount": 0,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      }
+                    },
+                    "expenses": {
+                      "note": "Expenses are partitioned into deductible (taxDeductible === true), non-deductible (taxDeductible === false), and undetermined classification (taxDeductible absent, null, or non-boolean) without assuming deductibility by default.",
+                      "count": 1,
+                      "total": {
+                        "amount": 100,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(expenses)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 100,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "deductibleCount": 1,
+                      "deductibleTotal": {
+                        "amount": 100,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(deductible_expenses)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 100,
+                            "documentCount": 1,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "nonDeductibleCount": 0,
+                      "nonDeductibleTotal": {
+                        "amount": 0,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(non_deductible_expenses) (0 documents)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 0,
+                            "documentCount": 0,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "undeterminedDeductibilityCount": 0,
+                      "undeterminedDeductibilityTotal": {
+                        "amount": 0,
+                        "currency": "EUR",
+                        "provenance": "stored_field",
+                        "fieldOrFormula": "sum(undetermined_deductibility_expenses) (0 documents)",
+                        "totalsByCurrency": [
+                          {
+                            "currency": "EUR",
+                            "amount": 0,
+                            "documentCount": 0,
+                            "provenance": "stored_field"
+                          }
+                        ],
+                        "unavailableCount": 0
+                      },
+                      "byCategory": [
+                        {
+                          "category": "software",
+                          "currency": "EUR",
+                          "amount": 100,
+                          "expenseCount": 1
+                        }
+                      ]
+                    },
+                    "netOperatingByCurrency": [
+                      {
+                        "currency": "EUR",
+                        "issuedRevenueMinusExpenses": 1110,
+                        "issuedCohortCurrentlyPaidMinusExpenses": 1110,
+                        "completeAndDeterminable": true
+                      },
+                      {
+                        "currency": "USD",
+                        "issuedRevenueMinusExpenses": 500,
+                        "issuedCohortCurrentlyPaidMinusExpenses": 500,
+                        "completeAndDeterminable": true
+                      }
+                    ]
+                  },
+                  "comparison": {
+                    "primaryMonth": "2026-10",
+                    "compareWithMonth": "2026-09",
+                    "bothPeriodsComplete": true,
+                    "issuedInvoicesCountDelta": 1,
+                    "draftInvoicesCountDelta": 1,
+                    "expensesCountDelta": 2,
+                    "deltasByCurrency": [
+                      {
+                        "currency": "EUR",
+                        "primaryIssuedRevenue": 4235,
+                        "comparisonIssuedRevenue": 1210,
+                        "issuedRevenueDelta": 3025,
+                        "primaryIssuedCurrentlyPaid": 2420,
+                        "comparisonIssuedCurrentlyPaid": 1210,
+                        "issuedCurrentlyPaidDelta": 1210,
+                        "primaryExpenses": 255,
+                        "comparisonExpenses": 100,
+                        "expensesDelta": 155,
+                        "completeAndDeterminable": true
+                      },
+                      {
+                        "currency": "USD",
+                        "primaryIssuedRevenue": 800,
+                        "comparisonIssuedRevenue": 500,
+                        "issuedRevenueDelta": 300,
+                        "primaryIssuedCurrentlyPaid": 0,
+                        "comparisonIssuedCurrentlyPaid": 500,
+                        "issuedCurrentlyPaidDelta": -500,
+                        "primaryExpenses": 0,
+                        "comparisonExpenses": 0,
+                        "expensesDelta": 0,
+                        "completeAndDeterminable": true
+                      }
+                    ],
+                    "notes": [
+                      "Invoice figures compare issueDate cohorts for each period; issuedCurrentlyPaidDelta compares invoices issued in each period that are currently marked as paid, not cash collections by payment date.",
+                      "Multiple currencies detected; deltas are reported per currency without exchange-rate conversion."
+                    ]
+                  }
+                }
+              }
+            ],
+            "assistantResponse": "Aquí tienes la comparativa de tu actividad entre **octubre de 2026** y **septiembre de 2026**.\n\n### 📊 Resumen Comparativo (Octubre vs. Septiembre)\n\n| Métrica | Octubre 2026 | Septiembre 2026 | Diferencia (Δ) |\n| :--- | :--- | :--- | :--- |\n| **Facturas Emitidas** | 3 | 2 | **+1** |\n| **Borradores de Factura** | 1 | 0 | **+1** |\n| **Gastos Registrados** | 3 | 1 | **+2** |\n\n---\n\n### 💰 Análisis por Moneda (Sin conversión)\n\nEn octubre se observa un incremento significativo en el volumen de facturación en euros comparado con el mes anterior.\n\n**En Euros (EUR):**\n*   **Facturación Emitida:** 4.235 € (Oct) vs. 1.210 € (Sep) $\\rightarrow$ **+3.025 €**\n*   **Facturas Pagadas (de este lote):** 2.420 € (Oct) vs. 1.210 € (Sep) $\\rightarrow$ **+1.210 €**\n*   **Gastos Totales:** 255 € (Oct) vs. 100 € (Sep) $\\rightarrow$ **+155 €**\n*   **Resultado Operativo Neto:** 3.980 € (Oct) vs. 1.110 € (Sep)\n\n**En Dólares (USD):**\n*   **Facturación Emitida:** 800 $ (Oct) vs. 500 $ (Sep) $\\rightarrow$ **+300 $**\n*   **Facturas Pagadas (de este lote):** 0 $ (Oct) vs. 500 $ (Sep) $\\rightarrow$ **-500 $**\n*   **Gastos Totales:** 0 $ (Oct) vs. 0 $ (Sep) $\\rightarrow$ **0**\n*   **Resultado Operativo Neto:** 800 $ (Oct) vs. 500 $ (Sep)\n\n---\n\n### 💡 Notas Clave de la Comparativa:\n*   **Crecimiento en Facturación:** Octubre ha tenido un volumen de facturación en euros mucho más alto que septiembre.\n*   **Gestión de Borradores:** En octubre tienes un borrador pendiente, mientras que en septiembre no tenías ninguno, lo que indica actividad de preparación de nuevos documentos.\n*   **Control de Gastos:** El número de gastos registrados ha aumentado en un 200% (de 1 a 3), lo que sugiere una mayor actividad operativa o una regularización de gastos del mes.\n\n*Nota: Las cifras de \"Facturas Pagadas\" se refieren a facturas emitidas en el mes correspondiente que actualmente están marcadas como pagadas, no al flujo de caja real de ese mes calendario.*"
+          },
+          {
+            "turnNumber": 3,
+            "userPrompt": "Tengo una reunión con este cliente; prepárame.",
+            "modelReportedByRouter": "local-code",
+            "toolCallsSelectedByModel": [
+              {
+                "step": 1,
+                "tool": "search_clients",
+                "arguments": {
+                  "includeContext": true,
+                  "query": "Acme Iberia SL"
+                },
+                "isError": false,
+                "durationMs": 152,
+                "structuredContentSummary": {
+                  "query": "Acme Iberia SL",
+                  "matchStatus": "partial_scan_single_match",
+                  "coverage": {
+                    "inspected": 300,
+                    "total": 320,
+                    "uninspectedCount": 20,
+                    "complete": false,
+                    "nextCursor": "cli_cursor_300",
+                    "telemetry": {
+                      "directoryPagesFetched": 3,
+                      "contextRequestsMade": 2,
+                      "totalApiRequests": 5,
+                      "recordsInspected": 300,
+                      "approximatePayloadBytes": 35421,
+                      "serverProjectionFields": "id,name,stage,email,phone"
+                    }
+                  },
+                  "matches": [
+                    {
+                      "id": "cli_acme_es",
+                      "name": "Acme Iberia SL",
+                      "stage": "active",
+                      "email": "facturacion@acme-iberia.example",
+                      "matchRank": "exact",
+                      "context": {
+                        "recentInvoices": [
+                          {
+                            "id": "inv_oct_overdue",
+                            "invoiceNumber": "F-2026-011",
+                            "status": "overdue",
+                            "issueDate": "2026-10-01",
+                            "dueDate": "2026-10-15",
+                            "amount": {
+                              "amount": 1815,
+                              "currency": "EUR",
+                              "provenance": "stored_field",
+                              "fieldOrFormula": "doc.total",
+                              "totalsByCurrency": [
+                                {
+                                  "currency": "EUR",
+                                  "amount": 1815,
+                                  "documentCount": 1,
+                                  "provenance": "stored_field"
+                                }
+                              ],
+                              "unavailableCount": 0
+                            }
+                          },
+                          {
+                            "id": "inv_oct_paid",
+                            "invoiceNumber": "F-2026-012",
+                            "status": "paid",
+                            "issueDate": "2026-10-20",
+                            "dueDate": "2026-11-05",
+                            "amount": {
+                              "amount": 2420,
+                              "currency": "EUR",
+                              "provenance": "stored_field",
+                              "fieldOrFormula": "doc.total",
+                              "totalsByCurrency": [
+                                {
+                                  "currency": "EUR",
+                                  "amount": 2420,
+                                  "documentCount": 1,
+                                  "provenance": "stored_field"
+                                }
+                              ],
+                              "unavailableCount": 0
+                            }
+                          }
+                        ],
+                        "recentActivities": [
+                          {
+                            "type": "call",
+                            "title": "Confirmada renovacion anual Q4",
+                            "timestamp": "2026-10-25T10:00:00Z"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "assistantResponse": "Para tu reunión con **Acme Iberia SL**, aquí tienes un resumen ejecutivo para prepararte. El cliente está en etapa **activa** y hay puntos críticos que deberías abordar:\n\n### 📋 Perfil del Cliente\n*   **Nombre:** Acme Iberia SL\n*   **Estado:** Activo\n*   **Contacto Principal:** facturacion@acme-iberia.example\n\n### 📊 Situación Financiera y Facturación\nHay dos facturas recientes que definen el estado actual de la relación:\n1.  **Factura Vencida (F-2026-011):** Por **1.815,00 €**. Esta factura está fuera de plazo (venció el 15 de octubre). Es el punto más crítico para tratar en la reunión.\n2.  **Factura Pagada (F-2026-012):** Por **2.420,00 €**. Esta factura ya está marcada como pagada, lo que indica una relación comercial activa y reciente.\n\n### 🕒 Actividad Reciente y Contexto\n*   **Último contacto:** Se registró una llamada el **25 de octubre** con el título: *\"Confirmada renovacion anual Q4\"*.\n*   **Oportunidad:** Dado que la renovación ya está confirmada, la reunión es un excelente momento para formalizar los detalles de la renovación y, simultáneamente, resolver la situación de la factura vencida (F-2026-011).\n\n### 💡 Puntos clave para la reunión:\n*   **Prioridad 1:** Mencionar la factura **F-2026-011** de 1.815,00 €. Puedes preguntar si necesitan alguna información adicional para procesar el pago pendiente.\n*   **Prioridad 2:** Aprovechar la confirmación de la **renovación anual Q4** para discutir los términos de este nuevo periodo.\n*   **Relación:** El cliente es recurrente y tiene facturas recientes pagadas, lo que sugiere una buena relación comercial a pesar del retraso en la factura específica mencionada."
+          }
+        ]
+      },
+      {
+        "conversationId": "conv_B_multipage_ambiguity_and_partial_scan",
+        "surfaceToolCount": 37,
+        "turns": [
+          {
+            "turnNumber": 1,
+            "userPrompt": "Tengo una reunión con Acme; búscalo en el directorio completo (maxPages=4) y prepárame.",
+            "modelReportedByRouter": "local-code",
+            "toolCallsSelectedByModel": [
+              {
+                "step": 1,
+                "tool": "search_clients",
+                "arguments": {
+                  "maxPages": 4,
+                  "query": "Acme"
+                },
+                "isError": false,
+                "durationMs": 16,
+                "structuredContentSummary": {
+                  "query": "Acme",
+                  "matchStatus": "ambiguous",
+                  "coverage": {
+                    "inspected": 320,
+                    "total": 320,
+                    "uninspectedCount": 0,
+                    "complete": true,
+                    "nextCursor": null,
+                    "telemetry": {
+                      "directoryPagesFetched": 4,
+                      "contextRequestsMade": 6,
+                      "totalApiRequests": 10,
+                      "recordsInspected": 320,
+                      "approximatePayloadBytes": 38544,
+                      "serverProjectionFields": "id,name,stage,email,phone"
+                    }
+                  },
+                  "matches": [
+                    {
+                      "id": "cli_acme_canarias",
+                      "name": "Acme Canarias SL",
+                      "stage": "active",
+                      "email": "administracion@acmecanarias.example",
+                      "matchRank": "prefix",
+                      "context": {
+                        "recentInvoices": [
+                          {
+                            "id": "inv_oct_canarias",
+                            "invoiceNumber": "F-2026-014",
+                            "status": "sent",
+                            "issueDate": "2026-10-24",
+                            "dueDate": "2026-11-08",
+                            "amount": {
+                              "amount": 963,
+                              "currency": "EUR",
+                              "provenance": "stored_field",
+                              "fieldOrFormula": "doc.total",
+                              "totalsByCurrency": [
+                                {
+                                  "currency": "EUR",
+                                  "amount": 963,
+                                  "documentCount": 1,
+                                  "provenance": "stored_field"
+                                }
+                              ],
+                              "unavailableCount": 0
+                            }
+                          }
+                        ],
+                        "recentActivities": [
+                          {
+                            "type": "meeting",
+                            "title": "Revision despliegue Las Palmas",
+                            "timestamp": "2026-10-26T15:00:00Z"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "id": "cli_acme_us",
+                      "name": "Acme Global Consulting",
+                      "stage": "proposal",
+                      "email": "ap@acmeglobal.example",
+                      "matchRank": "prefix",
+                      "context": {
+                        "recentInvoices": [
+                          {
+                            "id": "inv_oct_usd",
+                            "invoiceNumber": "F-2026-013",
+                            "status": "sent",
+                            "issueDate": "2026-10-22",
+                            "dueDate": "2026-11-06",
+                            "amount": {
+                              "amount": 800,
+                              "currency": "USD",
+                              "provenance": "stored_field",
+                              "fieldOrFormula": "doc.total",
+                              "totalsByCurrency": [
+                                {
+                                  "currency": "USD",
+                                  "amount": 800,
+                                  "documentCount": 1,
+                                  "provenance": "stored_field"
+                                }
+                              ],
+                              "unavailableCount": 0
+                            }
+                          }
+                        ],
+                        "recentActivities": []
+                      }
+                    },
+                    {
+                      "id": "cli_acme_es",
+                      "name": "Acme Iberia SL",
+                      "stage": "active",
+                      "email": "facturacion@acme-iberia.example",
+                      "matchRank": "prefix",
+                      "context": {
+                        "recentInvoices": [
+                          {
+                            "id": "inv_oct_overdue",
+                            "invoiceNumber": "F-2026-011",
+                            "status": "overdue",
+                            "issueDate": "2026-10-01",
+                            "dueDate": "2026-10-15",
+                            "amount": {
+                              "amount": 1815,
+                              "currency": "EUR",
+                              "provenance": "stored_field",
+                              "fieldOrFormula": "doc.total",
+                              "totalsByCurrency": [
+                                {
+                                  "currency": "EUR",
+                                  "amount": 1815,
+                                  "documentCount": 1,
+                                  "provenance": "stored_field"
+                                }
+                              ],
+                              "unavailableCount": 0
+                            }
+                          },
+                          {
+                            "id": "inv_oct_paid",
+                            "invoiceNumber": "F-2026-012",
+                            "status": "paid",
+                            "issueDate": "2026-10-20",
+                            "dueDate": "2026-11-05",
+                            "amount": {
+                              "amount": 2420,
+                              "currency": "EUR",
+                              "provenance": "stored_field",
+                              "fieldOrFormula": "doc.total",
+                              "totalsByCurrency": [
+                                {
+                                  "currency": "EUR",
+                                  "amount": 2420,
+                                  "documentCount": 1,
+                                  "provenance": "stored_field"
+                                }
+                              ],
+                              "unavailableCount": 0
+                            }
+                          }
+                        ],
+                        "recentActivities": [
+                          {
+                            "type": "call",
+                            "title": "Confirmada renovacion anual Q4",
+                            "timestamp": "2026-10-25T10:00:00Z"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "assistantResponse": "He encontrado tres clientes que coinciden con el nombre \"Acme\". Por favor, indícame cuál de ellos es el que te interesa para prepararte para la reunión:\n\n1.  **Acme Canarias SL** (Estado: activo)\n    *   **Última actividad:** Reunión \"Revision despliegue Las Palmas\" (2026-10-26).\n    *   **Factura reciente:** F-2026-014 (963 EUR, enviada).\n2.  **Acme Global Consulting** (Estado: propuesta)\n    *   **Factura reciente:** F-2026-013 (800 USD, enviada).\n3.  **Acme Iberia SL** (Estado: activo)\n    *   **Última actividad:** Llamada \"Confirmada renovacion anual Q4\" (2026-10-25).\n    *   **Facturas recientes:** F-2026-011 (1.815 EUR, **vencida**) y F-2026-012 (2.420 EUR, pagada).\n\nDime cuál es el correcto y te daré el resumen completo."
+          },
+          {
+            "turnNumber": 2,
+            "userPrompt": "Busca también al cliente Soluciones Atlántida SL revisando solo la primera página del directorio (maxPages=1).",
+            "modelReportedByRouter": "local-code",
+            "toolCallsSelectedByModel": [
+              {
+                "step": 1,
+                "tool": "search_clients",
+                "arguments": {
+                  "maxPages": 1,
+                  "query": "Soluciones Atlántida SL"
+                },
+                "isError": false,
+                "durationMs": 294,
+                "structuredContentSummary": {
+                  "query": "Soluciones Atlántida SL",
+                  "matchStatus": "partial_scan_single_match",
+                  "coverage": {
+                    "inspected": 100,
+                    "total": 320,
+                    "uninspectedCount": 220,
+                    "complete": false,
+                    "nextCursor": "cli_cursor_100",
+                    "telemetry": {
+                      "directoryPagesFetched": 1,
+                      "contextRequestsMade": 2,
+                      "totalApiRequests": 3,
+                      "recordsInspected": 100,
+                      "approximatePayloadBytes": 11498,
+                      "serverProjectionFields": "id,name,stage,email,phone"
+                    }
+                  },
+                  "matches": [
+                    {
+                      "id": "cli_sol_unico",
+                      "name": "Soluciones Atlantida SL",
+                      "stage": "active",
+                      "email": "admin@atlantida.example",
+                      "matchRank": "exact",
+                      "context": {
+                        "recentInvoices": [],
+                        "recentActivities": []
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "assistantResponse": "He encontrado un cliente que coincide con \"Soluciones Atlántida SL\":\n\n*   **Soluciones Atlantida SL** (Estado: activo)\n    *   **Detalles:** No hay facturas recientes ni actividades registradas en el historial.\n\n**Nota de cobertura:** Debido a que solo se revisó la primera página del directorio, la búsqueda es incompleta. Existen otros 220 registros que no han sido inspeccionados. Si crees que podría haber otro cliente con un nombre similar en las páginas siguientes, puedo continuar con la búsqueda."
+          }
+        ]
+      }
+    ]
+  }
+}

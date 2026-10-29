@@ -321,10 +321,11 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
               clientName: "Acme Global Consulting",
               issueDate: "2026-09-18",
               dueDate: "2026-10-05",
+              paidDate: "2026-10-05",
               status: "paid",
               currency: "USD",
               total: 500,
-              items: [{ description: "US Advisory", quantity: 1, unitPrice: 500, taxRate: 0 }],
+              items: [{ description: "US Advisory (issued Sep, paid Oct)", quantity: 1, unitPrice: 500, taxRate: 0 }],
             },
           ],
           total: 2,
@@ -338,6 +339,7 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
           {
             id: "inv_oct_overdue",
             documentNumber: "F-2026-011",
+            clientId: "cli_acme_es",
             clientName: "Acme Iberia SL",
             issueDate: "2026-10-01",
             dueDate: "2026-10-15",
@@ -349,13 +351,15 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
           {
             id: "inv_oct_paid",
             documentNumber: "F-2026-012",
+            clientId: "cli_acme_es",
             clientName: "Acme Iberia SL",
             issueDate: "2026-10-20",
             dueDate: "2026-11-05",
+            paidDate: "2026-11-02",
             status: "paid",
             currency: "EUR",
             total: 2420,
-            items: [{ description: "Implementacion ERP", quantity: 1, unitPrice: 2000, taxRate: 21 }],
+            items: [{ description: "Implementacion ERP (issued Oct, paid Nov)", quantity: 1, unitPrice: 2000, taxRate: 21 }],
           },
           {
             id: "inv_oct_usd",
@@ -505,8 +509,19 @@ function createSyntheticClient(spyCalls: Array<{ method: string; args: unknown[]
             currency: "EUR",
             taxDeductible: false,
           },
+          {
+            id: "exp_oct_3",
+            description: "Dominio anual sin clasificacion de deducibilidad",
+            vendor: "Cloud Hosting EU",
+            vendorId: "ven_1",
+            date: "2026-10-21",
+            category: "software",
+            amount: 50,
+            currency: "EUR",
+            // taxDeductible intentionally omitted to verify tri-state classification (true / false / undetermined)
+          },
         ],
-        total: 2,
+        total: 3,
         limit: 100,
         offset: 0,
       };
@@ -913,33 +928,57 @@ describe("ChatGPT 1.0.2 baseline vs 1.0.3 product candidate", () => {
       assert.notEqual(turn2Res.isError, true);
       const turn2 = turn2Res.structuredContent as Record<string, unknown>;
       const oct = turn2.primaryPeriod as Record<string, unknown>;
+      const sepPeriod = turn2.comparisonPeriod as Record<string, unknown>;
       const octIssued = oct.issuedInvoices as Record<string, unknown>;
+      const sepIssued = sepPeriod.issuedInvoices as Record<string, unknown>;
       const octDrafts = oct.draftInvoices as Record<string, unknown>;
+      const octExpenses = oct.expenses as Record<string, unknown>;
       const octCoverage = oct.coverage as Record<string, unknown>;
       const octTelemetry = octCoverage.telemetry as Record<string, unknown>;
       assert.equal(octTelemetry.invoicePagesFetched, 1);
       assert.equal(octTelemetry.expensePagesFetched, 1);
       assert.ok(Number(octTelemetry.approximatePayloadBytes) > 0);
 
-      // Verify strict separation between billed (issuedTotal), collected (paidTotal), unpaid nominal, and drafts:
+      // Verify issueDate-cohort semantics (currentlyMarkedPaidTotal measures invoices issued in the period
+      // that are currently marked as paid, NOT payment-date cash collections):
+      assert.equal(octIssued.selectionBasis, "issue_date_cohort_not_payment_date");
       assert.equal((octDrafts.total as Record<string, unknown>).amount, 605);
       const issuedByCur = (octIssued.issuedTotal as Record<string, unknown>).totalsByCurrency as Array<Record<string, unknown>>;
-      const paidByCur = (octIssued.paidTotal as Record<string, unknown>).totalsByCurrency as Array<Record<string, unknown>>;
+      const paidByCur = (octIssued.currentlyMarkedPaidTotal as Record<string, unknown>).totalsByCurrency as Array<
+        Record<string, unknown>
+      >;
       const unpaidByCur = (octIssued.unpaidNominalTotal as Record<string, unknown>).totalsByCurrency as Array<Record<string, unknown>>;
+      const sepPaidByCur = (sepIssued.currentlyMarkedPaidTotal as Record<string, unknown>).totalsByCurrency as Array<
+        Record<string, unknown>
+      >;
 
+      // inv_oct_paid (issued 2026-10-20, paidDate 2026-11-02) belongs to Oct issueDate cohort (2420 EUR)
       assert.equal(issuedByCur.find((b) => b.currency === "EUR")?.amount, 4235);
       assert.equal(paidByCur.find((b) => b.currency === "EUR")?.amount, 2420);
       assert.equal(unpaidByCur.find((b) => b.currency === "EUR")?.amount, 1815);
+      // inv_sep_usd (issued 2026-09-18, paidDate 2026-10-05) belongs to Sep issueDate cohort (500 USD), NOT Oct's
+      assert.equal(sepPaidByCur.find((b) => b.currency === "USD")?.amount, 500);
       assert.equal(issuedByCur.find((b) => b.currency === "USD")?.amount, 800);
       assert.equal(paidByCur.find((b) => b.currency === "USD")?.amount, undefined);
       assert.equal(unpaidByCur.find((b) => b.currency === "USD")?.amount, 800);
 
+      // Verify tri-state expense deductibility (true vs false vs undetermined — missing taxDeductible is never assumed true):
+      assert.equal(octExpenses.count, 3);
+      assert.equal((octExpenses.total as Record<string, unknown>).amount, 255);
+      assert.equal(octExpenses.deductibleCount, 1);
+      assert.equal((octExpenses.deductibleTotal as Record<string, unknown>).amount, 120);
+      assert.equal(octExpenses.nonDeductibleCount, 1);
+      assert.equal((octExpenses.nonDeductibleTotal as Record<string, unknown>).amount, 85);
+      assert.equal(octExpenses.undeterminedDeductibilityCount, 1);
+      assert.equal((octExpenses.undeterminedDeductibilityTotal as Record<string, unknown>).amount, 50);
+
       const comparison = turn2.comparison as Record<string, unknown>;
       const deltas = comparison.deltasByCurrency as Array<Record<string, unknown>>;
       const eurDelta = deltas.find((d) => d.currency === "EUR")!;
-      // Oct EUR billed = 4235 vs Sep EUR billed = 1210 (+3025); Oct EUR paid = 2420 vs Sep EUR paid = 1210 (+1210)
+      // Oct EUR issued = 4235 vs Sep EUR issued = 1210 (+3025); Oct EUR issuedCurrentlyPaid = 2420 vs Sep = 1210 (+1210)
       assert.equal(eurDelta.issuedRevenueDelta, 3025);
-      assert.equal(eurDelta.paidRevenueDelta, 1210);
+      assert.equal(eurDelta.issuedCurrentlyPaidDelta, 1210);
+      assert.equal(eurDelta.expensesDelta, 155);
 
       /* -------------------------------------------------------------- */
       /*  Turn 3: «Tengo una reunión con este cliente; prepárame»       */

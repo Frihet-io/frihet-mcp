@@ -38,16 +38,16 @@ Always distinguish a **generic capability question** from an **authenticated wor
 - Call `get_daily_operational_brief` (optional `asOfDate`, `pageLimit`).
 - Present the prioritized findings with strict operational honesty:
   - **Separate drafts from issued activity:** Never mix `draftActivity` (non-issued working drafts) with `issuedActivity` (issued invoices).
-  - **Separate collected cash from nominal unpaid receivables:** Report `paidInvoicesTotal` separately from `unpaidNominalTotal` and `overdueNominalTotal`, and note that `realOutstandingBalanceDeterminable` is `false` because partial payments and bank reconciliation are outside this connector.
+  - **Separate invoices marked as paid from nominal unpaid receivables:** Report `paidInvoicesTotal` separately from `unpaidNominalTotal` and `overdueNominalTotal`, and note that `realOutstandingBalanceDeterminable` is `false` because partial payments and bank reconciliation are outside this connector.
   - **Preserve multi-currency buckets:** When `currency === "MIXED"`, report each currency bucket from `totalsByCurrency` separately without cross-currency conversion.
-  - **Cite source records & coverage:** Cite the `recordRefs` (`id`, `label`) for each priority item and state whether `coverage.isPartial` is true.
+  - **Cite source records & coverage:** Cite the `recordRefs` (`id`, `label`) for each priority item and explicitly state whether the coverage is partial or complete (`coverage.isPartial`), noting if it is a partial operational sample.
 
 ### C. Period summaries & month-over-month comparisons (*"Compare October with September"*, *"Compáralo con el mes anterior"*, *"Summarize my business in 2026-10"*)
 - Call `get_business_period_summary` with `period` (`YYYY-MM`) and optional `compareWithPeriod` (`YYYY-MM`).
 - Present the period figures and deltas per currency (`deltasByCurrency`) without cross-currency conversion:
-  - **Issued revenue (`issuedTotal`) vs. collected revenue (`paidTotal`) vs. nominal unpaid (`unpaidNominalTotal`):** Always explain the difference between what was billed (`issuedTotal`) and what has been marked paid (`paidTotal`), and keep `draftInvoices` separate from issued revenue.
-  - **Expenses & deductibility:** Report `expenses.total`, `deductibleTotal`, `nonDeductibleTotal`, and top `byCategory` buckets.
-  - **Coverage & non-filing boundary:** Report `coverage.isComplete` (and `bothPeriodsComplete` when comparing). Never present operational period summaries as official tax-return filings.
+  - **Issue-date cohort semantics (`issuedTotal` vs. `currentlyMarkedPaidTotal` vs. `unpaidNominalTotal`):** Invoices are selected by `issueDate` within each period (`selectionBasis: "issue_date_cohort_not_payment_date"`). Always explain that `currentlyMarkedPaidTotal` (and `issuedCurrentlyPaidDelta`) represents **invoices issued in that period that are currently marked as paid**, NOT cash collected during that calendar month (an invoice issued in September and paid in October belongs to the September `issueDate` cohort). Never present `issuedCohortCurrentlyPaidMinusExpenses` as treasury cash flow or real accounting profit, and keep `draftInvoices` separate from issued revenue.
+  - **Expenses & tri-state deductibility (`true` / `false` / `undetermined`):** Report `expenses.total`, `deductibleTotal` (`taxDeductible === true`), `nonDeductibleTotal` (`taxDeductible === false`), `undeterminedDeductibilityTotal` (`taxDeductible` absent or null — never assume missing deductibility is `true`), and top `byCategory` buckets.
+  - **Coverage & non-filing boundary:** Report `coverage.isComplete` (and `bothPeriodsComplete` / `completeAndDeterminable` when comparing; if a delta is `null` because a document has an unavailable amount, state that honestly instead of substituting `0`). Never present operational period summaries as official tax-return filings.
 
 ### D. General workspace overview requests (*"Give me my current Frihet business context overview"*, *"Check my workspace plan usage and defaults"*)
 - When the user asks to inspect their connected workspace defaults, plan usage, or general snapshot (including during `onboardingSkill` setup):
