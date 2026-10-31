@@ -1,0 +1,197 @@
+identity:
+  name: frihet
+  author: Frihet
+  label:
+    en_US: Frihet ERP
+    es_ES: Frihet ERP
+  description:
+    en_US: AI-native business management, invoicing, expense tracking, and European tax summaries (VeriFactu / TicketBAI / Facturae compliant).
+    es_ES: Gestión empresarial, facturación, gastos y fiscalidad española/europea con IA nativa (VeriFactu, TicketBAI, Facturae).
+  icon: icon.svg
+
+credentials_for_provider:
+  api_key:
+    type: secret-input
+    required: true
+    label:
+      en_US: Frihet API Key
+      es_ES: Clave de API Frihet
+    placeholder:
+      en_US: fri_live_...
+      es_ES: fri_live_...
+    help:
+      en_US: Generate an API key in your Frihet ERP settings at https://app.frihet.io/settings/api-keys
+      es_ES: Genera tu clave API en los ajustes de Frihet ERP en https://app.frihet.io/settings/api-keys
+
+tools:
+  - name: get_business_context
+    label:
+      en_US: Get Business Context
+      es_ES: Obtener Contexto de Empresa
+    description:
+      en_US: Retrieve company profile, default currency, fiscal country, and legal structure.
+      es_ES: Consulta el perfil de empresa, moneda predeterminada, país fiscal y forma jurídica.
+    parameters: []
+
+  - name: get_monthly_summary
+    label:
+      en_US: Monthly Financial Summary
+      es_ES: Resumen Financiero Mensual
+    description:
+      en_US: Get revenue, deductible expenses, net margin, and cash flow for a specific month.
+      es_ES: Consulta ingresos, gastos deducibles, margen neto y saldo para un mes específico.
+    parameters:
+      - name: year
+        type: number
+        required: true
+        label:
+          en_US: Year
+          es_ES: Año
+        description:
+          en_US: Calendar year (e.g. 2026)
+          es_ES: Año natural (ej. 2026)
+      - name: month
+        type: number
+        required: true
+        label:
+          en_US: Month
+          es_ES: Mes
+        description:
+          en_US: Month (1-12)
+          es_ES: Mes (1-12)
+
+  - name: get_quarterly_taxes
+    label:
+      en_US: Quarterly Tax Estimates
+      es_ES: Estimación Fiscal Trimestral
+    description:
+      en_US: Estimate tax balances for VAT/IVA (Modelo 303) and personal income tax (Modelo 130).
+      es_ES: Estima los modelos fiscales trimestrales de IVA (Modelo 303) e IRPF (Modelo 130).
+    parameters:
+      - name: year
+        type: number
+        required: true
+        label:
+          en_US: Year
+          es_ES: Año
+      - name: quarter
+        type: number
+        required: true
+        label:
+          en_US: Quarter
+          es_ES: Trimestre
+        description:
+          en_US: Fiscal quarter (1-4)
+          es_ES: Trimestre fiscal (1-4)
+
+  - name: list_invoices
+    label:
+      en_US: List Invoices
+      es_ES: Listar Facturas
+    description:
+      en_US: Query customer invoices filtered by payment status or client.
+      es_ES: Consulta facturas de clientes filtrando por estado de cobro o cliente.
+    parameters:
+      - name: status
+        type: select
+        required: false
+        options:
+          - value: draft
+            label:
+              en_US: Draft
+              es_ES: Borrador
+          - value: issued
+            label:
+              en_US: Issued
+              es_ES: Emitida
+          - value: paid
+            label:
+              en_US: Paid
+              es_ES: Pagada
+          - value: overdue
+            label:
+              en_US: Overdue
+              es_ES: Vencida
+      - name: limit
+        type: number
+        required: false
+        default: 20
+        label:
+          en_US: Limit
+          es_ES: Límite
+
+  - name: create_draft_invoice
+    label:
+      en_US: Create Draft Invoice
+      es_ES: Crear Factura Borrador
+    description:
+      en_US: Generate an invoice strictly in DRAFT status for human review. Zero irreversible fiscal submissions.
+      es_ES: Crea una factura estrictamente en estado BORRADOR para revisión humana. Sin emisiones fiscales automáticas.
+    parameters:
+      - name: client_id
+        type: string
+        required: true
+        label:
+          en_US: Client ID
+          es_ES: ID del Cliente
+      - name: description
+        type: string
+        required: true
+        label:
+          en_US: Item Description
+          es_ES: Concepto del Servicio/Producto
+      - name: quantity
+        type: number
+        required: true
+        default: 1
+        label:
+          en_US: Quantity
+          es_ES: Cantidad
+      - name: unit_price
+        type: number
+        required: true
+        label:
+          en_US: Unit Price (EUR)
+          es_ES: Precio Unitario (EUR)
+      - name: vat_rate
+        type: number
+        required: false
+        default: 21
+        label:
+          en_US: VAT Rate (%)
+          es_ES: Tipo de IVA (%)
+
+  - name: create_expense
+    label:
+      en_US: Record Expense
+      es_ES: Registrar Gasto
+    description:
+      en_US: Log a deductible receipt or operating expense.
+      es_ES: Registra un ticket o factura de gasto deducible.
+    parameters:
+      - name: vendor
+        type: string
+        required: true
+        label:
+          en_US: Vendor
+          es_ES: Proveedor
+      - name: amount
+        type: number
+        required: true
+        label:
+          en_US: Total Amount
+          es_ES: Importe Total
+      - name: vat_rate
+        type: number
+        required: false
+        default: 21
+        label:
+          en_US: VAT Rate (%)
+          es_ES: Tipo de IVA (%)
+      - name: category
+        type: string
+        required: false
+        default: General
+        label:
+          en_US: Category
+          es_ES: Categoría

@@ -43,6 +43,7 @@
     "sync:openapi": "node scripts/sync-openapi.mjs",
     "gate:openapi-fresh": "node scripts/sync-openapi.mjs --check",
     "gate:openapi-fresh:live": "node scripts/sync-openapi.mjs --check --live",
+    "check:marketplace": "node scripts/check-marketplace-contracts.mjs",
     "gate:cross-surface-authority": "node scripts/cross-surface-authority.mjs",
     "cross-surface-authority:diff": "node scripts/cross-surface-authority.mjs --diff",
     "cross-surface-authority:update": "node scripts/cross-surface-authority.mjs --update",
