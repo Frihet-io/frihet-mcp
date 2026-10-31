@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "Frihet ERP",
+  "id": "io.frihet.muse",
+  "version": "1.0.0",
+  "description": "AI-native ERP connector for Meta Muse: business health summaries, customer insights, expense tracking, and governed draft invoice generation.",
+  "publisher": {
+    "name": "Frihet-io",
+    "url": "https://frihet.io",
+    "supportEmail": "support@frihet.io"
+  },
+  "transport": {
+    "type": "streamable-http",
+    "endpoint": "https://mcp.frihet.io/mcp",
+    "fallbackEndpoint": "https://api.frihet.io/v1"
+  },
+  "authentication": {
+    "type": "oauth2",
+    "authorizationUrl": "https://auth.frihet.io/oauth2/authorize",
+    "tokenUrl": "https://auth.frihet.io/oauth2/token",
+    "scopes": [
+      "openid",
+      "email",
+      "frihet:workspace.manage"
+    ],
+    "apiKeyHeader": "x-frihet-api-key"
+  },
+  "capabilities": {
+    "tools": [
+      {
+        "name": "frihet_get_business_context",
+        "description": "Get high-level business profile, default currency, fiscal country, and operating summary.",
+        "readOnly": true
+      },
+      {
+        "name": "get_monthly_summary",
+        "description": "Retrieve financial summary (revenue, expenses, net margin, cash balance) for a specific month.",
+        "readOnly": true
+      },
+      {
+        "name": "get_quarterly_taxes",
+        "description": "Retrieve estimated tax obligations (VAT/IRPF) and pending fiscal model deadlines for a quarter.",
+        "readOnly": true
+      },
+      {
+        "name": "list_invoices",
+        "description": "List issued customer invoices with pagination and status filters (draft, sent, paid, overdue).",
+        "readOnly": true
+      },
+      {
+        "name": "get_invoice",
+        "description": "Retrieve full details and line items of a specific customer invoice by ID.",
+        "readOnly": true
+      },
+      {
+        "name": "search_invoices",
+        "description": "Search invoices by customer name, reference number, or total amount range.",
+        "readOnly": true
+      },
+      {
+        "name": "create_invoice",
+        "description": "Create a new DRAFT customer invoice. Does not submit to tax authorities or send to customer.",
+        "readOnly": false,
+        "governance": {
+          "draftOnly": true,
+          "fiscalAuthoritySubmissionBlocked": true
+        }
+      },
+      {
+        "name": "list_expenses",
+        "description": "List business expenses with date range and category filters.",
+        "readOnly": true
+      },
+      {
+        "name": "get_expense",
+        "description": "Retrieve details and breakdown of a recorded business expense by ID.",
+        "readOnly": true
+      },
+      {
+        "name": "create_expense",
+        "description": "Record a new draft business expense with amount, vendor, category, and deductible tax.",
+        "readOnly": false,
+        "governance": {
+          "draftOnly": true
+        }
+      },
+      {
+        "name": "list_clients",
+        "description": "List registered clients and business contacts.",
+        "readOnly": true
+      },
+      {
+        "name": "get_client",
+        "description": "Retrieve client profile, contact details, payment terms, and historical billing summary.",
+        "readOnly": true
+      },
+      {
+        "name": "create_client",
+        "description": "Register a new client record with contact email, trade name, and billing details.",
+        "readOnly": false
+      },
+      {
+        "name": "list_products",
+        "description": "List products and service items in the business catalog with pricing and tax codes.",
+        "readOnly": true
+      },
+      {
+        "name": "get_product",
+        "description": "Retrieve pricing, SKU, description, and standard tax rate of a specific product.",
+        "readOnly": true
+      },
+      {
+        "name": "list_quotes",
+        "description": "List customer commercial quotes and estimates with status filters.",
+        "readOnly": true
+      },
+      {
+        "name": "get_quote",
+        "description": "Retrieve full quote details, line items, and expiration date.",
+        "readOnly": true
+      },
+      {
+        "name": "create_quote",
+        "description": "Create a new commercial quote for a client. Does not automatically send to client.",
+        "readOnly": false,
+        "governance": {
+          "draftOnly": true
+        }
+      }
+    ]
+  },
+  "governance": {
+    "fiscalIntegrity": {
+      "verifactuDirectSubmission": false,
+      "ticketbaiDirectSubmission": false,
+      "facturaeDirectSubmission": false,
+      "policy": "AI agents operating in Meta Muse can only create draft documents. Official fiscal stamping and transmission require authenticated human review inside the Frihet ERP web dashboard."
+    },
+    "privacy": {
+      "piiRedaction": true,
+      "maskedFields": ["taxId", "iban", "vatNumber", "streetAddress"]
+    }
+  }
+}
