@@ -1,0 +1,16 @@
+# Smithery configuration for Frihet ERP MCP Server
+# https://smithery.ai/server/@frihet-io/frihet-mcp
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      FRIHET_API_KEY:
+        type: string
+        description: Frihet API key from https://app.frihet.io/settings/api-keys
+    required: []
+  commandFunction:
+    - npx
+    - -y
+    - "@frihet/mcp-server@latest"
