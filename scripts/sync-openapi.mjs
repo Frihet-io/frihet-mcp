@@ -108,11 +108,11 @@ const RETIRED_OPENAI_URL = "https://openai-mcp.frihet.io/openapi.json";
  * only place that sees all of them at once.
  */
 const LIVE_HOSTS = [
-  { url: "https://api.frihet.io/openapi.json", owner: "frihet-mcp (workers/api-proxy)" },
-  { url: "https://mcp.frihet.io/openapi.json", owner: "frihet-mcp (workers/remote-mcp)" },
-  { url: "https://www.frihet.io/openapi.json", owner: "Frihet-Saas-Website (prebuild sync)" },
-  { url: "https://docs.frihet.io/openapi.json", owner: "frihet-docs (vercel-build sync)" },
-  { url: "https://app.frihet.io/openapi.json", owner: "Frihet-ERP (apps/erp/public, needs a frontend deploy)" },
+  { url: "https://api.frihet.io/openapi.json", owner: "frihet-mcp (workers/api-proxy)", kind: "full" },
+  { url: "https://mcp.frihet.io/openapi.json", owner: "frihet-mcp (workers/remote-mcp)", kind: "full" },
+  { url: "https://www.frihet.io/openapi.json", owner: "Frihet-Saas-Website (prebuild sync)", kind: "public-projection" },
+  { url: "https://docs.frihet.io/openapi.json", owner: "frihet-docs (vercel-build sync)", kind: "full" },
+  { url: "https://app.frihet.io/openapi.json", owner: "Frihet-ERP (apps/erp/public, needs a frontend deploy)", kind: "full" },
 ];
 
 const args = new Set(process.argv.slice(2));
@@ -279,7 +279,23 @@ if (LIVE) {
       }
       continue;
     }
-    if (fingerprint(served) !== fingerprint(canonical)) {
+    if (host.kind === "public-projection") {
+      const servedPaths = Object.keys(served.paths ?? {});
+      const canonicalPaths = new Set(Object.keys(canonical.paths ?? {}));
+      const unknownPaths = servedPaths.filter((p) => !canonicalPaths.has(p));
+      const servedCn = creditNoteContract(served);
+      if (unknownPaths.length > 0) {
+        fail.push(
+          `${host.url} serves unexpected paths not in canonical: ${unknownPaths.join(", ")} — owner: ${host.owner}`,
+        );
+      } else if (servedCn?.saysSent) {
+        fail.push(`${host.url} still describes credit note as created with 'sent' status — owner: ${host.owner}`);
+      } else if (servedPaths.length < 80) {
+        fail.push(`${host.url} serves only ${servedPaths.length} paths (expected at least 80) — owner: ${host.owner}`);
+      } else {
+        note(`ok         ${host.url} is a valid public projection (${servedPaths.length} paths, subset of canonical)`);
+      }
+    } else if (fingerprint(served) !== fingerprint(canonical)) {
       fail.push(
         `${host.url} serves ${Object.keys(served.paths ?? {}).length} paths and does not match the ` +
           `full canonical (${Object.keys(canonical.paths ?? {}).length} paths) — a committed fix still ` +

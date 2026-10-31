@@ -345,7 +345,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/no-public-leak.sh": "168718b79ae54ff4b37be5522c66baf064c1462ced64c466edf6a9536bfd5a5b",
   "scripts/postinstall.js": "02947d11d324048f69bc92d253d7c41f947aa338d1d6315b1579492689d462e3",
   "scripts/published-artifact-drift.mjs": "29435fd9b25625db5f6835e0b11b0528daf7345eef1421c6c826879be00b4f95",
-  "scripts/sync-openapi.mjs": "3d72c61a014b53887906fade05a13631e06d47977891b4b4fdb9a337322a4f32",
+  "scripts/sync-openapi.mjs": "311927e49e3ab5c514c418f29cc298bdec79f6b8705c47bdc7de34c6cee4943d",
   "scripts/test-openai-full-compose.mjs": "24b6c922553fedcb6fe9836b768d88b1e10a93d6a6877ebbf2a67551be6b2b79", // directory-readiness: also compares the path-inserted metadata to the snapshot
   "scripts/validate-openai-submission-schema.mjs": "a3fa908a5ea83d6468f2d77345e464f1832845f45677df2627d2eebb423c548a",
   "tsconfig.json": "fee86899bb77179611ed16b73572159d567e76a4717522e567900dbb17ac0804",
