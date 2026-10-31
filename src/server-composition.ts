@@ -13,6 +13,7 @@ import {
 } from "./capability-truth.js";
 import { applyFiscalAliases } from "./fiscal-aliases.js";
 import { applyClaudeCandidateProfile, CLAUDE_CANDIDATE_TOOLS, CLAUDE_GROUP_METADATA } from "./claude-profile.js";
+import { applyGoogleProfile, GOOGLE_CANDIDATE_TOOLS } from "./google-profile.js";
 import {
   applyOpenAIProfile,
   applyOpenAIReviewProfiles,
@@ -27,22 +28,25 @@ export interface McpSurfaceComposition {
   readonly groupedMode: boolean;
   readonly includeDynamicResources: boolean;
   readonly claudeMode?: boolean;
+  readonly googleMode?: boolean;
 }
 
 export function localMcpSurfaceComposition(
   openaiMode: boolean,
   groupedMode: boolean,
   claudeMode = false,
+  googleMode = false,
 ): McpSurfaceComposition {
-  return { openaiMode, groupedMode, includeDynamicResources: true, claudeMode };
+  return { openaiMode, groupedMode, includeDynamicResources: true, claudeMode, googleMode };
 }
 
 export function remoteMcpSurfaceComposition(
   openaiMode: boolean,
   groupedMode: boolean,
   claudeMode = false,
+  googleMode = false,
 ): McpSurfaceComposition {
-  return { openaiMode, groupedMode, includeDynamicResources: false, claudeMode };
+  return { openaiMode, groupedMode, includeDynamicResources: false, claudeMode, googleMode };
 }
 
 export function registerMcpSurface(
@@ -50,8 +54,9 @@ export function registerMcpSurface(
   client: IFrihetClient,
   options: McpSurfaceComposition,
 ): void {
-  if (options.openaiMode && options.claudeMode) {
-    throw new Error("FRIHET_OPENAI_MODE and FRIHET_CLAUDE_MODE are mutually exclusive");
+  const activeModes = [options.openaiMode, options.claudeMode, options.googleMode].filter(Boolean).length;
+  if (activeModes > 1) {
+    throw new Error("FRIHET_OPENAI_MODE, FRIHET_CLAUDE_MODE, and FRIHET_GOOGLE_MODE are mutually exclusive");
   }
   if (options.claudeMode) {
     // Directory reads annotations.title. Install before grouped discovery eagerly
@@ -82,12 +87,14 @@ export function registerMcpSurface(
     applyOpenAIProfile(server);
   }
 
-  if (!options.openaiMode) {
+  if (!options.openaiMode && !options.googleMode) {
     applyPublicCapabilityTruth(server);
   }
 
   if (options.claudeMode) {
     applyClaudeCandidateProfile(server);
+  } else if (options.googleMode) {
+    applyGoogleProfile(server);
   }
 
   registerAllTools(server, client);
