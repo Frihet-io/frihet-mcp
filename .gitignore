@@ -15,6 +15,11 @@ SOUL.md
 # Local tooling / build cache (accidentally committed in #82)
 .wrangler/
 .serena/
+.cache/
+.claude/
+.worktrees/
+graphify-out/
+*.mcpb
 
 # Phase 0 conformance raw harness output (#1578). Regenerable with
 # `npm run conformance:phase0`, and not deterministic: the official harness

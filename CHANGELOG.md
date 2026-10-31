@@ -4,6 +4,13 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Google Connected Apps Platform Curated Profile (#262).** Added an 18-tool curated profile (`GOOGLE_CONNECTED_APPS_TOOL_NAMES`) in `src/google-profile.ts` conforming strictly to Google's October 2026 guidelines. Enforces draft-only mutations for invoices/quotes/expenses, deep output redaction for European tax IDs and bank accounts, and `readOnlyHint: true` on analytical queries.
+- **Multi-Agent Python Toolkits (CrewAI & LangChain/LangGraph).** Added native agent toolkits under `marketplace/crewai/` and `marketplace/langchain/` with Pydantic v2 schemas, strict type-checking, runnable multi-agent CFO/Collections examples, and LangGraph human-in-the-loop (`interrupt_before=["frihet_draft_invoice"]`) safety patterns.
+- **Smithery CI Configuration (`smithery.yaml`).** Added root Smithery server manifest for zero-config indexing and containerized agent execution.
+- **Official MCP Registry Specification Documentation.** Added reference guide and publication instructions in `marketplace/mcp-registry/` tracking the canonical `server.json` manifest (`io.frihet/erp`).
+
 ### Security
 
 - **The provisioning service credential is no longer sent to the public API.** The OAuth Worker attached it as the `x-frihet-oauth-key` header to every tool-call request, although only the API-key provisioning endpoints read it. The tool client no longer accepts it; the provisioning calls keep it. A wire test asserts no public API request carries the header or the value. The credential should be rotated after this ships.
