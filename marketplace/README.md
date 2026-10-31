@@ -36,6 +36,27 @@ This directory contains public listing copy, official manifests, SDK toolkits, a
 | **Cursor IDE** | `marketplace/cursor/` | Developers using Cursor Composer/Agent | `.cursor/mcp.json` & `.mdc` rules | Documented |
 | **OpenAI ChatGPT Store** | `marketplace/openai/` | ChatGPT Plus & Team | 33-tool approved profile | Frozen / Prepared |
 | **Raycast Extension** | `marketplace/raycast/` | macOS founders & engineers | HUD summary, search, expense capture | Package Defined |
+| **Dify Tool Provider** | `marketplace/dify/` | Open-source enterprise LLM workflows | Curated YAML tools / Draft invariant | Defined & Tested |
+| **Flowise Custom Tool** | `marketplace/flowise/` | Drag-and-drop LangChain canvas | JavaScript tool node / Draft invariant | Available |
+| **Make.com (Integromat)** | `marketplace/make/` | Visual SMB workflow scenarios | HMAC webhooks + Actions | App Defined |
+| **Postman Official Collection** | `marketplace/postman/` | API developers & integration QA | Collection v2.1.0 with tests & env | Complete |
+| **GitHub Copilot & VS Code** | `marketplace/copilot/` | Copilot Workspace & VS Code Chat | `.github/copilot-instructions.md` | Documented |
+
+---
+
+## Contract Verification & Drift Guard
+
+Run the automated cross-platform validator to verify all marketplace schemas, manifests, and safety invariants:
+
+```bash
+node scripts/check-marketplace-contracts.mjs
+```
+
+Validates that:
+1. All JSON manifests (`server.json`, `glama.json`, Zapier, Cursor, Raycast, Muse, Make, Postman) parse with zero syntax errors.
+2. All YAML specifications (`smithery.yaml`, Dify) conform to spec.
+3. Every toolkit (Vercel AI, Genkit, AutoGen, LlamaIndex, LangChain, CrewAI, Flowise) enforces the **Draft-Only Invariant** (`status: 'draft'`).
+4. Zero credentials or secret tokens are leaked in examples.
 
 ---
 

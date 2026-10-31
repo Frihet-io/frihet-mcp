@@ -6,6 +6,13 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ### Added
 
+- **No-Code & Visual Agent Ecosystems (Dify, Flowise, Make.com).** Added official tool manifests and configurations under `marketplace/`:
+  - `marketplace/dify/`: Dify Tool Provider specification (`provider.yaml`) with bilingual English/Spanish labels and draft-only invoice creation.
+  - `marketplace/flowise/`: Flowise Custom Tool node (`frihet_custom_tool.js`) for LangChain/LangGraph canvas agents.
+  - `marketplace/make/`: Make.com (Integromat) App Definition (`app-definition.json`) with HMAC-SHA256 webhooks and REST actions.
+- **Official Postman Collection v2.1.0 (`marketplace/postman/`).** Added production Postman collection and environment files with pre-configured requests and automated test assertions validating HTTP 200/201 and draft status enforcement.
+- **GitHub Copilot Integration Suite (`marketplace/copilot/`).** Added `.github/copilot-instructions.md` and VS Code MCP settings for GitHub Copilot Workspace and Copilot Chat.
+- **Automated Cross-Platform Marketplace Contract Guard (`scripts/check-marketplace-contracts.mjs` / `npm run check:marketplace`).** Added verification script checking all JSON/YAML manifests, draft-only invariant preservation, and secret leak prevention across 23 marketplace surfaces.
 - **Multi-Agent & AI Framework Toolkits (Vercel AI SDK, Google Genkit, AutoGen, LlamaIndex).** Expanded Frihet ERP native toolkits under `marketplace/`:
   - `marketplace/vercel-ai/`: Native AI SDK Core tools with Zod schemas and Next.js App Router example route (`example-nextjs.ts`).
   - `marketplace/genkit/`: Google Genkit toolkit with Gemini 1.5/2.0 Pro/Flash flows (`example-flow.ts`) and Zod parameter validation.

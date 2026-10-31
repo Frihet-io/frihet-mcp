@@ -1,0 +1,81 @@
+{
+  "name": "frihet",
+  "label": "Frihet ERP",
+  "description": "AI-native ERP for invoicing, expenses, and European tax compliance.",
+  "version": 1,
+  "theme": "#000000",
+  "baseUrl": "https://api.frihet.io/v1",
+  "authentication": {
+    "type": "api-key",
+    "header": {
+      "Authorization": "Bearer {{apiKey}}",
+      "x-frihet-api-key": "{{apiKey}}"
+    }
+  },
+  "modules": [
+    {
+      "name": "watchInvoices",
+      "label": "Watch Invoices (Trigger)",
+      "type": "instant-trigger",
+      "description": "Triggers when a new invoice is created or marked as paid.",
+      "webhook": {
+        "url": "/webhooks/invoices",
+        "signatureHeader": "x-frihet-signature",
+        "algorithm": "sha256"
+      }
+    },
+    {
+      "name": "watchExpenses",
+      "label": "Watch Expenses (Trigger)",
+      "type": "instant-trigger",
+      "description": "Triggers when an expense is recorded or approved.",
+      "webhook": {
+        "url": "/webhooks/expenses",
+        "signatureHeader": "x-frihet-signature",
+        "algorithm": "sha256"
+      }
+    },
+    {
+      "name": "createDraftInvoice",
+      "label": "Create Draft Invoice (Action)",
+      "type": "action",
+      "description": "Creates an invoice in strictly reviewable DRAFT status.",
+      "communication": {
+        "url": "/invoices",
+        "method": "POST",
+        "body": {
+          "clientId": "{{clientId}}",
+          "items": "{{items}}",
+          "notes": "{{notes}}",
+          "status": "draft"
+        }
+      }
+    },
+    {
+      "name": "createClient",
+      "label": "Create Client (Action)",
+      "type": "action",
+      "description": "Registers a new customer or business client.",
+      "communication": {
+        "url": "/clients",
+        "method": "POST",
+        "body": {
+          "name": "{{name}}",
+          "taxId": "{{taxId}}",
+          "email": "{{email}}",
+          "country": "{{country}}"
+        }
+      }
+    },
+    {
+      "name": "getMonthlySummary",
+      "label": "Get Monthly Summary (Action)",
+      "type": "action",
+      "description": "Retrieves revenue, expenses, and net margin for a given month.",
+      "communication": {
+        "url": "/summaries/monthly?year={{year}}&month={{month}}",
+        "method": "GET"
+      }
+    }
+  ]
+}
