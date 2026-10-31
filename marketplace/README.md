@@ -49,7 +49,7 @@ This directory contains public listing copy, official manifests, SDK toolkits, a
 Run the automated cross-platform validator to verify all marketplace schemas, manifests, and safety invariants:
 
 ```bash
-npm run check:marketplace
+node scripts/check-marketplace-contracts.mjs
 ```
 
 Validates that:
