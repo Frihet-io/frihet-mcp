@@ -1,0 +1,66 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "frihet-erp",
+  "title": "Frihet ERP",
+  "description": "Manage invoices, record deductible expenses, and check European tax summaries directly from Raycast.",
+  "icon": "icon.png",
+  "author": "frihet",
+  "categories": [
+    "Finance",
+    "Productivity"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "search-invoices",
+      "title": "Search Invoices",
+      "description": "Search and inspect customer invoices, payment statuses, and amounts.",
+      "mode": "view"
+    },
+    {
+      "name": "monthly-summary",
+      "title": "Monthly Financial Summary",
+      "description": "Quick HUD showing current month revenue, expenses, and estimated VAT balance.",
+      "mode": "view"
+    },
+    {
+      "name": "create-draft-expense",
+      "title": "Log Business Expense",
+      "description": "Quickly record a deductible receipt or expense with VAT category.",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "apiKey",
+      "type": "password",
+      "required": true,
+      "title": "Frihet API Key",
+      "description": "Generate an API key in your Frihet ERP settings (https://app.frihet.io/settings/api-keys)",
+      "placeholder": "fri_live_..."
+    },
+    {
+      "name": "baseUrl",
+      "type": "textfield",
+      "required": false,
+      "title": "API Base URL",
+      "description": "Frihet ERP API endpoint (defaults to production)",
+      "default": "https://api.frihet.io/v1"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.83.0",
+    "@raycast/utils": "^1.16.0"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^1.0.8",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.0"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop"
+  }
+}

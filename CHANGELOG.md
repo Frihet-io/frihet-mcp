@@ -6,6 +6,16 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ### Added
 
+- **Multi-Agent & AI Framework Toolkits (Vercel AI SDK, Google Genkit, AutoGen, LlamaIndex).** Expanded Frihet ERP native toolkits under `marketplace/`:
+  - `marketplace/vercel-ai/`: Native AI SDK Core tools with Zod schemas and Next.js App Router example route (`example-nextjs.ts`).
+  - `marketplace/genkit/`: Google Genkit toolkit with Gemini 1.5/2.0 Pro/Flash flows (`example-flow.ts`) and Zod parameter validation.
+  - `marketplace/autogen/`: Microsoft AutoGen v0.4+ Python enterprise agent tools with Pydantic v2 schemas and runnable multi-agent script (`example_autogen.py`).
+  - `marketplace/llamaindex/`: LlamaIndex `FrihetToolSpec` with FunctionTools, draft-only invariant enforcement, and runnable agent (`example_agent.py`).
+- **Zapier Actions & MCP Integration (`marketplace/zapier/`).** Added official definition for Zapier AI Actions and Triggers (`invoice_paid`, `invoice_created`, `create_draft_invoice`, `create_client`) with HMAC-SHA256 signature verification.
+- **Cursor IDE Integration Kit (`marketplace/cursor/`).** Added production-ready `.cursor/mcp.json` configuration and semantic `.cursor/rules/frihet.mdc` rules grounding Cursor Composer and Agent mode in non-destructive draft invoicing and European/Spanish VAT/IGIC regimes.
+- **Claude Code CLI Integration Guide (`marketplace/anthropic/claude-code.md`).** Documented one-line stdio and SSE streaming connections for Anthropic's Claude Code terminal agent and Claude Desktop.
+- **Raycast Extension Manifest (`marketplace/raycast/`).** Added extension package manifest and commands (`search-invoices`, `monthly-summary`, `create-draft-expense`) for macOS founders.
+- **Multi-Surface Distribution & Ecosystem Matrix (`marketplace/README.md`).** Centralized public contract facts and tracking matrix spanning 18 official distribution surfaces across MCP registries, AI agent frameworks, automation platforms, and IDE extensions.
 - **Google Connected Apps Platform Curated Profile (#262).** Added an 18-tool curated profile (`GOOGLE_CONNECTED_APPS_TOOL_NAMES`) in `src/google-profile.ts` conforming strictly to Google's October 2026 guidelines. Enforces draft-only mutations for invoices/quotes/expenses, deep output redaction for European tax IDs and bank accounts, and `readOnlyHint: true` on analytical queries.
 - **Meta Muse Official Connector Package.** Added official integration package and manifest in `marketplace/muse/` declaring the 18-tool small-business profile, OAuth/API-key gateway bindings, and draft-only financial invariants (resolving [berthelius/Frihet-ERP#2291](https://github.com/berthelius/Frihet-ERP/issues/2291)).
 - **Multi-Agent Python Toolkits (CrewAI & LangChain/LangGraph).** Added native agent toolkits under `marketplace/crewai/` and `marketplace/langchain/` with Pydantic v2 schemas, strict type-checking, runnable multi-agent CFO/Collections examples, and LangGraph human-in-the-loop (`interrupt_before=["frihet_draft_invoice"]`) safety patterns.
