@@ -1,0 +1,112 @@
+{
+  "name": "Frihet ERP",
+  "key": "frihet",
+  "version": "1.0.0",
+  "platformVersion": "15.0.0",
+  "description": "Connect Frihet ERP to 7,000+ apps. Automated invoicing, receipt expense capture, and European tax compliance.",
+  "authentication": {
+    "type": "custom",
+    "test": {
+      "url": "https://api.frihet.io/v1/context",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer {{bundle.authData.apiKey}}",
+        "x-frihet-api-key": "{{bundle.authData.apiKey}}"
+      }
+    },
+    "fields": [
+      {
+        "key": "apiKey",
+        "type": "string",
+        "required": true,
+        "label": "API Key",
+        "helpText": "Create an API key in Frihet (Settings -> Developers -> API Keys)."
+      }
+    ]
+  },
+  "triggers": {
+    "invoice_paid": {
+      "key": "invoice_paid",
+      "noun": "Invoice",
+      "display": {
+        "label": "New Paid Invoice",
+        "description": "Triggers when an invoice is fully marked as paid."
+      },
+      "operation": {
+        "type": "hook",
+        "performSubscribe": {
+          "url": "https://api.frihet.io/v1/webhooks",
+          "method": "POST",
+          "body": {
+            "targetUrl": "{{bundle.targetUrl}}",
+            "event": "invoice.paid"
+          }
+        },
+        "performUnsubscribe": {
+          "url": "https://api.frihet.io/v1/webhooks/{{bundle.subscribeData.id}}",
+          "method": "DELETE"
+        }
+      }
+    },
+    "invoice_created": {
+      "key": "invoice_created",
+      "noun": "Invoice",
+      "display": {
+        "label": "New Invoice Created",
+        "description": "Triggers when a new invoice is created (draft or issued)."
+      },
+      "operation": {
+        "type": "hook",
+        "performSubscribe": {
+          "url": "https://api.frihet.io/v1/webhooks",
+          "method": "POST",
+          "body": {
+            "targetUrl": "{{bundle.targetUrl}}",
+            "event": "invoice.created"
+          }
+        }
+      }
+    }
+  },
+  "creates": {
+    "create_draft_invoice": {
+      "key": "create_draft_invoice",
+      "noun": "Draft Invoice",
+      "display": {
+        "label": "Create Draft Invoice",
+        "description": "Creates a draft invoice for human confirmation. Does not submit to tax authorities."
+      },
+      "operation": {
+        "perform": {
+          "url": "https://api.frihet.io/v1/invoices",
+          "method": "POST",
+          "body": {
+            "clientId": "{{bundle.inputData.clientId}}",
+            "items": "{{bundle.inputData.items}}",
+            "status": "draft"
+          }
+        }
+      }
+    },
+    "create_client": {
+      "key": "create_client",
+      "noun": "Client",
+      "display": {
+        "label": "Create Client",
+        "description": "Registers a new customer or business contact."
+      },
+      "operation": {
+        "perform": {
+          "url": "https://api.frihet.io/v1/clients",
+          "method": "POST",
+          "body": {
+            "name": "{{bundle.inputData.name}}",
+            "email": "{{bundle.inputData.email}}",
+            "taxId": "{{bundle.inputData.taxId}}",
+            "country": "{{bundle.inputData.country}}"
+          }
+        }
+      }
+    }
+  }
+}
