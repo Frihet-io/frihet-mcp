@@ -48,6 +48,7 @@ const TOOLKIT_CODE_FILES = [
   'marketplace/langchain/frihet_langchain.py',
   'marketplace/crewai/frihet_crewai.py',
   'marketplace/flowise/frihet_custom_tool.js',
+  'marketplace/raycast/src/api.ts',
 ];
 
 let failed = false;
