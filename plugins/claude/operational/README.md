@@ -77,7 +77,7 @@ datos personales: utiliza solo los necesarios.
 [Soporte](https://claude-mcp.frihet.io/support) ·
 [Privacidad](https://www.frihet.io/es/privacy) ·
 [Condiciones](https://www.frihet.io/es/terms) ·
-[Contacto](mailto:hola@frihet.io)
+[Contacto](mailto:contact@frihet.io)
 
 ## Estado de esta versión
 

@@ -21,7 +21,7 @@ test("remote preview is a self-contained export of the Claude operational skills
   assert.equal(manifest.version, "1.18.0-preview.4");
   assert.equal(manifest.license, "MIT");
   assert.equal(manifest.author.name, "Frihet");
-  assert.equal(manifest.author.email, "hola@frihet.io");
+  assert.equal(manifest.author.email, "hello@frihet.io");
   assert.equal(manifest.privacyPolicyUrl, "https://www.frihet.io/es/privacy");
   // Directory listing fields (code.claude.com/docs/en/plugins-reference#directory-listing-fields).
   assert.equal(manifest.icon, "./.claude-plugin/icon.png");

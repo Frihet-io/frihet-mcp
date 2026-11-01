@@ -6,7 +6,7 @@
   "description": "Review receivables, prepare invoices and quotes, and review monthly business records in Frihet. Uses the connected MCP schemas, verifies partial payments and currencies, and respects approval before changes.",
   "author": {
     "name": "Frihet",
-    "email": "hola@frihet.io",
+    "email": "hello@frihet.io",
     "url": "https://frihet.io"
   },
   "homepage": "https://frihet.io",
