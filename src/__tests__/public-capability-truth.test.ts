@@ -138,7 +138,7 @@ test("generated remote profiles match the committed Worker configuration", () =>
   );
   assert.match(
     ROOT_INDEX_SOURCE,
-    /localMcpSurfaceComposition\(openaiMode, toolMode === "grouped", claudeMode\)/,
+    /localMcpSurfaceComposition\(openaiMode, toolMode === "grouped", claudeMode(?:, googleMode(?:, museMode)?)?\)/,
   );
   assert.match(
     WORKER_INDEX_SOURCE,
