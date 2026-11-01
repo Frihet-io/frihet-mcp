@@ -36,6 +36,8 @@ const PKG_VERSION: string = (() => {
 })();
 import { OPENAI_ALLOWED_TOOL_COUNT, OPENAI_EXCLUDED_COUNT, OPENAI_EXCLUDED_RESOURCE_COUNT } from "./openai-profile.js";
 import { CLAUDE_CANDIDATE_INSTRUCTIONS, CLAUDE_CANDIDATE_TOOLS } from "./claude-profile.js";
+import { GOOGLE_INSTRUCTIONS, GOOGLE_CANDIDATE_TOOL_COUNT } from "./google-profile.js";
+import { MUSE_INSTRUCTIONS, MUSE_CANDIDATE_TOOL_COUNT } from "./muse-profile.js";
 import { resolveToolMode, GROUPED_META_TOOL_COUNT } from "./tool-exposure.js";
 import {
   localMcpSurfaceComposition,
@@ -52,8 +54,11 @@ import { setTraceContext } from "./observability.js";
 function main(): void {
   const openaiMode = process.env.FRIHET_OPENAI_MODE === "true";
   const claudeMode = process.env.FRIHET_CLAUDE_MODE === "true";
-  if (openaiMode && claudeMode) {
-    console.error("Error: FRIHET_OPENAI_MODE and FRIHET_CLAUDE_MODE are mutually exclusive");
+  const googleMode = process.env.FRIHET_GOOGLE_MODE === "true";
+  const museMode = process.env.FRIHET_MUSE_MODE === "true";
+  const activeModes = [openaiMode, claudeMode, googleMode, museMode].filter(Boolean).length;
+  if (activeModes > 1) {
+    console.error("Error: FRIHET_OPENAI_MODE, FRIHET_CLAUDE_MODE, FRIHET_GOOGLE_MODE, and FRIHET_MUSE_MODE are mutually exclusive");
     process.exit(1);
   }
   const apiKey = process.env.FRIHET_API_KEY;
@@ -131,6 +136,10 @@ function main(): void {
     version: PKG_VERSION,
     description: claudeMode
       ? `Local Claude candidate for Frihet: ${CLAUDE_CANDIDATE_TOOLS.size} canonical operations with reviewed fiscal aliases, 1 currencies resource and 2 receivables prompts. Optional grouped discovery adds 3 names. API-dependent operations require live workspace verification; this is not a published Directory connector.`
+      : googleMode
+      ? `Frihet ERP profile for Google Connected Apps (Gemini & Search): ${GOOGLE_CANDIDATE_TOOL_COUNT} canonical operations with draft-only human-in-the-loop protection.`
+      : museMode
+      ? `Frihet ERP connector for Meta Muse: ${MUSE_CANDIDATE_TOOL_COUNT} canonical operations with draft-only human-in-the-loop protection.`
       :
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
       "Provides a catalogue of 158 canonical operations; fiscal aliases and optional grouped discovery names are reported separately. " +
@@ -140,7 +149,13 @@ function main(): void {
     // Delivered by `initialize` to every MCP client, which hands it to the model
     // before the first tool call. This is the only onboarding channel that costs
     // the operator zero configuration. Source: src/agent-onboarding.ts.
-    instructions: claudeMode ? CLAUDE_CANDIDATE_INSTRUCTIONS : AGENT_SERVER_INSTRUCTIONS,
+    instructions: claudeMode
+      ? CLAUDE_CANDIDATE_INSTRUCTIONS
+      : googleMode
+      ? GOOGLE_INSTRUCTIONS
+      : museMode
+      ? MUSE_INSTRUCTIONS
+      : AGENT_SERVER_INSTRUCTIONS,
   });
 
   const toolMode = resolveToolMode();
@@ -164,7 +179,7 @@ function main(): void {
   registerMcpSurface(
     server,
     client,
-    localMcpSurfaceComposition(openaiMode, toolMode === "grouped", claudeMode),
+    localMcpSurfaceComposition(openaiMode, toolMode === "grouped", claudeMode, googleMode, museMode),
   );
 
   // Register shutdown hook to log final metrics summary

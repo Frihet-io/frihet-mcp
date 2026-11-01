@@ -30,6 +30,7 @@ const JSON_MANIFESTS = [
   'marketplace/cursor/.cursor/mcp.json',
   'marketplace/raycast/package.json',
   'marketplace/muse/manifest.json',
+  'marketplace/openclaw/skill.json',
   'marketplace/make/app-definition.json',
   'marketplace/postman/frihet-erp.postman_collection.json',
   'marketplace/postman/frihet-erp.postman_environment.json',

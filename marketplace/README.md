@@ -26,12 +26,12 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 |---|---|---|---|---|
 | **n8n Community Node** | `n8n-nodes-frihet@1.0.2` | n8n self-hosted & cloud | Sigstore provenance, governed credentials | **`PUBLISHED_VERIFIED`** |
 | **OpenAI ChatGPT Store** | `marketplace/openai/` | ChatGPT Plus & Team | 33-tool profile, draft-only mutations | **`PUBLISHED_VERIFIED`** |
-| **ClawHub Registry** | `@frihet-io` v1.1.0 | OpenClaw agent network | Governed skill package, draft-only | **`PUBLISHED_VERIFIED`** |
+| **ClawHub Registry** | `marketplace/openclaw/` | OpenClaw agent network | Governed skill package (`@frihet-io` v1.1.0) | **`PUBLISHED_VERIFIED`** |
 | **Glama Directory** | `glama.json` | MCP directory users | Full catalogue listing metadata | **`PUBLISHED_VERIFIED`** |
 | **Smithery Registry** | `smithery.yaml` | AI agent developers | Full stdio / CLI configuration | **`PUBLISHED_VERIFIED`** |
 | **Anthropic Claude Directory** | `marketplace/anthropic/` | Claude Desktop & Enterprise | 132 tools, Sanitized PII | **`SUBMITTED`** (PR open, CI green) |
 | **Composio Toolkit** | `Remote MCP / REST` | 1500+ agent ecosystem | Full OpenAPI & MCP profile, draft invariant | **`SUBMITTED`** (Email & web form verified) |
-| **Meta Muse Connector** | `marketplace/muse/` | WhatsApp & Meta AI SMB | Curated 18-tool profile | **`SUBMITTED`** (Catalog submission) |
+| **Meta Muse Connector** | `src/muse-profile.ts` | WhatsApp & Meta AI SMB | Curated 18-tool profile, forced draft | **`SUBMITTED`** (Catalog submission & server profile) |
 | **Google Connected Apps** | `src/google-profile.ts` | Gemini & Google Search | Curated 18-tool profile, forced draft | **`PREVIEW_APPLIED`** (Form 46 preview access) |
 | **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (157 ops) / Draft invariant | **`CONTRACT_TESTED`** |
 | **Vercel AI SDK** | `marketplace/vercel-ai/` | Next.js & TypeScript agents | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |

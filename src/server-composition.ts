@@ -14,6 +14,7 @@ import {
 import { applyFiscalAliases } from "./fiscal-aliases.js";
 import { applyClaudeCandidateProfile, CLAUDE_CANDIDATE_TOOLS, CLAUDE_GROUP_METADATA } from "./claude-profile.js";
 import { applyGoogleProfile, GOOGLE_CANDIDATE_TOOLS } from "./google-profile.js";
+import { applyMuseProfile, MUSE_CANDIDATE_TOOLS } from "./muse-profile.js";
 import {
   applyOpenAIProfile,
   applyOpenAIReviewProfiles,
@@ -29,6 +30,7 @@ export interface McpSurfaceComposition {
   readonly includeDynamicResources: boolean;
   readonly claudeMode?: boolean;
   readonly googleMode?: boolean;
+  readonly museMode?: boolean;
 }
 
 export function localMcpSurfaceComposition(
@@ -36,8 +38,9 @@ export function localMcpSurfaceComposition(
   groupedMode: boolean,
   claudeMode = false,
   googleMode = false,
+  museMode = false,
 ): McpSurfaceComposition {
-  return { openaiMode, groupedMode, includeDynamicResources: true, claudeMode, googleMode };
+  return { openaiMode, groupedMode, includeDynamicResources: true, claudeMode, googleMode, museMode };
 }
 
 export function remoteMcpSurfaceComposition(
@@ -45,8 +48,9 @@ export function remoteMcpSurfaceComposition(
   groupedMode: boolean,
   claudeMode = false,
   googleMode = false,
+  museMode = false,
 ): McpSurfaceComposition {
-  return { openaiMode, groupedMode, includeDynamicResources: false, claudeMode, googleMode };
+  return { openaiMode, groupedMode, includeDynamicResources: false, claudeMode, googleMode, museMode };
 }
 
 export function registerMcpSurface(
@@ -54,9 +58,9 @@ export function registerMcpSurface(
   client: IFrihetClient,
   options: McpSurfaceComposition,
 ): void {
-  const activeModes = [options.openaiMode, options.claudeMode, options.googleMode].filter(Boolean).length;
+  const activeModes = [options.openaiMode, options.claudeMode, options.googleMode, options.museMode].filter(Boolean).length;
   if (activeModes > 1) {
-    throw new Error("FRIHET_OPENAI_MODE, FRIHET_CLAUDE_MODE, and FRIHET_GOOGLE_MODE are mutually exclusive");
+    throw new Error("FRIHET_OPENAI_MODE, FRIHET_CLAUDE_MODE, FRIHET_GOOGLE_MODE, and FRIHET_MUSE_MODE are mutually exclusive");
   }
   if (options.claudeMode) {
     // Directory reads annotations.title. Install before grouped discovery eagerly
@@ -87,7 +91,7 @@ export function registerMcpSurface(
     applyOpenAIProfile(server);
   }
 
-  if (!options.openaiMode && !options.googleMode) {
+  if (!options.openaiMode && !options.googleMode && !options.museMode) {
     applyPublicCapabilityTruth(server);
   }
 
@@ -95,6 +99,8 @@ export function registerMcpSurface(
     applyClaudeCandidateProfile(server);
   } else if (options.googleMode) {
     applyGoogleProfile(server);
+  } else if (options.museMode) {
+    applyMuseProfile(server);
   }
 
   registerAllTools(server, client);
