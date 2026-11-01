@@ -36,7 +36,7 @@ import {
   getContent,
   formatRecord,
   READ_ONLY_ANNOTATIONS,
-} from "./shared.js";
+} from "../tools/shared.js";
 import {
   generateDailyOperationalBrief,
   resolveDocumentAmount,

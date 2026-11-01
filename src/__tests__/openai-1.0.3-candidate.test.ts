@@ -41,7 +41,7 @@ import {
   CLIENT_SEARCH_SERVER_PROJECTION,
   VENDOR_SEARCH_SERVER_PROJECTION,
   registerOpenAI103CandidateTools,
-} from "../tools/openai-expansion-103.js";
+} from "../openai-103/openai-expansion-103.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
