@@ -66,6 +66,11 @@ export function googleToolResult(result: unknown): unknown {
   return res;
 }
 
+export const GOOGLE_FORCED_INPUT_VALUES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
+  create_invoice: { status: "draft" },
+  create_quote: { status: "draft" },
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function applyGoogleProfile(server: any): void {
   const registerTool = server.registerTool.bind(server);
@@ -75,8 +80,20 @@ export function applyGoogleProfile(server: any): void {
     if (!GOOGLE_CANDIDATE_TOOLS.has(name)) return undefined;
 
     let description = config.description ?? "";
+    let inputSchema = config.inputSchema;
+
     if (name === "create_invoice") {
       description = `${description} [Google Connected Apps: Generates an invoice strictly in 'draft' status for human review. No irreversible fiscal submission occurs.]`;
+      if (inputSchema && typeof inputSchema === "object" && "status" in inputSchema) {
+        const { status: _omittedStatus, ...rest } = inputSchema;
+        inputSchema = rest;
+      }
+    } else if (name === "create_quote") {
+      description = `${description} [Google Connected Apps: Generates a quote strictly in 'draft' status for human review.]`;
+      if (inputSchema && typeof inputSchema === "object" && "status" in inputSchema) {
+        const { status: _omittedStatus, ...rest } = inputSchema;
+        inputSchema = rest;
+      }
     }
 
     return registerTool(
@@ -84,6 +101,7 @@ export function applyGoogleProfile(server: any): void {
       {
         ...config,
         description,
+        inputSchema,
         annotations: {
           ...config.annotations,
           ...(config.annotations?.readOnlyHint !== true ? { destructiveHint: true } : {}),
@@ -92,7 +110,14 @@ export function applyGoogleProfile(server: any): void {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async (...args: any[]) => {
         try {
-          const res = await handler(...args);
+          let input = args[0];
+          if (input && typeof input === "object") {
+            const forced = GOOGLE_FORCED_INPUT_VALUES[name];
+            if (forced) {
+              input = { ...input, ...forced };
+            }
+          }
+          const res = await handler(input, ...args.slice(1));
           return googleToolResult(res);
         } catch {
           return googleToolResult({

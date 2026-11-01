@@ -43,6 +43,9 @@
       "communication": {
         "url": "/invoices",
         "method": "POST",
+        "headers": {
+          "Idempotency-Key": "{{uuid}}"
+        },
         "body": {
           "clientId": "{{clientId}}",
           "items": "{{items}}",
@@ -59,6 +62,9 @@
       "communication": {
         "url": "/clients",
         "method": "POST",
+        "headers": {
+          "Idempotency-Key": "{{uuid}}"
+        },
         "body": {
           "name": "{{name}}",
           "taxId": "{{taxId}}",
@@ -71,9 +77,19 @@
       "name": "getMonthlySummary",
       "label": "Get Monthly Summary (Action)",
       "type": "action",
-      "description": "Retrieves revenue, expenses, and net margin for a given month.",
+      "description": "Retrieves revenue, expenses, and net margin for a given month in YYYY-MM format.",
       "communication": {
-        "url": "/summaries/monthly?year={{year}}&month={{month}}",
+        "url": "/monthly?month={{month}}",
+        "method": "GET"
+      }
+    },
+    {
+      "name": "getQuarterlyTaxes",
+      "label": "Get Quarterly Taxes (Action)",
+      "type": "action",
+      "description": "Retrieves estimated VAT and IRPF tax balances for a quarter in YYYY-Q# format.",
+      "communication": {
+        "url": "/quarterly?quarter={{quarter}}",
         "method": "GET"
       }
     }

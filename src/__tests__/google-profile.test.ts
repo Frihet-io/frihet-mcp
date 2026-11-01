@@ -67,6 +67,72 @@ test("google-profile: create_invoice includes draft-only human-in-the-loop notic
   assert.match(tool.description, /Google Connected Apps: Generates an invoice strictly in 'draft' status/);
 });
 
+test("google-profile: create_invoice strictly forces draft status on real composition even if caller specifies status='sent'", async () => {
+  const server = new McpServer({ name: "test-google", version: "1.0.0" });
+  const comp = localMcpSurfaceComposition(false, false, false, true);
+
+  let capturedInvoicePayload: Record<string, unknown> | undefined;
+  const mockClient = {
+    ...stubClient,
+    createInvoice: async (data: Record<string, unknown>) => {
+      capturedInvoicePayload = data;
+      return { id: "inv_123", status: data.status, invoiceNumber: "FAC-2026-001" };
+    },
+  } as unknown as IFrihetClient;
+
+  registerMcpSurface(server, mockClient, comp);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tool = (server as any)._registeredTools?.["create_invoice"];
+  assert.ok(tool);
+
+  // Status must be omitted from inputSchema to prevent agent confusion
+  assert.equal(tool.config?.inputSchema?.status, undefined);
+
+  // Even if caller bypasses and passes status: 'sent'
+  const result = await tool.handler({
+    clientName: "Test Client",
+    items: [{ description: "Service", quantity: 1, unitPrice: 100 }],
+    status: "sent",
+  });
+
+  assert.ok(capturedInvoicePayload, "client.createInvoice must be called");
+  assert.equal(capturedInvoicePayload.status, "draft", "Disallowed non-draft status must NEVER reach the client");
+  assert.notEqual(capturedInvoicePayload.status, "sent");
+});
+
+test("google-profile: create_quote strictly forces draft status on real composition even if caller specifies status='accepted'", async () => {
+  const server = new McpServer({ name: "test-google", version: "1.0.0" });
+  const comp = localMcpSurfaceComposition(false, false, false, true);
+
+  let capturedQuotePayload: Record<string, unknown> | undefined;
+  const mockClient = {
+    ...stubClient,
+    createQuote: async (data: Record<string, unknown>) => {
+      capturedQuotePayload = data;
+      return { id: "quo_123", status: data.status, quoteNumber: "PRE-2026-001" };
+    },
+  } as unknown as IFrihetClient;
+
+  registerMcpSurface(server, mockClient, comp);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tool = (server as any)._registeredTools?.["create_quote"];
+  assert.ok(tool);
+
+  assert.equal(tool.config?.inputSchema?.status, undefined);
+
+  await tool.handler({
+    clientName: "Test Client",
+    items: [{ description: "Service", quantity: 1, unitPrice: 100 }],
+    status: "accepted",
+  });
+
+  assert.ok(capturedQuotePayload, "client.createQuote must be called");
+  assert.equal(capturedQuotePayload.status, "draft", "Disallowed non-draft status must NEVER reach the client");
+  assert.notEqual(capturedQuotePayload.status, "accepted");
+});
+
 test("google-profile: redaction strips sensitive fiscal IDs and secrets from output", () => {
   const raw = {
     content: [{ type: "text", text: "Client tax ID: ESB12345678 and token: fri_sec_12345" }],

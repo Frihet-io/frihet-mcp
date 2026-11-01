@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Frihet ERP API",
-    "_postman_id": "c1f7b8e2-04e1-4c6e-8e4a-4a69b72019a1",
-    "description": "Official Postman Collection for Frihet ERP — AI-native business management, invoicing, expenses, and European tax compliance.",
+    "name": "Frihet ERP API Collection",
+    "_postman_id": "7b2e8f1c-4e31-412f-90e1-f673190b2026",
+    "description": "Complete collection of Frihet ERP REST endpoints for business intelligence, invoice drafting, expense management, and client records. Conforms to Frihet canonical API and draft-only governance invariants.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -17,7 +17,7 @@
   },
   "item": [
     {
-      "name": "Context & Taxes",
+      "name": "Intelligence & Summaries",
       "item": [
         {
           "name": "Get Business Context",
@@ -36,7 +36,7 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"Has valid business context\", function () {",
+                  "pm.test(\"Response contains operating context\", function () {",
                   "    var json = pm.response.json();",
                   "    pm.expect(json).to.be.an('object');",
                   "});"
@@ -51,12 +51,11 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/summaries/monthly?year=2026&month=10",
+              "raw": "{{baseUrl}}/monthly?month=2026-10",
               "host": ["{{baseUrl}}"],
-              "path": ["summaries", "monthly"],
+              "path": ["monthly"],
               "query": [
-                { "key": "year", "value": "2026" },
-                { "key": "month", "value": "10" }
+                { "key": "month", "value": "2026-10" }
               ]
             }
           }
@@ -67,12 +66,11 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/taxes/quarterly?year=2026&quarter=3",
+              "raw": "{{baseUrl}}/quarterly?quarter=2026-Q3",
               "host": ["{{baseUrl}}"],
-              "path": ["taxes", "quarterly"],
+              "path": ["quarterly"],
               "query": [
-                { "key": "year", "value": "2026" },
-                { "key": "quarter", "value": "3" }
+                { "key": "quarter", "value": "2026-Q3" }
               ]
             }
           }
@@ -100,7 +98,8 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
             ],
             "body": {
               "mode": "raw",
@@ -150,11 +149,12 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vendor\": \"Cloud Services Corp\",\n  \"amount\": 49.99,\n  \"vatRate\": 21,\n  \"category\": \"Software\"\n}"
+              "raw": "{\n  \"vendor\": \"Cloud Services Corp\",\n  \"amount\": 49.99,\n  \"vatRate\": 21,\n  \"category\": \"Software\",\n  \"status\": \"draft\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/expenses",
@@ -186,7 +186,8 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
             ],
             "body": {
               "mode": "raw",
