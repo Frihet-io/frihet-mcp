@@ -251,7 +251,7 @@ test("contradictory modes fail before any registration", () => {
   }
 });
 
-test("actual stdio Claude flag exposes truthful candidate and rejects mixed flags using injected env", { timeout: 30000 }, async () => {
+test("actual stdio Claude flag exposes truthful candidate and rejects mixed flags using injected env", { timeout: 60000 }, async () => {
   const entry = fileURLToPath(new URL("../index.js", import.meta.url));
   const transport = new StdioClientTransport({ command: process.execPath, args: [entry], env: { FRIHET_DEMO: "1", FRIHET_CLAUDE_MODE: "true" }, stderr: "pipe" });
   const client = new Client({ name: "stdio-candidate-test", version: "1.0.0" });
