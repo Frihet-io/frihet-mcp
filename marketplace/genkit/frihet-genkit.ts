@@ -11,6 +11,33 @@ export interface GenkitToolRegistrar {
   defineTool(config: { name: string; description: string; inputSchema: any; outputSchema?: any }, fn: (input: any) => Promise<any>): any;
 }
 
+const SENSITIVE_KEYS = new Set(['taxId', 'iban', 'token', 'secret', 'apiKey', 'password', 'verifactuHash']);
+
+function redactSensitiveData(obj: unknown): unknown {
+  if (obj === null || typeof obj !== 'object') return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(redactSensitiveData);
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    if (SENSITIVE_KEYS.has(key)) {
+      result[key] = '[REDACTED]';
+    } else {
+      result[key] = redactSensitiveData(value);
+    }
+  }
+  return result;
+}
+
+function generateIdempotencyKey(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+}
+
 /**
  * Creates Google Genkit tools for Frihet ERP.
  * Works seamlessly with Google Genkit (Gemini 1.5/2.0 Pro and Flash models).
@@ -22,6 +49,7 @@ export function createFrihetGenkitTools(registrar?: GenkitToolRegistrar, config:
   const baseUrl = (config.baseUrl || envBaseUrl || 'https://api.frihet.io/v1').replace(/\/+$/, '');
 
   async function request(endpoint: string, options: RequestInit = {}) {
+    const method = options.method?.toUpperCase() || 'GET';
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'User-Agent': 'Frihet-Genkit-Toolkit/1.0.0',
@@ -29,6 +57,10 @@ export function createFrihetGenkitTools(registrar?: GenkitToolRegistrar, config:
     if (apiKey) {
       headers['Authorization'] = `Bearer ${apiKey}`;
       headers['x-frihet-api-key'] = apiKey;
+    }
+
+    if (['POST', 'PATCH', 'DELETE'].includes(method)) {
+      headers['Idempotency-Key'] = generateIdempotencyKey();
     }
 
     const response = await fetch(`${baseUrl}${endpoint}`, {
@@ -41,7 +73,8 @@ export function createFrihetGenkitTools(registrar?: GenkitToolRegistrar, config:
       throw new Error(`Frihet API error (${response.status}): ${errText}`);
     }
 
-    return response.json();
+    const raw = await response.json();
+    return redactSensitiveData(raw);
   }
 
   const toolDefinitions = [
@@ -59,7 +92,8 @@ export function createFrihetGenkitTools(registrar?: GenkitToolRegistrar, config:
         month: z.number().int().min(1).max(12).describe('Calendar month (1-12)'),
       }),
       fn: async (input: { year: number; month: number }) => {
-        return request(`/summaries/monthly?year=${input.year}&month=${input.month}`);
+        const monthStr = `${input.year}-${String(input.month).padStart(2, '0')}`;
+        return request(`/monthly?month=${encodeURIComponent(monthStr)}`);
       },
     },
     {
@@ -70,7 +104,8 @@ export function createFrihetGenkitTools(registrar?: GenkitToolRegistrar, config:
         quarter: z.number().int().min(1).max(4).describe('Quarter (1-4)'),
       }),
       fn: async (input: { year: number; quarter: number }) => {
-        return request(`/taxes/quarterly?year=${input.year}&quarter=${input.quarter}`);
+        const quarterStr = `${input.year}-Q${input.quarter}`;
+        return request(`/quarterly?quarter=${encodeURIComponent(quarterStr)}`);
       },
     },
     {
@@ -138,7 +173,7 @@ export function createFrihetGenkitTools(registrar?: GenkitToolRegistrar, config:
     },
     {
       name: 'frihet_create_expense',
-      description: 'Record a new business expense/receipt for tax deduction.',
+      description: 'Record a new business expense/receipt for tax deduction in draft status.',
       inputSchema: z.object({
         vendor: z.string().describe('Vendor or merchant name'),
         amount: z.number().positive().describe('Total expense amount including tax'),
@@ -149,7 +184,7 @@ export function createFrihetGenkitTools(registrar?: GenkitToolRegistrar, config:
       fn: async (input: { vendor: string; amount: number; vatRate: number; category: string; date?: string }) => {
         return request('/expenses', {
           method: 'POST',
-          body: JSON.stringify(input),
+          body: JSON.stringify({ ...input, status: 'draft' }),
         });
       },
     },

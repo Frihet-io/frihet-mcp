@@ -28,7 +28,7 @@
   "capabilities": {
     "tools": [
       {
-        "name": "frihet_get_business_context",
+        "name": "get_business_context",
         "description": "Get high-level business profile, default currency, fiscal country, and operating summary.",
         "readOnly": true
       },

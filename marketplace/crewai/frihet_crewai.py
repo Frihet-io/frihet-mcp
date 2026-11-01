@@ -8,10 +8,26 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from typing import Any, Dict, List, Optional
 import urllib.request
 import urllib.error
 from pydantic import BaseModel, Field
+
+SENSITIVE_KEYS = {"taxId", "iban", "token", "secret", "apiKey", "password", "verifactuHash"}
+
+
+def redact_sensitive_data(obj: Any) -> Any:
+    """Recursively redacts sensitive identifiers from API responses."""
+    if isinstance(obj, dict):
+        return {
+            k: ("[REDACTED]" if k in SENSITIVE_KEYS else redact_sensitive_data(v))
+            for k, v in obj.items()
+        }
+    elif isinstance(obj, list):
+        return [redact_sensitive_data(item) for item in obj]
+    return obj
+
 
 try:
     from crewai.tools import BaseTool
@@ -43,7 +59,10 @@ class FrihetClientBase:
         }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-            headers["X-API-Key"] = self.api_key
+            headers["x-frihet-api-key"] = self.api_key
+
+        if method in ("POST", "PATCH", "DELETE"):
+            headers["Idempotency-Key"] = str(uuid.uuid4())
 
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
@@ -51,7 +70,8 @@ class FrihetClientBase:
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 body = resp.read().decode("utf-8")
-                return json.loads(body) if body else {}
+                res = json.loads(body) if body else {}
+                return redact_sensitive_data(res)
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8") if e.fp else str(e)
             return {"error": True, "status": e.code, "message": error_body}

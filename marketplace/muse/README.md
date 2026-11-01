@@ -29,7 +29,7 @@ flowchart LR
 Rather than exposing the complete 165-tool internal enterprise catalogue, the Muse connector exposes a curated, high-confidence surface designed for small-to-medium business management:
 
 ### A. Business Health & Financial Context (Read-Only)
-- `frihet_get_business_context`: Overview of current business setup, currency, and operating summary.
+- `get_business_context`: Overview of current business setup, currency, and operating summary.
 - `get_monthly_summary`: Revenue, expenses, net margin, and cash summary for a specific calendar month.
 - `get_quarterly_taxes`: Estimated quarterly VAT/IRPF obligations and fiscal calendar deadlines.
 

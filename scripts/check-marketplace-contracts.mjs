@@ -7,7 +7,11 @@
  *   1. All JSON manifests parse without syntax errors.
  *   2. All YAML specifications parse without syntax errors.
  *   3. Draft-only invoice creation invariant is maintained across all tools.
- *   4. Zero leaked production secrets (API keys or tokens).
+ *   4. Canonical REST endpoint routes (/monthly, /quarterly) strictly maintained;
+ *      legacy/divergent paths (/summaries/monthly, /taxes/quarterly) rejected.
+ *   5. Idempotency-Key support and sensitive field redaction in all client toolkits.
+ *   6. Canonical tool naming in directory manifests (e.g. Meta Muse).
+ *   7. Zero leaked production secrets (API keys or tokens).
  */
 
 import fs from 'node:fs';
@@ -94,7 +98,74 @@ for (const relPath of TOOLKIT_CODE_FILES) {
   }
 }
 
-// 4. Secret Leak Tripwire
+// 4. Check Canonical Endpoints Invariant (No /summaries/monthly or /taxes/quarterly divergence)
+const DIVERGENT_ENDPOINTS = [
+  '/summaries/monthly',
+  '/summaries/quarterly',
+  '/taxes/quarterly',
+];
+
+const filesToInspectForEndpoints = [
+  ...TOOLKIT_CODE_FILES,
+  'marketplace/make/app-definition.json',
+  'marketplace/postman/frihet-erp.postman_collection.json',
+];
+
+for (const relPath of filesToInspectForEndpoints) {
+  const fullPath = path.join(rootDir, relPath);
+  try {
+    const content = fs.readFileSync(fullPath, 'utf8');
+    for (const badRoute of DIVERGENT_ENDPOINTS) {
+      if (content.includes(badRoute)) {
+        console.error(`✗ Divergent non-canonical route '${badRoute}' found in: ${relPath}`);
+        failed = true;
+      }
+    }
+  } catch (err) {
+    console.error(`✗ Failed reading for endpoint audit: ${relPath} — ${err.message}`);
+    failed = true;
+  }
+}
+console.log('✓ Canonical REST endpoint routes strictly enforced (zero legacy route divergence)');
+
+// 5. Check Idempotency & Redaction Guarantees in Toolkits
+for (const relPath of TOOLKIT_CODE_FILES) {
+  const fullPath = path.join(rootDir, relPath);
+  const code = fs.readFileSync(fullPath, 'utf8');
+  const hasIdempotency = code.includes('Idempotency-Key') || code.includes('idemp_');
+  const hasRedaction = code.includes('redact') || code.includes('REDACTED');
+
+  if (!hasIdempotency) {
+    console.error(`✗ Missing Idempotency-Key mutation protection in: ${relPath}`);
+    failed = true;
+  }
+  if (!hasRedaction) {
+    console.error(`✗ Missing sensitive field redaction in: ${relPath}`);
+    failed = true;
+  }
+}
+console.log('✓ Idempotency-Key and sensitive data redaction verified across all toolkits');
+
+// 6. Check Meta Muse canonical tool names
+const musePath = path.join(rootDir, 'marketplace/muse/manifest.json');
+try {
+  const museManifest = JSON.parse(fs.readFileSync(musePath, 'utf8'));
+  const toolNames = museManifest.capabilities.tools.map((t) => t.name);
+  if (toolNames.includes('frihet_get_business_context')) {
+    console.error(`✗ Non-canonical tool name frihet_get_business_context in Meta Muse manifest`);
+    failed = true;
+  }
+  if (!toolNames.includes('get_business_context')) {
+    console.error(`✗ Missing canonical tool get_business_context in Meta Muse manifest`);
+    failed = true;
+  }
+  console.log('✓ Meta Muse manifest canonical tool naming verified');
+} catch (err) {
+  console.error(`✗ Meta Muse validation failed: ${err.message}`);
+  failed = true;
+}
+
+// 7. Secret Leak Tripwire
 const allFilesToCheck = [...JSON_MANIFESTS, ...YAML_MANIFESTS, ...TOOLKIT_CODE_FILES];
 const SECRET_REGEX = /(?:sk_live_[0-9a-zA-Z]{24,}|fri_live_[0-9a-zA-Z]{24,})/;
 

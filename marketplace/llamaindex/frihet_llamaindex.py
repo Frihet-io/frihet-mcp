@@ -6,6 +6,7 @@ and reviewable draft invoicing in compliance with European/Spanish fiscal standa
 """
 
 import os
+import uuid
 import urllib.parse
 from typing import Any, Dict, List, Optional
 import requests
@@ -25,11 +26,26 @@ except ImportError:
             return {"fn": fn, "name": name, "description": description}
 
 
+SENSITIVE_KEYS = {"taxId", "iban", "token", "secret", "apiKey", "password", "verifactuHash"}
+
+
+def redact_sensitive_data(obj: Any) -> Any:
+    """Recursively redacts sensitive identifiers from API responses."""
+    if isinstance(obj, dict):
+        return {
+            k: ("[REDACTED]" if k in SENSITIVE_KEYS else redact_sensitive_data(v))
+            for k, v in obj.items()
+        }
+    elif isinstance(obj, list):
+        return [redact_sensitive_data(item) for item in obj]
+    return obj
+
+
 class DraftInvoiceItem(BaseModel):
     description: str = Field(description="Line item description")
-    quantity: float = Field(default=1.0, gt=0, description="Quantity units")
-    unit_price: float = Field(description="Net price per unit in EUR")
-    vat_rate: float = Field(default=21.0, description="VAT percentage (e.g. 21, 10, 4, 0)")
+    quantity: float = Field(default=1.0, gt=0, description="Quantity units (must be > 0)")
+    unit_price: float = Field(ge=0, description="Net price per unit in EUR (must be >= 0)")
+    vat_rate: float = Field(default=21.0, ge=0, description="VAT percentage (e.g. 21, 10, 4, 0)")
 
 
 class FrihetToolSpec(BaseToolSpec):
@@ -52,7 +68,13 @@ class FrihetToolSpec(BaseToolSpec):
         self.api_key = api_key or os.environ.get("FRIHET_API_KEY", "")
         self.base_url = (base_url or os.environ.get("FRIHET_API_BASE_URL", "https://api.frihet.io/v1")).rstrip("/")
 
-    def _request(self, endpoint: str, method: str = "GET", json_data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _request(
+        self,
+        endpoint: str,
+        method: str = "GET",
+        json_data: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Any:
         headers = {
             "Content-Type": "application/json",
             "User-Agent": "Frihet-LlamaIndex-Toolkit/1.0.0",
@@ -61,11 +83,16 @@ class FrihetToolSpec(BaseToolSpec):
             headers["Authorization"] = f"Bearer {self.api_key}"
             headers["x-frihet-api-key"] = self.api_key
 
+        if method in ("POST", "PATCH", "DELETE"):
+            headers["Idempotency-Key"] = str(uuid.uuid4())
+
         url = f"{self.base_url}{endpoint}"
         resp = requests.request(method, url, headers=headers, json=json_data, params=params, timeout=30)
         if not resp.ok:
             raise RuntimeError(f"Frihet API error ({resp.status_code}): {resp.text}")
-        return resp.json()
+
+        resp_json = resp.json()
+        return redact_sensitive_data(resp_json)
 
     def get_business_context(self) -> Dict[str, Any]:
         """Get high-level overview of the connected business, currency, fiscal regime, and active limits."""
@@ -73,15 +100,17 @@ class FrihetToolSpec(BaseToolSpec):
 
     def get_monthly_summary(self, year: int, month: int) -> Dict[str, Any]:
         """Retrieve monthly financial summary including revenue, deductible expenses, net margin, and cash."""
-        return self._request(f"/summaries/monthly", params={"year": year, "month": month})
+        month_str = f"{year:04d}-{month:02d}"
+        return self._request("/monthly", params={"month": month_str})
 
     def get_quarterly_taxes(self, year: int, quarter: int) -> Dict[str, Any]:
         """Retrieve estimated quarterly tax breakdown (Modelo 303 VAT, Modelo 130 IRPF installment)."""
-        return self._request(f"/taxes/quarterly", params={"year": year, "quarter": quarter})
+        quarter_str = f"{year:04d}-Q{quarter}"
+        return self._request("/quarterly", params={"quarter": quarter_str})
 
     def list_invoices(self, status: Optional[str] = None, client_id: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
         """List and search customer invoices with optional filters for status and client ID."""
-        params: Dict[str, Any] = {"limit": limit}
+        params: Dict[str, Any] = {"limit": min(limit, 100)}
         if status:
             params["status"] = status
         if client_id:
@@ -95,60 +124,47 @@ class FrihetToolSpec(BaseToolSpec):
 
     def create_draft_invoice(self, client_id: str, items: List[Dict[str, Any]], notes: Optional[str] = None) -> Dict[str, Any]:
         """Create an invoice in strictly DRAFT status. Human confirmation required before issuance."""
+        validated_items = [DraftInvoiceItem(**item).model_dump() for item in items]
         payload = {
             "clientId": client_id,
-            "items": items,
+            "items": validated_items,
             "notes": notes,
-            "status": "draft",  # Strict draft invariant
+            "status": "draft",  # Strict draft-only invariant
         }
         return self._request("/invoices", method="POST", json_data=payload)
 
     def list_expenses(self, category: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
-        """Query deductible business expenses and receipts with category filter."""
-        params: Dict[str, Any] = {"limit": limit}
+        """List recorded business expenses with category filtering and deductibility details."""
+        params: Dict[str, Any] = {"limit": min(limit, 100)}
         if category:
             params["category"] = category
         return self._request("/expenses", params=params)
 
-    def create_expense(self, vendor: str, amount: float, vat_rate: float = 21.0, category: str = "General", date: Optional[str] = None) -> Dict[str, Any]:
-        """Record a deductible business expense or supplier invoice."""
+    def create_expense(self, vendor: str, amount: float, category: str = "General", vat_rate: float = 21.0, date: Optional[str] = None) -> Dict[str, Any]:
+        """Record a business expense/receipt in draft status."""
         payload = {
             "vendor": vendor,
             "amount": amount,
-            "vatRate": vat_rate,
             "category": category,
+            "vatRate": vat_rate,
             "date": date,
+            "status": "draft",
         }
         return self._request("/expenses", method="POST", json_data=payload)
 
     def list_clients(self, search: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
-        """Search and list registered clients by name, tax ID (NIF/CIF), or email."""
-        params: Dict[str, Any] = {"limit": limit}
+        """List registered clients with optional search by company name, tax ID, or email."""
+        params: Dict[str, Any] = {"limit": min(limit, 100)}
         if search:
             params["search"] = search
         return self._request("/clients", params=params)
 
-    def create_client(self, name: str, tax_id: str, email: str, country: str = "ES") -> Dict[str, Any]:
-        """Register a new customer or business client."""
+    def create_client(self, name: str, email: str, country: str = "ES", tax_id: Optional[str] = None) -> Dict[str, Any]:
+        """Register a new customer profile with billing details."""
         payload = {
             "name": name,
-            "taxId": tax_id,
             "email": email,
             "country": country,
+            "taxId": tax_id,
         }
         return self._request("/clients", method="POST", json_data=payload)
-
-    def to_tool_list(self) -> List[Any]:
-        """Export as a list of LlamaIndex FunctionTools."""
-        return [
-            FunctionTool.from_defaults(fn=self.get_business_context, name="frihet_get_business_context"),
-            FunctionTool.from_defaults(fn=self.get_monthly_summary, name="frihet_get_monthly_summary"),
-            FunctionTool.from_defaults(fn=self.get_quarterly_taxes, name="frihet_get_quarterly_taxes"),
-            FunctionTool.from_defaults(fn=self.list_invoices, name="frihet_list_invoices"),
-            FunctionTool.from_defaults(fn=self.get_invoice, name="frihet_get_invoice"),
-            FunctionTool.from_defaults(fn=self.create_draft_invoice, name="frihet_create_draft_invoice"),
-            FunctionTool.from_defaults(fn=self.list_expenses, name="frihet_list_expenses"),
-            FunctionTool.from_defaults(fn=self.create_expense, name="frihet_create_expense"),
-            FunctionTool.from_defaults(fn=self.list_clients, name="frihet_list_clients"),
-            FunctionTool.from_defaults(fn=self.create_client, name="frihet_create_client"),
-        ]

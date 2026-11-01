@@ -10,43 +10,50 @@ This directory contains public listing copy, official manifests, SDK toolkits, a
 - **Canonical Catalogue:** 157 operations
 - **Local Full Surface:** 162 tool names, 11 resources, 10 prompts
 - **Grouped Remote Surface:** 165 tool names, 7 resources, 10 prompts
-- **Safety Invariant:** All agent-triggered document creations are non-destructive and strictly in **`draft`** status; irreversible fiscal submissions (AEAT, VeriFactu, TicketBAI) and real-money movements require explicit human confirmation.
+- **Safety Invariant:** All agent-triggered document creations are non-destructive and strictly in **`draft`** status; irreversible fiscal submissions (AEAT, VeriFactu, TicketBAI) and real-money movements require explicit human confirmation in Frihet ERP web dashboard.
 
 ---
 
 ## Ecosystem Distribution Matrix
 
-| Platform / Surface | Format / Location | Target Audience | Safety Profile | Status |
+Lifecycle states follow a strict, evidence-based taxonomy:
+- **`PUBLISHED_VERIFIED`**: Package or connector is live and verified in the target registry/store.
+- **`SUBMITTED`**: Official submission package delivered to partner directory; awaiting reviewer evaluation.
+- **`PREVIEW_APPLIED`**: Formal developer preview access request submitted; awaiting partner onboarding.
+- **`CONTRACT_TESTED`**: Integration code, schemas, and safety invariants pass automated tests in this repository.
+
+| Platform / Surface | Format / Location | Target Surface | Safety Boundary | Verified Lifecycle State |
 |---|---|---|---|---|
-| **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (157 ops) / Draft invariant | Conformance Validated |
-| **Smithery** | `smithery.yaml` | AI agent developers | Full stdio / CLI | Active |
-| **Glama** | `glama.json` | MCP directory users | Full catalogue | Listed |
-| **Vercel AI SDK** | `marketplace/vercel-ai/` | Next.js & TypeScript agents | Curated 10 tools, Zod schemas | Available |
-| **Google Genkit** | `marketplace/genkit/` | Gemini & Firebase workflows | Curated 10 tools, Zod schemas | Available |
-| **Microsoft AutoGen** | `marketplace/autogen/` | Python enterprise multi-agent | Curated 10 tools, Pydantic v2 | Available |
-| **LangChain / LangGraph** | `marketplace/langchain/` | LangGraph HITL pipelines | Curated tools, Draft HITL | Available |
-| **CrewAI** | `marketplace/crewai/` | Role-based autonomous crews | Curated tools, Draft invariant | Available |
-| **LlamaIndex** | `marketplace/llamaindex/` | Financial RAG & data agents | ToolSpec & FunctionTools | Available |
-| **Zapier Actions & MCP** | `marketplace/zapier/` | No-code enterprise automation | Webhooks (HMAC) + Actions | Available |
-| **n8n Community Node** | `n8n-nodes-frihet@1.0.2` | Self-hosted & cloud workflow automation | Full node package with Sigstore provenance | Live on npm |
-| **Meta Muse** | `marketplace/muse/` | WhatsApp & Meta AI small business | Curated 18-tool profile | Submitted |
-| **Google Connected Apps** | `src/google-profile.ts` | Gemini & Google Search users | Curated 18-tool profile | In Review |
-| **Anthropic Claude Directory** | `marketplace/anthropic/` | Claude Desktop & Enterprise | 132 tools, Sanitized PII | In Review |
-| **Claude Code CLI** | `marketplace/anthropic/claude-code.md` | Terminal AI developers | Stdio & Remote SSE | Documented |
-| **Cursor IDE** | `marketplace/cursor/` | Developers using Cursor Composer/Agent | `.cursor/mcp.json` & `.mdc` rules | Documented |
-| **OpenAI ChatGPT Store** | `marketplace/openai/` | ChatGPT Plus & Team | 33-tool approved profile | Frozen / Prepared |
-| **Raycast Extension** | `marketplace/raycast/` | macOS founders & engineers | HUD summary, search, expense capture | Package Defined |
-| **Dify Tool Provider** | `marketplace/dify/` | Open-source enterprise LLM workflows | Curated YAML tools / Draft invariant | Defined & Tested |
-| **Flowise Custom Tool** | `marketplace/flowise/` | Drag-and-drop LangChain canvas | JavaScript tool node / Draft invariant | Available |
-| **Make.com (Integromat)** | `marketplace/make/` | Visual SMB workflow scenarios | HMAC webhooks + Actions | App Defined |
-| **Postman Official Collection** | `marketplace/postman/` | API developers & integration QA | Collection v2.1.0 with tests & env | Complete |
-| **GitHub Copilot & VS Code** | `marketplace/copilot/` | Copilot Workspace & VS Code Chat | `.github/copilot-instructions.md` | Documented |
+| **n8n Community Node** | `n8n-nodes-frihet@1.0.2` | n8n self-hosted & cloud | Sigstore provenance, governed credentials | **`PUBLISHED_VERIFIED`** |
+| **OpenAI ChatGPT Store** | `marketplace/openai/` | ChatGPT Plus & Team | 33-tool profile, draft-only mutations | **`PUBLISHED_VERIFIED`** |
+| **ClawHub Registry** | `@frihet-io` v1.1.0 | OpenClaw agent network | Governed skill package, draft-only | **`PUBLISHED_VERIFIED`** |
+| **Glama Directory** | `glama.json` | MCP directory users | Full catalogue listing metadata | **`PUBLISHED_VERIFIED`** |
+| **Smithery Registry** | `smithery.yaml` | AI agent developers | Full stdio / CLI configuration | **`PUBLISHED_VERIFIED`** |
+| **Anthropic Claude Directory** | `marketplace/anthropic/` | Claude Desktop & Enterprise | 132 tools, Sanitized PII | **`SUBMITTED`** (PR open, CI green) |
+| **Meta Muse Connector** | `marketplace/muse/` | WhatsApp & Meta AI SMB | Curated 18-tool profile | **`SUBMITTED`** (Catalog submission) |
+| **Google Connected Apps** | `src/google-profile.ts` | Gemini & Google Search | Curated 18-tool profile, forced draft | **`PREVIEW_APPLIED`** (Form 46 preview access) |
+| **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (157 ops) / Draft invariant | **`CONTRACT_TESTED`** |
+| **Vercel AI SDK** | `marketplace/vercel-ai/` | Next.js & TypeScript agents | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |
+| **Google Genkit** | `marketplace/genkit/` | Gemini & Firebase workflows | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |
+| **Microsoft AutoGen** | `marketplace/autogen/` | Python enterprise multi-agent | v0.4+ / v0.2 compatible, Pydantic validation | **`CONTRACT_TESTED`** |
+| **LangChain / LangGraph** | `marketplace/langchain/` | LangGraph HITL pipelines | BaseTool definitions, Idempotency, Redaction | **`CONTRACT_TESTED`** |
+| **CrewAI** | `marketplace/crewai/` | Role-based autonomous crews | BaseTool definitions, Idempotency, Redaction | **`CONTRACT_TESTED`** |
+| **LlamaIndex** | `marketplace/llamaindex/` | Financial RAG & data agents | ToolSpec & FunctionTools, Pydantic validation | **`CONTRACT_TESTED`** |
+| **Zapier Platform Schema** | `marketplace/zapier/` | Zapier Platform CLI & AI Actions | Declarative triggers/actions schema (#2101) | **`CONTRACT_TESTED`** |
+| **Raycast Extension Manifest** | `marketplace/raycast/` | macOS founders & engineers | Extension manifest (`package.json`) & schema | **`CONTRACT_TESTED`** |
+| **Dify Tool Provider** | `marketplace/dify/` | Enterprise LLM workflows | Curated YAML tools, draft-only invariant | **`CONTRACT_TESTED`** |
+| **Flowise Custom Tool** | `marketplace/flowise/` | Drag-and-drop LangChain canvas | JavaScript tool node, draft-only invariant | **`CONTRACT_TESTED`** |
+| **Make.com (Integromat)** | `marketplace/make/` | Visual SMB workflow scenarios | App definition with canonical routes | **`CONTRACT_TESTED`** |
+| **Postman Official Collection** | `marketplace/postman/` | API developers & integration QA | Collection v2.1.0 with canonical tests & env | **`CONTRACT_TESTED`** |
+| **Cursor IDE Rules** | `marketplace/cursor/` | Cursor Composer/Agent | `.cursor/mcp.json` & `.mdc` system rules | **`CONTRACT_TESTED`** |
+| **Claude Code CLI Guide** | `marketplace/anthropic/claude-code.md` | Terminal AI developers | Stdio & Remote SSE setup guide | **`CONTRACT_TESTED`** |
+| **GitHub Copilot Instructions** | `marketplace/copilot/` | Copilot Workspace & VS Code | `.github/copilot-instructions.md` | **`CONTRACT_TESTED`** |
 
 ---
 
 ## Contract Verification & Drift Guard
 
-Run the automated cross-platform validator to verify all marketplace schemas, manifests, and safety invariants:
+Run the automated cross-platform validator to verify all marketplace schemas, manifests, canonical endpoints, and safety invariants:
 
 ```bash
 node scripts/check-marketplace-contracts.mjs
@@ -55,8 +62,10 @@ node scripts/check-marketplace-contracts.mjs
 Validates that:
 1. All JSON manifests (`server.json`, `glama.json`, Zapier, Cursor, Raycast, Muse, Make, Postman) parse with zero syntax errors.
 2. All YAML specifications (`smithery.yaml`, Dify) conform to spec.
-3. Every toolkit (Vercel AI, Genkit, AutoGen, LlamaIndex, LangChain, CrewAI, Flowise) enforces the **Draft-Only Invariant** (`status: 'draft'`).
-4. Zero credentials or secret tokens are leaked in examples.
+3. Every toolkit enforces the **Draft-Only Invariant** (`status: 'draft'`).
+4. All endpoints in manifests and code use canonical Frihet routes (`/monthly?month=`, `/quarterly?quarter=`) and reject non-canonical legacy forms (`/summaries/monthly`, `/taxes/quarterly`).
+5. All mutating integrations include **Idempotency-Key** protection and sensitive field redaction.
+6. Zero credentials or secret tokens are leaked in examples.
 
 ---
 
