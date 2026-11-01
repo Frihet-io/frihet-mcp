@@ -16,7 +16,7 @@ fail=0
 note() { echo "  ✗ $1"; fail=1; }
 
 # 1. Worker descriptions must NEVER name a competitor (served live on mcp.frihet.io).
-if grep -rinE "holded" workers/ 2>/dev/null; then
+if grep -rinE "holded" --exclude-dir=node_modules --exclude-dir=.wrangler workers/ 2>/dev/null; then
   note "Competitor 'Holded' found in workers/ (public Worker description) — remove."
 fi
 

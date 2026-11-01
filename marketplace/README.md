@@ -30,6 +30,7 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 | **Glama Directory** | `glama.json` | MCP directory users | Full catalogue listing metadata | **`PUBLISHED_VERIFIED`** |
 | **Smithery Registry** | `smithery.yaml` | AI agent developers | Full stdio / CLI configuration | **`PUBLISHED_VERIFIED`** |
 | **Anthropic Claude Directory** | `marketplace/anthropic/` | Claude Desktop & Enterprise | 132 tools, Sanitized PII | **`SUBMITTED`** (PR open, CI green) |
+| **Composio Toolkit** | `Remote MCP / REST` | 1500+ agent ecosystem | Full OpenAPI & MCP profile, draft invariant | **`SUBMITTED`** (Email & web form verified) |
 | **Meta Muse Connector** | `marketplace/muse/` | WhatsApp & Meta AI SMB | Curated 18-tool profile | **`SUBMITTED`** (Catalog submission) |
 | **Google Connected Apps** | `src/google-profile.ts` | Gemini & Google Search | Curated 18-tool profile, forced draft | **`PREVIEW_APPLIED`** (Form 46 preview access) |
 | **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (157 ops) / Draft invariant | **`CONTRACT_TESTED`** |
@@ -40,7 +41,7 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 | **CrewAI** | `marketplace/crewai/` | Role-based autonomous crews | BaseTool definitions, Idempotency, Redaction | **`CONTRACT_TESTED`** |
 | **LlamaIndex** | `marketplace/llamaindex/` | Financial RAG & data agents | ToolSpec & FunctionTools, Pydantic validation | **`CONTRACT_TESTED`** |
 | **Zapier Platform Schema** | `marketplace/zapier/` | Zapier Platform CLI & AI Actions | Declarative triggers/actions schema (#2101) | **`CONTRACT_TESTED`** |
-| **Raycast Extension Manifest** | `marketplace/raycast/` | macOS founders & engineers | Extension manifest (`package.json`) & schema | **`CONTRACT_TESTED`** |
+| **Raycast Extension** | `marketplace/raycast/` | macOS founders & engineers | Extension (3 commands, API client, draft invariant) | **`CONTRACT_TESTED`** |
 | **Dify Tool Provider** | `marketplace/dify/` | Enterprise LLM workflows | Curated YAML tools, draft-only invariant | **`CONTRACT_TESTED`** |
 | **Flowise Custom Tool** | `marketplace/flowise/` | Drag-and-drop LangChain canvas | JavaScript tool node, draft-only invariant | **`CONTRACT_TESTED`** |
 | **Make.com (Integromat)** | `marketplace/make/` | Visual SMB workflow scenarios | App definition with canonical routes | **`CONTRACT_TESTED`** |
