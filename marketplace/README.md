@@ -47,6 +47,7 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 | **Make.com (Integromat)** | `marketplace/make/` | Visual SMB workflow scenarios | App definition with canonical routes | **`CONTRACT_TESTED`** |
 | **Postman Official Collection** | `marketplace/postman/` | API developers & integration QA | Collection v2.1.0 with canonical tests & env | **`CONTRACT_TESTED`** |
 | **Cursor IDE Rules** | `marketplace/cursor/` | Cursor Composer/Agent | `.cursor/mcp.json` & `.mdc` system rules | **`CONTRACT_TESTED`** |
+| **Windsurf IDE (Codeium)** | `marketplace/windsurf/` | Cascade Agent & Composer | `mcp_config.json` & `.windsurfrules` | **`CONTRACT_TESTED`** |
 | **Claude Code CLI Guide** | `marketplace/anthropic/claude-code.md` | Terminal AI developers | Stdio & Remote SSE setup guide | **`CONTRACT_TESTED`** |
 | **GitHub Copilot Instructions** | `marketplace/copilot/` | Copilot Workspace & VS Code | `.github/copilot-instructions.md` | **`CONTRACT_TESTED`** |
 
