@@ -189,7 +189,7 @@ describe("anti-defang contract", () => {
     );
     assert.equal(
       APPROVED_PUBLISHED_FILE_HASHES["README.md"],
-      "6226ef232dff5e5cfbffb9b5270d08414e0b1d94197228f131fef6ff382d2531",
+      "a5db057c80f7ddbfee7f222462d815bf544f337c794bd173119d728230363d95",
     );
     assert.deepEqual(APPROVED_PLATFORM_TELEMETRY, {
       "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",

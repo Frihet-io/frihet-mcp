@@ -274,7 +274,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "0bc4802c6bc780bb7916382330a1496136306b21fcfc5f59c64d1ad3b8cffbbc", // #251: reviewed applyDeposit body validation before request I/O; existing sinks, authorities and payloads unchanged
-  "workers/remote-mcp/src/claude-public-surface.ts": "4333358ffe7688d888c0c81401f9c40f8f24123740f94f8072870da8f622c3b8", // #246: mode-neutral support wording; isolated Claude host and authorization boundary preserved, no new sink
+  "workers/remote-mcp/src/claude-public-surface.ts": "1161f124f2afc721e5c7b92f9fa1ccd46819de9d5dff0f940b034149486a0c62", // cd82dc3: support@frihet.io mailto alignment; isolated Claude host and authorization boundary preserved, no new sink
   "workers/remote-mcp/src/oauth-profile.ts": "d404aaf7c51a6fe675e7d1daae2317f7ea72b9e70b83f687b9359f857e6107b8", // #246: strict versioned admission policy and verified identity boundary, no new sink
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "bfde5584b9b37fd24c4d7b4a32b149813c08e22dc06aa46b9b4d8afae3b77d90", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink); confirm comment no longer claims every mutating tool requires it
@@ -303,7 +303,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
   "docs/agent-onboarding.json": "0cf30d7ef2e1b33256dda5ecb71773873d8867d032c4af8d4c0f2969f6ca97b3", // Task 1 recurring confirmation and declared fiscal/webhook effects; no new emitter
-  "README.md": "6226ef232dff5e5cfbffb9b5270d08414e0b1d94197228f131fef6ff382d2531", // GitHub Registry discovery links + static badge on existing img.shields.io host, unreleased local candidate flag and corrected deposit/recurring semantics, portable Claude preview link, skill install path and removal of fictional /frihet subcommands; no new runtime emitter or destination
+  "README.md": "a5db057c80f7ddbfee7f222462d815bf544f337c794bd173119d728230363d95", // distribution#18: bounded MCP README Distribution section reconciliation (Use Frihet / Find Frihet / Pending or not reverified, ChatGPT 1.0.2 published); no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
@@ -342,7 +342,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/generate-openai-submission.mjs": "20fa24e5c2f44ff172d72c3fc1c1d5ccb790d12dde120dcee5a8484de4d9c473",
   "scripts/generate-public-capability-contract.mjs": "7c6f08e3a28c9bc2cd50a9e791571eaf4987b2c618f4c614ae55c9ed811cf1f2",
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
-  "scripts/no-public-leak.sh": "168718b79ae54ff4b37be5522c66baf064c1462ced64c466edf6a9536bfd5a5b",
+  "scripts/no-public-leak.sh": "35e9056bfdf7a6c563cfc3b1286e906f03700df76deaaa8bdaa7ca0878bd5cf3",
   "scripts/postinstall.js": "02947d11d324048f69bc92d253d7c41f947aa338d1d6315b1579492689d462e3",
   "scripts/published-artifact-drift.mjs": "29435fd9b25625db5f6835e0b11b0528daf7345eef1421c6c826879be00b4f95",
   "scripts/sync-openapi.mjs": "311927e49e3ab5c514c418f29cc298bdec79f6b8705c47bdc7de34c6cee4943d",

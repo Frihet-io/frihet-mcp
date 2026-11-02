@@ -35,19 +35,39 @@
 
 ## Distribution
 
-| Channel | Status | Install |
-|---------|--------|---------|
-| **npm** | Live | `npx @frihet/mcp-server` |
-| **Remote endpoint** | Live | `https://mcp.frihet.io/mcp` (zero install, OAuth or API key) |
-| **Smithery** | Live | [smithery.ai/servers/frihet/frihet-mcp](https://smithery.ai/servers/frihet/frihet-mcp) |
-| **MCP Registry** | Live | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/?q=io.frihet) |
-| **GitHub MCP Registry** | Live | [github.com/mcp/io.frihet/erp](https://github.com/mcp/io.frihet/erp) |
-| **Glama** | Live | [glama.ai/mcp/servers/Frihet-io/frihet-mcp](https://glama.ai/mcp/servers/Frihet-io/frihet-mcp) |
-| **mcp.so** | Auto-index (unverified) | [mcp.so](https://mcp.so) — indexes from npm + GitHub |
-| **PulseMCP** | Auto-index (unverified) | [pulsemcp.com](https://pulsemcp.com) — indexes from npm + GitHub |
-| **Cursor Marketplace** | Coming soon | [cursor.com/marketplace](https://cursor.com/marketplace) |
-| **ChatGPT Apps** | Coming soon | [chatgpt.com](https://chatgpt.com) |
-| **Anthropic Claude Directory** | Coming soon | [claude.ai/settings/connectors](https://claude.ai/settings/connectors) |
+Reviewed 2026-10-31. A directory entry is not proof of a working installation, vendor endorsement, or adoption. Package releases, hosted deployments and reviewed app versions are independent.
+
+### Use Frihet
+
+| Channel | Availability | Entry point |
+|---|---|---|
+| npm | Published package; see its own release version | [npm](https://www.npmjs.com/package/@frihet/mcp-server) · `npx @frihet/mcp-server` |
+| Remote MCP | Hosted connection route; OAuth or API key | `https://mcp.frihet.io/mcp` |
+| ChatGPT app | Published 1.0.2, confirmed by the maintainer; not the separate 1.0.3 candidate | [Frihet in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ac6b51bd7648191a0696bd1e725bfe6) |
+
+### Find Frihet
+
+These are discovery links, not a count of independent integrations. Some third-party descriptions and cached copies are outdated.
+
+| Surface | Evidence at review | Entry |
+|---|---|---|
+| Official MCP Registry | Specific registry entry indexed | [io.frihet/erp](https://registry.modelcontextprotocol.io/?q=io.frihet) |
+| GitHub MCP Registry | Listing content retrieved; not a GitHub-verified connector claim | [Frihet ERP](https://github.com/mcp/io.frihet/erp) |
+| ToolSDK MCP Registry | Entry read in upstream repository | [Registry entry](https://github.com/toolsdk-ai/toolsdk-mcp-registry/blob/main/packages/finance-fintech/frihet-mcp.json) |
+| Glama | Specific listing indexed; summary needs refresh | [Listing](https://glama.ai/mcp/servers/Frihet-io/frihet-mcp) |
+| Smithery | Specific listing indexed; live recheck blocked | [Listing](https://smithery.ai/servers/%40frihet/frihet-mcp) |
+| mcpservers.org | Listing content retrieved; description outdated | [Listing](https://mcpservers.org/servers/frihet-io/frihet-mcp) |
+| Cursor Directory | Community listing retrieved; separate from the official Cursor Marketplace | [Listing](https://cursor.directory/plugins/mcp-frihet) |
+| mcp.so | Specific listing indexed; current installation not verified | [Listing](https://mcp.so/servers/frihet-mcp) |
+
+Frihet also appears in **[punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)**, **[TensorBlock/awesome-mcp-servers](https://github.com/TensorBlock/awesome-mcp-servers/blob/main/docs/finance--crypto.md)** and **[ever-works/awesome-mcp-servers](https://github.com/ever-works/awesome-mcp-servers/blob/master/details/frihetmcp-server.md)**. Their retrieved descriptions still use an old tool count; the ever-works entry also links to a non-canonical repository URL. Use this repository's install instructions rather than copying those descriptions.
+
+### Pending or not reverified
+
+- **Docker:** [submission PR #1711](https://github.com/docker/mcp-registry/pull/1711) remains open; do not describe it as published in Docker's catalog.
+- **Cline:** [submission #2053](https://github.com/cline/mcp-marketplace/issues/2053) remains open; client compatibility is not marketplace approval.
+- **PulseMCP:** historically reported; a current primary listing was not retrieved in this review.
+- **Official Cursor Marketplace and Claude Directory:** public approval was not reverified here. This does not change existing submissions or manual MCP installation support.
 
 > **Surface truth:** the catalogue contains 156 canonical operations. The local full profile serves 161 tool names, 11 resources, and 10 prompts (156 canonical operations plus 5 fiscal aliases). The hosted grouped profile serves 164 tool names, 7 resources, and 10 prompts (the same names plus 3 discovery tools, with API-backed resources kept local-only). The separately reviewed OpenAI profile serves 33 tool names, 0 resources, and 0 prompts. Catalogue membership is not a promise that a backing API is enabled for every workspace.
 
