@@ -264,10 +264,9 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
 
     // 4. Real MCP SDK + Claude Candidate Profile (`applyClaudeCandidateProfile`):
     //    Verify neither truncated=true nor q+after is ever presented as an exhaustive list.
-    //    Note: `claudeToolResult` (`src/claude-output-privacy.ts`) replaces unstructured error text
-    //    with a generic privacy-redacted message ("Frihet could not complete or confirm this request..."),
-    //    so Claude receives `isError=true` and `structuredContent=undefined`, never the partial list,
-    //    while preserving the frozen Claude privacy filter contract.
+    //    `claudeToolResult` (`src/claude-output-privacy.ts`) maps allowlisted diagnostic
+    //    flags (`io.frihet/searchScanTruncated` and `io.frihet/cursorWithQueryUnsupported`)
+    //    to static, PII-free remediation strings while withholding `structuredContent`.
     const claudeServer = new McpServer({ name: "claude-trunc-test", version: "1.0.0" });
     applyClaudeCandidateProfile(claudeServer);
     registerClientTools(claudeServer, mockClient);
@@ -285,7 +284,11 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
       const claudeTruncClientText = (claudeTruncClients.content as Array<{ type: string; text: string }>)[0]!.text;
       assert.equal(
         claudeTruncClientText,
-        "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry.",
+        "SEARCH_SCAN_TRUNCATED: The text search hit the ERP 500-document scan cap (truncated=true) and was withheld so an incomplete scan is never mistaken for an exhaustive list. Narrow 'q' with a more specific term or paginate without 'q' using 'after'.",
+      );
+      assert.equal(
+        (claudeTruncClients._meta as Record<string, unknown> | undefined)?.["io.frihet/searchScanTruncated"],
+        true,
       );
 
       const claudeTruncVendors = await claudeClient.callTool({
@@ -294,6 +297,11 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
       });
       assert.equal(claudeTruncVendors.isError, true, "Claude profile must receive isError=true on truncated vendor search");
       assert.equal(claudeTruncVendors.structuredContent, undefined, "Claude profile must NOT receive structuredContent on truncated vendor search");
+      const claudeTruncVendorText = (claudeTruncVendors.content as Array<{ type: string; text: string }>)[0]!.text;
+      assert.equal(
+        claudeTruncVendorText,
+        "SEARCH_SCAN_TRUNCATED: The text search hit the ERP 500-document scan cap (truncated=true) and was withheld so an incomplete scan is never mistaken for an exhaustive list. Narrow 'q' with a more specific term or paginate without 'q' using 'after'.",
+      );
 
       const claudeQAfter = await claudeClient.callTool({
         name: "list_clients",
@@ -301,6 +309,15 @@ describe("Client & Vendor search, normalization, and listResources limitation tr
       });
       assert.equal(claudeQAfter.isError, true, "Claude profile must receive isError=true when q and after are combined");
       assert.equal(claudeQAfter.structuredContent, undefined);
+      const claudeQAfterText = (claudeQAfter.content as Array<{ type: string; text: string }>)[0]!.text;
+      assert.equal(
+        claudeQAfterText,
+        "CURSOR_WITH_QUERY_UNSUPPORTED: Text search ('q') cannot be combined with cursor pagination ('after') because the ERP backend slices search results by 'offset'/'limit' and ignores 'after'. No action was performed. Use 'offset' and 'limit' when searching with 'q', or omit 'q' when paginating with 'after'.",
+      );
+      assert.equal(
+        (claudeQAfter._meta as Record<string, unknown> | undefined)?.["io.frihet/cursorWithQueryUnsupported"],
+        true,
+      );
     } finally {
       await Promise.allSettled([claudeClient.close(), claudeServer.close()]);
     }

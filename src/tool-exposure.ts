@@ -43,6 +43,7 @@
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod/v4";
+import { READ_STAMP } from "./demo-fixtures.js";
 
 /* ------------------------------------------------------------------ */
 /*  Group taxonomy                                                     */
@@ -383,6 +384,7 @@ export function applyToolExposureProfile(
       type: "oauth2";
       scopes: readonly string[];
     }>;
+    demoMode?: boolean;
   },
 ): ToolExposureHandle {
   const catalog = new Map<string, CatalogEntry>();
@@ -502,6 +504,7 @@ export function applyToolExposureProfile(
     options?.capabilityTruth,
     options?.securitySchemes,
     options?.describeToolExample,
+    options?.demoMode === true,
   );
 
   return handle;
@@ -551,8 +554,10 @@ function registerMetaTools(
     scopes: readonly string[];
   }>,
   describeToolExample = "create_invoice",
+  demoMode = false,
 ): void {
   const { catalog, groups } = handle;
+  const demoStamp = demoMode ? READ_STAMP : {};
   const oauthConfig = securitySchemes
     ? {
         securitySchemes: securitySchemes.map((scheme) => ({
@@ -673,6 +678,7 @@ function registerMetaTools(
         }))
         .filter((g) => g.toolCount > 0);
       return textResult({
+        ...demoStamp,
         groups: out,
         totalGroups: out.length,
         totalTools: catalog.size,
@@ -744,6 +750,7 @@ function registerMetaTools(
         }));
 
       return textResult({
+        ...demoStamp,
         query: query || null,
         group: groupFilter ?? null,
         count: scored.length,
@@ -788,6 +795,7 @@ function registerMetaTools(
               type: "text" as const,
               text: JSON.stringify(
                 {
+                  ...demoStamp,
                   error: name
                     ? `No tool named '${name}'.`
                     : "Provide { name } — the exact tool name from search_tools.",
@@ -803,6 +811,7 @@ function registerMetaTools(
         };
       }
       return textResult({
+        ...demoStamp,
         name: entry.name,
         group: entry.group,
         title: entry.title,
