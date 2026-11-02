@@ -564,6 +564,17 @@ function installOpenAIToolsListSecurityProjection(server: any): void {
   };
 }
 
+export const OPENAI_103_READ_ONLY_CANDIDATE_TOOLS: ReadonlySet<string> = new Set([
+  "get_daily_operational_brief",
+  "get_business_period_summary",
+  "search_clients",
+  "search_vendors",
+]);
+
+export interface ApplyOpenAIProfileOptions {
+  candidateVersion?: "1.0.2" | "1.0.3";
+}
+
 export const OPENAI_WORKSPACE_WEBHOOK_EVENT_TOOLS: ReadonlySet<string> = new Set([
   "create_invoice",
   "create_expense",
@@ -1421,9 +1432,15 @@ export const OPENAI_CSP =
  * ```
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function applyOpenAIProfile(server: any): void {
+export function applyOpenAIProfile(server: any, options?: ApplyOpenAIProfileOptions): void {
   installOpenAIToolsListSecurityProjection(server);
   const fieldsToRedact = PROFILE.redactOutputFields;
+  const activeIncludeTools = new Set<string>(PROFILE.includeTools);
+  if (options?.candidateVersion === "1.0.3") {
+    for (const tool of OPENAI_103_READ_ONLY_CANDIDATE_TOOLS) {
+      activeIncludeTools.add(tool);
+    }
+  }
 
   /* ── Intercept registerTool ─────────────────────────────────────── */
 
@@ -1432,7 +1449,7 @@ export function applyOpenAIProfile(server: any): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   server.registerTool = (name: string, config: any, handler: any) => {
     // 0. Keep the public ChatGPT app to the reviewed core tool surface
-    if (!PROFILE.includeTools.has(name)) return;
+    if (!activeIncludeTools.has(name)) return;
 
     // 1. Skip excluded tools entirely
     if (PROFILE.excludeTools.has(name)) return;

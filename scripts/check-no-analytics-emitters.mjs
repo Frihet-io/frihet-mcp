@@ -274,7 +274,7 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "src/client.ts": "0bc4802c6bc780bb7916382330a1496136306b21fcfc5f59c64d1ad3b8cffbbc", // #251: reviewed applyDeposit body validation before request I/O; existing sinks, authorities and payloads unchanged
-  "workers/remote-mcp/src/claude-public-surface.ts": "4333358ffe7688d888c0c81401f9c40f8f24123740f94f8072870da8f622c3b8", // #246: mode-neutral support wording; isolated Claude host and authorization boundary preserved, no new sink
+  "workers/remote-mcp/src/claude-public-surface.ts": "1161f124f2afc721e5c7b92f9fa1ccd46819de9d5dff0f940b034149486a0c62", // cd82dc3: support@frihet.io mailto alignment; isolated Claude host and authorization boundary preserved, no new sink
   "workers/remote-mcp/src/oauth-profile.ts": "d404aaf7c51a6fe675e7d1daae2317f7ea72b9e70b83f687b9359f857e6107b8", // #246: strict versioned admission policy and verified identity boundary, no new sink
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "bfde5584b9b37fd24c4d7b4a32b149813c08e22dc06aa46b9b4d8afae3b77d90", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink); confirm comment no longer claims every mutating tool requires it
@@ -342,7 +342,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/generate-openai-submission.mjs": "20fa24e5c2f44ff172d72c3fc1c1d5ccb790d12dde120dcee5a8484de4d9c473",
   "scripts/generate-public-capability-contract.mjs": "7c6f08e3a28c9bc2cd50a9e791571eaf4987b2c618f4c614ae55c9ed811cf1f2",
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
-  "scripts/no-public-leak.sh": "168718b79ae54ff4b37be5522c66baf064c1462ced64c466edf6a9536bfd5a5b",
+  "scripts/no-public-leak.sh": "35e9056bfdf7a6c563cfc3b1286e906f03700df76deaaa8bdaa7ca0878bd5cf3",
   "scripts/postinstall.js": "02947d11d324048f69bc92d253d7c41f947aa338d1d6315b1579492689d462e3",
   "scripts/published-artifact-drift.mjs": "29435fd9b25625db5f6835e0b11b0528daf7345eef1421c6c826879be00b4f95",
   "scripts/sync-openapi.mjs": "311927e49e3ab5c514c418f29cc298bdec79f6b8705c47bdc7de34c6cee4943d",
