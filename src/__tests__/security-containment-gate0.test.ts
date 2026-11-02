@@ -689,7 +689,7 @@ describe("Machine Payments Protocol (MPP) Sell-Side Sandbox Conformance M0–M4 
     // 1. 401 before 402 when unauthenticated
     const unauthRes = await coordinator.handleRequest({
       principal: { bearerTokenPresent: false, hasReadPermission: true },
-      resource: baseResource,
+      targetResource: baseResource,
       executeReadResource: async () => {
         executionCount += 1;
         return { ok: true };
@@ -706,7 +706,7 @@ describe("Machine Payments Protocol (MPP) Sell-Side Sandbox Conformance M0–M4 
         workspaceUid: "ws_other_tenant",
         hasReadPermission: true,
       },
-      resource: baseResource,
+      targetResource: baseResource,
       executeReadResource: async () => {
         executionCount += 1;
         return { ok: true };
@@ -725,7 +725,7 @@ describe("Machine Payments Protocol (MPP) Sell-Side Sandbox Conformance M0–M4 
     // 3. 402 Challenge issued with WWW-Authenticate: Payment, Cache-Control: no-store, and MCP -32042
     const challengeRes = await coordinator.handleRequest({
       principal: validPrincipal,
-      resource: baseResource,
+      targetResource: baseResource,
       nowIso: "2026-11-02T01:00:00.000Z",
       executeReadResource: async () => {
         executionCount += 1;
@@ -743,7 +743,7 @@ describe("Machine Payments Protocol (MPP) Sell-Side Sandbox Conformance M0–M4 
     // 4. Negative control: challenge substitution (mismatching requestDigest or amount) is rejected with 402 / -32043
     const substitutedRes = await coordinator.handleRequest({
       principal: validPrincipal,
-      resource: { ...baseResource, requestDigest: "sha256_tampered_digest" },
+      targetResource: { ...baseResource, requestDigest: "sha256_tampered_digest" },
       credential: {
         challengeId: challengeMeta.challengeId,
         credentialId: "cred_sbx_1",
@@ -772,7 +772,7 @@ describe("Machine Payments Protocol (MPP) Sell-Side Sandbox Conformance M0–M4 
     // 5. Pending settlement transitions to `pending` and NEVER delivers the resource
     const pendingRes = await coordinator.handleRequest({
       principal: validPrincipal,
-      resource: baseResource,
+      targetResource: baseResource,
       credential: {
         challengeId: challengeMeta.challengeId,
         credentialId: "cred_sbx_1",
@@ -801,7 +801,7 @@ describe("Machine Payments Protocol (MPP) Sell-Side Sandbox Conformance M0–M4 
     // 6. Post-verification downstream failure transitions to `failed_delivery_recovery` without issuing receipt
     const failedDeliveryRes = await coordinator.handleRequest({
       principal: validPrincipal,
-      resource: baseResource,
+      targetResource: baseResource,
       credential: {
         challengeId: challengeMeta.challengeId,
         credentialId: "cred_sbx_1",
@@ -832,7 +832,7 @@ describe("Machine Payments Protocol (MPP) Sell-Side Sandbox Conformance M0–M4 
     // 7. Recovery retry with the same verified credential transitions to `delivered` and issues sanitized receipt
     const deliveredRes = await coordinator.handleRequest({
       principal: validPrincipal,
-      resource: baseResource,
+      targetResource: baseResource,
       credential: {
         challengeId: challengeMeta.challengeId,
         credentialId: "cred_sbx_1",
@@ -868,7 +868,7 @@ describe("Machine Payments Protocol (MPP) Sell-Side Sandbox Conformance M0–M4 
     // 8. Idempotent replay of delivered attempt returns cached payload without re-executing handler
     const replayRes = await coordinator.handleRequest({
       principal: validPrincipal,
-      resource: baseResource,
+      targetResource: baseResource,
       credential: {
         challengeId: challengeMeta.challengeId,
         credentialId: "cred_sbx_1",

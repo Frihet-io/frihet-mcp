@@ -337,13 +337,14 @@ export class MppSandboxCoordinator {
 
   async handleRequest(params: {
     readonly principal: MppSandboxPrincipal;
-    readonly resource: MppSandboxResource;
+    readonly targetResource: MppSandboxResource;
     readonly credential?: MppPaymentCredentialInput;
     readonly nowIso?: string;
     readonly executeReadResource: () => Promise<Record<string, unknown>>;
   }): Promise<MppHttpSandboxResponse> {
     const nowIso = params.nowIso ?? "2026-11-02T00:00:00.000Z";
-    const { principal, resource, credential } = params;
+    const { principal, targetResource, credential } = params;
+    const resource = targetResource;
 
     // 1. Strict 401 authentication pre-condition (before any 402 challenge)
     if (
@@ -810,7 +811,7 @@ export function attachExperimentalMppSandboxTool(
           hasReadPermission: true,
           bearerTokenPresent: true,
         },
-        resource: {
+        targetResource: {
           workspaceUid: args.workspaceUid,
           resourceId: args.resourceId,
           realm: "mcp.frihet.io/sandbox",
