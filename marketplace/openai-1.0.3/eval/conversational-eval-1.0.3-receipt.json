@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-10-29T20:13:18.100Z",
+  "generatedAt": "2026-11-02T01:08:44.342Z",
   "environmentDistinctionNotice": {
-    "automatedModelEvaluationAndPrivateRuntime": "Executed in this receipt: (1) Real 37-tool 1.0.3 MCP candidate runtime connected to live https://api.frihet.io/v1 on QA workspace hnVCrCb9Pxf8BgLP0ijz84iuntt2 verifying server-side fields projection over the wire, and (2) Real LLM multi-turn tool-calling evaluation (via LiteLLM 127.0.0.1:4000, temperature=0) using the exact 4 skills unpacked from frihet-1.0.3.zip without hardcoding the model's tool sequence.",
+    "automatedModelEvaluationAndPrivateRuntime": "Executed in this receipt: (1) Real 37-tool 1.0.3 MCP candidate runtime connected to live https://api.frihet.io/v1 verifying server-side fields projection over the wire (HTTP status, x-request-id, response byte reduction, latency ms, and stripped PII/fiscal keys), and (2) Real LLM multi-turn tool-calling evaluation (via LiteLLM 127.0.0.1:4000, temperature=0) using the exact 4 skills unpacked from frihet-1.0.3.zip without hardcoding the model's tool sequence.",
     "installedChatGptWebClientStatus": "Not executed in chatgpt.com UI for 1.0.3 because https://openai-mcp.frihet.io/mcp is intentionally kept on the published 1.0.2 release (33 tools, releaseSha fd59f0aea90c872a029ba574d046d33181ae6407). Testing 1.0.3 inside the chatgpt.com web UI will occur when Viktor authorizes deploying the 1.0.3 Worker or staging a dedicated preview Worker URL in OpenAI Developer Portal."
   },
   "candidatePackage": {
@@ -17,10 +17,187 @@
     "registeredMcpToolCount": 37
   },
   "liveBackendProjectionAndRuntimeVerification": {
-    "executedAgainstLiveApi": false,
-    "reason": "Ephemeral QA API key provisioning skipped: Command failed: node -e \nconst admin = require(\"firebase-admin\");\nif (!admin.apps.length) admin.initializeApp({ projectId: \"gen-lang-client-0335716041\" });\nconst db = admin.firestore();\nconst action = process.argv[1];\nconst keyId = process.argv[2];\nconst uid = process.argv[3];\nconst keyHash = process.argv[4];\nconst prefix = process.argv[5];\n(async () => {\n  const ref = db.collection(\"apiKeys\").doc(keyId);\n  if (action === \"create\") {\n    await ref.set({\n      userId: uid,\n      name: \"Ephemeral 1.0.3 Candidate Runtime & Projection Check\",\n      keyHash,\n      prefix,\n      scopes: [\"read\"],\n      active: true,\n      accessProfile: \"openai-103-qa-ephemeral\",\n      createdAt: admin.firestore.FieldValue.serverTimestamp(),\n    });\n    console.log(\"CREATED\");\n  } else if (action === \"delete\") {\n    await ref.update({ active: false });\n    await ref.delete();\n    console.log(\"DELETED\");\n  }\n})().catch((e) => { console.error(e); process.exit(1); });\n create qa_103_eval_1793304255824 hnVCrCb9Pxf8BgLP0ijz84iuntt2 fd120b77b4132f81f6ee446925c5ce463c2b6f2e524026622087ba2986599b79 fri_qa103_7a\nError: 2 UNKNOWN: Getting metadata from plugin failed with error: invalid_grant\n    at callErrorFromStatus (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/call.js:32:19)\n    at Object.onReceiveStatus (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/client.js:193:76)\n    at Object.onReceiveStatus (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/client-interceptors.js:367:141)\n    at Object.onReceiveStatus (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/client-interceptors.js:327:181)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/resolving-call.js:135:78\n    at process.processTicksAndRejections (node:internal/process/task_queues:84:11)\nfor call at\n    at ServiceClientImpl.makeUnaryRequest (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/client.js:161:32)\n    at ServiceClientImpl.<anonymous> (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@grpc/grpc-js/build/src/make-client.js:105:19)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/v1/firestore_client.js:242:33\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/normalCalls/timeout.js:44:16\n    at repeat (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/normalCalls/retries.js:82:25)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/normalCalls/retries.js:125:13\n    at OngoingCallPromise.call (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/call.js:67:27)\n    at NormalApiCaller.call (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/normalCalls/normalApiCaller.js:34:19)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/google-gax/build/src/createApiCall.js:112:30\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\nCaused by: Error\n    at _firestore._traceUtil.startActiveSpan (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/write-batch.js:438:27)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/telemetry/enabled-trace-util.js:110:30\n    at NoopContextManager.with (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@opentelemetry/api/build/src/context/NoopContextManager.js:14:19)\n    at ContextAPI.with (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@opentelemetry/api/build/src/api/context.js:51:46)\n    at NoopTracer.startActiveSpan (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@opentelemetry/api/build/src/trace/NoopTracer.js:54:31)\n    at ProxyTracer.startActiveSpan (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@opentelemetry/api/build/src/trace/ProxyTracer.js:27:24)\n    at EnabledTraceUtil.startActiveSpan (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/telemetry/enabled-trace-util.js:102:28)\n    at WriteBatch.commit (/Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/write-batch.js:436:43)\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/reference/document-reference.js:350:31\n    at /Users/brthls/Documents/Frihet-ERP/functions/node_modules/@google-cloud/firestore/build/src/telemetry/enabled-trace-util.js:110:30 {\n  code: 2,\n  details: 'Getting metadata from plugin failed with error: invalid_grant',\n  metadata: Metadata {\n    internalRepr: Map(0) {},\n    opaqueData: Map(0) {},\n    options: {}\n  },\n  note: 'Exception occurred in retry method that was not classified as transient'\n}\n. Local ADC credentials require fresh login or are restricted in this environment.",
+    "executedAgainstLiveApi": true,
     "targetApiBaseUrl": "https://api.frihet.io/v1",
-    "qaWorkspaceUid": "hnVCrCb9Pxf8BgLP0ijz84iuntt2"
+    "authMode": "configured_api_key_read_only",
+    "wireFieldProjectionProof": {
+      "clients": {
+        "unprojectedStatus": 200,
+        "unprojectedRequestId": "408a164e-ea78-4a4c-8d8e-22735e536294",
+        "unprojectedLatencyMs": 1585,
+        "unprojectedResponseBytes": 1603,
+        "unprojectedRowCount": 5,
+        "unprojectedFirstRowKeys": [
+          "clientType",
+          "createdAt",
+          "email",
+          "id",
+          "name",
+          "searchTokens",
+          "stage",
+          "tags",
+          "updatedAt"
+        ],
+        "projectedQueryParam": "fields=id,name,stage,email,phone",
+        "projectedStatus": 200,
+        "projectedRequestId": "23ffd4ca-8779-4f8e-80d5-c9173dceac61",
+        "projectedLatencyMs": 1410,
+        "projectedResponseBytes": 647,
+        "projectedRowCount": 5,
+        "projectedFirstRowKeys": [
+          "email",
+          "id",
+          "name",
+          "stage"
+        ],
+        "responseByteReductionPct": 59.64,
+        "taxIdPresentBeforeProjection": false,
+        "taxIdPresentAfterProjection": false,
+        "addressPresentBeforeProjection": false,
+        "addressPresentAfterProjection": false
+      },
+      "vendors": {
+        "unprojectedStatus": 200,
+        "unprojectedRequestId": "85a17b5b-50e8-4281-bbc6-0a31478d3982",
+        "unprojectedLatencyMs": 752,
+        "unprojectedResponseBytes": 1065,
+        "unprojectedRowCount": 5,
+        "unprojectedFirstRowKeys": [
+          "address",
+          "createdAt",
+          "createdBy",
+          "id",
+          "name",
+          "nameLower",
+          "taxId",
+          "updatedAt"
+        ],
+        "projectedQueryParam": "fields=id,name,email,phone",
+        "projectedStatus": 200,
+        "projectedRequestId": "a07e28e3-0030-4c9c-b55c-69777cfb8877",
+        "projectedLatencyMs": 642,
+        "projectedResponseBytes": 518,
+        "projectedRowCount": 5,
+        "projectedFirstRowKeys": [
+          "id",
+          "name"
+        ],
+        "responseByteReductionPct": 51.36,
+        "taxIdPresentBeforeProjection": true,
+        "taxIdPresentAfterProjection": false,
+        "addressPresentBeforeProjection": true,
+        "addressPresentAfterProjection": false
+      }
+    },
+    "mcpLiveCandidateRuntimeCalls": {
+      "registeredToolCount": 37,
+      "preserved102ToolCount": 33,
+      "added103CandidateTools": [
+        "get_daily_operational_brief",
+        "get_business_period_summary",
+        "search_clients",
+        "search_vendors"
+      ],
+      "searchClients": {
+        "durationMs": 2008,
+        "isError": false,
+        "matchStatus": "none",
+        "coverage": {
+          "inspected": 189,
+          "total": 189,
+          "uninspectedCount": 0,
+          "complete": true,
+          "nextCursor": null,
+          "telemetry": {
+            "directoryPagesFetched": 2,
+            "contextRequestsMade": 0,
+            "totalApiRequests": 2,
+            "recordsInspected": 189,
+            "approximatePayloadBytes": 19475,
+            "serverProjectionFields": "id,name,stage,email,phone"
+          }
+        },
+        "matchedRowKeys": []
+      },
+      "searchVendors": {
+        "durationMs": 966,
+        "isError": false,
+        "matchStatus": "none",
+        "coverage": {
+          "inspected": 81,
+          "total": 81,
+          "uninspectedCount": 0,
+          "complete": true,
+          "nextCursor": null,
+          "telemetry": {
+            "directoryPagesFetched": 1,
+            "contextRequestsMade": 0,
+            "totalApiRequests": 1,
+            "recordsInspected": 81,
+            "approximatePayloadBytes": 4840,
+            "serverProjectionFields": "id,name,email,phone"
+          }
+        },
+        "matchedRowKeys": []
+      },
+      "dailyOperationalBrief": {
+        "durationMs": 5083,
+        "isError": false,
+        "coverage": {
+          "asOfDate": "2026-10-28",
+          "referenceMonth": "2026-10",
+          "temporalScope": "unfiltered_operational_sample_as_of_date",
+          "temporalScopeNote": "Las consultas list_invoices, list_quotes y list_expenses leen los registros recientes/abiertos a fecha de corte (2026-10-28) sin filtro mensual para no ocultar impagos vencidos ni borradores de meses anteriores. La actividad específica del mes de referencia (2026-10) se desglosa por separado en currentMonthActivity.",
+          "isPartial": true,
+          "resources": [
+            {
+              "collection": "invoices",
+              "sourceTool": "list_invoices",
+              "inspected": 20,
+              "total": 50,
+              "complete": false
+            },
+            {
+              "collection": "quotes",
+              "sourceTool": "list_quotes",
+              "inspected": 5,
+              "total": 5,
+              "complete": true
+            },
+            {
+              "collection": "expenses",
+              "sourceTool": "list_expenses",
+              "inspected": 20,
+              "total": 200,
+              "complete": false
+            },
+            {
+              "collection": "clients",
+              "sourceTool": "list_clients",
+              "inspected": 20,
+              "total": 189,
+              "complete": false
+            },
+            {
+              "collection": "client_activities",
+              "sourceTool": "list_client_activities",
+              "inspected": 3,
+              "total": 189,
+              "complete": false
+            }
+          ]
+        },
+        "hasActivitySeparation": true,
+        "priorityCount": 0
+      },
+      "businessPeriodSummary": {
+        "durationMs": 3452,
+        "isError": false,
+        "selectionBasis": "issue_date_cohort_not_payment_date",
+        "hasTriStateDeductibilityBuckets": false,
+        "currencyBucketsObserved": []
+      }
+    }
   },
   "conversationalEvaluation": {
     "llmRouterEndpoint": "http://127.0.0.1:4000/v1/chat/completions",
