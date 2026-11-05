@@ -35,7 +35,7 @@ Important per-tool consequences:
 - `create_invoice` and `create_quote` create drafts, reserve a document number,
   advance the numbering counter, and may create/link a client.
 - `create_invoice` also consumes monthly invoice usage, may send minimized
-  activation/usage analytics to PostHog's EU-hosted analytics service, may notify
+  activation/usage analytics to PostHog's analytics service, may notify
   eligible admins/accountants in-app and through Novu, and may award a first-use
   referral credit to another Frihet account.
 - `create_expense` requires an explicit expense date and deductible choice, may create/link a vendor in a separate backend step that can remain if the later expense write fails, may notify eligible

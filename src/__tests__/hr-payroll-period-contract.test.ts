@@ -303,7 +303,7 @@ describe("current ERP DTO schemas", () => {
   test("payroll export rejects fabricated generated-file shape", () => {
     assert.equal(payrollExportOutput.safeParse({
       month: "2026-07",
-      format: "holded",
+      format: "vendor-x",
       fileUrl: "https://files.example.test/payroll.csv",
       filename: "payroll.csv",
       rowCount: 2,
@@ -410,7 +410,7 @@ describe("real MCP SDK — current DTOs survive output validation", () => {
       assert.match(overtimeDescription, /selected period/i);
       assert.match(overtimeDescription, /periodo seleccionado/i);
       const exportDescription = byName("payroll_export")?.description ?? "";
-      assert.doesNotMatch(exportDescription, /holded|fileUrl|generated URL/i);
+      assert.doesNotMatch(exportDescription, /vendor-x|fileUrl|generated URL/i);
       assert.match(exportDescription, /identical across formats/i);
       assert.match(exportDescription, /No CSV, XML, PDF/i);
       const checklistDescription = byName("payroll_checklist")?.description ?? "";
@@ -459,13 +459,13 @@ describe("real MCP SDK — current DTOs survive output validation", () => {
       assert.equal(emptyEmployee.isError, true, "empty employeeId must fail input validation");
       assert.equal(count("/time-entries/overtime"), quarterlyBefore, "empty employeeId must not call ERP");
 
-      const holdedBefore = count("/payroll/prep/export");
-      const holded = await client.callTool({
+      const rejectedBefore = count("/payroll/prep/export");
+      const rejected = await client.callTool({
         name: "payroll_export",
-        arguments: { format: "holded", month: "2026-07" },
+        arguments: { format: "vendor-x", month: "2026-07" },
       });
-      assert.equal(holded.isError, true, "holded is not an accepted ERP payroll format");
-      assert.equal(count("/payroll/prep/export"), holdedBefore, "invalid format must not call ERP");
+      assert.equal(rejected.isError, true, "an unsupported vendor format is not an accepted ERP payroll format");
+      assert.equal(count("/payroll/prep/export"), rejectedBefore, "invalid format must not call ERP");
 
       const checklistBefore = count("/payroll/prep/employees");
       const invalidMonth = await client.callTool({

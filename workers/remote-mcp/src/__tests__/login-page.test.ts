@@ -27,7 +27,7 @@ describe("OAuth consent copy", () => {
     assert.match(html, /chatgpt\.com/);
     assert.match(html, /Current business context/);
     assert.match(html, /monthly invoice usage/);
-    assert.match(html, /PostHog's EU-hosted analytics service/);
+    assert.match(html, /PostHog's analytics service/);
     assert.match(html, /Ten confirmed writes may deliver one or more full business events/);
     assert.match(html, /outside the reviewed connector response schema/);
     assert.match(html, /fields this connector does not return to the AI assistant/);

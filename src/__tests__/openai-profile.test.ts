@@ -338,7 +338,7 @@ describe("OpenAI profile", () => {
     // Open-world creation keeps its bespoke true rationale (not double-appended).
     const createInvoiceDesc = server.tools.get("create_invoice")!.config.description;
     assert.match(createInvoiceDesc, /openWorldHint: true/);
-    assert.match(createInvoiceDesc, /PostHog's EU-hosted analytics service/);
+    assert.match(createInvoiceDesc, /PostHog's analytics service/);
     assert.match(createInvoiceDesc, /Novu/);
     assert.doesNotMatch(createInvoiceDesc, /openWorldHint: false/);
   });
@@ -1050,7 +1050,7 @@ describe("OpenAI profile", () => {
     });
     const invoiceText = JSON.stringify(invoice);
     assert.match(invoiceText, /monthly invoice usage/);
-    assert.match(invoiceText, /PostHog's EU-hosted analytics service/);
+    assert.match(invoiceText, /PostHog's analytics service/);
     assert.match(invoiceText, /Novu/);
     assert.match(invoiceText, /activation credits/);
 

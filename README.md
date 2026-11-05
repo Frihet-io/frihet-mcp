@@ -683,7 +683,7 @@ The local package serves 11 resources: 7 static references plus 4 API-backed wor
 | Expense Categories | `frihet://config/expense-categories` | 8 categories with deductibility rules, IVA treatment, amortization |
 | Invoice Statuses | `frihet://config/invoice-statuses` | Status flow (draft > sent > paid/overdue > cancelled), transition rules, webhook events |
 | Currencies | `frihet://config/currencies` | 40 supported currencies with ISO codes, symbols, decimal places, locale formatting |
-| Countries | `frihet://config/countries` | 61 supported countries with fiscal zones, default tax rates, currencies, invoice prefixes |
+| Countries | `frihet://config/countries` | Supported countries with fiscal zones, default tax rates, currencies, invoice prefixes |
 
 **Dynamic** (live data from your account):
 

@@ -206,7 +206,7 @@ const NAME_OVERRIDES: Record<string, ToolGroupId> = {
 
 /**
  * Assign a group by tool NAME. The name-based mapping reproduces the
- * source-file grouping exactly for all 158 current tools (verified), with the
+ * source-file grouping exactly for every current tool (verified), with the
  * eight cross-file cases pinned via NAME_OVERRIDES. Driven off the name (not a
  * hand-kept list) so a future tool lands somewhere sensible automatically.
  *

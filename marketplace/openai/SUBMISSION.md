@@ -46,7 +46,7 @@ MCP response schema and can include the complete underlying record, including
 fields not exposed to ChatGPT. Creating an invoice or expense may also
 notify eligible workspace members through in-app/Novu notifications and may
 award first-use referral credits; invoice creation may send minimized usage
-analytics to PostHog's EU-hosted analytics service. A call, meeting, or email CRM
+analytics to PostHog's analytics service. A call, meeting, or email CRM
 activity can emit `client.updated`, while a task activity does not update the
 parent client. Expense creation requires an explicit date and deductible choice;
 the date determines its accounting/future tax-report period, but this surface
