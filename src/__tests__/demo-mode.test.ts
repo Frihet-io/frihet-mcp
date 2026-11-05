@@ -14,6 +14,12 @@ import assert from "node:assert/strict";
 import { DemoFrihetClient } from "../demo-client.js";
 import * as fixtures from "../demo-fixtures.js";
 import { permissionsMatrixOutput, permissionsMeOutput } from "../tools/shared.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { localMcpSurfaceComposition, registerMcpSurface } from "../server-composition.js";
+import { claudeToolResult } from "../claude-output-privacy.js";
+import type { IFrihetClient } from "../client-interface.js";
 
 describe("DemoFrihetClient — reads", () => {
   test("listInvoices returns a non-empty canonical PaginatedResponse", async () => {
@@ -172,5 +178,124 @@ describe("demo fixtures — PII safety", () => {
     assert.equal(fixtures.DEMO_TEST_IBAN, "ES9121000418450200051332");
     const account = fixtures.demoBankAccounts[0]!;
     assert.equal(account.iban, fixtures.DEMO_TEST_IBAN);
+  });
+});
+
+describe("Grouped meta-tools in demoMode (#118) and Claude diagnostic error allowlist (#228)", () => {
+  test("list_tool_groups, search_tools, and describe_tool carry _demo:true and _demoNotice when client is DemoFrihetClient", async () => {
+    const server = new McpServer({ name: "demo-grouped-test", version: "1.0.0" });
+    registerMcpSurface(server, new DemoFrihetClient(), localMcpSurfaceComposition(false, true));
+    const client = new Client({ name: "demo-grouped-client", version: "1.0.0" });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    try {
+      const groupsRes = await client.callTool({ name: "list_tool_groups", arguments: {} });
+      const groupsPayload = groupsRes.structuredContent as Record<string, unknown>;
+      assert.equal(groupsPayload._demo, true);
+      assert.equal(groupsPayload._demoNotice, fixtures.READ_STAMP._demoNotice);
+      const groupsText = JSON.parse((groupsRes.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+      assert.equal(groupsText._demo, true);
+      assert.equal(groupsText._demoNotice, fixtures.READ_STAMP._demoNotice);
+
+      const searchRes = await client.callTool({ name: "search_tools", arguments: { query: "invoice" } });
+      const searchPayload = searchRes.structuredContent as Record<string, unknown>;
+      assert.equal(searchPayload._demo, true);
+      assert.equal(searchPayload._demoNotice, fixtures.READ_STAMP._demoNotice);
+      const searchText = JSON.parse((searchRes.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+      assert.equal(searchText._demo, true);
+      assert.equal(searchText._demoNotice, fixtures.READ_STAMP._demoNotice);
+
+      const describeRes = await client.callTool({ name: "describe_tool", arguments: { name: "create_invoice" } });
+      const describePayload = describeRes.structuredContent as Record<string, unknown>;
+      assert.equal(describePayload._demo, true);
+      assert.equal(describePayload._demoNotice, fixtures.READ_STAMP._demoNotice);
+      const describeText = JSON.parse((describeRes.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+      assert.equal(describeText._demo, true);
+      assert.equal(describeText._demoNotice, fixtures.READ_STAMP._demoNotice);
+
+      // Unknown tool error in demoMode also carries READ_STAMP in its JSON text
+      const unknownRes = await client.callTool({ name: "describe_tool", arguments: { name: "nonexistent_tool_xyz" } });
+      assert.equal(unknownRes.isError, true);
+      const unknownText = JSON.parse((unknownRes.content as Array<{ text: string }>)[0]!.text) as Record<string, unknown>;
+      assert.equal(unknownText._demo, true);
+      assert.equal(unknownText._demoNotice, fixtures.READ_STAMP._demoNotice);
+      assert.equal(unknownText.error, "No tool named 'nonexistent_tool_xyz'.");
+    } finally {
+      await Promise.allSettled([client.close(), server.close()]);
+    }
+  });
+
+  test("list_tool_groups, search_tools, and describe_tool omit _demo and _demoNotice when demoMode is false", async () => {
+    const liveMock = new Proxy({}, { get: () => async () => ({ data: [], total: 0, limit: 20, offset: 0 }) }) as IFrihetClient;
+    const server = new McpServer({ name: "live-grouped-test", version: "1.0.0" });
+    registerMcpSurface(server, liveMock, localMcpSurfaceComposition(false, true));
+    const client = new Client({ name: "live-grouped-client", version: "1.0.0" });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    try {
+      for (const call of [
+        { name: "list_tool_groups", arguments: {} },
+        { name: "search_tools", arguments: { query: "invoice" } },
+        { name: "describe_tool", arguments: { name: "create_invoice" } },
+      ] as const) {
+        const res = await client.callTool(call);
+        const structured = res.structuredContent as Record<string, unknown>;
+        assert.equal("_demo" in structured, false, `${call.name} structuredContent must not contain _demo in live mode`);
+        assert.equal("_demoNotice" in structured, false, `${call.name} structuredContent must not contain _demoNotice in live mode`);
+        const rawText = (res.content as Array<{ text: string }>)[0]!.text;
+        assert.doesNotMatch(rawText, /"_demo"/);
+        assert.doesNotMatch(rawText, /"_demoNotice"/);
+      }
+    } finally {
+      await Promise.allSettled([client.close(), server.close()]);
+    }
+  });
+
+  test("claudeToolResult allowlists static diagnostic reasons without leaking raw provider prose or PII (#228)", () => {
+    const leakedProse = "Error: search for B12345678 / secret@acme.io hit 499 matches in workspace_secret_99";
+    const truncOut = claudeToolResult({
+      isError: true,
+      content: [{ type: "text", text: leakedProse }],
+      _meta: {
+        "io.frihet/searchScanTruncated": true,
+        "io.frihet/unallowlistedSecret": "B12345678",
+      },
+    });
+    assert.equal(truncOut.isError, true);
+    assert.equal(truncOut.structuredContent, undefined);
+    const truncText = (truncOut.content as Array<{ text: string }>)[0]!.text;
+    assert.match(truncText, /^SEARCH_SCAN_TRUNCATED:/);
+    assert.doesNotMatch(truncText, /B12345678|secret@acme\.io|499|workspace_secret_99/);
+    assert.deepEqual(truncOut._meta, { "io.frihet/searchScanTruncated": true });
+
+    const cursorOut = claudeToolResult({
+      isError: true,
+      content: [{ type: "text", text: leakedProse }],
+      _meta: {
+        "io.frihet/cursorWithQueryUnsupported": true,
+        "io.frihet/unallowlistedSecret": true,
+      },
+    });
+    assert.equal(cursorOut.isError, true);
+    assert.equal(cursorOut.structuredContent, undefined);
+    const cursorText = (cursorOut.content as Array<{ text: string }>)[0]!.text;
+    assert.match(cursorText, /^CURSOR_WITH_QUERY_UNSUPPORTED:/);
+    assert.doesNotMatch(cursorText, /B12345678|secret@acme\.io|499|workspace_secret_99/);
+    assert.deepEqual(cursorOut._meta, { "io.frihet/cursorWithQueryUnsupported": true });
+
+    // Precedence: uncertain outcome flags still take precedence over diagnostic flags
+    const uncertainOut = claudeToolResult({
+      isError: true,
+      content: [{ type: "text", text: leakedProse }],
+      _meta: {
+        "io.frihet/operationOutcomeUnknown": true,
+        "io.frihet/searchScanTruncated": true,
+      },
+    });
+    const uncertainText = (uncertainOut.content as Array<{ text: string }>)[0]!.text;
+    assert.equal(
+      uncertainText,
+      "Frihet could not complete or confirm this request. Check access and read the current record before deciding whether to retry.",
+    );
   });
 });

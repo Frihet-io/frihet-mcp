@@ -252,6 +252,7 @@ export function registerClientTools(server: McpServer, client: IFrihetClient): v
               "Error: la busqueda textual ('q') no se puede combinar con el cursor 'after' porque el backend pagina las busquedas mediante 'offset'/'limit' e ignora 'after'. Usa 'offset' y 'limit' con 'q', u omite 'q' al paginar con 'after'.",
           }],
           isError: true,
+          _meta: { "io.frihet/cursorWithQueryUnsupported": true },
         };
       }
 
@@ -312,6 +313,7 @@ export function registerClientTools(server: McpServer, client: IFrihetClient): v
               `Error: la busqueda de clientes alcanzo el limite de escaneo de 500 documentos del ERP (truncated=true; ${partialCount} coincidencia(s) en los primeros 500 registros) y no puede devolverse como resultado exhaustivo. Acota 'q' (o filtra por 'stage') o pagina sin 'q' usando 'after'.`,
           }],
           isError: true,
+          _meta: { "io.frihet/searchScanTruncated": true },
         };
       }
 

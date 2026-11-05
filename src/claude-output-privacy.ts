@@ -149,6 +149,7 @@ const SAFE_META_FLAGS = [
   "io.frihet/transportOutcomeUnknown", "io.frihet/retryable", "io.frihet/operationMayHaveCompleted",
   "io.frihet/resourceNotFound", "io.frihet/accessDenied",
   "io.frihet/confirmationRequired", "io.frihet/localValidationRejected", "io.frihet/requestRejected",
+  "io.frihet/searchScanTruncated", "io.frihet/cursorWithQueryUnsupported",
 ] as const;
 
 /** Claude does not expose opaque tool metadata as an actionable error message.
@@ -169,6 +170,12 @@ function claudeErrorText(meta: Record<string, unknown>): string {
   }
   if (meta["io.frihet/resourceNotFound"] === true) {
     return "NOT_FOUND: No record is available with this ID in the authorized workspace. Check the ID; after deletion, verify absence with a list. Do not automatically repeat a write.";
+  }
+  if (meta["io.frihet/cursorWithQueryUnsupported"] === true) {
+    return "CURSOR_WITH_QUERY_UNSUPPORTED: Text search ('q') cannot be combined with cursor pagination ('after') because the ERP backend slices search results by 'offset'/'limit' and ignores 'after'. No action was performed. Use 'offset' and 'limit' when searching with 'q', or omit 'q' when paginating with 'after'.";
+  }
+  if (meta["io.frihet/searchScanTruncated"] === true) {
+    return "SEARCH_SCAN_TRUNCATED: The text search hit the ERP 500-document scan cap (truncated=true) and was withheld so an incomplete scan is never mistaken for an exhaustive list. Narrow 'q' with a more specific term or paginate without 'q' using 'after'.";
   }
   if (meta["io.frihet/localValidationRejected"] === true) {
     return "VALIDATION_FAILED: The ID or input parameters were rejected before sending the request. No action was performed. Correct the ID and parameters before retrying.";
@@ -192,6 +199,8 @@ export function claudeToolResult(result: Record<string, unknown>, toolName?: str
     safeMeta["io.frihet/confirmationRequired"] === true
     || safeMeta["io.frihet/localValidationRejected"] === true
     || safeMeta["io.frihet/requestRejected"] === true
+    || safeMeta["io.frihet/cursorWithQueryUnsupported"] === true
+    || safeMeta["io.frihet/searchScanTruncated"] === true
     || safeMeta["io.frihet/operationOutcomeUnknown"] === true
     || safeMeta["io.frihet/transportOutcomeUnknown"] === true
     || safeMeta["io.frihet/operationMayHaveCompleted"] === true
