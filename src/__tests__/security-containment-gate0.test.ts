@@ -17,6 +17,15 @@ import {
   traceMCPTool,
 } from "../observability.js";
 import { registerCrmTools } from "../tools/crm.js";
+import {
+  attachExperimentalMppSandboxTool,
+  evaluateMppSandboxEligibility,
+  MPP_MCP_PAYMENT_REQUIRED_CODE,
+  MPP_MCP_VERIFICATION_FAILED_CODE,
+  MPP_META_CREDENTIAL_KEY,
+  MPP_META_RECEIPT_KEY,
+  MppSandboxCoordinator,
+} from "../mpp-sandbox.js";
 
 const BUSINESS_DATA = {
   customerName: "Ada Lovelace",
@@ -511,5 +520,448 @@ describe("public API path segments", () => {
         }
       }
     });
+  });
+});
+
+describe("Machine Payments Protocol (MPP) Sell-Side Sandbox Conformance M0–M4 (#269 / #3127)", () => {
+  const experimentalEnv = { FRIHET_MPP_EXPERIMENTAL: "true" };
+
+  test("M0 — Eligibility matrix enforces experimental flag, test profile prefix, read-only effect, SPT region/minimum, and USDC approval gate", () => {
+    // 1. Disabled by default when FRIHET_MPP_EXPERIMENTAL is absent
+    assert.equal(
+      evaluateMppSandboxEligibility({
+        env: {},
+        profileId: "profile_test_sbx1",
+        region: "ES",
+        paymentMethod: "stripe_spt",
+        amountMinor: 50,
+        currency: "USD",
+        effect: "read",
+      }).reasonCode,
+      "MPP_EXPERIMENTAL_DISABLED",
+    );
+
+    // 2. Forbidden on all frozen public connector profiles
+    for (const modeKey of ["openaiMode", "claudeMode", "googleMode", "museMode"] as const) {
+      assert.equal(
+        evaluateMppSandboxEligibility({
+          env: experimentalEnv,
+          profileId: "profile_test_sbx1",
+          region: "ES",
+          paymentMethod: "stripe_spt",
+          amountMinor: 50,
+          currency: "USD",
+          effect: "read",
+          activeConnectorModes: { [modeKey]: true },
+        }).reasonCode,
+        "MPP_FROZEN_PROFILE_FORBIDDEN",
+      );
+    }
+
+    // 3. Rejects non-test profile IDs
+    assert.equal(
+      evaluateMppSandboxEligibility({
+        env: experimentalEnv,
+        profileId: "profile_live_prod1",
+        region: "ES",
+        paymentMethod: "stripe_spt",
+        amountMinor: 50,
+        currency: "USD",
+        effect: "read",
+      }).reasonCode,
+      "MPP_TEST_PROFILE_REQUIRED",
+    );
+
+    // 4. Rejects mutating or fiscal resources
+    for (const effect of ["write", "fiscal"] as const) {
+      assert.equal(
+        evaluateMppSandboxEligibility({
+          env: experimentalEnv,
+          profileId: "profile_test_sbx1",
+          region: "ES",
+          paymentMethod: "stripe_spt",
+          amountMinor: 50,
+          currency: "USD",
+          effect,
+        }).reasonCode,
+        "MPP_MUTATING_RESOURCE_UNSUPPORTED",
+      );
+    }
+
+    // 5. Stripe SPT region allowlist (US, CA, ES, SE), USD currency, and $0.50 (50 minor) minimum
+    assert.equal(
+      evaluateMppSandboxEligibility({
+        env: experimentalEnv,
+        profileId: "profile_test_sbx1",
+        region: "DE",
+        paymentMethod: "stripe_spt",
+        amountMinor: 50,
+        currency: "USD",
+        effect: "read",
+      }).reasonCode,
+      "MPP_SPT_UNSUPPORTED_REGION",
+    );
+    assert.equal(
+      evaluateMppSandboxEligibility({
+        env: experimentalEnv,
+        profileId: "profile_test_sbx1",
+        region: "ES",
+        paymentMethod: "stripe_spt",
+        amountMinor: 50,
+        currency: "EUR",
+        effect: "read",
+      }).reasonCode,
+      "MPP_SPT_CURRENCY_MISMATCH",
+    );
+    assert.equal(
+      evaluateMppSandboxEligibility({
+        env: experimentalEnv,
+        profileId: "profile_test_sbx1",
+        region: "ES",
+        paymentMethod: "stripe_spt",
+        amountMinor: 49,
+        currency: "USD",
+        effect: "read",
+      }).reasonCode,
+      "MPP_SPT_BELOW_MINIMUM",
+    );
+    for (const region of ["US", "CA", "ES", "SE"]) {
+      assert.equal(
+        evaluateMppSandboxEligibility({
+          env: experimentalEnv,
+          profileId: "profile_test_sbx1",
+          region,
+          paymentMethod: "stripe_spt",
+          amountMinor: 50,
+          currency: "USD",
+          effect: "read",
+        }).eligible,
+        true,
+      );
+    }
+
+    // 6. Tempo USDC requires explicit stablecoinApprovalGranted=true and >= 1 minor unit ($0.01)
+    assert.equal(
+      evaluateMppSandboxEligibility({
+        env: experimentalEnv,
+        profileId: "profile_test_sbx1",
+        region: "DE",
+        paymentMethod: "tempo_usdc",
+        amountMinor: 1,
+        currency: "USDC",
+        effect: "read",
+        stablecoinApprovalGranted: false,
+      }).reasonCode,
+      "MPP_STABLECOIN_APPROVAL_REQUIRED",
+    );
+    assert.equal(
+      evaluateMppSandboxEligibility({
+        env: experimentalEnv,
+        profileId: "profile_test_sbx1",
+        region: "DE",
+        paymentMethod: "tempo_usdc",
+        amountMinor: 1,
+        currency: "USDC",
+        effect: "read",
+        stablecoinApprovalGranted: true,
+      }).eligible,
+      true,
+    );
+  });
+
+  test("M1 / M2 / M3 — RBAC 401/403 precedes 402, prevents substitution/replay, withholds pending, recovers failed delivery, and redacts receipt secrets", async () => {
+    const coordinator = new MppSandboxCoordinator({ env: experimentalEnv });
+    const baseResource = {
+      workspaceUid: "ws_sandbox_alpha",
+      resourceId: "report_period_summary_q3",
+      realm: "mcp.frihet.io/sandbox",
+      effect: "read" as const,
+      requestDigest: "sha256_req_digest_q3_alpha",
+      amountMinor: 50,
+      currency: "USD",
+      paymentMethod: "stripe_spt" as const,
+      profileId: "profile_test_merchant_es",
+      region: "ES",
+    };
+
+    let executionCount = 0;
+
+    // 1. 401 before 402 when unauthenticated
+    const unauthRes = await coordinator.handleRequest({
+      principal: { bearerTokenPresent: false, hasReadPermission: true },
+      targetResource: baseResource,
+      executeReadResource: async () => {
+        executionCount += 1;
+        return { ok: true };
+      },
+    });
+    assert.equal(unauthRes.status, 401);
+    assert.equal(executionCount, 0);
+
+    // 2. 403 before 402 on cross-tenant workspace mismatch
+    const crossTenantRes = await coordinator.handleRequest({
+      principal: {
+        bearerTokenPresent: true,
+        authenticatedSubjectId: "subj_1",
+        workspaceUid: "ws_other_tenant",
+        hasReadPermission: true,
+      },
+      targetResource: baseResource,
+      executeReadResource: async () => {
+        executionCount += 1;
+        return { ok: true };
+      },
+    });
+    assert.equal(crossTenantRes.status, 403);
+    assert.equal(executionCount, 0);
+
+    const validPrincipal = {
+      bearerTokenPresent: true,
+      authenticatedSubjectId: "subj_1",
+      workspaceUid: "ws_sandbox_alpha",
+      hasReadPermission: true,
+    };
+
+    // 3. 402 Challenge issued with WWW-Authenticate: Payment, Cache-Control: no-store, and MCP -32042
+    const challengeRes = await coordinator.handleRequest({
+      principal: validPrincipal,
+      targetResource: baseResource,
+      nowIso: "2026-11-02T01:00:00.000Z",
+      executeReadResource: async () => {
+        executionCount += 1;
+        return { ok: true };
+      },
+    });
+    assert.equal(challengeRes.status, 402);
+    assert.equal(challengeRes.headers["Cache-Control"], "no-store");
+    assert.match(challengeRes.headers["WWW-Authenticate"] ?? "", /^Payment realm="mcp\.frihet\.io\/sandbox"/);
+    assert.equal(challengeRes.mcpErrorCode, MPP_MCP_PAYMENT_REQUIRED_CODE);
+    const challengeMeta = challengeRes.mcpMeta?.[MPP_META_CREDENTIAL_KEY] as { challengeId: string };
+    assert.ok(challengeMeta.challengeId.startsWith("chk_"));
+    assert.equal(coordinator.getAttempt(challengeMeta.challengeId)?.state, "challenged");
+
+    // 4. Negative control: challenge substitution (mismatching requestDigest or amount) is rejected with 402 / -32043
+    const substitutedRes = await coordinator.handleRequest({
+      principal: validPrincipal,
+      targetResource: { ...baseResource, requestDigest: "sha256_tampered_digest" },
+      credential: {
+        challengeId: challengeMeta.challengeId,
+        credentialId: "cred_sbx_1",
+        rawCredentialToken: "spt_secret_raw_token_DO_NOT_LEAK",
+        settlementReference: "settle_ref_raw_DO_NOT_LEAK",
+        workspaceUid: baseResource.workspaceUid,
+        resourceId: baseResource.resourceId,
+        requestDigest: baseResource.requestDigest,
+        amountMinor: baseResource.amountMinor,
+        currency: baseResource.currency,
+        paymentMethod: baseResource.paymentMethod,
+        reportedFinality: "settled",
+        observedAt: "2026-11-02T01:01:00.000Z",
+      },
+      nowIso: "2026-11-02T01:01:00.000Z",
+      executeReadResource: async () => {
+        executionCount += 1;
+        return { ok: true };
+      },
+    });
+    assert.equal(substitutedRes.status, 402);
+    assert.equal(substitutedRes.body.error, "CHALLENGE_SUBSTITUTION_REJECTED");
+    assert.equal(substitutedRes.mcpErrorCode, MPP_MCP_VERIFICATION_FAILED_CODE);
+    assert.equal(executionCount, 0);
+
+    // 5. Pending settlement transitions to `pending` and NEVER delivers the resource
+    const pendingRes = await coordinator.handleRequest({
+      principal: validPrincipal,
+      targetResource: baseResource,
+      credential: {
+        challengeId: challengeMeta.challengeId,
+        credentialId: "cred_sbx_1",
+        rawCredentialToken: "spt_secret_raw_token_DO_NOT_LEAK",
+        settlementReference: "settle_ref_raw_DO_NOT_LEAK",
+        workspaceUid: baseResource.workspaceUid,
+        resourceId: baseResource.resourceId,
+        requestDigest: baseResource.requestDigest,
+        amountMinor: baseResource.amountMinor,
+        currency: baseResource.currency,
+        paymentMethod: baseResource.paymentMethod,
+        reportedFinality: "pending",
+        observedAt: "2026-11-02T01:01:10.000Z",
+      },
+      nowIso: "2026-11-02T01:01:10.000Z",
+      executeReadResource: async () => {
+        executionCount += 1;
+        return { ok: true };
+      },
+    });
+    assert.equal(pendingRes.status, 402);
+    assert.equal(pendingRes.body.error, "PAYMENT_SETTLEMENT_PENDING");
+    assert.equal(coordinator.getAttempt(challengeMeta.challengeId)?.state, "pending");
+    assert.equal(executionCount, 0);
+
+    // 6. Post-verification downstream failure transitions to `failed_delivery_recovery` without issuing receipt
+    const failedDeliveryRes = await coordinator.handleRequest({
+      principal: validPrincipal,
+      targetResource: baseResource,
+      credential: {
+        challengeId: challengeMeta.challengeId,
+        credentialId: "cred_sbx_1",
+        rawCredentialToken: "spt_secret_raw_token_DO_NOT_LEAK",
+        settlementReference: "settle_ref_raw_DO_NOT_LEAK",
+        workspaceUid: baseResource.workspaceUid,
+        resourceId: baseResource.resourceId,
+        requestDigest: baseResource.requestDigest,
+        amountMinor: baseResource.amountMinor,
+        currency: baseResource.currency,
+        paymentMethod: baseResource.paymentMethod,
+        reportedFinality: "settled",
+        observedAt: "2026-11-02T01:01:20.000Z",
+      },
+      nowIso: "2026-11-02T01:01:20.000Z",
+      executeReadResource: async () => {
+        executionCount += 1;
+        throw new Error("UPSTREAM_READ_TIMEOUT");
+      },
+    });
+    assert.equal(failedDeliveryRes.status, 502);
+    assert.equal(failedDeliveryRes.body.state, "failed_delivery_recovery");
+    assert.equal(failedDeliveryRes.body.receiptIssued, false);
+    assert.equal(failedDeliveryRes.headers["Payment-Receipt"], undefined);
+    assert.equal(coordinator.getAttempt(challengeMeta.challengeId)?.state, "failed_delivery_recovery");
+    assert.equal(executionCount, 1);
+
+    // 7. Recovery retry with the same verified credential transitions to `delivered` and issues sanitized receipt
+    const deliveredRes = await coordinator.handleRequest({
+      principal: validPrincipal,
+      targetResource: baseResource,
+      credential: {
+        challengeId: challengeMeta.challengeId,
+        credentialId: "cred_sbx_1",
+        rawCredentialToken: "spt_secret_raw_token_DO_NOT_LEAK",
+        settlementReference: "settle_ref_raw_DO_NOT_LEAK",
+        workspaceUid: baseResource.workspaceUid,
+        resourceId: baseResource.resourceId,
+        requestDigest: baseResource.requestDigest,
+        amountMinor: baseResource.amountMinor,
+        currency: baseResource.currency,
+        paymentMethod: baseResource.paymentMethod,
+        reportedFinality: "settled",
+        observedAt: "2026-11-02T01:01:30.000Z",
+      },
+      nowIso: "2026-11-02T01:01:30.000Z",
+      executeReadResource: async () => {
+        executionCount += 1;
+        return { reportId: "rep_q3", revenueUsd: 12500 };
+      },
+    });
+    assert.equal(deliveredRes.status, 200);
+    assert.equal(deliveredRes.headers["Cache-Control"], "private");
+    assert.match(deliveredRes.headers["Payment-Receipt"] ?? "", /^rcpt_/);
+    assert.equal(coordinator.getAttempt(challengeMeta.challengeId)?.state, "delivered");
+    assert.equal(executionCount, 2);
+
+    const serializedDelivered = JSON.stringify(deliveredRes);
+    assert.doesNotMatch(serializedDelivered, /spt_secret_raw_token_DO_NOT_LEAK|settle_ref_raw_DO_NOT_LEAK/);
+    const receiptMeta = deliveredRes.mcpMeta?.[MPP_META_RECEIPT_KEY] as { receiptId: string; credentialFingerprint: string };
+    assert.equal(receiptMeta.receiptId, deliveredRes.headers["Payment-Receipt"]);
+    assert.match(receiptMeta.credentialFingerprint, /^fp_credential_/);
+
+    // 8. Idempotent replay of delivered attempt returns cached payload without re-executing handler
+    const replayRes = await coordinator.handleRequest({
+      principal: validPrincipal,
+      targetResource: baseResource,
+      credential: {
+        challengeId: challengeMeta.challengeId,
+        credentialId: "cred_sbx_1",
+        rawCredentialToken: "spt_secret_raw_token_DO_NOT_LEAK",
+        settlementReference: "settle_ref_raw_DO_NOT_LEAK",
+        workspaceUid: baseResource.workspaceUid,
+        resourceId: baseResource.resourceId,
+        requestDigest: baseResource.requestDigest,
+        amountMinor: baseResource.amountMinor,
+        currency: baseResource.currency,
+        paymentMethod: baseResource.paymentMethod,
+        reportedFinality: "settled",
+        observedAt: "2026-11-02T01:01:40.000Z",
+      },
+      nowIso: "2026-11-02T01:01:40.000Z",
+      executeReadResource: async () => {
+        executionCount += 1;
+        return { shouldNotRun: true };
+      },
+    });
+    assert.equal(replayRes.status, 200);
+    assert.equal(replayRes.body.replayedIdempotent, true);
+    assert.equal(executionCount, 2, "Idempotent replay must not re-run resource handler");
+  });
+
+  test("M4 — Frozen connector profiles never load experimental MPP tool; experimental local sandbox exposes end-to-end MCP tool flow", async () => {
+    // 1. Default env or any frozen profile mode -> tool is NOT registered
+    for (const opts of [
+      { env: {} },
+      { env: experimentalEnv, openaiMode: true },
+      { env: experimentalEnv, claudeMode: true },
+      { env: experimentalEnv, googleMode: true },
+      { env: experimentalEnv, museMode: true },
+    ]) {
+      const srv = new McpServer({ name: "mpp-isolation-test", version: "1.0.0" });
+      const coord = attachExperimentalMppSandboxTool(srv, opts);
+      assert.equal(coord, undefined);
+    }
+
+    // 2. Experimental local sandbox mode -> registers and executes challenge -> verified delivery
+    const srv = new McpServer({ name: "mpp-exp-test", version: "1.0.0" });
+    const coord = attachExperimentalMppSandboxTool(srv, { env: experimentalEnv });
+    assert.ok(coord);
+    const client = new Client({ name: "mpp-exp-client", version: "1.0.0" });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([srv.connect(st), client.connect(ct)]);
+    try {
+      const tools = (await client.listTools()).tools;
+      assert.deepEqual(tools.map((t) => t.name), ["mpp_sandbox_verify_read"]);
+
+      const challengeCall = await client.callTool({
+        name: "mpp_sandbox_verify_read",
+        arguments: {
+          profileId: "profile_test_mcp1",
+          workspaceUid: "ws_mcp_1",
+          resourceId: "res_1",
+          requestDigest: "dig_1",
+          region: "ES",
+          paymentMethod: "stripe_spt",
+          amountMinor: 50,
+          currency: "USD",
+        },
+      });
+      assert.equal(challengeCall.isError, true);
+      const challengeMeta = (challengeCall._meta as Record<string, unknown>)?.[MPP_META_CREDENTIAL_KEY] as { challengeId: string };
+      assert.ok(challengeMeta.challengeId.startsWith("chk_"));
+
+      const verifiedCall = await client.callTool({
+        name: "mpp_sandbox_verify_read",
+        arguments: {
+          profileId: "profile_test_mcp1",
+          workspaceUid: "ws_mcp_1",
+          resourceId: "res_1",
+          requestDigest: "dig_1",
+          region: "ES",
+          paymentMethod: "stripe_spt",
+          amountMinor: 50,
+          currency: "USD",
+          credential: {
+            challengeId: challengeMeta.challengeId,
+            credentialId: "cred_mcp_1",
+            rawCredentialToken: "spt_test_secret_999",
+            settlementReference: "settle_test_999",
+            reportedFinality: "settled",
+            observedAt: "2026-11-02T01:02:00.000Z",
+          },
+        },
+      });
+      assert.equal(verifiedCall.isError, false);
+      const receiptMeta = (verifiedCall._meta as Record<string, unknown>)?.[MPP_META_RECEIPT_KEY] as { receiptId: string };
+      assert.ok(receiptMeta.receiptId.startsWith("rcpt_"));
+    } finally {
+      await Promise.allSettled([client.close(), srv.close()]);
+    }
   });
 });
