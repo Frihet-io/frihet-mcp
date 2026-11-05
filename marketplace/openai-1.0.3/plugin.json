@@ -1,0 +1,117 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "frihet",
+  "version": "1.0.3",
+  "description": "Manage invoices, quotes, expenses, clients and catalogue items in your connected Frihet workspace.",
+  "author": {
+    "name": "Frihet",
+    "email": "ayuda@frihet.io",
+    "url": "https://www.frihet.io"
+  },
+  "homepage": "https://www.frihet.io",
+  "repository": "https://github.com/Frihet-io/frihet-mcp",
+  "license": "MIT",
+  "keywords": [
+    "invoices",
+    "expenses",
+    "clients",
+    "business-management",
+    "frihet"
+  ],
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/frihet-workspace/SKILL.md",
+      "interface": {
+        "displayName": "Frihet",
+        "shortDescription": "Invoices, expenses and clients",
+        "longDescription": "Run everyday business workflows from ChatGPT with your connected Frihet workspace. Built for freelancers and growing companies, Frihet includes four guided skills—workspace & catalogue overview, invoices & quotes, expenses & vendors, and client CRM—so you can review a daily operational brief of what deserves attention today, compare monthly periods by currency without mixing draft and issued activity, search clients and vendors by commercial name with multi-page coverage and ambiguity protection, prepare numbered invoice and quote drafts, record dated expenses with explicit tax-deductibility, and keep vendors and client contacts, notes, and activities up to date.\n\nSign in securely with your existing Frihet account via OAuth (no API key required). Every write requires explicit confirmation and discloses its workspace or external effects: creating a draft reserves a document number and advances the numbering counter (invoice drafts also consume monthly invoice usage), and confirmed writes may create or link clients or vendors, trigger owner-configured webhooks, notify workspace members, award referral credits, or send minimized EU-hosted invoice-creation analytics.\n\nScope and limits: this connector works with internal records and stored payment status or payment dates only. It does not process payments, issue or email final invoices, file taxes, access banking or payroll/HR, retrieve raw documents, administer webhooks, or generate regulated exports.",
+        "developerName": "Frihet",
+        "category": "Business & Operations",
+        "capabilities": [
+          "Daily operational brief and period comparisons",
+          "Find clients, vendors, and invoices",
+          "Prepare invoice and quote drafts",
+          "Manage expenses and client CRM records"
+        ],
+        "websiteURL": "https://www.frihet.io",
+        "supportURL": "https://openai-mcp.frihet.io/support",
+        "privacyPolicyURL": "https://openai-mcp.frihet.io/privacy",
+        "termsOfServiceURL": "https://www.frihet.io/es/terms",
+        "defaultPrompt": [
+          "What deserves my attention today in my business?",
+          "Compare this month with last month.",
+          "Prepare me for my meeting with client Acme SL."
+        ],
+        "composerIcon": "./assets/frihet-composer.png",
+        "composerIconDark": "./assets/frihet-composer-dark.png",
+        "logo": "./assets/frihet-composer.png",
+        "logoDark": "./assets/frihet-directory-dark.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Generate a daily operational brief separating draft documents from issued activity with explicit coverage and source record IDs.",
+              "prompt": "What deserves my attention today in my business and why?",
+              "tools_triggered": "get_daily_operational_brief",
+              "expected_behavior": "A prioritized read-only operational brief backed by source record IDs, separating draft documents from issued activity, reporting nominal unpaid receivables without claiming bank-reconciled balances, keeping multi-currency totals separate, and recommending only tools available in the reviewed ChatGPT surface."
+            },
+            {
+              "description": "Compare two calendar months side-by-side by currency while separating issued billing, collected cash, and drafts.",
+              "prompt": "Compare October 2026 with September 2026 in my business.",
+              "tools_triggered": "get_business_period_summary",
+              "expected_behavior": "A side-by-side operational comparison for 2026-10 vs 2026-09 grouped strictly by currency without cross-currency conversion, separating draft invoices from issued revenue (issuedTotal), collected cash (paidTotal), and nominal unpaid amounts (unpaidNominalTotal), with zero regulated tax-filing fields."
+            },
+            {
+              "description": "Search clients by commercial name for meeting preparation with ambiguity and coverage truth.",
+              "prompt": "I have a meeting with Acme; find the client and prepare a briefing.",
+              "tools_triggered": "search_clients",
+              "expected_behavior": "Searches commercial client names without querying or exposing government tax IDs or street addresses, reports exact multi-page coverage and uninspected count, flags ambiguous matches when multiple clients match 'Acme', or labels single matches on partial scans as partial_scan_single_match, and includes recent invoices and CRM activities."
+            },
+            {
+              "description": "Create a numbered invoice draft after explicit authorization without using a stored client identifier.",
+              "prompt": "I authorize Frihet to create a numbered invoice draft, advance the numbering counter, consume monthly invoice usage, send invoice-creation analytics to PostHog's EU-hosted service, possibly create or link the client, deliver owner-configured webhooks, notify eligible admins or accountants, and possibly award first-use referral credits. Prepare it for Acme SL with 5 hours of consulting at 100 EUR per hour and a 21 percent tax rate.",
+              "tools_triggered": "create_invoice",
+              "expected_behavior": "The reviewed response contains the new record ID, linked client ID and name, the requested line item, issue and due dates, draft status, a reserved invoice number, and external-effects disclosures. It does not claim that the invoice was issued, emailed, filed, or paid."
+            },
+            {
+              "description": "Create an office expense after explicit authorization.",
+              "prompt": "I authorize Frihet to record this expense on 2026-08-28 as not tax deductible and create or link the vendor Office Depot Canarias in a separate step that may remain if expense creation fails, deliver owner-configured webhooks, notify eligible admins or accountants, and possibly award first-use referral credits. Record 45.99 EUR of office supplies in the office category.",
+              "tools_triggered": "create_expense",
+              "expected_behavior": "The reviewed response contains a new record ID, description, amount 45.99 EUR, date 2026-08-28, taxDeductible=false, and external-effects disclosures."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Do not trigger Frihet for payroll execution because payroll and HR are outside the reviewed connector.",
+              "prompt": "Run payroll for all employees for August 2026.",
+              "expected_behavior": "The app should not be invoked because payroll and HR workflows are outside the reviewed Frihet connector."
+            },
+            {
+              "description": "Do not trigger Frihet for banking records because banking is outside the reviewed connector.",
+              "prompt": "Show my bank transactions from last week.",
+              "expected_behavior": "The app should not be invoked because banking data is outside the reviewed Frihet connector."
+            },
+            {
+              "description": "Do not trigger Frihet for a regulated e-invoice delivery receipt.",
+              "prompt": "Check the Peppol delivery receipt for an EN 16931 invoice submitted yesterday.",
+              "expected_behavior": "The app should not be invoked because Peppol delivery receipts and regulated e-invoice submission tracking are outside the reviewed Frihet connector."
+            }
+          ]
+        }
+      },
+      "publication": {
+        "countries": [
+          "ES"
+        ],
+        "release_notes": "Frihet connector for ChatGPT, package 1.0.3 candidate. Expands the reviewed 33-tool 1.0.2 surface to 37 tools by adding four read-only operational intelligence and commercial-search tools (get_daily_operational_brief, get_business_period_summary, search_clients, search_vendors), updates the four guided workflow skills and onboardingSkill (./skills/frihet-workspace/SKILL.md) to support daily prioritization, month-over-month currency-safe comparisons, and multi-page commercial-name search with explicit coverage and ambiguity truth, while preserving OAuth scopes and safety boundaries. Legal controller and trademark ownership (Frihet is the trade name owned and operated in Spain by VICTOR BERTHELIUS PATO) remain accredited on the live /privacy, /support, and /es/terms surfaces and in these reviewer release notes.",
+        "translations": {
+          "es-ES": {
+            "subtitle": "Facturas, gastos y clientes",
+            "description": "Ejecuta los flujos diarios de tu negocio desde ChatGPT con tu espacio de trabajo conectado de Frihet. Diseñado para autónomos y empresas en crecimiento, Frihet incluye cuatro skills guiadas —orientación del espacio y catálogo, facturas y presupuestos, gastos y proveedores, y CRM de clientes— para consultar el brief operativo diario de prioridades, comparar periodos mensuales por moneda separando borradores, facturación emitida y cobros, buscar clientes y proveedores por nombre comercial con cobertura explícita y detección de ambigüedades, preparar borradores numerados de facturas y presupuestos, registrar gastos con fecha y deducibilidad explícitas, y mantener al día proveedores y contactos, notas y actividades de clientes.\n\nInicia sesión de forma segura con tu cuenta de Frihet mediante OAuth (sin clave de API). Cada escritura requiere confirmación explícita e informa de sus efectos: crear un borrador reserva numeración y avanza el contador (los borradores de factura también consumen uso mensual), y los cambios confirmados pueden crear o vincular clientes o proveedores, disparar webhooks configurados por el propietario, notificar a miembros del espacio, conceder créditos por recomendación o enviar analítica mínima de creación de facturas alojada en la UE.\n\nAlcance y límites: este conector opera únicamente sobre registros internos y estados o fechas de pago almacenados. No procesa pagos, no emite ni envía facturas definitivas por correo, no presenta impuestos, ni accede a banca, nóminas/RR. HH., documentos originales, administración de webhooks o exportaciones reguladas."
+          }
+        }
+      }
+    }
+  }
+}
