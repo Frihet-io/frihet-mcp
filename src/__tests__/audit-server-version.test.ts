@@ -125,8 +125,8 @@ describe("server.json version gate", () => {
 
   test("reports BOTH fields when both drift", () => {
     const serverJson = JSON.parse(readFileSync(SERVER_JSON_PATH, "utf8"));
-    serverJson.version = "2.0.0";
-    serverJson.packages[0].version = "2.0.0";
+    serverJson.version = "0.0.0";
+    serverJson.packages[0].version = "0.0.0";
     const drifts = checkServerJsonVersion(serverJson, SOT_VERSION);
     assert.equal(drifts.length, 2);
     assert.deepEqual(
@@ -189,7 +189,7 @@ describe("current release projection gate", () => {
       ["default Worker product", (input) => { input.releasesJson.products.mcp_server.version = "0.0.0"; }],
       ["Anthropic root", (input) => { input.anthropicManifest.version = "0.0.0"; }],
       ["Anthropic npm package", (input) => { input.anthropicManifest.packages[0].version = "0.0.0"; }],
-      ["skill frontmatter", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 1.18.0", "  version: 0.0.0"); }],
+      ["skill frontmatter", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 2.0.0", "  version: 0.0.0"); }],
     ];
     for (const [label, mutate] of mutations) {
       const input = releaseProjectionInput();
@@ -247,7 +247,7 @@ describe("current release projection gate", () => {
       ["Glama", (input) => { input.glamaJson.description += " The grouped remote profile serves 163 tool names, 7 resources, and 10 prompts."; }],
       ["package", (input) => { input.packageJson.description += " Legacy claim: 155 canonical operations."; }],
       ["Anthropic", (input) => { input.anthropicManifest.description += " The grouped remote profile exposes 163 tool names, 7 resources, and 10 prompts."; }],
-      ["skill metadata", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 1.18.0", "  version: 1.18.0\n  version: 0.0.0"); }],
+      ["skill metadata", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 2.0.0", "  version: 2.0.0\n  version: 0.0.0"); }],
       ["current changelog", (input) => { input.changelog = input.changelog.replace("The catalogue has 156 canonical operations", "The catalogue has 156 canonical operations. The catalogue has 155 canonical operations. `localFull` exposes 999 tool names, 11 resources, and 10 prompts."); }],
     ];
     for (const [label, mutate] of mutations) {

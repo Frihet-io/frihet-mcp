@@ -4,6 +4,47 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-11-05
+
+### BREAKING
+
+This is a major release. The tool contract changed against `1.17.0` (the last published version): 2 tools were removed, 13 tools changed their required or accepted inputs in a way that makes some previously valid calls fail, and 5 tools changed additively. The list below was produced by instantiating the `v1.17.0` build and this source and diffing `tools/list` (names, `inputSchema.required`, properties, enums, formats and annotations); the surface is 162 tool names in 1.17.0 and 161 here (156 canonical operations plus 5 fiscal aliases). Resources (11) and prompts (10) are unchanged. Output shapes were not compared field by field.
+
+`1.18.0` was prepared in the repository but never published to npm. Its changes ship here, and the CHANGELOG entries that were filed under it are part of this section.
+
+**What users on `latest` will see.** `npm install @frihet/mcp-server`, `npx @frihet/mcp-server` and any unpinned MCP client configuration resolve to `2.0.0` instead of the previous release on the next install or cache refresh. Caret ranges anchored on the 1.x line do not move to the new major. Agent prompts, automations and saved tool calls that name a removed tool receive a tool-not-found error, and calls that omit a newly required input or send a removed input receive a validation error before any request reaches the API.
+
+To stay on the old contract, pin the exact previous version, 1.17.0.
+
+#### Removed tools (2)
+
+| Tool | Migration |
+|---|---|
+| `onboarding_status` | No replacement. The ERP `/v1/onboarding/*` family is not shipped (#124). Remove the call. |
+| `onboarding_persona_set` | No replacement. Remove the call. |
+
+#### Tools with changed inputs that break existing calls (13)
+
+| Tool | Change | Migration |
+|---|---|---|
+| `face_submit` | `confirm` is now required | Pass `confirm: true` after the user authorizes the submission. |
+| `ticketbai_submit` | `confirm` is now required | Pass `confirm: true` after the user authorizes the submission. |
+| `run_recurring_now` | `confirm` is now required; `openWorldHint` is now `true` | Pass `confirm: true`; it authorizes invoice creation, configured webhooks and possible fiscal issuance. |
+| `create_deposit` | `clientName`, `date` (`YYYY-MM-DD`) and `description` are now required; `notes` and `status` removed; unknown properties are rejected; length limits added | Send the three fields; move any `notes` text into `description`; stop sending `status`. |
+| `update_deposit` | `notes` and `status` removed; unknown properties are rejected; same length and date limits as `create_deposit` | Move `notes` text into `description`; stop sending `status`. |
+| `apply_deposit` | `invoiceId`, `invoiceNumber` and `amount` are now required; `notes` removed; unknown properties are rejected | Send the invoice id and number and the amount to apply; drop `notes`. |
+| `refund_deposit` | `reason` and `notes` removed; optional `amount` added (omit it for the remaining balance); `idempotentHint` is now `false`; unknown properties are rejected | Drop `reason` and `notes`; pass `amount` for a partial refund. `confirm` was already required. |
+| `einvoice_export` | `format` no longer accepts `facturx-extended`, `facturx-basic`, `facturx-minimum`; `fa-2-ksef` added; `readOnlyHint` is now `false` | Use `facturx-en16931` (Factur-X profiles other than EN 16931 now fail instead of collapsing to it) or another listed format. |
+| `frihet_bank_rule_create` | `conditions` and `actions` replaced by required `bankConditions`, `action` and `actionConfig` | Rename `conditions` to `bankConditions`; replace the `actions` list with one `action` plus its `actionConfig` payload (see the field descriptions for each action). |
+| `frihet_gl_entry_reject` | required `reason` replaced by required `note` | Send the rejection text as `note`. |
+| `gestoria_aging_consolidated` | `ownerUid` removed; `workspaceIds`, `asOf` and `bustCache` added (all optional) | Stop sending `ownerUid`; use `workspaceIds` to select workspaces. |
+| `anomaly_list` | `severity` is now `warning` or `critical` (was `low`, `medium`, `high`, `critical`); `type` is a closed enum (`daily_exceeded`, `weekly_exceeded`, `annual_approaching`, `annual_exceeded`, `missing_break`) | Map `low`/`medium` to `warning` and `high` to `critical`; use one of the listed `type` values. |
+| `leave_request_create` | `type` is now one of `vacation`, `sick`, `personal`, `parental`, `bereavement`, `other` (was a free string) | Map custom leave labels to the closest listed value. |
+
+#### Additive changes (5, not breaking)
+
+`global_search` (new, read-only); `create_invoice` and `update_invoice` accept `fiscalTreatment`; `attendance_clock_in` and `attendance_clock_out` accept `idempotencyKey`; `list_team_members.status` also accepts `expired` and `invalid`.
+
 ### Added
 
 - **No-Code & Visual Agent Ecosystems (Dify, Flowise, Make.com).** Added official tool manifests and configurations under `marketplace/`:
@@ -28,20 +69,15 @@ All notable changes to `@frihet/mcp-server` are documented here.
 - **Multi-Agent Python Toolkits (CrewAI & LangChain/LangGraph).** Added native agent toolkits under `marketplace/crewai/` and `marketplace/langchain/` with Pydantic v2 schemas, strict type-checking, runnable multi-agent CFO/Collections examples, and LangGraph human-in-the-loop (`interrupt_before=["frihet_draft_invoice"]`) safety patterns.
 - **Smithery CI Configuration (`smithery.yaml`).** Added root Smithery server manifest for zero-config indexing and containerized agent execution.
 - **Official MCP Registry Specification Documentation.** Added reference guide and publication instructions in `marketplace/mcp-registry/` tracking the canonical `server.json` manifest (`io.frihet/erp`).
-
-### Security
-
-- **The provisioning service credential is no longer sent to the public API.** The OAuth Worker attached it as the `x-frihet-oauth-key` header to every tool-call request, although only the API-key provisioning endpoints read it. The tool client no longer accepts it; the provisioning calls keep it. A wire test asserts no public API request carries the header or the value. The credential should be rotated after this ships.
-
-## [1.18.0] — 2026-10-07
-
-### Added
-
 - **`global_search` adds one read-only, workspace-scoped canonical operation (#168).** It wraps `GET /v1/search/global` across invoices, expenses, vendors, clients, and products with `q` (1–200 characters), an optional five-value `types` filter, `limit` 1–50, and `offset` 0–1000. Its result uses the endpoint's own `{ data, total, limit, offset, hasMore, query, types, truncated? }` envelope; this is intentionally not described as the standard single-resource pagination envelope. The OpenAI allow-list is unchanged. All 10 focused tests in `src/__tests__/search-tools.test.ts` are now executed by `npm test`.
 - **A fail-closed release pipeline for npm and the full-profile Worker (#171, #173).** The ten-job workflow verifies the exact `origin/main` source, runs release gates, packs deterministic npm evidence, authorizes the protected environment, publishes through npm OIDC, compares the registry tarball byte-for-byte with the local pack, verifies npm `gitHead`, and, for the `npm-and-worker` target, explicitly deploys only the default Wrangler environment at `mcp.frihet.io`, reads back its source SHA/version, creates the exact-SHA GitHub Release, and then starts downstream refreshes. CI runs the real `actionlint` parser, while 37 executable tests in `scripts/__tests__/release-workflow-contract.test.mjs` freeze the dependency graph, dry-run non-mutation, permissions, lockfile authority, toolchain, and provenance checks. Before the first irreversible mutation, authorization also verifies the required configured credentials and the required full-profile Worker secret names; it never reads or prints Worker secret values.
 - **`frihet://config/invoice-statuses` now includes the `partial` status and explicit transition paths (#198).** A partially paid invoice with a remaining balance can move to paid, overdue, or cancelled, and the resource lists only real invoice webhook events (a partial payment is reported as `invoice.payment_status_updated`).
 - **`npm run check:openai-public-surface` checks the reviewed host's public responses (#185).** It runs with bounded time and size, no credentials, no followed redirects and no tool execution, and distinguishes a contradiction from an inconclusive network or upstream failure. The reviewed host's public root no longer links the full OpenAPI catalogue.
 - **An explicit `npm-only` release target (#193).** It publishes and verifies the existing v1 package through the protected `npm-release` environment without deploying a Worker, creating a GitHub Release, or triggering registry cascades; `npm-and-worker` keeps the reviewed Full OAuth hold.
+
+### Security
+
+- **The provisioning service credential is no longer sent to the public API.** The OAuth Worker attached it as the `x-frihet-oauth-key` header to every tool-call request, although only the API-key provisioning endpoints read it. The tool client no longer accepts it; the provisioning calls keep it. A wire test asserts no public API request carries the header or the value. The credential should be rotated after this ships.
 
 ### Fixed
 
@@ -65,9 +101,7 @@ All notable changes to `@frihet/mcp-server` are documented here.
 - **OpenAI and directory submission material is source-only preparation (#175, #177, #178, #186, #187, #188, #190, #191, #194, #196, #197).** It covers the exact-SHA reviewed-profile release workflow and its evidence uploads, client-neutral copy on the reviewed host, the exact `openid email frihet:workspace.manage` scope set with OIDC discovery and a verified `/userinfo`, and a portable plugin package named `frihet` for a new listing. The reviewed profile stays at 33 tool names; none of this is deployed or submitted by this release.
 - **Cross-surface authority V2 is offline and fail-closed (#166).** `scripts/cross-surface-authority.mjs` checks the committed OpenAPI projection against the consumer-required operation, security, response, and schema fields. It does not claim to prove that the projection equals live ERP by itself; `gate:openapi-fresh` remains the separate canonical-source check.
 - **The OAuth provisioning contract mirrors profile-scoped permissions (#164, #170).** The reviewed mirror records `read`/`write` for the OpenAI profile and adds `einvoice:*` only for the full profile. ERP remains the runtime authority that writes stored permissions; the MCP-side addition is a drift-detection contract, not a scope grant.
-- **Release projections now agree on 1.18.0 and the generated runtime inventory.** The catalogue has 156 canonical operations (down from 158 after #124 withdrew the dead `onboarding_status` / `onboarding_persona_set` tools pending Frihet-ERP shipping the `/v1/onboarding/*` family). `localFull` exposes 161 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 164 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth. The separately reviewed OpenAI submission artifacts remain frozen and are not hand-edited by this release prep.
-
-No npm publication, Worker deployment, GitHub Release, marketplace submission, environment configuration, or secret mutation is part of this source-preparation change.
+- **Release projections now agree on 2.0.0 and the generated runtime inventory.** The catalogue has 156 canonical operations (157 measured in 1.17.0, minus the two withdrawn tools, plus `global_search`; #124 withdrew the dead `onboarding_status` / `onboarding_persona_set` tools pending Frihet-ERP shipping the `/v1/onboarding/*` family). `localFull` exposes 161 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 164 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth. The separately reviewed OpenAI submission artifacts remain frozen and are not hand-edited by this release prep.
 
 ## [1.17.1] — 2026-08-30
 

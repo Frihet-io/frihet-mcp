@@ -38,7 +38,7 @@ meeting, or email can emit `client.updated`; logging a task does not update the
 parent client. Creating an invoice or expense can also notify eligible
 workspace admins/accountants in-app and through Novu and can award first-use
 referral credits. Invoice creation may send minimized activation/usage analytics
-to PostHog's EU-hosted analytics service.
+to PostHog's analytics service.
 
 Creating an invoice or quote always creates a draft, reserves a document number,
 advances the workspace numbering counter, and may create/link a client. Creating

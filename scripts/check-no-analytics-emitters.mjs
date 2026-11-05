@@ -278,19 +278,19 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/oauth-profile.ts": "d404aaf7c51a6fe675e7d1daae2317f7ea72b9e70b83f687b9359f857e6107b8", // #246: strict versioned admission policy and verified identity boundary, no new sink
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "bfde5584b9b37fd24c4d7b4a32b149813c08e22dc06aa46b9b4d8afae3b77d90", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink); confirm comment no longer claims every mutating tool requires it
-  "workers/api-proxy/worker.js": "34f6c6e995a6c779d6a80fb954321f589cf64cd99f62c5d9c6b49e0fcaf07fd4",
+  "workers/api-proxy/worker.js": "35cf73fc35213916b92f3ea7a516b9c3d1315ce93752849b5c3454388e8cc95f",
   "workers/remote-mcp/src/api-url.ts": "d30673b8814eae5fc2f0cc0ea6ebdfa0885a710fab0571f2efdd8ac10d85d518",
   "workers/remote-mcp/src/auth-handler.ts": "2e050bfc605df98410fd305c6b8e113b1c9d07ab6b3c607f264b714baf687aba", // #249: return the existing full-profile hold before consent/token processing; no new I/O or destination. #246: admission enforced before provisioning; #221 M1: revoke unredeemed grant in KV when commit responses are lost (no new destination); #205: commit carries the replaced grant ids into the durable state outbox; inline replacement kept as fast path (no new destination); #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
-  "workers/remote-mcp/src/index.ts": "de7175f1fca04e0ee977f63557ad4858f1ede30c60e90c73043961356cd9040e", // #246: current Claude admission at code, refresh and MCP ingress, with authenticated cleanup; sinks unchanged
-  "workers/remote-mcp/src/login-page.ts": "b2db19132595c6d19a51d0538b8e144b0990d67c455fa7d98932a11af528558d", // H-1/M-1: Claude consent copy discloses VeriFactu submission via invoice writes, no stale e-invoicing claims; M2: Claude consent copy states no e-invoicing sends; directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
+  "workers/remote-mcp/src/index.ts": "20f22a32215ea2d3c6e870587ce293dae5179f9c2f27e4ebbffcd9655aef9f9e", // #246: current Claude admission at code, refresh and MCP ingress, with authenticated cleanup; sinks unchanged
+  "workers/remote-mcp/src/login-page.ts": "6ea51f39406f222fbf09fc28ae5afc1f17d0d581072d743866177b7dd463533d", // H-1/M-1: Claude consent copy discloses VeriFactu submission via invoice writes, no stale e-invoicing claims; M2: Claude consent copy states no e-invoicing sends; directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
   "workers/remote-mcp/src/oauth-provisioning.ts": "87ae36476e28acad049578fcb588873da899e76c63b62f5ebe816ac6762a565c", // #203: callback reserve/commit — revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
   "workers/remote-mcp/src/oauth-state-store.ts": "d596ff35135e4d63cdcf48bb7e3a5ccc5651412d0922d3d1539d83a513f6278c", // #221 M1: /release disarms oauth_grant_replacement when a committed lease aborts after lost commit responses (no new destination); #221 L3: clarify >64 replaced-grant truncation docstring; only Claude Worker records carry accessProfile; existing-Worker records keep their earlier shape (no new destination); #205: grant-replacement outbox on commit, drained by the alarm before expiry cleanup through the token family's /token-family/supersede (same internal origin); fail-closed keyId binding kept; lifecycle logs carry outcome/stage/counts only (no new destination); #203: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
   "workers/remote-mcp/src/oauth-token-family.ts": "fd5b46bd1cf104beeb48ed07cc5dad29789f47d8c208b2473db4dd791a460f30", // #246: reversible policy pause checks the existing internal status without credential rotation; #205: supersede tombstones a replaced grant's family on the same internal Durable Object origin; OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "56f576d63fbd42f9a587040ee7dbe8f17653e40bd641df7862184e69accdcd40",
+  "package-lock.json": "a96ebe02410c7d6cde9f32df6baeac4b986c9560f4ddffb8f739ad40e809cc2c",
   "workers/remote-mcp/package-lock.json": "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
@@ -303,7 +303,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
   "docs/agent-onboarding.json": "0cf30d7ef2e1b33256dda5ecb71773873d8867d032c4af8d4c0f2969f6ca97b3", // Task 1 recurring confirmation and declared fiscal/webhook effects; no new emitter
-  "README.md": "a5db057c80f7ddbfee7f222462d815bf544f337c794bd173119d728230363d95", // distribution#18: bounded MCP README Distribution section reconciliation (Use Frihet / Find Frihet / Pending or not reverified, ChatGPT 1.0.2 published); no new runtime emitter or destination
+  "README.md": "c9acbe42e794446ede2c9e542f2a1b1feae661e7b16debb0a89ad32acd3329eb", // distribution#18: bounded MCP README Distribution section reconciliation (Use Frihet / Find Frihet / Pending or not reverified, ChatGPT 1.0.2 published); no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
@@ -339,7 +339,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/conformance/run-phase0.mjs": "8298c4dc4c586622b79caa6a7f86d6376b3970d52c2b8a8af1dcb74585b112f7",
   "scripts/conformance/validate-baseline.mjs": "8acd56c5364c488280280af7b39e6f94091e3544103fb6bd56b1cc954af555e7",
   "scripts/generate-agent-onboarding.mjs": "64c195c341c9c822f17026617db56326b34282a90f5c16a10ddf5bb195360e06",
-  "scripts/generate-openai-submission.mjs": "20fa24e5c2f44ff172d72c3fc1c1d5ccb790d12dde120dcee5a8484de4d9c473",
+  "scripts/generate-openai-submission.mjs": "e8616d6c83235e55d960e96ce8ec2086b41fcf06a6d721317e9f52d5c08ade9e",
   "scripts/generate-public-capability-contract.mjs": "7c6f08e3a28c9bc2cd50a9e791571eaf4987b2c618f4c614ae55c9ed811cf1f2",
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
   "scripts/no-public-leak.sh": "35e9056bfdf7a6c563cfc3b1286e906f03700df76deaaa8bdaa7ca0878bd5cf3",
@@ -353,13 +353,13 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/tsconfig.json": "03d5bac68efb117ed224ec2091bb0918370cb4453ae2fa04bd5fd1d7aff26f54",
 });
 export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
-  "marketplace/openai/SUBMISSION.md": "feb2aa1f11e63941b6871fb8730d98cadceb83aeab7719a2f0b59d8f117f4c61",
-  "marketplace/openai/chatgpt-app-submission.json": "4a18cb5402a52544b1207981768f00206011fa2ec254b4452cf68fa6bb5b66a7",
+  "marketplace/openai/SUBMISSION.md": "2275eabf8979db8aff36dd7efd02194d2aa19b775862e022bf76b3d442611c44",
+  "marketplace/openai/chatgpt-app-submission.json": "399c5db36e7b74cb488541a32803ed9e339cec75465c9dbbf620d62480394288",
   "marketplace/openai/chatgpt-app-submission.v1.schema.json": "aa7d1bd554e6c615d411c03e5b73bb464816be603461eb5813bb589645550304",
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
-  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "00b5ce103dc0309092b2f317cab66406389f957e3e923555bd6c24a4118193e3", // Reviewed invoice reads: three description-only boundaries for unavailable external evidence; schemas, OAuth and 33-tool security schemes unchanged
+  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "7390455199e002fb751823f6fad2d740da0e1b53b74d70b8400b4f37581580e5", // Reviewed invoice reads: three description-only boundaries for unavailable external evidence; schemas, OAuth and 33-tool security schemes unchanged
   "src/__tests__/fixtures/public-capability-contract.json": "8e71d8136e7d4a524a16fc14af4bf6804bc9e862f92738278403108376917ddd", // Task 1 deposit retry hint and recurring fiscal/webhook capability truth; no new emitter
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });

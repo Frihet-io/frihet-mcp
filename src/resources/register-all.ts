@@ -571,9 +571,9 @@ export function registerAllResources(server: McpServer, client?: IFrihetClient):
     "frihet://config/countries",
     {
       description:
-        "61 supported countries with ISO codes, fiscal zones (peninsula, canarias, ceuta, melilla, eu, international), " +
+        "Supported countries with ISO codes, fiscal zones (peninsula, canarias, ceuta, melilla, eu, international), " +
         "default tax rates, tax names, default currencies, and invoice prefixes. Note: default rates are onboarding suggestions only, not legal determination. " +
-        "/ 61 países soportados con zonas fiscales, tipos impositivos por defecto y prefijos de factura.",
+        "/ Países soportados con zonas fiscales, tipos impositivos por defecto y prefijos de factura.",
       mimeType: "application/json",
     },
     async () => ({
