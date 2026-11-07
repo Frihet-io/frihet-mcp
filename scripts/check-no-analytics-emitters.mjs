@@ -303,7 +303,7 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
   "docs/agent-onboarding.json": "0cf30d7ef2e1b33256dda5ecb71773873d8867d032c4af8d4c0f2969f6ca97b3", // Task 1 recurring confirmation and declared fiscal/webhook effects; no new emitter
-  "README.md": "c9acbe42e794446ede2c9e542f2a1b1feae661e7b16debb0a89ad32acd3329eb", // distribution#18: bounded MCP README Distribution section reconciliation (Use Frihet / Find Frihet / Pending or not reverified, ChatGPT 1.0.2 published); no new runtime emitter or destination
+  "README.md": "7058ab85bd4a577896b612218b3a154b628ae2d566b8a0549194f48bbd6272a8", // public README front-page rewrite (docs-only); no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({

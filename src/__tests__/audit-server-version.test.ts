@@ -273,14 +273,15 @@ describe("current release projection gate", () => {
 
   test("explicitly historical README canonical and profile claims are outside the public scan", () => {
     const input = releaseProjectionInput();
-    const historicalComment = "<!-- v1.12.0-beta.1 — D4-B megasprint:";
-    assert.ok(input.readme.includes(historicalComment), "fixture must contain the historical HTML comment");
-    input.readme = input.readme.replace(
-      historicalComment,
-      "<!-- Historical release note: 157 canonical operations. The hosted grouped profile serves 165 tool names, 9 resources, and 8 prompts. v1.12.0-beta.1 — D4-B megasprint:",
-    );
+    const note = "Historical release note: 157 canonical operations. The hosted grouped profile serves 165 tool names, 9 resources, and 8 prompts.";
+    input.readme += `\n<!-- ${note} -->\n`;
 
     assert.deepEqual(checkCurrentReleaseProjections(input, SOT_VERSION), []);
+
+    // Negative twin: the same text outside a comment must be flagged.
+    const bare = releaseProjectionInput();
+    bare.readme += `\n${note}\n`;
+    assert.ok(checkCurrentReleaseProjections(bare, SOT_VERSION).length >= 1);
   });
 
   test("a stale canonical summary relocated into a new public section fails", () => {
