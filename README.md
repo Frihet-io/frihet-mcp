@@ -322,7 +322,7 @@ It does not do OCR, PDF scanning, file upload or image processing. To digitize a
 | `face_status` | Poll submission status from FACe for a submitted invoice |
 | `ticketbai_submit` | Submit TicketBAI fiscal record to Basque Country tax authority (Hacienda) |
 | `ticketbai_status` | Poll TicketBAI submission status from the Basque tax authority |
-| `ksef_submit` | Submit an invoice to KSeF (Poland). Not live yet: returns a labeled "unavailable" error until activated |
+| `ksef_submit` | **NOT_DEPLOYED**: submit an invoice to KSeF (Poland). Returns a labeled "unavailable" error until activated |
 
 ### Time Tracking (6)
 
