@@ -18,15 +18,25 @@ import { describe, test } from "node:test";
 import {
   PACKAGE_NAME,
   PUBLISHED_SURFACE,
+  REMOTE_HEALTH_URL,
   VERDICTS,
   classifyDrift,
   compareVersions,
+  formatReport,
   isPublishedSurface,
+  lookupRemote,
 } from "../published-artifact-drift.mjs";
 import {
   classifyPublishAnchor,
   parseRemoteMain,
 } from "../assert-publish-anchor.mjs";
+import {
+  ISSUE_TITLE_PREFIX,
+  applyIssuePlan,
+  listOpenIssues,
+  parseVerdict,
+  planIssue,
+} from "../published-drift-issue.mjs";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PKG = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8"));
@@ -42,6 +52,7 @@ function agreed(overrides = {}) {
     npm: { version: "1.17.0", gitHead: HEAD },
     anchor: { known: true, isAncestor: true, commitsAhead: 0, changedPaths: [] },
     registry: { version: "1.17.0" },
+    remote: { version: "1.17.0" },
     errors: [],
     ...overrides,
   };
@@ -289,6 +300,9 @@ describe("the #154 case, reproduced", () => {
       ],
     },
     registry: { version: "1.16.3" },
+    // The remote axis did not exist on 26 Aug and was not measured then. It is
+    // set equal to npm so this case keeps isolating the axes that were.
+    remote: { version: "1.16.6" },
     errors: [],
   };
 
@@ -417,5 +431,322 @@ describe("publish anchor guard", () => {
       headMatchesRemote: true,
     });
     assert.equal(result.fatal, null);
+  });
+});
+
+// --- remote axis ------------------------------------------------------------
+// mcp.frihet.io is a third distribution surface. It reported 1.16.6 on 7 Nov 2026
+// while npm served 1.17.0, and no gate could see it.
+
+/** A fetch stub that serves `responses` in order and records every URL asked for. */
+function stubFetch(responses) {
+  const calls = [];
+  const impl = async (url) => {
+    calls.push(String(url));
+    const next = responses[Math.min(calls.length - 1, responses.length - 1)];
+    if (next instanceof Error) throw next;
+    return {
+      ok: next.status >= 200 && next.status < 300,
+      status: next.status,
+      json: async () => next.body,
+    };
+  };
+  return { impl, calls };
+}
+
+describe("remote axis", () => {
+  test("a remote that agrees with npm is GREEN", () => {
+    const result = classifyDrift(agreed());
+    assert.deepEqual(result.findings, []);
+    assert.equal(result.facts.remoteVersion, "1.17.0");
+  });
+
+  test("REMOTE_VERSION_DRIFT — the hosted server is behind npm", () => {
+    const result = classifyDrift(agreed({ remote: { version: "1.16.6" } }));
+    assert.deepEqual(ids(result), ["REMOTE_VERSION_DRIFT"]);
+    assert.equal(result.exitCode, VERDICTS.REMOTE_VERSION_DRIFT);
+    assert.match(result.findings[0].detail, /reports 1\.16\.6; npm 'latest' is 1\.17\.0/);
+    assert.match(result.findings[0].detail, /behind/);
+  });
+
+  test("REMOTE_VERSION_DRIFT — ahead of npm is drift too", () => {
+    const result = classifyDrift(agreed({ remote: { version: "1.18.0" } }));
+    assert.deepEqual(ids(result), ["REMOTE_VERSION_DRIFT"]);
+    assert.match(result.findings[0].detail, /ahead of/);
+  });
+
+  test("a caller that forgets the remote gets RED, not GREEN", () => {
+    const input = agreed();
+    delete input.remote;
+    const result = classifyDrift(input);
+    assert.deepEqual(ids(result), ["REMOTE_UNVERIFIABLE"]);
+    assert.equal(result.exitCode, VERDICTS.REMOTE_UNVERIFIABLE);
+  });
+
+  test("an unreachable remote is REMOTE_UNVERIFIABLE with its own code", () => {
+    const result = classifyDrift(
+      agreed({ remote: { error: "remote MCP health unreachable after 3 attempts: ETIMEDOUT" } }),
+    );
+    assert.deepEqual(ids(result), ["REMOTE_UNVERIFIABLE"]);
+    assert.notEqual(VERDICTS.REMOTE_UNVERIFIABLE, VERDICTS.UNVERIFIABLE);
+    assert.match(result.findings[0].detail, /ETIMEDOUT/);
+  });
+
+  test("an unparseable remote version is REMOTE_UNVERIFIABLE, never equal", () => {
+    const result = classifyDrift(agreed({ remote: { version: "latest" } }));
+    assert.deepEqual(ids(result), ["REMOTE_UNVERIFIABLE"]);
+  });
+
+  test("the live state on 7 Nov 2026 is RED on the version and remote axes", () => {
+    const result = classifyDrift(
+      agreed({
+        localVersion: "2.0.0",
+        npm: { version: "1.17.0", gitHead: PUBLISHED_SHA },
+        registry: { version: "1.17.0" },
+        remote: { version: "1.16.6" },
+      }),
+    );
+    assert.deepEqual(ids(result), ["UNPUBLISHED_VERSION", "REMOTE_VERSION_DRIFT"]);
+    assert.equal(result.exitCode, VERDICTS.UNPUBLISHED_VERSION);
+  });
+});
+
+describe("remote lookup (stubbed fetch)", () => {
+  test("reads `version` from the health endpoint and nothing else", async () => {
+    const { impl, calls } = stubFetch([{ status: 200, body: { status: "ok", version: "1.16.6" } }]);
+    assert.deepEqual(await lookupRemote({ fetchImpl: impl, retryDelayMs: 0 }), { version: "1.16.6" });
+    assert.deepEqual(calls, [REMOTE_HEALTH_URL]);
+    assert.equal(REMOTE_HEALTH_URL, "https://mcp.frihet.io/health");
+  });
+
+  test("a network failure on every attempt is an error, not a version", async () => {
+    const { impl, calls } = stubFetch([new Error("getaddrinfo ENOTFOUND mcp.frihet.io")]);
+    const remote = await lookupRemote({ fetchImpl: impl, retryDelayMs: 0 });
+    assert.equal(remote.version, undefined);
+    assert.match(remote.error, /unreachable after 3 attempts: getaddrinfo ENOTFOUND/);
+    assert.equal(calls.length, 3);
+    assert.deepEqual(ids(classifyDrift(agreed({ remote }))), ["REMOTE_UNVERIFIABLE"]);
+  });
+
+  test("a transient failure followed by an answer is measured", async () => {
+    const { impl } = stubFetch([new Error("ECONNRESET"), { status: 200, body: { version: "1.17.0" } }]);
+    assert.deepEqual(await lookupRemote({ fetchImpl: impl, retryDelayMs: 0 }), { version: "1.17.0" });
+  });
+
+  test("a non-2xx answer is an error", async () => {
+    const { impl } = stubFetch([{ status: 503, body: { version: "1.17.0" } }]);
+    const remote = await lookupRemote({ fetchImpl: impl, retryDelayMs: 0 });
+    assert.match(remote.error, /HTTP 503/);
+  });
+
+  test("an answer without a version is an error", async () => {
+    for (const body of [{ status: "ok" }, { version: "" }, { version: 116 }, null, "1.17.0"]) {
+      const { impl } = stubFetch([{ status: 200, body }]);
+      const remote = await lookupRemote({ fetchImpl: impl, retryDelayMs: 0 });
+      assert.equal(remote.version, undefined, JSON.stringify(body));
+      assert.equal(typeof remote.error, "string", JSON.stringify(body));
+    }
+  });
+});
+
+describe("exit-code table in the header stays true", () => {
+  test("every verdict appears in the header with its exact code", () => {
+    const header = readFileSync(join(REPO, "scripts/published-artifact-drift.mjs"), "utf8").split(
+      "\nimport ",
+    )[0];
+    for (const [id, code] of Object.entries(VERDICTS)) {
+      assert.match(header, new RegExp(`//\\s+${code} = ${id}\\b`), `${code} = ${id} missing from header`);
+    }
+    assert.equal(new Set(Object.values(VERDICTS)).size, Object.keys(VERDICTS).length, "codes are distinct");
+  });
+});
+
+describe("text report", () => {
+  test("names every surface and prints each finding as a RED line", () => {
+    const lines = formatReport(classifyDrift(agreed({ remote: { version: "1.16.6" } })));
+    assert.ok(lines.some((l) => /^ {2}remote {4}1\.16\.6$/.test(l)), lines.join("\n"));
+    assert.ok(lines.some((l) => l.startsWith("RED [REMOTE_VERSION_DRIFT] ")));
+  });
+
+  test("green prints GREEN and no RED line", () => {
+    const lines = formatReport(classifyDrift(agreed()));
+    assert.ok(lines.some((l) => l.startsWith("GREEN")));
+    assert.equal(lines.some((l) => l.startsWith("RED")), false);
+  });
+});
+
+// --- issue on red ---------------------------------------------------------------
+// The detector was red on every one of its 177 runs (26 Aug to 7 Nov 2026) and
+// nobody noticed: a red scheduled run notifies no one. scripts/published-drift-issue.mjs
+// turns that red into one open issue and closes it on the next green run.
+
+const RUN = "https://github.com/Frihet-io/frihet-mcp/actions/runs/1";
+const RUN2 = "https://github.com/Frihet-io/frihet-mcp/actions/runs/2";
+const red = classifyDrift(
+  agreed({ localVersion: "2.0.0", npm: { version: "1.17.0", gitHead: PUBLISHED_SHA } }),
+);
+const green = classifyDrift(agreed());
+const issue = (number, title, extra = {}) => ({ number, title, ...extra });
+const unrelated = [
+  issue(3, "Add support for X"),
+  issue(4, `${ISSUE_TITLE_PREFIX}: UNPUBLISHED_VERSION`, { pull_request: { url: "x" } }),
+];
+
+describe("issue plan", () => {
+  test("red with no open issue opens one, labelled, with the RED lines and the run URL", () => {
+    const plan = planIssue({ verdict: red, openIssues: unrelated, runUrl: RUN });
+    assert.equal(plan.action, "open");
+    assert.equal(plan.title, `${ISSUE_TITLE_PREFIX}: UNPUBLISHED_VERSION`);
+    assert.deepEqual(plan.labels, ["bug"]);
+    assert.ok(plan.body.includes(RUN));
+    assert.ok(plan.body.includes("RED [UNPUBLISHED_VERSION] package.json is 2.0.0; npm 'latest' is 1.17.0"));
+  });
+
+  test("red with our issue already open updates it — never a second one", () => {
+    const open = [...unrelated, issue(9, `${ISSUE_TITLE_PREFIX}: UNPUBLISHED_VERSION`)];
+    const plan = planIssue({ verdict: red, openIssues: open, runUrl: RUN2 });
+    assert.equal(plan.action, "update");
+    assert.equal(plan.number, 9);
+    assert.ok(plan.body.includes(RUN2));
+    assert.equal(plan.comment, null, "same findings: refresh the body, no comment");
+  });
+
+  test("a change in findings retitles the issue and comments once", () => {
+    const open = [issue(9, `${ISSUE_TITLE_PREFIX}: UNPUBLISHED_VERSION`)];
+    const both = classifyDrift(
+      agreed({
+        localVersion: "2.0.0",
+        npm: { version: "1.17.0", gitHead: PUBLISHED_SHA },
+        remote: { version: "1.16.6" },
+      }),
+    );
+    const plan = planIssue({ verdict: both, openIssues: open, runUrl: RUN2 });
+    assert.equal(plan.title, `${ISSUE_TITLE_PREFIX}: UNPUBLISHED_VERSION, REMOTE_VERSION_DRIFT`);
+    assert.match(plan.comment, /REMOTE_VERSION_DRIFT/);
+    assert.ok(plan.comment.includes(RUN2));
+  });
+
+  test("duplicates left by an old race: the oldest is updated", () => {
+    const open = [issue(12, `${ISSUE_TITLE_PREFIX}: X`), issue(7, `${ISSUE_TITLE_PREFIX}: Y`)];
+    assert.equal(planIssue({ verdict: red, openIssues: open, runUrl: RUN }).number, 7);
+  });
+
+  test("green closes every open drift issue and touches nothing else", () => {
+    const open = [...unrelated, issue(9, `${ISSUE_TITLE_PREFIX}: A`), issue(11, `${ISSUE_TITLE_PREFIX}: B`)];
+    const plan = planIssue({ verdict: green, openIssues: open, runUrl: RUN2 });
+    assert.equal(plan.action, "close");
+    assert.deepEqual(plan.numbers, [9, 11]);
+    assert.ok(plan.comment.includes(RUN2));
+  });
+
+  test("green with nothing open does nothing", () => {
+    assert.deepEqual(planIssue({ verdict: green, openIssues: unrelated, runUrl: RUN }), { action: "none" });
+  });
+
+  test("no verdict at all (detector crashed, job died) is RED, not silence", () => {
+    for (const raw of [undefined, "", "   ", "{not json", "null", '{"exitCode":"0","findings":[]}', '{"exitCode":0}']) {
+      const verdict = parseVerdict(raw);
+      assert.equal(verdict, null, String(raw));
+      const plan = planIssue({ verdict, openIssues: [], runUrl: RUN });
+      assert.equal(plan.action, "open", String(raw));
+      assert.equal(plan.title, `${ISSUE_TITLE_PREFIX}: NO_VERDICT`);
+      assert.ok(plan.body.includes("RED [NO_VERDICT]"));
+    }
+  });
+
+  test("an exit code of 0 that still carries findings is RED", () => {
+    const inconsistent = { ...red, exitCode: 0 };
+    assert.equal(planIssue({ verdict: inconsistent, openIssues: [], runUrl: RUN }).action, "open");
+  });
+
+  test("the verdict round-trips through the compact JSON the workflow passes along", () => {
+    const raw = JSON.stringify(red);
+    assert.equal(raw.includes("\n"), false, "one line, so it fits a $GITHUB_OUTPUT line");
+    assert.deepEqual(parseVerdict(raw), red);
+  });
+
+  test("backticks in a finding cannot break out of the code block", () => {
+    const hostile = classifyDrift(agreed({ remote: { error: "```\n@someone <img src=x>" } }));
+    const plan = planIssue({ verdict: hostile, openIssues: [], runUrl: RUN });
+    const fenced = plan.body.split("```text\n")[1].split("\n```")[0];
+    assert.equal(fenced.includes("`"), false);
+  });
+
+  test("a huge verdict is truncated, with a pointer to the run log", () => {
+    const paths = Array.from({ length: 500 }, (_, i) => `src/f${i}.ts`);
+    const huge = classifyDrift(
+      agreed({ anchor: { known: true, isAncestor: true, commitsAhead: 1, changedPaths: paths } }),
+    );
+    huge.findings[0].detail = "x".repeat(70_000);
+    const plan = planIssue({ verdict: huge, openIssues: [], runUrl: RUN });
+    assert.ok(plan.body.length < 65_536, "GitHub rejects issue bodies over 65536 characters");
+    assert.ok(plan.body.includes(RUN));
+  });
+});
+
+describe("issue plan execution (stubbed GitHub API)", () => {
+  const recorder = (pages = []) => {
+    const calls = [];
+    const request = async (method, path, body) => {
+      calls.push(body === undefined ? [method, path] : [method, path, body]);
+      return method === "GET" ? (pages.shift() ?? []) : {};
+    };
+    return { calls, request };
+  };
+
+  test("open is one POST to /issues", async () => {
+    const { calls, request } = recorder();
+    await applyIssuePlan({ action: "open", title: "t", body: "b", labels: ["bug"] }, request);
+    assert.deepEqual(calls, [["POST", "/issues", { title: "t", body: "b", labels: ["bug"] }]]);
+  });
+
+  test("update edits in place and comments only when asked", async () => {
+    const quiet = recorder();
+    await applyIssuePlan({ action: "update", number: 9, title: "t", body: "b", comment: null }, quiet.request);
+    assert.deepEqual(quiet.calls, [["PATCH", "/issues/9", { title: "t", body: "b" }]]);
+    const loud = recorder();
+    await applyIssuePlan({ action: "update", number: 9, title: "t", body: "b", comment: "c" }, loud.request);
+    assert.deepEqual(loud.calls, [
+      ["PATCH", "/issues/9", { title: "t", body: "b" }],
+      ["POST", "/issues/9/comments", { body: "c" }],
+    ]);
+  });
+
+  test("close comments, then closes as completed", async () => {
+    const { calls, request } = recorder();
+    await applyIssuePlan({ action: "close", numbers: [9, 11], comment: "c" }, request);
+    assert.deepEqual(calls, [
+      ["POST", "/issues/9/comments", { body: "c" }],
+      ["PATCH", "/issues/9", { state: "closed", state_reason: "completed" }],
+      ["POST", "/issues/11/comments", { body: "c" }],
+      ["PATCH", "/issues/11", { state: "closed", state_reason: "completed" }],
+    ]);
+  });
+
+  test("none makes no call", async () => {
+    const { calls, request } = recorder();
+    await applyIssuePlan({ action: "none" }, request);
+    assert.deepEqual(calls, []);
+  });
+
+  test("listing walks every page of open issues", async () => {
+    const full = Array.from({ length: 100 }, (_, i) => issue(i + 1, "x"));
+    const { calls, request } = recorder([full, [issue(101, `${ISSUE_TITLE_PREFIX}: A`)]]);
+    const all = await listOpenIssues(request);
+    assert.equal(all.length, 101);
+    assert.deepEqual(calls, [
+      ["GET", "/issues?state=open&per_page=100&page=1"],
+      ["GET", "/issues?state=open&per_page=100&page=2"],
+    ]);
+  });
+
+  test("a failing API call propagates, so the reporter job goes red too", async () => {
+    const request = async () => {
+      throw new Error("POST /issues: HTTP 403");
+    };
+    await assert.rejects(
+      applyIssuePlan({ action: "open", title: "t", body: "b", labels: [] }, request),
+      /HTTP 403/,
+    );
   });
 });
