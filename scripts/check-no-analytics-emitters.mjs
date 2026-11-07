@@ -321,7 +321,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",
-  "scripts/__tests__/published-artifact-drift.test.mjs": "3bc8e9f51d4e71b274217a7afa56a7df1f9f76af65f240a01ec3b56e321a6b9f",
+  "scripts/__tests__/published-artifact-drift.test.mjs": "cfe73d3d85f2ee54373a2d2c0afa659fa49b93e69e8220d2f5c00a47e48f5474", // remote axis and issue-on-red planner tests; stubbed fetch and stubbed GitHub API, no live calls
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
@@ -344,7 +344,8 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
   "scripts/no-public-leak.sh": "35e9056bfdf7a6c563cfc3b1286e906f03700df76deaaa8bdaa7ca0878bd5cf3",
   "scripts/postinstall.js": "02947d11d324048f69bc92d253d7c41f947aa338d1d6315b1579492689d462e3",
-  "scripts/published-artifact-drift.mjs": "29435fd9b25625db5f6835e0b11b0528daf7345eef1421c6c826879be00b4f95",
+  "scripts/published-artifact-drift.mjs": "c2d02904dfb08aae08cb5345275beacba1b0ac5d05d8ccaf2a26717f8e520763", // adds a read-only GET of https://mcp.frihet.io/health (first-party origin) and --json-out; no telemetry
+  "scripts/published-drift-issue.mjs": "947a7403cc5d2cd64a6ea6641eaddaaa742498e4a0848f3b26e50be3a1da9f1e", // CI-only reporter: GitHub REST issues API with the workflow token; not shipped, no telemetry
   "scripts/sync-openapi.mjs": "311927e49e3ab5c514c418f29cc298bdec79f6b8705c47bdc7de34c6cee4943d",
   "scripts/test-openai-full-compose.mjs": "24b6c922553fedcb6fe9836b768d88b1e10a93d6a6877ebbf2a67551be6b2b79", // directory-readiness: also compares the path-inserted metadata to the snapshot
   "scripts/validate-openai-submission-schema.mjs": "a3fa908a5ea83d6468f2d77345e464f1832845f45677df2627d2eebb423c548a",

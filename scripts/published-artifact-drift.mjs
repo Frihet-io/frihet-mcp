@@ -13,9 +13,15 @@
 // field is load-bearing here, not decorative. When it is absent or unreachable in
 // this repo's history the detector says UNVERIFIABLE rather than guessing.
 //
+// The hosted server at mcp.frihet.io is the third surface: its /health `version` is
+// compared with npm 'latest', because a remote that lags npm serves different code
+// to remote users than `npx` users get.
+//
 // Usage:
-//   node scripts/published-artifact-drift.mjs           # live check (exit != 0 on drift)
-//   node scripts/published-artifact-drift.mjs --json    # machine-readable
+//   node scripts/published-artifact-drift.mjs                    # live check (exit != 0 on drift)
+//   node scripts/published-artifact-drift.mjs --json             # machine-readable
+//   node scripts/published-artifact-drift.mjs --json-out <file>  # text report, plus the
+//       verdict as one-line JSON in <file> (read by scripts/published-drift-issue.mjs)
 //
 // Exit codes (lowest wins when several findings apply):
 //   0 = OK
@@ -31,9 +37,15 @@
 //   5 = UNVERIFIABLE — network failure, missing gitHead, or an anchor commit that
 //       is not in this repo's history. Fail-closed: an unmeasurable surface is not
 //       a green one.
+//   6 = REMOTE_VERSION_DRIFT — https://mcp.frihet.io/health reports a version other
+//       than npm 'latest' (behind or ahead).
+//   7 = REMOTE_UNVERIFIABLE — the health endpoint was unreachable after retries,
+//       answered non-2xx, or carried no parseable `version`. Fail-closed, and kept
+//       apart from 5 so an outage of the hosted server is not read as an npm or
+//       registry lookup failure.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,6 +53,7 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const PACKAGE_NAME = "@frihet/mcp-server";
 export const REGISTRY_SERVER_NAME = "io.frihet/erp";
+export const REMOTE_HEALTH_URL = "https://mcp.frihet.io/health";
 
 // Paths whose content ends up in — or changes — the published tarball.
 // Derived from package.json `files`: dist (built from src/), scripts/postinstall.js,
@@ -76,6 +89,8 @@ export const VERDICTS = Object.freeze({
   REGISTRY_BEHIND_NPM: 3,
   REPO_BEHIND_NPM: 4,
   UNVERIFIABLE: 5,
+  REMOTE_VERSION_DRIFT: 6,
+  REMOTE_UNVERIFIABLE: 7,
 });
 
 /** True when `path` would change the published tarball. */
@@ -131,6 +146,8 @@ export function compareVersions(a, b) {
  * @param {{known: boolean, isAncestor: boolean, commitsAhead: number,
  *          changedPaths: string[]}|null} input.anchor  history between gitHead and HEAD
  * @param {{version: string}|null} input.registry       MCP Registry `isLatest` entry
+ * @param {{version: string}|{error: string}|undefined} input.remote  hosted /health
+ *        version, or why it could not be read. Absent counts as unverifiable.
  * @param {string[]} [input.errors]              lookup failures collected by the caller
  * @returns {{exitCode: number, findings: Array, facts: object}}
  */
@@ -223,6 +240,26 @@ export function classifyDrift(input) {
     add("UNVERIFIABLE", `no 'isLatest' entry for ${REGISTRY_SERVER_NAME} in the MCP Registry.`);
   }
 
+  // --- remote axis --------------------------------------------------------
+  const remote = input.remote;
+  if (typeof remote?.version !== "string") {
+    add("REMOTE_UNVERIFIABLE", remote?.error || `no version was read from ${REMOTE_HEALTH_URL}.`);
+  } else {
+    let remoteOrder = null;
+    try {
+      remoteOrder = compareVersions(remote.version, input.npm.version);
+    } catch (error) {
+      add("REMOTE_UNVERIFIABLE", `remote version comparison failed: ${error.message}`);
+    }
+    if (remoteOrder !== null && remoteOrder !== 0) {
+      add(
+        "REMOTE_VERSION_DRIFT",
+        `${REMOTE_HEALTH_URL} reports ${remote.version}; npm 'latest' is ${input.npm.version}. ` +
+          `The hosted server is ${remoteOrder < 0 ? "behind" : "ahead of"} what npm users install.`,
+      );
+    }
+  }
+
   return finish(findings, input);
 }
 
@@ -238,6 +275,7 @@ function finish(findings, input) {
       npmVersion: input.npm?.version ?? null,
       npmGitHead: input.npm?.gitHead ?? null,
       registryVersion: input.registry?.version ?? null,
+      remoteVersion: typeof input.remote?.version === "string" ? input.remote.version : null,
       commitsAhead: input.anchor?.commitsAhead ?? null,
     },
   };
@@ -249,10 +287,10 @@ const short = (sha) => (typeof sha === "string" ? sha.slice(0, 7) : String(sha))
 
 const FETCH_ATTEMPTS = 3;
 
-async function fetchJson(url, errors, label) {
+async function fetchJson(url, errors, label, { fetchImpl = globalThis.fetch, retryDelayMs = 500 } = {}) {
   for (let attempt = 1; attempt <= FETCH_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetch(url, {
+      const response = await fetchImpl(url, {
         headers: { accept: "application/json" },
         signal: AbortSignal.timeout(20_000),
       });
@@ -263,10 +301,27 @@ async function fetchJson(url, errors, label) {
         errors.push(`${label} unreachable after ${FETCH_ATTEMPTS} attempts: ${error.message}`);
         return null;
       }
-      await new Promise((r) => setTimeout(r, 500 * attempt));
+      await new Promise((r) => setTimeout(r, retryDelayMs * attempt));
     }
   }
   return null;
+}
+
+/**
+ * Reads the hosted server's version from its health endpoint. Never throws:
+ * returns `{version}` or `{error}`, and classifyDrift treats `{error}` as RED.
+ * `fetchImpl` and `retryDelayMs` exist so the test suite can stub the network.
+ */
+export async function lookupRemote(options = {}) {
+  const errors = [];
+  const health = await fetchJson(REMOTE_HEALTH_URL, errors, "remote MCP health", options);
+  if (health === null || typeof health !== "object") {
+    return { error: errors[0] ?? `${REMOTE_HEALTH_URL} did not answer with a JSON object.` };
+  }
+  if (typeof health.version !== "string" || health.version.length === 0) {
+    return { error: `${REMOTE_HEALTH_URL} answered without a 'version' string.` };
+  }
+  return { version: health.version };
 }
 
 function git(args) {
@@ -336,40 +391,54 @@ async function collect() {
     if (entry?.server?.version) registry = { version: entry.server.version };
   }
 
-  return { localVersion, headSha, npm, anchor, registry, errors };
+  const remote = await lookupRemote();
+
+  return { localVersion, headSha, npm, anchor, registry, remote, errors };
+}
+
+/** The human-readable report, one array entry per line. Also the issue body's source. */
+export function formatReport(result) {
+  const f = result.facts;
+  const lines = [
+    `published-artifact-drift — ${PACKAGE_NAME}`,
+    `  repo      ${f.localVersion} @ ${short(f.headSha)}`,
+    `  npm       ${f.npmVersion ?? "?"} @ ${short(f.npmGitHead ?? "?")}` +
+      (f.commitsAhead === null ? "" : `  (${f.commitsAhead} commit(s) behind HEAD)`),
+    `  registry  ${f.registryVersion ?? "?"}`,
+    `  remote    ${f.remoteVersion ?? "?"}`,
+    "",
+  ];
+  if (result.findings.length === 0) {
+    lines.push("GREEN — the published artifact, the registry, the hosted server and this repo agree.");
+    return lines;
+  }
+  for (const finding of result.findings) {
+    lines.push(`RED [${finding.id}] ${finding.detail}`);
+    if (finding.paths) {
+      for (const path of finding.paths.slice(0, 12)) lines.push(`       ${path}`);
+      if (finding.paths.length > 12) lines.push(`       … ${finding.paths.length - 12} more`);
+    }
+  }
+  lines.push("");
+  lines.push("Remedy: bump the version and cut a release. Exit-code table: header of this file.");
+  return lines;
 }
 
 async function main() {
   const json = process.argv.includes("--json");
+  const outAt = process.argv.indexOf("--json-out");
+  const outPath = outAt === -1 ? null : process.argv[outAt + 1];
+  if (outAt !== -1 && (!outPath || outPath.startsWith("--"))) {
+    throw new Error("--json-out needs a file path");
+  }
   const result = classifyDrift(await collect());
 
+  // Compact on purpose: one line, so the workflow can hand it on as a step output.
+  if (outPath) writeFileSync(outPath, JSON.stringify(result));
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
-    const f = result.facts;
-    console.log(`published-artifact-drift — ${PACKAGE_NAME}`);
-    console.log(`  repo      ${f.localVersion} @ ${short(f.headSha)}`);
-    console.log(
-      `  npm       ${f.npmVersion ?? "?"} @ ${short(f.npmGitHead ?? "?")}` +
-        (f.commitsAhead === null ? "" : `  (${f.commitsAhead} commit(s) behind HEAD)`),
-    );
-    console.log(`  registry  ${f.registryVersion ?? "?"}`);
-    console.log("");
-    if (result.findings.length === 0) {
-      console.log("GREEN — the published artifact, the registry and this repo agree.");
-    } else {
-      for (const finding of result.findings) {
-        console.log(`RED [${finding.id}] ${finding.detail}`);
-        if (finding.paths) {
-          for (const path of finding.paths.slice(0, 12)) console.log(`       ${path}`);
-          if (finding.paths.length > 12) {
-            console.log(`       … ${finding.paths.length - 12} more`);
-          }
-        }
-      }
-      console.log("");
-      console.log("Remedy: bump the version and cut a release. Exit-code table: header of this file.");
-    }
+    console.log(formatReport(result).join("\n"));
   }
   process.exit(result.exitCode);
 }
