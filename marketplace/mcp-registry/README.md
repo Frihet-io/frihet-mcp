@@ -11,11 +11,30 @@ Frihet ERP provides a strictly validated metadata manifest in the repository roo
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.frihet/erp",
   "title": "Frihet ERP",
-  "description": "AI-native ERP MCP: ES/EU fiscal compliance (VeriFactu/TicketBAI/Facturae), invoicing, tax, banking",
+  "description": "Frihet ERP over MCP: invoices, quotes, expenses, clients, CRM, banking and Spanish tax summaries",
   "repository": {
     "url": "https://github.com/Frihet-io/frihet-mcp",
     "source": "github"
   },
+  "websiteUrl": "https://www.frihet.io/en/mcp",
+  "icons": [
+    {
+      "src": "https://www.frihet.io/logo.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ],
+      "theme": "light"
+    },
+    {
+      "src": "https://www.frihet.io/brand/frihet-mark-white.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ],
+      "theme": "dark"
+    }
+  ],
   "version": "2.0.0",
   "packages": [
     {
