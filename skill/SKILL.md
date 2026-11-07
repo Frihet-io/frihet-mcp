@@ -9,7 +9,7 @@ description: >-
 license: MIT
 metadata:
   author: Frihet
-  version: 2.0.0
+  version: 2.0.1
   mcp-server: frihet
   documentation: https://docs.frihet.io/desarrolladores/mcp-server
 ---

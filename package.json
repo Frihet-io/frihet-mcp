@@ -1,6 +1,6 @@
 {
   "name": "@frihet/mcp-server",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "AI-native MCP server for Frihet ERP — 156 canonical operations for invoicing, expenses, CRM, banking, POS and ES/EU fiscal workflows, with conservative capability and side-effect metadata.",
   "type": "module",
   "main": "./dist/index.js",
