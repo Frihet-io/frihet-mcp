@@ -3,7 +3,7 @@
   "name": "io.frihet/erp",
   "title": "Frihet ERP",
   "description": "AI-native ERP MCP server with a 156-operation catalogue; the grouped remote profile exposes 164 tool names, 7 resources, and 10 prompts with callability and side effects reported separately.",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "license": "MIT",
   "repository": {
     "url": "https://github.com/Frihet-io/frihet-mcp",
@@ -33,7 +33,7 @@
     {
       "registryType": "npm",
       "identifier": "@frihet/mcp-server",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "transport": {
         "type": "stdio"
       },

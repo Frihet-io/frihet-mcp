@@ -2,7 +2,7 @@
   "$schema": "https://glama.ai/mcp/schemas/server.json",
   "name": "frihet-mcp",
   "title": "Frihet ERP",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "AI-native MCP server for business management. The catalogue contains 156 canonical operations; the grouped remote profile serves 164 tool names, 7 resources, and 10 prompts with conservative callability and side-effect metadata.",
   "license": "MIT",
   "homepage": "https://frihet.io/?utm_source=glama&utm_medium=mcp_directory",

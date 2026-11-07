@@ -36,7 +36,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "2.0.0"
+      "version": "2.0.1"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -45,8 +45,17 @@
       "version": "0.1.0"
     }
   },
-  "releasedAt": "2026-11-05",
+  "releasedAt": "2026-11-08",
   "releases": [
+    {
+      "version": "2.0.1",
+      "date": "2026-11-08",
+      "mcpToolCount": 156,
+      "toolNamesCount": 164,
+      "resourcesCount": 7,
+      "promptsCount": 10,
+      "notes": "Documentation and registry metadata release. Ships the rewritten public README front page (#277), MCP Registry listing metadata (websiteUrl and light/dark icons in server.json, #274), and the published-artifact drift issue reporter and remote /health version comparator (#274). No tool, resource, prompt, or runtime behavior changes."
+    },
     {
       "version": "2.0.0",
       "date": "2026-11-05",
@@ -154,5 +163,5 @@
       "version": "1.7.0-beta.1"
     }
   ],
-  "version": "2.0.0"
+  "version": "2.0.1"
 }

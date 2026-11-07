@@ -4,6 +4,14 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-11-08
+
+### Changed
+
+- **Public README front page rewritten for distribution and quick start (#277).** Leads with distribution surfaces, quick start, and grouped vs. local capability truth; collapses the full operation reference table so npm and GitHub readers reach installation and authentication first without changing any shipped tool, resource, or prompt.
+- **MCP Registry listing metadata and published-drift issue reporting (#274).** Adds `websiteUrl` and light/dark icons to `server.json`, compares `https://mcp.frihet.io/health` version against npm `latest` in `scripts/published-artifact-drift.mjs`, and opens/refreshes/closes a tracking issue from `.github/workflows/published-drift.yml`.
+- **Release projections now agree on 2.0.1 and the generated runtime inventory.** The catalogue has 156 canonical operations (157 measured in 1.17.0, minus the two withdrawn tools, plus `global_search`; #124 withdrew the dead `onboarding_status` / `onboarding_persona_set` tools pending Frihet-ERP shipping the `/v1/onboarding/*` family). `localFull` exposes 161 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 164 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth.
+
 ## [2.0.0] — 2026-11-05
 
 ### BREAKING
@@ -12,7 +20,7 @@ This is a major release. The tool contract changed against `1.17.0` (the last pu
 
 `1.18.0` was prepared in the repository but never published to npm. Its changes ship here, and the CHANGELOG entries that were filed under it are part of this section.
 
-**What users on `latest` will see.** `npm install @frihet/mcp-server`, `npx @frihet/mcp-server` and any unpinned MCP client configuration resolve to `2.0.0` instead of the previous release on the next install or cache refresh. Caret ranges anchored on the 1.x line do not move to the new major. Agent prompts, automations and saved tool calls that name a removed tool receive a tool-not-found error, and calls that omit a newly required input or send a removed input receive a validation error before any request reaches the API.
+**What users on `latest` will see.** `npm install @frihet/mcp-server`, `npx @frihet/mcp-server` and any unpinned MCP client configuration resolve to the new major (`2.x`) instead of the previous release on the next install or cache refresh. Caret ranges anchored on the 1.x line do not move to the new major. Agent prompts, automations and saved tool calls that name a removed tool receive a tool-not-found error, and calls that omit a newly required input or send a removed input receive a validation error before any request reaches the API.
 
 To stay on the old contract, pin the exact previous version, 1.17.0.
 

@@ -35,12 +35,12 @@ Frihet ERP provides a strictly validated metadata manifest in the repository roo
       "theme": "dark"
     }
   ],
-  "version": "2.0.0",
+  "version": "2.0.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@frihet/mcp-server",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "transport": {
         "type": "stdio"
       }

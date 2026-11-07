@@ -27,10 +27,10 @@ describe("readReleaseMeta — wrangler-var path", () => {
   test("valid 40-hex sha is reported verbatim and source is wrangler-var", () => {
     const meta = readReleaseMeta({
       RELEASE_SOURCE_SHA: "7d7167b0b6e870cb89f595f8a9185a929b3b491a",
-      RELEASE_VERSION: "2.0.0",
+      RELEASE_VERSION: "2.0.1",
     });
     assert.equal(meta.releaseSha, "7d7167b0b6e870cb89f595f8a9185a929b3b491a");
-    assert.equal(meta.releaseVersion, "2.0.0");
+    assert.equal(meta.releaseVersion, "2.0.1");
     assert.equal(meta.source, "wrangler-var");
   });
 
