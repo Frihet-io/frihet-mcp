@@ -37,7 +37,10 @@ const JSON_MANIFESTS = [
   'marketplace/windsurf/mcp_config.json',
   'marketplace/antigravity/plugin.json',
   'marketplace/antigravity/mcp_config.json',
+  'marketplace/anthropic/connector/manifest.json',
   '.antigravity-plugin/plugin.json',
+  '.claude-plugin/marketplace.json',
+  '.cursor-plugin/marketplace.json',
   'gemini-extension.json',
   'mcp_config.json',
 ];

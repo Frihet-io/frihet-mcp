@@ -1,0 +1,40 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "frihet",
+  "owner": {
+    "name": "Frihet",
+    "email": "hello@frihet.io"
+  },
+  "metadata": {
+    "description": "Official Frihet ERP plugin marketplace for Claude Code — invoicing, quotes, expenses, CRM, treasury, operations, and monthly business reviews.",
+    "version": "2.0.1"
+  },
+  "plugins": [
+    {
+      "name": "frihet-erp",
+      "source": "./plugins/claude/frihet-erp",
+      "description": "Review receivables, prepare invoices and quotes, manage expenses, clients, treasury, and monthly business records in Frihet ERP.",
+      "version": "1.18.0-preview.4",
+      "author": {
+        "name": "Frihet",
+        "email": "hello@frihet.io",
+        "url": "https://frihet.io"
+      },
+      "homepage": "https://frihet.io",
+      "repository": "https://github.com/Frihet-io/frihet-mcp",
+      "license": "MIT",
+      "category": "productivity",
+      "keywords": [
+        "erp",
+        "invoicing",
+        "quotes",
+        "expenses",
+        "receivables",
+        "crm",
+        "treasury",
+        "mcp",
+        "business-management"
+      ]
+    }
+  ]
+}
