@@ -31,6 +31,7 @@ export interface McpSurfaceComposition {
   readonly claudeMode?: boolean;
   readonly googleMode?: boolean;
   readonly museMode?: boolean;
+  readonly demoMode?: boolean;
 }
 
 export function localMcpSurfaceComposition(
@@ -71,6 +72,15 @@ export function registerMcpSurface(
       annotations: { ...config.annotations, title: config.title },
     }, handler);
   }
+  let clientIsDemo = false;
+  try {
+    clientIsDemo =
+      (client as { isDemoClient?: unknown } | undefined)?.isDemoClient === true ||
+      (client as { constructor?: { name?: string } } | undefined)?.constructor?.name === "DemoFrihetClient";
+  } catch {
+    clientIsDemo = false;
+  }
+  const isDemoMode = options.demoMode === true || clientIsDemo;
   if (options.groupedMode) {
     if (options.openaiMode) {
       applyOpenAIReviewProfiles(server);
@@ -85,6 +95,7 @@ export function registerMcpSurface(
           metaKey: CAPABILITY_META_KEY,
           localDiscovery: buildLocalDiscoveryCapability,
         },
+        demoMode: isDemoMode,
       });
     }
   } else if (options.openaiMode) {

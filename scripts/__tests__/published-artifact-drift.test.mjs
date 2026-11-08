@@ -31,9 +31,11 @@ import {
   parseRemoteMain,
 } from "../assert-publish-anchor.mjs";
 import {
+  ISSUE_MARKER,
   ISSUE_TITLE_PREFIX,
   applyIssuePlan,
   listOpenIssues,
+  main as runDriftIssueMain,
   parseVerdict,
   planIssue,
 } from "../published-drift-issue.mjs";
@@ -550,22 +552,38 @@ describe("remote lookup (stubbed fetch)", () => {
 });
 
 describe("exit-code table in the header stays true", () => {
-  test("every verdict appears in the header with its exact code", () => {
+  test("every verdict appears in the header with its exact code and remedies include 6 and 7", () => {
     const header = readFileSync(join(REPO, "scripts/published-artifact-drift.mjs"), "utf8").split(
       "\nimport ",
     )[0];
     for (const [id, code] of Object.entries(VERDICTS)) {
       assert.match(header, new RegExp(`//\\s+${code} = ${id}\\b`), `${code} = ${id} missing from header`);
     }
+    assert.match(header, /6 = REMOTE_VERSION_DRIFT[\s\S]*Remedy: redeploy the hosted server/);
+    assert.match(header, /7 = REMOTE_UNVERIFIABLE[\s\S]*Remedy: restore https:\/\/mcp\.frihet\.io\/health/);
     assert.equal(new Set(Object.values(VERDICTS)).size, Object.keys(VERDICTS).length, "codes are distinct");
   });
 });
 
 describe("text report", () => {
-  test("names every surface and prints each finding as a RED line", () => {
+  test("names every surface and prints each finding as a RED line with remote-specific remedy", () => {
     const lines = formatReport(classifyDrift(agreed({ remote: { version: "1.16.6" } })));
     assert.ok(lines.some((l) => /^ {2}remote {4}1\.16\.6$/.test(l)), lines.join("\n"));
     assert.ok(lines.some((l) => l.startsWith("RED [REMOTE_VERSION_DRIFT] ")));
+    assert.ok(
+      lines.some((l) => l.startsWith("Remedy: redeploy or restore the hosted server at mcp.frihet.io")),
+      lines.join("\n"),
+    );
+  });
+
+  test("prints package remedy when only package/registry axes drift", () => {
+    const lines = formatReport(
+      classifyDrift(agreed({ localVersion: "2.0.0", npm: { version: "1.17.0", gitHead: PUBLISHED_SHA } })),
+    );
+    assert.ok(
+      lines.some((l) => l.startsWith("Remedy: bump the version and cut a release.")),
+      lines.join("\n"),
+    );
   });
 
   test("green prints GREEN and no RED line", () => {
@@ -598,8 +616,18 @@ describe("issue plan", () => {
     assert.equal(plan.action, "open");
     assert.equal(plan.title, `${ISSUE_TITLE_PREFIX}: UNPUBLISHED_VERSION`);
     assert.deepEqual(plan.labels, ["bug"]);
+    assert.ok(plan.body.startsWith(`${ISSUE_MARKER}\n`), "rendered body must carry the hidden marker");
     assert.ok(plan.body.includes(RUN));
     assert.ok(plan.body.includes("RED [UNPUBLISHED_VERSION] package.json is 2.0.0; npm 'latest' is 1.17.0"));
+  });
+
+  test("an open issue whose title matches the prefix but whose body lacks ISSUE_MARKER is ignored", () => {
+    const userIssue = issue(42, `${ISSUE_TITLE_PREFIX}: UNPUBLISHED_VERSION`, {
+      body: "Human discussion referencing the drift title without the machine marker.",
+    });
+    const open = [...unrelated, userIssue];
+    assert.equal(planIssue({ verdict: red, openIssues: open, runUrl: RUN }).action, "open");
+    assert.deepEqual(planIssue({ verdict: green, openIssues: open, runUrl: RUN }), { action: "none" });
   });
 
   test("red with our issue already open updates it — never a second one", () => {
@@ -748,5 +776,172 @@ describe("issue plan execution (stubbed GitHub API)", () => {
       applyIssuePlan({ action: "open", title: "t", body: "b", labels: [] }, request),
       /HTTP 403/,
     );
+  });
+});
+
+describe("published-drift-issue main() (stubbed fetch)", () => {
+  const baseEnv = {
+    GITHUB_TOKEN: "ghs_test_token",
+    GITHUB_REPOSITORY: "Frihet-io/frihet-mcp",
+    DRIFT_RUN_URL: RUN,
+  };
+
+  function makeGitHubFetch(responses) {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({
+        url: String(url),
+        method: init.method ?? "GET",
+        headers: init.headers ?? {},
+        body: init.body ? JSON.parse(init.body) : undefined,
+      });
+      const next = responses[Math.min(calls.length - 1, responses.length - 1)];
+      if (next instanceof Error) throw next;
+      return {
+        ok: next.status >= 200 && next.status < 300,
+        status: next.status,
+        json: async () => next.body,
+      };
+    };
+    return { calls, fetchImpl };
+  }
+
+  test("missing required env vars throw before any network call", async () => {
+    for (const missing of ["GITHUB_TOKEN", "GITHUB_REPOSITORY", "DRIFT_RUN_URL"]) {
+      const env = { ...baseEnv };
+      delete env[missing];
+      const { calls, fetchImpl } = makeGitHubFetch([]);
+      await assert.rejects(
+        runDriftIssueMain(env, { fetchImpl, log: () => {} }),
+        new RegExp(`${missing} is not set`),
+      );
+      assert.equal(calls.length, 0);
+    }
+  });
+
+  test("missing or empty DRIFT_VERDICT plans RED (NO_VERDICT) and opens an issue with ISSUE_MARKER", async () => {
+    const { calls, fetchImpl } = makeGitHubFetch([
+      { status: 200, body: [] },
+      { status: 201, body: { number: 99 } },
+    ]);
+    const logs = [];
+    const plan = await runDriftIssueMain(
+      { ...baseEnv, DRIFT_VERDICT: "" },
+      { fetchImpl, log: (msg) => logs.push(msg) },
+    );
+    assert.equal(plan.action, "open");
+    assert.equal(plan.title, `${ISSUE_TITLE_PREFIX}: NO_VERDICT`);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].method, "GET");
+    assert.equal(
+      calls[0].url,
+      "https://api.github.com/repos/Frihet-io/frihet-mcp/issues?state=open&per_page=100&page=1",
+    );
+    assert.equal(calls[1].method, "POST");
+    assert.equal(calls[1].url, "https://api.github.com/repos/Frihet-io/frihet-mcp/issues");
+    assert.ok(calls[1].body.body.startsWith(`${ISSUE_MARKER}\n`));
+    assert.deepEqual(logs, [`published-drift-issue: open — ${ISSUE_TITLE_PREFIX}: NO_VERDICT`]);
+  });
+
+  test("a non-2xx GitHub response throws a status-only error without echoing response body", async () => {
+    const secretBody = { message: "Bad credentials", token_echo: "ghs_secret_leak" };
+    const { fetchImpl } = makeGitHubFetch([{ status: 403, body: secretBody }]);
+    await assert.rejects(
+      runDriftIssueMain(
+        { ...baseEnv, DRIFT_VERDICT: JSON.stringify(red) },
+        { fetchImpl, log: () => {} },
+      ),
+      (err) => {
+        assert.equal(err.message, "GET /issues: HTTP 403");
+        assert.equal(err.message.includes("ghs_secret_leak"), false);
+        return true;
+      },
+    );
+  });
+
+  test("a green DRIFT_VERDICT comments and closes open issues carrying ISSUE_MARKER", async () => {
+    const openDriftIssue = {
+      number: 17,
+      title: `${ISSUE_TITLE_PREFIX}: UNPUBLISHED_VERSION`,
+      body: `${ISSUE_MARKER}\nDrift report body`,
+    };
+    const { calls, fetchImpl } = makeGitHubFetch([
+      { status: 200, body: [openDriftIssue] },
+      { status: 201, body: {} },
+      { status: 200, body: {} },
+    ]);
+    const logs = [];
+    const plan = await runDriftIssueMain(
+      { ...baseEnv, DRIFT_VERDICT: JSON.stringify(green) },
+      { fetchImpl, log: (msg) => logs.push(msg) },
+    );
+    assert.equal(plan.action, "close");
+    assert.deepEqual(plan.numbers, [17]);
+    assert.equal(calls.length, 3);
+    assert.equal(calls[1].method, "POST");
+    assert.equal(calls[1].url, "https://api.github.com/repos/Frihet-io/frihet-mcp/issues/17/comments");
+    assert.equal(calls[2].method, "PATCH");
+    assert.deepEqual(calls[2].body, { state: "closed", state_reason: "completed" });
+    assert.deepEqual(logs, ["published-drift-issue: close #17"]);
+  });
+});
+
+describe("published-drift.yml workflow contract", () => {
+  const workflowRaw = readFileSync(join(REPO, ".github/workflows/published-drift.yml"), "utf8");
+
+  test("top-level concurrency serializes overlapping runs without cancelling in-progress", () => {
+    assert.match(
+      workflowRaw,
+      /^concurrency:\n {2}group: published-drift\n {2}cancel-in-progress: false$/m,
+    );
+  });
+
+  test("defines drift and report jobs with exact dependency, condition, permissions, and concurrency", () => {
+    assert.match(workflowRaw, /^ {2}drift:\n/m);
+    assert.match(workflowRaw, /^ {2}report:\n/m);
+    assert.match(workflowRaw, /^ {4}needs: drift$/m);
+    assert.match(
+      workflowRaw,
+      /^ {4}if: \$\{\{ !cancelled\(\) && github\.ref == 'refs\/heads\/main' \}\}$/m,
+    );
+    assert.match(
+      workflowRaw,
+      /^ {4}permissions:\n {6}contents: read\n {6}issues: write$/m,
+    );
+    assert.match(
+      workflowRaw,
+      /^ {4}concurrency:\n {6}group: published-drift-issue\n {6}cancel-in-progress: false$/m,
+    );
+  });
+
+  test("verdict step runs on !cancelled() and passes DRIFT_VERDICT via env without ${{ in run:", () => {
+    assert.match(
+      workflowRaw,
+      /- name: Expose the verdict\n {8}id: verdict\n {8}if: \$\{\{ !cancelled\(\) \}\}/m,
+    );
+    assert.match(workflowRaw, /DRIFT_VERDICT: \$\{\{ needs\.drift\.outputs\.verdict \}\}/);
+    // Extract every `run:` block and verify no `${{` template interpolation appears inside shell commands.
+    const runLines = workflowRaw
+      .split("\n")
+      .filter((line) => /^\s*run:\s*/.test(line));
+    assert.ok(runLines.length >= 3, "expected at least 3 run: steps in published-drift.yml");
+    for (const line of runLines) {
+      assert.equal(line.includes("${{"), false, `run: line must not interpolate expressions: ${line}`);
+    }
+  });
+
+  test("every uses: action is pinned to a 40-hex commit SHA", () => {
+    const usesLines = workflowRaw
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith("- uses:") || l.startsWith("uses:"));
+    assert.ok(usesLines.length >= 3, "expected at least 3 uses: steps");
+    for (const line of usesLines) {
+      assert.match(
+        line,
+        /@[0-9a-f]{40}(\s+#.*)?$/,
+        `uses: step must be pinned to a full 40-char SHA: ${line}`,
+      );
+    }
   });
 });

@@ -28,21 +28,30 @@
 //   1 = PUBLISHED_SURFACE_DRIFT — package.json version equals the published version
 //       while commits touching the published surface have landed since. The version
 //       number is lying about its content. This is #154.
+//       Remedy: bump the version and cut a release.
 //   2 = UNPUBLISHED_VERSION — repo version is ahead of npm. A release was cut and
 //       never published; users still get the old bytes.
+//       Remedy: publish the release to npm.
 //   3 = REGISTRY_BEHIND_NPM — the MCP Registry serves an older version than npm.
 //       `publish-mcp-registry.yml` fires on `release: published`, so a publish
 //       without a GitHub release leaves the registry behind silently.
+//       Remedy: cut a GitHub release or run publish-mcp-registry.yml.
 //   4 = REPO_BEHIND_NPM — npm serves a version this repo has never reached.
+//       Remedy: reconcile main with the published release commit.
 //   5 = UNVERIFIABLE — network failure, missing gitHead, or an anchor commit that
 //       is not in this repo's history. Fail-closed: an unmeasurable surface is not
-//       a green one.
+//       a green one. Remedy: restore registry reachability or republish from a
+//       clean full clone on origin/main so npm records gitHead.
 //   6 = REMOTE_VERSION_DRIFT — https://mcp.frihet.io/health reports a version other
 //       than npm 'latest' (behind or ahead).
+//       Remedy: redeploy the hosted server at mcp.frihet.io so its version matches
+//       npm 'latest'.
 //   7 = REMOTE_UNVERIFIABLE — the health endpoint was unreachable after retries,
 //       answered non-2xx, or carried no parseable `version`. Fail-closed, and kept
 //       apart from 5 so an outage of the hosted server is not read as an npm or
 //       registry lookup failure.
+//       Remedy: restore https://mcp.frihet.io/health so it answers HTTP 200 with a
+//       valid `version` string.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -420,7 +429,18 @@ export function formatReport(result) {
     }
   }
   lines.push("");
-  lines.push("Remedy: bump the version and cut a release. Exit-code table: header of this file.");
+  const remoteOnly = result.findings.every(
+    (f) => f.id === "REMOTE_VERSION_DRIFT" || f.id === "REMOTE_UNVERIFIABLE",
+  );
+  const hasRemote = result.findings.some(
+    (f) => f.id === "REMOTE_VERSION_DRIFT" || f.id === "REMOTE_UNVERIFIABLE",
+  );
+  const remedy = remoteOnly
+    ? "Remedy: redeploy or restore the hosted server at mcp.frihet.io so /health matches npm 'latest'. Exit-code table: header of this file."
+    : hasRemote
+      ? "Remedy: bump the version and cut a release, and redeploy the hosted server at mcp.frihet.io. Exit-code table: header of this file."
+      : "Remedy: bump the version and cut a release. Exit-code table: header of this file.";
+  lines.push(remedy);
   return lines;
 }
 
