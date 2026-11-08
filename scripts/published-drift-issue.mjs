@@ -7,11 +7,15 @@
 //
 //   red   -> open one issue titled "published-artifact drift: <codes>", or update the
 //            one already open (body refreshed; a comment only when the codes change)
-//   green -> comment and close every open issue carrying that title prefix
-//   no verdict (detector crashed, job died, malformed JSON) -> red, code NO_VERDICT
+//   green -> comment and close every open issue carrying the hidden body marker
+//   no verdict on an uncancelled run (detector crashed, job died, malformed JSON) ->
+//            red, code NO_VERDICT
+//   cancelled run -> report job is skipped (!cancelled()) and open issue state is left
+//            unchanged (fails safe)
 //
-// Idempotent: the open issue is found by its title prefix, so a re-run updates
-// rather than duplicates. The workflow serializes runs with a concurrency group.
+// Idempotent: the open issue is found by its hidden body marker (with title-prefix
+// fallback only when body is omitted), so a re-run updates rather than duplicates.
+// The workflow serializes runs with a concurrency group.
 //
 // Environment (set by the workflow):
 //   GITHUB_TOKEN       workflow token; the job grants it `issues: write` and read-only contents
@@ -27,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { formatReport } from "./published-artifact-drift.mjs";
 
 export const ISSUE_TITLE_PREFIX = "published-artifact drift";
+export const ISSUE_MARKER = "<!-- frihet-published-drift -->";
 export const ISSUE_LABELS = Object.freeze(["bug"]);
 
 // GitHub rejects issue bodies over 65536 characters; stay well below.
@@ -56,8 +61,9 @@ export function parseVerdict(raw) {
 
 const isOurs = (issue) =>
   !issue.pull_request &&
-  typeof issue.title === "string" &&
-  issue.title.startsWith(`${ISSUE_TITLE_PREFIX}:`);
+  (typeof issue.body === "string"
+    ? issue.body.includes(ISSUE_MARKER)
+    : typeof issue.title === "string" && issue.title.startsWith(`${ISSUE_TITLE_PREFIX}:`));
 
 /**
  * Pure: decides what to do from the verdict and the repo's open issues.
@@ -102,6 +108,7 @@ export function planIssue({ verdict, openIssues, runUrl }) {
 
 function renderBody(lines, runUrl) {
   const head = [
+    ISSUE_MARKER,
     "The `published-drift` check is RED on `main`.",
     "",
     `Latest run: ${runUrl}`,
@@ -155,14 +162,17 @@ export async function applyIssuePlan(plan, request) {
   }
 }
 
-async function main() {
-  const { GITHUB_TOKEN, GITHUB_REPOSITORY, DRIFT_VERDICT, DRIFT_RUN_URL } = process.env;
+export async function main(
+  env = process.env,
+  { fetchImpl = globalThis.fetch, log = console.log } = {},
+) {
+  const { GITHUB_TOKEN, GITHUB_REPOSITORY, DRIFT_VERDICT, DRIFT_RUN_URL } = env;
   for (const [name, value] of Object.entries({ GITHUB_TOKEN, GITHUB_REPOSITORY, DRIFT_RUN_URL })) {
     if (!value) throw new Error(`${name} is not set`);
   }
-  const api = `${process.env.GITHUB_API_URL || "https://api.github.com"}/repos/${GITHUB_REPOSITORY}`;
+  const api = `${env.GITHUB_API_URL || "https://api.github.com"}/repos/${GITHUB_REPOSITORY}`;
   const request = async (method, path, body) => {
-    const response = await fetch(`${api}${path}`, {
+    const response = await fetchImpl(`${api}${path}`, {
       method,
       headers: {
         accept: "application/vnd.github+json",
@@ -182,7 +192,8 @@ async function main() {
   const plan = planIssue({ verdict, openIssues: await listOpenIssues(request), runUrl: DRIFT_RUN_URL });
   await applyIssuePlan(plan, request);
   const target = plan.number ?? plan.numbers?.join(", ") ?? "";
-  console.log(`published-drift-issue: ${plan.action}${target ? ` #${target}` : ""}${plan.title ? ` — ${plan.title}` : ""}`);
+  log(`published-drift-issue: ${plan.action}${target ? ` #${target}` : ""}${plan.title ? ` — ${plan.title}` : ""}`);
+  return plan;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
