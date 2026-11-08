@@ -12,6 +12,9 @@ import {
   CAPABILITY_META_KEY,
 } from "./capability-truth.js";
 import { applyFiscalAliases } from "./fiscal-aliases.js";
+import { applyClaudeCandidateProfile, CLAUDE_CANDIDATE_TOOLS, CLAUDE_GROUP_METADATA } from "./claude-profile.js";
+import { applyGoogleProfile, GOOGLE_CANDIDATE_TOOLS } from "./google-profile.js";
+import { applyMuseProfile, MUSE_CANDIDATE_TOOLS } from "./muse-profile.js";
 import {
   applyOpenAIProfile,
   applyOpenAIReviewProfiles,
@@ -25,20 +28,30 @@ export interface McpSurfaceComposition {
   readonly openaiMode: boolean;
   readonly groupedMode: boolean;
   readonly includeDynamicResources: boolean;
+  readonly claudeMode?: boolean;
+  readonly googleMode?: boolean;
+  readonly museMode?: boolean;
+  readonly demoMode?: boolean;
 }
 
 export function localMcpSurfaceComposition(
   openaiMode: boolean,
   groupedMode: boolean,
+  claudeMode = false,
+  googleMode = false,
+  museMode = false,
 ): McpSurfaceComposition {
-  return { openaiMode, groupedMode, includeDynamicResources: true };
+  return { openaiMode, groupedMode, includeDynamicResources: true, claudeMode, googleMode, museMode };
 }
 
 export function remoteMcpSurfaceComposition(
   openaiMode: boolean,
   groupedMode: boolean,
+  claudeMode = false,
+  googleMode = false,
+  museMode = false,
 ): McpSurfaceComposition {
-  return { openaiMode, groupedMode, includeDynamicResources: false };
+  return { openaiMode, groupedMode, includeDynamicResources: false, claudeMode, googleMode, museMode };
 }
 
 export function registerMcpSurface(
@@ -46,23 +59,59 @@ export function registerMcpSurface(
   client: IFrihetClient,
   options: McpSurfaceComposition,
 ): void {
+  const activeModes = [options.openaiMode, options.claudeMode, options.googleMode, options.museMode].filter(Boolean).length;
+  if (activeModes > 1) {
+    throw new Error("FRIHET_OPENAI_MODE, FRIHET_CLAUDE_MODE, FRIHET_GOOGLE_MODE, and FRIHET_MUSE_MODE are mutually exclusive");
+  }
+  if (options.claudeMode) {
+    // Directory reads annotations.title. Install before grouped discovery eagerly
+    // registers its meta-tools, and clone annotations to preserve shared hints.
+    const registerTool = server.registerTool.bind(server);
+    server.registerTool = (name, config, handler) => registerTool(name, {
+      ...config,
+      annotations: { ...config.annotations, title: config.title },
+    }, handler);
+  }
+  let clientIsDemo = false;
+  try {
+    clientIsDemo =
+      (client as { isDemoClient?: unknown } | undefined)?.isDemoClient === true ||
+      (client as { constructor?: { name?: string } } | undefined)?.constructor?.name === "DemoFrihetClient";
+  } catch {
+    clientIsDemo = false;
+  }
+  const isDemoMode = options.demoMode === true || clientIsDemo;
   if (options.groupedMode) {
     if (options.openaiMode) {
       applyOpenAIReviewProfiles(server);
     } else {
       applyToolExposureProfile(server, {
+        ...(options.claudeMode ? {
+          allowlist: CLAUDE_CANDIDATE_TOOLS,
+          groupMetadata: CLAUDE_GROUP_METADATA,
+          describeToolExample: "list_invoices",
+        } : {}),
         capabilityTruth: {
           metaKey: CAPABILITY_META_KEY,
           localDiscovery: buildLocalDiscoveryCapability,
         },
+        demoMode: isDemoMode,
       });
     }
   } else if (options.openaiMode) {
     applyOpenAIProfile(server);
   }
 
-  if (!options.openaiMode) {
+  if (!options.openaiMode && !options.googleMode && !options.museMode) {
     applyPublicCapabilityTruth(server);
+  }
+
+  if (options.claudeMode) {
+    applyClaudeCandidateProfile(server);
+  } else if (options.googleMode) {
+    applyGoogleProfile(server);
+  } else if (options.museMode) {
+    applyMuseProfile(server);
   }
 
   registerAllTools(server, client);

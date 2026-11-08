@@ -10,6 +10,12 @@ name: Published artifact drift
 # everyone learns to ignore. The comparator's own unit tests DO run on every PR
 # via `npm test`, so the logic is protected everywhere; only the live probe is
 # scoped here.
+#
+# A red scheduled run notifies no one: this job failed every one of its 177
+# runs from 26 Aug to 7 Nov 2026, each with a real finding, unnoticed. So the `report` job below turns
+# every verdict on main into issue state: red opens or refreshes one issue
+# titled "published-artifact drift: <codes>", green closes it. Logic and tests:
+# scripts/published-drift-issue.mjs, scripts/__tests__/published-artifact-drift.test.mjs.
 
 on:
   schedule:
@@ -22,27 +28,84 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: published-drift
+  cancel-in-progress: false
+
 jobs:
   drift:
-    name: Repo vs npm vs MCP Registry
+    name: Repo vs npm vs MCP Registry vs remote
     runs-on: ubuntu-latest
+    outputs:
+      verdict: ${{ steps.verdict.outputs.json }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # Full history is load-bearing: the detector's anchor is the `gitHead`
           # npm recorded at publish time, and a shallow clone cannot resolve it.
           # With fetch-depth 1 this job would report UNVERIFIABLE, not GREEN —
           # fail-closed either way, but the useful signal needs the history.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 22.23.4
 
       # No `npm ci`: the detector imports only node: builtins and uses global
       # fetch. Installing would make a supply-chain step a prerequisite for
       # detecting a supply-chain divergence.
       - name: Check published artifact against main
-        run: node scripts/published-artifact-drift.mjs
+        run: node scripts/published-artifact-drift.mjs --json-out "$RUNNER_TEMP/drift-verdict.json"
+
+      # Runs on red too, so the verdict reaches the reporter. The file is one line
+      # of JSON (newlines inside strings are escaped), so a single `key=value`
+      # line is a complete output. No file (the detector crashed) = no output,
+      # which the reporter treats as RED [NO_VERDICT].
+      - name: Expose the verdict
+        id: verdict
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -s "$RUNNER_TEMP/drift-verdict.json" ]; then
+            printf 'json=%s\n' "$(cat "$RUNNER_TEMP/drift-verdict.json")" >> "$GITHUB_OUTPUT"
+          fi
+
+  report:
+    name: Open, refresh or close the drift issue
+    needs: drift
+    # Only main's verdict is authoritative: a manual run on another branch must
+    # neither open nor close the issue.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    # The only job holding a write scope, and only for issues. The detector job
+    # above, which talks to npm, the registry and the hosted server, keeps the
+    # read-only default.
+    permissions:
+      contents: read
+      issues: write
+    # The schedule and a push to main can land together; serializing them keeps
+    # the title-prefix lookup from racing into two issues.
+    concurrency:
+      group: published-drift-issue
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.23.4
+
+      # Passed through env, never interpolated into the script: the verdict
+      # carries strings fetched from npm, the registry and the hosted server.
+      - name: Sync the issue with the verdict
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DRIFT_VERDICT: ${{ needs.drift.outputs.verdict }}
+          DRIFT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/published-drift-issue.mjs

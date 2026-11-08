@@ -139,7 +139,7 @@ test("generated remote profiles match the committed Worker configuration", () =>
   );
   assert.match(
     ROOT_INDEX_SOURCE,
-    /localMcpSurfaceComposition\(openaiMode, toolMode === "grouped"\)/,
+    /localMcpSurfaceComposition\(openaiMode, toolMode === "grouped", claudeMode(?:, googleMode(?:, museMode)?)?\)/,
   );
   assert.match(
     WORKER_INDEX_SOURCE,
@@ -256,6 +256,7 @@ test("full-surface action hints expose destructive and external effects", async 
     "log_client_activity",
     "mark_invoice_paid",
     "refund_sale",
+    "run_recurring_now",
     "send_einvoice",
     "send_invoice",
     "send_quote",

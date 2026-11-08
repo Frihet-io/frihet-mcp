@@ -1,0 +1,117 @@
+{
+  "name": "list_products",
+  "title": "List Products",
+  "description": "List all products/services with optional pagination. Products are reusable items that can be added to invoices and quotes. / Lista todos los productos/servicios con paginacion opcional. Los productos son conceptos reutilizables para facturas y presupuestos. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "q": {
+        "description": "Search by product name / Buscar por nombre de producto",
+        "type": "string"
+      },
+      "isActive": {
+        "description": "Filter by active status / Filtrar por estado activo",
+        "type": "boolean"
+      },
+      "fields": {
+        "description": "Comma-separated field names to return (e.g. 'id,name,unitPrice') / Campos a devolver",
+        "type": "string"
+      },
+      "limit": {
+        "description": "Max results (1-100) / Resultados maximos",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "offset": {
+        "description": "Offset / Desplazamiento",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "after": {
+        "description": "Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor",
+        "type": "string"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "unitPrice": {
+              "type": "number"
+            },
+            "description": {
+              "type": "string"
+            },
+            "taxRate": {
+              "type": "number"
+            },
+            "isActive": {
+              "type": "boolean"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "total": {
+        "type": "number"
+      },
+      "limit": {
+        "type": "number"
+      },
+      "offset": {
+        "type": "number"
+      },
+      "nextCursor": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "data",
+      "total",
+      "limit",
+      "offset"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false
+  },
+  "annotations": {
+    "title": "List Products",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "list_products",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}

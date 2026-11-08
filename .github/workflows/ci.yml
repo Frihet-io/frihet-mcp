@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: npm
 
       # This runs before npm reads either lockfile. The parser-backed gate also
@@ -36,7 +36,7 @@ jobs:
           test ! -e .npmrc
           test ! -e workers/remote-mcp/npm-shrinkwrap.json
           test ! -e workers/remote-mcp/.npmrc
-          echo "62bcc09846f3544ea75d682bc53a8b944f0f525abdf64fa7e0459046fecefbab  package-lock.json" | sha256sum --check --strict -
+          echo "bc62a34a12ad5aebb7c95ec4426195e01fb1cdcb3ce35a2d9585da6224a3dc24  package-lock.json" | sha256sum --check --strict -
           echo "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b  workers/remote-mcp/package-lock.json" | sha256sum --check --strict -
 
       - name: Install
@@ -92,6 +92,11 @@ jobs:
       - name: Conformance baseline anti-false-green gate
         run: npm run gate:conformance-baseline
 
+      - name: Claude source profile and isolated topology
+        run: |
+          npm run gate:claude-candidate
+          npm run gate:claude-hosted-source
+
       - name: OpenAI review descriptor freeze
         run: npm run gate:openai-review-descriptor
 
@@ -114,3 +119,21 @@ jobs:
       # package.json SoT. Cross-repo drift is caught by the local pre-publish run.
       - name: Drift audit (self)
         run: npm run audit:mcp-refs -- --repo frihet-mcp
+
+      - name: Package OpenAI portable plugin bundle
+        run: |
+          npm run package:openai-plugin
+          (cd marketplace/openai/dist && sha256sum --check --strict frihet-1.0.2.zip.sha256)
+
+      - name: Upload OpenAI portable plugin artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openai-plugin-1.0.2-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            marketplace/openai/dist/frihet-1.0.2.zip
+            marketplace/openai/dist/frihet-1.0.2.zip.sha256
+            marketplace/openai/dist/frihet-1.0.2-inventory.json
+            marketplace/openai/eval/model-behavior-eval-1.0.1-vs-1.0.2.json
+            marketplace/openai/eval/run-model-behavior-eval.mjs
+          if-no-files-found: error
+          retention-days: 90

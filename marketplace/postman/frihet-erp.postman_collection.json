@@ -1,0 +1,206 @@
+{
+  "info": {
+    "name": "Frihet ERP API Collection",
+    "_postman_id": "7b2e8f1c-4e31-412f-90e1-f673190b2026",
+    "description": "Complete collection of Frihet ERP REST endpoints for business intelligence, invoice drafting, expense management, and client records. Conforms to Frihet canonical API and draft-only governance invariants.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiKey}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Intelligence & Summaries",
+      "item": [
+        {
+          "name": "Get Business Context",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/context",
+              "host": ["{{baseUrl}}"],
+              "path": ["context"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response contains operating context\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Monthly Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/monthly?month=2026-10",
+              "host": ["{{baseUrl}}"],
+              "path": ["monthly"],
+              "query": [
+                { "key": "month", "value": "2026-10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Quarterly Taxes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quarterly?quarter=2026-Q3",
+              "host": ["{{baseUrl}}"],
+              "path": ["quarterly"],
+              "query": [
+                { "key": "quarter", "value": "2026-Q3" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "List Invoices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Create Draft Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"client_sample_123\",\n  \"items\": [\n    {\n      \"description\": \"Consulting Services\",\n      \"quantity\": 1,\n      \"unitPrice\": 150.00,\n      \"vatRate\": 21\n    }\n  ],\n  \"notes\": \"Reviewable draft invoice.\",\n  \"status\": \"draft\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 or 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "pm.test(\"Invoice is strictly in draft status\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('draft');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Expenses",
+      "item": [
+        {
+          "name": "List Expenses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/expenses?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["expenses"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Create Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vendor\": \"Cloud Services Corp\",\n  \"amount\": 49.99,\n  \"vatRate\": 21,\n  \"category\": \"Software\",\n  \"status\": \"draft\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/expenses",
+              "host": ["{{baseUrl}}"],
+              "path": ["expenses"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clients",
+      "item": [
+        {
+          "name": "List Clients",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Create Client",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Global Inc\",\n  \"taxId\": \"B12345678\",\n  \"email\": \"billing@acmeglobal.com\",\n  \"country\": \"ES\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clients",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+---
+description: Frihet ERP financial management, invoicing, and European tax guidelines for Cursor Agent
+globs: **/*
+alwaysApply: false
+---
+
+# Frihet ERP Integration Rules for Cursor
+
+When interacting with Frihet ERP via MCP or code:
+
+## 1. Non-Destructive Drafting Invariant (MANDATORY)
+- Always create invoices, quotes, and financial records in strictly **`draft`** status.
+- NEVER attempt to trigger irreversible fiscal submissions (VeriFactu, TicketBAI, AEAT) or issue real-money refunds automatically.
+- Present created drafts to the user with a direct verification URL: `https://app.frihet.io/invoices/:id`.
+
+## 2. European & Spanish Fiscal Context
+- Standard VAT (IVA) rates:
+  - 21% (Standard general rate)
+  - 10% (Reduced: food, hospitality, transport)
+  - 4% (Super-reduced: basic groceries, books, pharmaceuticals)
+  - 0% (Intra-community B2B, exports)
+- Canary Islands IGIC:
+  - 7% (General IGIC rate)
+  - 3% / 0% (Reduced / Exempt)
+- Personal Income Tax Withholding (IRPF):
+  - 15% (Standard freelance professional withholding)
+  - 7% (First 3 years of new autonomous professional activity)
+
+## 3. Querying & Pagination
+- Default to `limit: 20` for list operations (`list_invoices`, `list_expenses`, `list_clients`).
+- Use `get_business_context` first when discovering tenant fiscal country, default currency, and active modules.
+- Mask sensitive identifiers (NIF/CIF, IBAN) in developer-facing summaries unless explicit full verification is requested.

@@ -42,15 +42,17 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "2b58a9475251afbc53c8603f326f4b8c207397ff368326a7e43c7be5d88ea774", // registers the provisioning-credential wire test and scripts/__tests__/audit-mcp-refs-published-sot.test.mjs; no new deps, lifecycle or network script
-  "workers/remote-mcp/package.json": "4ad1ca897893b1d27e8e2b2e6a07052360add02994f457d98c2e0ed916b94adf", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
+  "package.json": "65cbf7c8253c5abf7a7fac7712e47e3c98bd786db53a7579425ad095179f4b75", // adds paginated-metadata-contract.test.js and purchase-orders tests to the reviewed test script; all other scripts, deps, lifecycle and network settings unchanged
+  "workers/remote-mcp/package.json": "0248007796a87b37d4f7060566b48d767aa4dcdc7a70b9fdb5883387997d1c72", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
   "workers/api-proxy/wrangler.toml": "worker.js",
   "workers/remote-mcp/wrangler.toml": "src/index.ts",
+  "workers/remote-mcp/wrangler.claude.toml": "src/index.ts",
 });
 export const APPROVED_PLATFORM_TELEMETRY = Object.freeze({
   "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
+  "workers/remote-mcp/wrangler.claude.toml|cloudflare-observability": "enabled",
 });
 export const APPROVED_DIST_IMPORTS = Object.freeze({
   "workers/remote-mcp/scripts/capture-openai-review.mjs": Object.freeze([
@@ -219,6 +221,8 @@ export const APPROVED_NETWORK_SINKS = Object.freeze({
   "workers/remote-mcp/src/oauth-state-store.ts|releaseOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/release`": 1,
   "workers/remote-mcp/src/oauth-state-store.ts|reserveOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/reserve`": 1,
   "workers/remote-mcp/src/oauth-state-store.ts|storeOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/state`": 1,
+  // #246: policy pause reads the existing family status on the same bound internal Durable Object.
+  "workers/remote-mcp/src/oauth-token-family.ts|assertPolicyPauseIsSafe|(awaittokenFamilyStub(this.namespace,this.credential.userId,this.credential.grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/status`": 1,
   "workers/remote-mcp/src/oauth-token-family.ts|beginOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/begin`": 1,
   "workers/remote-mcp/src/oauth-token-family.ts|checkOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/check`": 1,
   "workers/remote-mcp/src/oauth-token-family.ts|commitOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/commit`": 1,
@@ -256,7 +260,8 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
   "workers/remote-mcp/src/api-url.ts|DEFAULT_API_BASE": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/publicApi/api",
   "workers/remote-mcp/src/api-url.ts|TRUSTED_CLOUD_FUNCTION_HOST": "europe-west1-gen-lang-client-0335716041.cloudfunctions.net",
   "workers/remote-mcp/src/api-url.ts|OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
-  "workers/remote-mcp/src/oauth-provisioning.ts|OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
+  "workers/remote-mcp/src/api-url.ts|CLAUDE_OAUTH_API_KEY_PROVISIONING_URL": "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning",
+  "workers/remote-mcp/src/oauth-profile.ts|CLAUDE_ORIGIN": "https://claude-mcp.frihet.io",
   "workers/remote-mcp/src/oauth-state-store.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
   "workers/remote-mcp/src/oauth-token-family.ts|INTERNAL_ORIGIN": "https://oauth-state.internal",
 });
@@ -268,25 +273,28 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "3810570b02ca25e03e4ecf3cd4ae54f02537b6bf195df68c3bc6869ee8b61b22", // provisioning credential removed from the public API client; + two read-only GET purchase-order methods (ADR 0027 S2); sinks unchanged
+  "src/client.ts": "bdaac75fafde4e1532fb5e02aa898e1475125a6740acfe23eb6d84ae385fe6f1", // #251: reviewed applyDeposit body validation before request I/O + two read-only GET purchase-order methods (ADR 0027 S2); existing sinks, authorities and payloads unchanged
+  "workers/remote-mcp/src/claude-public-surface.ts": "1161f124f2afc721e5c7b92f9fa1ccd46819de9d5dff0f940b034149486a0c62", // cd82dc3: support@frihet.io mailto alignment; isolated Claude host and authorization boundary preserved, no new sink
+  "workers/remote-mcp/src/oauth-profile.ts": "d404aaf7c51a6fe675e7d1daae2317f7ea72b9e70b83f687b9359f857e6107b8", // #246: strict versioned admission policy and verified identity boundary, no new sink
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
-  "src/openai-review-oauth.ts": "d4623c788137df9c366ee15f39178235b063d7bc7a1540bc6677bd107d8d0000", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink)
-  "workers/api-proxy/worker.js": "8121fb734429b885f566334af9790dab060a5930faa5c417330628668896174e",
-  "workers/remote-mcp/src/api-url.ts": "6c2712a95fb0c92832f1031d07da3bebb9e9824eb0ac3829f82c5c1c53a9b136",
-  "workers/remote-mcp/src/auth-handler.ts": "d19999e6263445c9731ad2f482d5c2639ec703c6152519a482b11bbdee7ccb8e", // #205: commit carries the replaced grant ids into the durable state outbox; inline replacement kept as fast path (no new destination); #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
+  "src/openai-review-oauth.ts": "bfde5584b9b37fd24c4d7b4a32b149813c08e22dc06aa46b9b4d8afae3b77d90", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink); confirm comment no longer claims every mutating tool requires it
+  "workers/api-proxy/worker.js": "279cd721a6637ee87944ba49c4d3242efaf577eb56cdd25bc245d4a38f1d4811",
+  "workers/remote-mcp/src/api-url.ts": "d30673b8814eae5fc2f0cc0ea6ebdfa0885a710fab0571f2efdd8ac10d85d518",
+  "workers/remote-mcp/src/auth-handler.ts": "2e050bfc605df98410fd305c6b8e113b1c9d07ab6b3c607f264b714baf687aba", // #249: return the existing full-profile hold before consent/token processing; no new I/O or destination. #246: admission enforced before provisioning; #221 M1: revoke unredeemed grant in KV when commit responses are lost (no new destination); #205: commit carries the replaced grant ids into the durable state outbox; inline replacement kept as fast path (no new destination); #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
-  "workers/remote-mcp/src/index.ts": "24e9e40ad2288eea9e5f04d618420d763b0f6f63d81ae4a11827383f284af632", // HEAD/GET metadata parity for reviewed legal pages; sinks unchanged
-  "workers/remote-mcp/src/login-page.ts": "f32d36c8bf9a7556830aa242a69f5f17d4be7d97a01e59e70adb3aaca01654bf", // directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
+  "workers/remote-mcp/src/index.ts": "20f22a32215ea2d3c6e870587ce293dae5179f9c2f27e4ebbffcd9655aef9f9e", // #246: current Claude admission at code, refresh and MCP ingress, with authenticated cleanup; sinks unchanged
+  "workers/remote-mcp/src/login-page.ts": "6ea51f39406f222fbf09fc28ae5afc1f17d0d581072d743866177b7dd463533d", // H-1/M-1: Claude consent copy discloses VeriFactu submission via invoice writes, no stale e-invoicing claims; M2: Claude consent copy states no e-invoicing sends; directory-readiness: consent copy names the AI assistant instead of ChatGPT (no new sink)
   "workers/remote-mcp/src/mcp-session-binding.ts": "cf792a5af0bf827b603e55fd77bcf9ae7e6facff4e7b2346b12165eef91b9ca5",
-  "workers/remote-mcp/src/oauth-provisioning.ts": "dd79003720debeaba12b6ae943569be6e9d286c6f9b83b24c6117639805ac938", // #203: callback reserve/commit — revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
-  "workers/remote-mcp/src/oauth-state-store.ts": "d872eff53d99b4d6c8b95fa748d161acba8133fc8591bf5c8ee993c7985a219a", // #205: grant-replacement outbox on commit, drained by the alarm before expiry cleanup through the token family's /token-family/supersede (same internal origin); fail-closed keyId binding kept; lifecycle logs carry outcome/stage/counts only (no new destination); #203: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
-  "workers/remote-mcp/src/oauth-token-family.ts": "d8b9c747beefd3fd641068fc6d62830c080443f060b7a382b5ceeb12d39934c6", // #205: supersede tombstones a replaced grant's family on the same internal Durable Object origin; OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
+  "workers/remote-mcp/src/oauth-provisioning.ts": "87ae36476e28acad049578fcb588873da899e76c63b62f5ebe816ac6762a565c", // #203: callback reserve/commit — revoke-by-correlation DELETE to the same exact lifecycle URL (no new destination)
+  "workers/remote-mcp/src/oauth-state-store.ts": "d596ff35135e4d63cdcf48bb7e3a5ccc5651412d0922d3d1539d83a513f6278c", // #221 M1: /release disarms oauth_grant_replacement when a committed lease aborts after lost commit responses (no new destination); #221 L3: clarify >64 replaced-grant truncation docstring; only Claude Worker records carry accessProfile; existing-Worker records keep their earlier shape (no new destination); #205: grant-replacement outbox on commit, drained by the alarm before expiry cleanup through the token family's /token-family/supersede (same internal origin); fail-closed keyId binding kept; lifecycle logs carry outcome/stage/counts only (no new destination); #203: /consume replaced by /reserve /attempt /commit /release on the same internal Durable Object origin
+  "workers/remote-mcp/src/oauth-token-family.ts": "fd5b46bd1cf104beeb48ed07cc5dad29789f47d8c208b2473db4dd791a460f30", // #246: reversible policy pause checks the existing internal status without credential rotation; #205: supersede tombstones a replaced grant's family on the same internal Durable Object origin; OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "62bcc09846f3544ea75d682bc53a8b944f0f525abdf64fa7e0459046fecefbab",
+  "package-lock.json": "bc62a34a12ad5aebb7c95ec4426195e01fb1cdcb3ce35a2d9585da6224a3dc24",
   "workers/remote-mcp/package-lock.json": "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
+  "workers/remote-mcp/wrangler.claude.toml": "280c8a3dbac7e9e03421f9f22159c451b6326e05d3ab2e78708d7dbe1c643d5c", // dedicated Claude provider alias and isolated OAUTH_KV namespace 274c7aaa85a04d44b4dc77f5f1dd7ca2
   "workers/api-proxy/wrangler.toml": "ad6b87b998712fde47e0cbf97225c17e8cbfd078c688cb50377263a844fee8d2",
   "workers/remote-mcp/wrangler.toml": "c04ee0033b2d0c53cebfd562ccc3da27810bd1ef5b49e52beeb5d50b218100e5",
 });
@@ -294,18 +302,26 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner.svg": "2b32a68014580c334f8b180d8812d842c744a9a59bd2298a586bb95bd6179ebc",
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
-  "docs/agent-onboarding.json": "ff7cf86707db768e0dd7ad3e759f17d0d0287476c2df95cb8b4cbaa237c1b8dc",
-  "README.md": "2ec480f8c4b4b8450f1e0aa3ec32ae3a46322d5055ea1596f2358107a5790473", // count-only 156->158 edits; GitHub Registry discovery links + static badge on existing img.shields.io host; no new runtime emitter or destination
+  "docs/agent-onboarding.json": "7c4ea70bdcd5ceda293d54e08234c23da3b678375eb387a601665f4f5b3383b6", // Task 1 recurring confirmation and declared fiscal/webhook effects; no new emitter
+  "README.md": "b5683aed1c4026b2e6146cccd9c5706f2396eb6f9966b60ff6f57f3fe9a3d3f4", // public README front-page rewrite (docs-only) + count-only 156->158 edits; no new runtime emitter or destination
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
+  "scripts/__tests__/no-public-leak.test.mjs": "8e39d519a49cf19a88902f9038919361da664410cecbf78d594cf0350f1028cd", // synthetic credential tripwire regression; reports paths, never values
+  "scripts/verify-claude-erp-source-release.mjs": "c9bbfdcea3f070a925c5d77bf1b0ed082f791485c1ee42bbee240f9d9d4b8ccd", // authenticated read-only GitHub artifacts and exact approved BEFORE-version backup; no telemetry or cloud mutation
+  "scripts/check-claude-bootstrap-secrets.mjs": "4d4700482718ea1ae88480dd215521f07dbc9e8342838775826a8846d20925e4", // local Claude bootstrap secret check; no network or raw credential output
+  "scripts/__tests__/claude-bootstrap-secrets.test.mjs": "90159f0a689cb8f5d6ffc6630871b0b596510b1e9f24e32adbdfe4dc2c779095", // local Claude bootstrap secret check; no network or raw credential output
+  "scripts/check-claude-hosted-release.mjs": "579a6ed7ede90a8f5201f6f3f686e234e916996d827074ae22525d57c92095de", // reviewed Claude ERP source-only provenance admission and mandatory write hints; no telemetry emitter or new sink
+  "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
+  "scripts/__tests__/claude-hosted-release.test.mjs": "cdd433a3eadee50d26f00a618f34479c2cf9201399554101ad89f81035011408", // reviewed source-only admission, authenticated backup-version and topology tests; no telemetry emitter or new sink
+  "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
-  ".github/workflows/ci.yml": "e77888420f0874d90c2ae001b587a07b394b5e57bdf83dbb9e90dd41908e99a0",
+  ".github/workflows/ci.yml": "0bb17acd56597d6eac45ba98e6754080b2d4e6d46fe59943472f0a41287fea27",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",
-  "scripts/__tests__/published-artifact-drift.test.mjs": "3bc8e9f51d4e71b274217a7afa56a7df1f9f76af65f240a01ec3b56e321a6b9f",
+  "scripts/__tests__/published-artifact-drift.test.mjs": "f33fe3ab8229af5d8c688881e20d0895238edc71ecc6b5e92c0fc7250a112630", // remote axis, issue-on-red planner, main() and workflow contract tests; stubbed fetch and stubbed GitHub API, no live calls
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
@@ -323,13 +339,14 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/conformance/run-phase0.mjs": "8298c4dc4c586622b79caa6a7f86d6376b3970d52c2b8a8af1dcb74585b112f7",
   "scripts/conformance/validate-baseline.mjs": "8acd56c5364c488280280af7b39e6f94091e3544103fb6bd56b1cc954af555e7",
   "scripts/generate-agent-onboarding.mjs": "64c195c341c9c822f17026617db56326b34282a90f5c16a10ddf5bb195360e06",
-  "scripts/generate-openai-submission.mjs": "4514b4f3099d5cb645e399367f0624c4b05d7192b004e68441295a00e56b90d7",
+  "scripts/generate-openai-submission.mjs": "e8616d6c83235e55d960e96ce8ec2086b41fcf06a6d721317e9f52d5c08ade9e",
   "scripts/generate-public-capability-contract.mjs": "7c6f08e3a28c9bc2cd50a9e791571eaf4987b2c618f4c614ae55c9ed811cf1f2",
   "scripts/no-legacy-region.sh": "560cc8a7b9c35d39418f5331833eaa28840d4528e7bfc863918b8d5ff2574ef7",
-  "scripts/no-public-leak.sh": "b1f545a1bce2fc8f3e227f9bff41e737ea398ef5f15001403e4b8c7bfc684855",
+  "scripts/no-public-leak.sh": "35e9056bfdf7a6c563cfc3b1286e906f03700df76deaaa8bdaa7ca0878bd5cf3",
   "scripts/postinstall.js": "02947d11d324048f69bc92d253d7c41f947aa338d1d6315b1579492689d462e3",
-  "scripts/published-artifact-drift.mjs": "29435fd9b25625db5f6835e0b11b0528daf7345eef1421c6c826879be00b4f95",
-  "scripts/sync-openapi.mjs": "3d72c61a014b53887906fade05a13631e06d47977891b4b4fdb9a337322a4f32",
+  "scripts/published-artifact-drift.mjs": "ea980ede86aafa9c6b866c11d5921ea91e24934f0d1a0c760480f9c50b38b80b", // adds a read-only GET of https://mcp.frihet.io/health (first-party origin) and --json-out; no telemetry
+  "scripts/published-drift-issue.mjs": "ba5b24ab84b5853faf313892c8e328e361133d2495cb147504888ce60756a9cf", // CI-only reporter: GitHub REST issues API with the workflow token; not shipped, no telemetry
+  "scripts/sync-openapi.mjs": "311927e49e3ab5c514c418f29cc298bdec79f6b8705c47bdc7de34c6cee4943d",
   "scripts/test-openai-full-compose.mjs": "24b6c922553fedcb6fe9836b768d88b1e10a93d6a6877ebbf2a67551be6b2b79", // directory-readiness: also compares the path-inserted metadata to the snapshot
   "scripts/validate-openai-submission-schema.mjs": "a3fa908a5ea83d6468f2d77345e464f1832845f45677df2627d2eebb423c548a",
   "tsconfig.json": "fee86899bb77179611ed16b73572159d567e76a4717522e567900dbb17ac0804",
@@ -337,14 +354,14 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/tsconfig.json": "03d5bac68efb117ed224ec2091bb0918370cb4453ae2fa04bd5fd1d7aff26f54",
 });
 export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
-  "marketplace/openai/SUBMISSION.md": "613a1ec52d2c3523817e88a1760ba744a5ad954a12c6646271b48f5e7b36b7e7",
-  "marketplace/openai/chatgpt-app-submission.json": "5a1bc3ba755f52642b9baadafd0993e38658ea1c9179c45e726ca5c7c238c44f",
+  "marketplace/openai/SUBMISSION.md": "2275eabf8979db8aff36dd7efd02194d2aa19b775862e022bf76b3d442611c44",
+  "marketplace/openai/chatgpt-app-submission.json": "399c5db36e7b74cb488541a32803ed9e339cec75465c9dbbf620d62480394288",
   "marketplace/openai/chatgpt-app-submission.v1.schema.json": "aa7d1bd554e6c615d411c03e5b73bb464816be603461eb5813bb589645550304",
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
-  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "00b5ce103dc0309092b2f317cab66406389f957e3e923555bd6c24a4118193e3", // Reviewed invoice reads: three description-only boundaries for unavailable external evidence; schemas, OAuth and 33-tool security schemes unchanged
-  "src/__tests__/fixtures/public-capability-contract.json": "bf036fe1d7c5855662748f2677ceba9aa6b23f0951f93d37149b506dde7b4c8e",
+  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "7390455199e002fb751823f6fad2d740da0e1b53b74d70b8400b4f37581580e5", // Reviewed invoice reads: three description-only boundaries for unavailable external evidence; schemas, OAuth and 33-tool security schemes unchanged
+  "src/__tests__/fixtures/public-capability-contract.json": "cf7ab3bcdde3f8e270e4517ba2c7d311d8bfe685877c123a8c92c2cb1a46d18d", // Task 1 deposit retry hint and recurring fiscal/webhook capability truth + purchase-order read tools; no new emitter
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
 

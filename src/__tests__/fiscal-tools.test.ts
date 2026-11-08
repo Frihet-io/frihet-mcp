@@ -304,13 +304,16 @@ describe("verifactu_status — 404 'invoice not found' is a real error, not back
 });
 
 describe("verifactu_status — generic 404 still falls through to the backend guard", () => {
-  test("plain 'Not Found' body keeps backend_unavailable behavior", async () => {
+  test("plain 'Not Found' body reports unresolved lookup without claiming deployment state", async () => {
     const server = await makeServer(make404Client);
     const tool = server.tools.get("verifactu_status")!;
     const result = await tool.handler({ invoiceId: "inv_abc123" });
 
     assert.ok(result.isError);
-    assert.equal(result.structuredContent!["error"], "backend_unavailable");
+    assert.equal(result.structuredContent!["error"], "lookup_unavailable");
+    assert.equal(result.structuredContent!["code"], "LOOKUP_UNAVAILABLE");
+    assert.equal(result.structuredContent!["_backendUnavailable"], undefined);
+    assert.doesNotMatch(result.content[0]!.text, /is not deployed|not available yet/u);
   });
 });
 

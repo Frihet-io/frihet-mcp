@@ -1,0 +1,24 @@
+# Frihet ERP Integration Rules for Windsurf Cascade
+
+When interacting with Frihet ERP business records, accounting, or billing through MCP:
+
+## 1. Draft-Only Mutations (Human-in-the-Loop Safeguard)
+- Always create invoices, quotes, expenses, and credit notes with strictly `status: "draft"`.
+- NEVER trigger irreversible fiscal submissions (`verifactu_submit`, `ticketbai_submit`, `face_submit`) or fund movements automatically.
+- Every mutating POST request must include an `Idempotency-Key` header (UUIDv4) to guarantee zero duplicate documents on network retries.
+
+## 2. Spanish & European Fiscal Context
+- Standard Spanish VAT (IVA) rates: 21% (general), 10% (reducido), 4% (superreducido), 0% (exento / intracomunitario).
+- Canary Islands IGIC: 7% (general), 3% / 0% (reducido / exento).
+- Ceuta & Melilla IPSI.
+- Professional Income Tax Withholdings (IRPF): 15% (standard professional), 7% (first 3 years autonomous).
+- Never inline tax arithmetic or rounding logic; always defer to Frihet server-calculated totals.
+
+## 3. PII & Secret Protection
+- Mask sensitive identifiers (NIF, CIF, NIE) in user summaries unless full verification is explicitly requested.
+- Mask bank account identifiers: display only the last 4 digits of IBANs (e.g. `ES** **** **** **** **** 1234`).
+- Never echo bearer tokens, API keys, or raw authentication cookies.
+
+## 4. Query-First Pattern
+- Before proposing any draft or record creation, query the existing records (`list_invoices`, `list_expenses`, `list_clients`, `get_business_context`) to verify if an active record already exists.
+- Present a structured summary of proposed document fields (client, items, tax breakdown, total) before asking the user for confirmation.

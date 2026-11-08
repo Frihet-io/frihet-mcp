@@ -1,0 +1,148 @@
+{
+  "name": "list_transactions",
+  "title": "List Bank Transactions",
+  "description": "List bank transactions with optional filters. Filter by account, date range, status (pending/posted/excluded), or category. Useful for reconciliation, expense matching, and cash flow analysis. / Lista movimientos bancarios con filtros opcionales. Filtra por cuenta, rango de fechas, estado (pendiente/contabilizado/excluido) o categoria. Util para conciliacion, asignacion de gastos y analisis de flujo de caja. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "accountId": {
+        "description": "Filter by bank account ID / Filtrar por ID de cuenta",
+        "type": "string"
+      },
+      "from": {
+        "description": "Start date ISO 8601 (YYYY-MM-DD) / Fecha inicio",
+        "type": "string"
+      },
+      "to": {
+        "description": "End date ISO 8601 (YYYY-MM-DD) / Fecha fin",
+        "type": "string"
+      },
+      "status": {
+        "description": "Filter by transaction status / Filtrar por estado",
+        "type": "string",
+        "enum": [
+          "pending",
+          "posted",
+          "excluded"
+        ]
+      },
+      "category": {
+        "description": "Filter by category slug / Filtrar por categoria",
+        "type": "string"
+      },
+      "limit": {
+        "description": "Max results (1-100) / Resultados maximos",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "offset": {
+        "description": "Offset / Desplazamiento",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "after": {
+        "description": "Cursor for cursor-based pagination / Cursor para paginacion",
+        "type": "string"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "accountId": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "postedAt": {
+              "type": "string"
+            },
+            "category": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "posted",
+                "excluded"
+              ]
+            },
+            "matchedDocId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "amount"
+          ],
+          "additionalProperties": {}
+        }
+      },
+      "total": {
+        "type": "number"
+      },
+      "limit": {
+        "type": "number"
+      },
+      "offset": {
+        "type": "number"
+      },
+      "nextCursor": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "data",
+      "total",
+      "limit",
+      "offset"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false
+  },
+  "annotations": {
+    "title": "List Bank Transactions",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "list_transactions",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}

@@ -165,7 +165,11 @@ class FakeDurableObjectNamespace {
     const name = (id as unknown as { name: string }).name;
     let store = this.stores.get(name);
     if (!store) {
-      store = new OAuthStateStore(new FakeState() as unknown as DurableObjectState);
+      store = new OAuthStateStore(new FakeState() as unknown as DurableObjectState, {
+        OAUTH_KV: {} as KVNamespace,
+        FRIHET_API_BASE: "https://api.frihet.io",
+        FRIHET_OPENAI_MODE: "true",
+      });
       this.stores.set(name, store);
     }
     return {

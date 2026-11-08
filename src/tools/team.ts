@@ -17,6 +17,7 @@ import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
 import {
   withToolLogging,
+  confirmationRequiredError,
   formatPaginatedResponse,
   formatRecord,
   listContent,
@@ -169,17 +170,11 @@ export function registerTeamTools(server: McpServer, client: IFrihetClient): voi
     },
     async ({ memberId, confirm }) => withToolLogging("remove_team_member", async () => {
       if (!confirm) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Error: confirm=true is required to remove a team member. " +
-                "The member will immediately lose access to the workspace. Set confirm=true to proceed. / " +
-                "Se requiere confirm=true para eliminar un miembro del equipo.",
-            },
-          ],
-          isError: true,
-        };
+        return confirmationRequiredError(
+          "Error: confirm=true is required to remove a team member. " +
+          "The member will immediately lose access to the workspace. Set confirm=true to proceed. / " +
+          "Se requiere confirm=true para eliminar un miembro del equipo.",
+        );
       }
       await client.removeTeamMember(memberId);
       return {

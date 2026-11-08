@@ -15,6 +15,7 @@ import { afterEach, describe, test } from "node:test";
 import {
   ANALYTICS_MODULE_PATTERNS,
   APPROVED_BUILT_NETWORK_SINKS,
+  APPROVED_CONFIG_FILE_HASHES,
   APPROVED_DIST_IMPORTS,
   APPROVED_EMBEDDED_RESOURCES,
   APPROVED_LIFECYCLE_SCRIPTS,
@@ -73,6 +74,7 @@ describe("anti-defang contract", () => {
     assert.deepEqual(APPROVED_WORKER_MAINS, {
       "workers/api-proxy/wrangler.toml": "worker.js",
       "workers/remote-mcp/wrangler.toml": "src/index.ts",
+      "workers/remote-mcp/wrangler.claude.toml": "src/index.ts",
     });
     assert.equal(APPROVED_PACKAGE_RUNTIME_METADATA["package.json"].type, "module");
     assert.equal(APPROVED_PACKAGE_RUNTIME_METADATA["package.json"].files.includes("scripts/postinstall.js"), true);
@@ -109,6 +111,19 @@ describe("anti-defang contract", () => {
       workerScripts.deploy,
       "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:openapi-fresh && wrangler deploy && npm --prefix ../.. run gate:openapi-fresh:live",
     );
+  });
+
+  test("Claude deploy selects the isolated config only after the release guard", () => {
+    const scripts = JSON.parse(readFileSync(join(REPOSITORY_ROOT, "workers/remote-mcp/package.json"), "utf8")).scripts;
+    assert.equal(scripts["deploy:claude"], "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:claude-candidate && npm --prefix ../.. run gate:openai-review-descriptor && node ../../scripts/check-claude-hosted-release.mjs && wrangler deploy --config wrangler.claude.toml");
+    assert.match(APPROVED_CONFIG_FILE_HASHES["workers/remote-mcp/wrangler.claude.toml"], /^[a-f0-9]{64}$/u);
+    for (const path of [
+      "scripts/check-claude-hosted-release.mjs",
+      "scripts/verify-claude-erp-source-release.mjs",
+      "scripts/prepare-claude-oauth-provider.mjs",
+      "scripts/__tests__/claude-hosted-release.test.mjs",
+      "scripts/__tests__/claude-oauth-provider.test.mjs",
+    ]) assert.match(APPROVED_OPERATIONAL_FILE_HASHES[path], /^[a-f0-9]{64}$/u);
   });
 
   test("pins providers, methods, authorities, source closure, locks, and platform telemetry", () => {
@@ -149,8 +164,8 @@ describe("anti-defang contract", () => {
       "track",
       "unregister",
     ]);
-    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 10);
-    assert.equal(Object.keys(APPROVED_SOURCE_FILE_HASHES).length, 13);
+    assert.equal(Object.keys(APPROVED_STATIC_BINDINGS).length, 11);
+    assert.equal(Object.keys(APPROVED_SOURCE_FILE_HASHES).length, 15);
     assert.equal(Object.values(APPROVED_SOURCE_FILE_HASHES).every((hash) => /^[a-f0-9]{64}$/u.test(hash)), true);
     for (const sink of Object.keys(APPROVED_NETWORK_SINKS)) {
       const owner = sink.split("|")[0].split("#")[0];
@@ -161,12 +176,12 @@ describe("anti-defang contract", () => {
       );
     }
     assert.deepEqual(APPROVED_LOCKFILE_HASHES, {
-      "package-lock.json": "62bcc09846f3544ea75d682bc53a8b944f0f525abdf64fa7e0459046fecefbab",
+      "package-lock.json": "bc62a34a12ad5aebb7c95ec4426195e01fb1cdcb3ce35a2d9585da6224a3dc24",
       "workers/remote-mcp/package-lock.json": "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b",
     });
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES[".github/workflows/ci.yml"],
-      "e77888420f0874d90c2ae001b587a07b394b5e57bdf83dbb9e90dd41908e99a0",
+      "0bb17acd56597d6eac45ba98e6754080b2d4e6d46fe59943472f0a41287fea27",
     );
     assert.equal(
       APPROVED_OPERATIONAL_FILE_HASHES["scripts/audit-mcp-refs.mjs"],
@@ -174,10 +189,11 @@ describe("anti-defang contract", () => {
     );
     assert.equal(
       APPROVED_PUBLISHED_FILE_HASHES["README.md"],
-      "2ec480f8c4b4b8450f1e0aa3ec32ae3a46322d5055ea1596f2358107a5790473",
+      "b5683aed1c4026b2e6146cccd9c5706f2396eb6f9966b60ff6f57f3fe9a3d3f4",
     );
     assert.deepEqual(APPROVED_PLATFORM_TELEMETRY, {
       "workers/remote-mcp/wrangler.toml|cloudflare-observability": "enabled",
+      "workers/remote-mcp/wrangler.claude.toml|cloudflare-observability": "enabled",
     });
     assert.deepEqual(APPROVED_DIST_IMPORTS, {
       "workers/remote-mcp/scripts/capture-openai-review.mjs": [
@@ -216,7 +232,7 @@ describe("anti-defang contract", () => {
   });
 
   test("pins exact source, built, navigation, and resource inventories", () => {
-    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 31);
+    assert.equal(Object.values(APPROVED_NETWORK_SINKS).reduce((sum, count) => sum + count, 0), 32);
     assert.deepEqual(APPROVED_NETWORK_SINKS, {
       "src/client.ts|request|fetch|url.toString()": 1,
       "src/client.ts|fetchRaw|fetch|url.toString()": 1,
@@ -236,6 +252,7 @@ describe("anti-defang contract", () => {
       "workers/remote-mcp/src/oauth-state-store.ts|releaseOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/release`": 1,
       "workers/remote-mcp/src/oauth-state-store.ts|reserveOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/reserve`": 1,
       "workers/remote-mcp/src/oauth-state-store.ts|storeOAuthState|stateStub(namespace,stateKey).fetch|`${INTERNAL_ORIGIN}/state`": 1,
+      "workers/remote-mcp/src/oauth-token-family.ts|assertPolicyPauseIsSafe|(awaittokenFamilyStub(this.namespace,this.credential.userId,this.credential.grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/status`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|beginOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/begin`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|checkOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/check`": 1,
       "workers/remote-mcp/src/oauth-token-family.ts|commitOAuthTokenFamilyUse|(awaittokenFamilyStub(namespace,userId,grantId)).fetch|`${INTERNAL_ORIGIN}/token-family/commit`": 1,
@@ -582,7 +599,7 @@ describe("executable analytics shapes fail closed", () => {
   test("the current source repository satisfies the complete gate", () => {
     const result = scanRepository(REPOSITORY_ROOT);
     assert.deepEqual(result.findings, []);
-    assert.equal(result.sinks.length, 31);
+    assert.equal(result.sinks.length, 32);
     assert.equal(result.resources.length, 2);
   });
 });

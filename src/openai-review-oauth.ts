@@ -98,7 +98,8 @@ export const OAUTH_PROVIDER_REVIEW_OPTIONS = {
   clientRegistrationEndpoint: "/register",
   // This provider does not implement per-tool OAuth authorization. Advertise
   // one honest connector-wide scope instead of implying that `read` prevents
-  // writes. Every mutating reviewed tool still requires confirm=true.
+  // writes. Where a profile requires confirm=true, that is a client interlock,
+  // not an authorization boundary.
   scopesSupported: [...OPENAI_REVIEW_OAUTH_SCOPES],
   accessTokenTTL: 3600,
   refreshTokenTTL: 2592000,
@@ -338,6 +339,15 @@ export type OpenAIUserInfo = {
 export function buildOpenAIUserInfo(
   token: ReviewedAccessTokenSummary | null,
   nowEpochSeconds = Math.floor(Date.now() / 1000),
+  boundary: Readonly<{
+    accessProfile: "openai" | "claude";
+    origin: string;
+    acceptedResources: readonly string[];
+  }> = {
+    accessProfile: "openai",
+    origin: OPENAI_REVIEW_ORIGIN,
+    acceptedResources: OPENAI_REVIEW_OAUTH_RESOURCES,
+  },
 ): OpenAIUserInfo | undefined {
   const audience = token?.audience;
   if (
@@ -345,7 +355,7 @@ export function buildOpenAIUserInfo(
     || !Number.isSafeInteger(token.expiresAt)
     || (token.expiresAt as number) <= nowEpochSeconds
     || typeof audience !== "string"
-    || !OPENAI_REVIEW_OAUTH_RESOURCES.includes(audience)
+    || !boundary.acceptedResources.includes(audience)
     || !hasExactOpenAIReviewScopes(token.scope)
     || !hasExactOpenAIReviewScopes(token.grant?.scope)
     || !isRecord(token.grant?.props)
@@ -360,10 +370,10 @@ export function buildOpenAIUserInfo(
     emailVerified: props.emailVerified,
   };
   if (
-    props.accessProfile !== "openai"
+    props.accessProfile !== boundary.accessProfile
     || props.authMethod !== "oauth"
-    || props.oauthIssuer !== OPENAI_REVIEW_ORIGIN
-    || props.oauthResource !== OPENAI_REVIEW_ORIGIN
+    || props.oauthIssuer !== boundary.origin
+    || props.oauthResource !== boundary.origin
     || props.oauthAudience !== audience
     || props.oauthScope !== FRIHET_CONNECTOR_SCOPE
     || !hasExactOpenAIReviewScopes(props.oauthScopes)

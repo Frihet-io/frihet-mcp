@@ -126,8 +126,8 @@ describe("server.json version gate", () => {
 
   test("reports BOTH fields when both drift", () => {
     const serverJson = JSON.parse(readFileSync(SERVER_JSON_PATH, "utf8"));
-    serverJson.version = "2.0.0";
-    serverJson.packages[0].version = "2.0.0";
+    serverJson.version = "0.0.0";
+    serverJson.packages[0].version = "0.0.0";
     const drifts = checkServerJsonVersion(serverJson, SOT_VERSION);
     assert.equal(drifts.length, 2);
     assert.deepEqual(
@@ -190,7 +190,7 @@ describe("current release projection gate", () => {
       ["default Worker product", (input) => { input.releasesJson.products.mcp_server.version = "0.0.0"; }],
       ["Anthropic root", (input) => { input.anthropicManifest.version = "0.0.0"; }],
       ["Anthropic npm package", (input) => { input.anthropicManifest.packages[0].version = "0.0.0"; }],
-      ["skill frontmatter", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 1.18.0", "  version: 0.0.0"); }],
+      ["skill frontmatter", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 2.0.1", "  version: 0.0.0"); }],
     ];
     for (const [label, mutate] of mutations) {
       const input = releaseProjectionInput();
@@ -248,7 +248,7 @@ describe("current release projection gate", () => {
       ["Glama", (input) => { input.glamaJson.description += ` The grouped remote profile serves ${REMOTE_GROUPED_TOOLS - 1} tool names, 7 resources, and 10 prompts.`; }],
       ["package", (input) => { input.packageJson.description += ` Legacy claim: ${CANONICAL_COUNT - 1} canonical operations.`; }],
       ["Anthropic", (input) => { input.anthropicManifest.description += ` The grouped remote profile exposes ${REMOTE_GROUPED_TOOLS - 1} tool names, 7 resources, and 10 prompts.`; }],
-      ["skill metadata", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 1.18.0", "  version: 1.18.0\n  version: 0.0.0"); }],
+      ["skill metadata", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 2.0.1", "  version: 2.0.1\n  version: 0.0.0"); }],
       ["current changelog", (input) => { input.changelog = input.changelog.replace(`The catalogue has ${CANONICAL_COUNT} canonical operations`, `The catalogue has ${CANONICAL_COUNT} canonical operations. The catalogue has ${CANONICAL_COUNT - 1} canonical operations. \`localFull\` exposes 999 tool names, 11 resources, and 10 prompts.`); }],
     ];
     for (const [label, mutate] of mutations) {
@@ -274,14 +274,15 @@ describe("current release projection gate", () => {
 
   test("explicitly historical README canonical and profile claims are outside the public scan", () => {
     const input = releaseProjectionInput();
-    const historicalComment = "<!-- v1.12.0-beta.1 — D4-B megasprint:";
-    assert.ok(input.readme.includes(historicalComment), "fixture must contain the historical HTML comment");
-    input.readme = input.readme.replace(
-      historicalComment,
-      "<!-- Historical release note: 157 canonical operations. The hosted grouped profile serves 165 tool names, 9 resources, and 8 prompts. v1.12.0-beta.1 — D4-B megasprint:",
-    );
+    const note = "Historical release note: 157 canonical operations. The hosted grouped profile serves 165 tool names, 9 resources, and 8 prompts.";
+    input.readme += `\n<!-- ${note} -->\n`;
 
     assert.deepEqual(checkCurrentReleaseProjections(input, SOT_VERSION), []);
+
+    // Negative twin: the same text outside a comment must be flagged.
+    const bare = releaseProjectionInput();
+    bare.readme += `\n${note}\n`;
+    assert.ok(checkCurrentReleaseProjections(bare, SOT_VERSION).length >= 1);
   });
 
   test("a stale canonical summary relocated into a new public section fails", () => {

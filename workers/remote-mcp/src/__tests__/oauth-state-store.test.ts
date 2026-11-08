@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  commitOAuthState,
+  DEFAULT_CLEANUP_AUTHORITIES,
   OAuthStateStore,
   type OAuthCleanupAuthorities,
 } from "../oauth-state-store.ts";
@@ -90,6 +92,7 @@ class FakeState {
 const TEST_ENV = {
   OAUTH_KV: {} as KVNamespace,
   FRIHET_API_BASE: "https://api.frihet.io",
+  FRIHET_OPENAI_MODE: "true",
   FRIHET_OAUTH_API_KEY: "test-service-secret-that-is-never-sent",
 };
 
@@ -109,12 +112,13 @@ const SUCCESSFUL_CLEANUP: OAuthCleanupAuthorities = {
 function makeStore(options: {
   state?: FakeState;
   cleanupAuthorities?: OAuthCleanupAuthorities;
+  env?: Partial<typeof TEST_ENV> & { FRIHET_CLAUDE_MODE?: string; FRIHET_CLAUDE_OAUTH_API_KEY?: string };
 } = {}): { store: OAuthStateStore; state: FakeState } {
   const state = options.state ?? new FakeState();
   return {
     store: new OAuthStateStore(
       state as unknown as DurableObjectState,
-      TEST_ENV,
+      { ...TEST_ENV, ...options.env },
       options.cleanupAuthorities ?? SUCCESSFUL_CLEANUP,
     ),
     state,
@@ -339,6 +343,247 @@ test("OAuth state enforces its TTL when the alarm is delayed, including the exac
     "Date.now() === expiresAtMs must be expired",
   );
   assert.equal(atBoundary.state.storage.values.size, 0);
+});
+
+const CLAUDE_ENV = {
+  FRIHET_OPENAI_MODE: "false",
+  FRIHET_CLAUDE_MODE: "true",
+  FRIHET_CLAUDE_OAUTH_API_KEY: "synthetic-claude-service-secret-at-least-32bytes",
+};
+
+const CLAUDE_BINDING = {
+  ...OPENAI_BINDING,
+  accessProfile: "claude",
+  oauthResource: "https://claude-mcp.frihet.io",
+} as const;
+
+const CLAUDE_CORRELATION_BINDING = {
+  ...CLAUDE_BINDING,
+  correlationId: "7fac6e06-e24c-4a74-9460-4e213b683f13",
+} as const;
+
+test("Claude correlation bindings are UUID-v4 validated and cannot enter OpenAI families", async () => {
+  const body = {
+    currentKind: "authorization_code",
+    currentHash: "a".repeat(64),
+    expiresAtMs: Date.now() + 60_000,
+  };
+  for (const correlationId of [null, "", "invalid", "7fac6e06-e24c-1a74-9460-4e213b683f13"]) {
+    const { store } = makeStore({ env: CLAUDE_ENV });
+    assert.equal((await store.fetch(familyRequest("/token-family", {
+      ...body, apiKeyBinding: { ...CLAUDE_BINDING, correlationId },
+    }, "PUT"))).status, 400);
+  }
+  const openai = makeStore();
+  assert.equal((await openai.store.fetch(familyRequest("/token-family", {
+    ...body, apiKeyBinding: { ...OPENAI_BINDING, correlationId: CLAUDE_CORRELATION_BINDING.correlationId },
+  }, "PUT"))).status, 400);
+  const claude = makeStore({ env: CLAUDE_ENV });
+  assert.equal((await claude.store.fetch(familyRequest("/token-family", {
+    ...body, apiKeyBinding: CLAUDE_CORRELATION_BINDING,
+  }, "PUT"))).status, 204);
+  assert.equal((await claude.store.fetch(familyRequest("/token-family", {
+    ...body, apiKeyBinding: { ...CLAUDE_CORRELATION_BINDING, correlationId: "7fac6e06-e24c-4a74-9460-4e213b683f14" },
+  }, "PUT"))).status, 409, "initialization never rebinds a correlation");
+  const begun = await familyJson(claude.store, "/token-family/begin", {
+    kind: "authorization_code", credentialHash: body.currentHash,
+  });
+  assert.equal((await familyJson(claude.store, "/token-family/commit", {
+    leaseId: begun.leaseId, newRefreshTokenHash: "b".repeat(64),
+  })).outcome, "committed");
+  assert.deepEqual(
+    (claude.state.storage.values.get("oauth_token_family") as { apiKeyBinding: unknown }).apiKeyBinding,
+    CLAUDE_CORRELATION_BINDING,
+    "omitting a commit binding retains the correlation",
+  );
+});
+
+test("a changed or removed Claude correlation tombstones the family and preserves its original cleanup binding", async () => {
+  for (const candidate of [
+    CLAUDE_BINDING,
+    { ...CLAUDE_CORRELATION_BINDING, correlationId: "7fac6e06-e24c-4a74-9460-4e213b683f14" },
+  ]) {
+    const { store, state } = makeStore({ env: CLAUDE_ENV });
+    assert.equal((await store.fetch(familyRequest("/token-family", {
+      currentKind: "authorization_code", currentHash: "a".repeat(64),
+      expiresAtMs: Date.now() + 60_000, apiKeyBinding: CLAUDE_CORRELATION_BINDING,
+    }, "PUT"))).status, 204);
+    const begun = await familyJson(store, "/token-family/begin", {
+      kind: "authorization_code", credentialHash: "a".repeat(64),
+    });
+    const committed = await familyJson(store, "/token-family/commit", {
+      leaseId: begun.leaseId, newRefreshTokenHash: "b".repeat(64), apiKeyBinding: candidate,
+    });
+    assert.equal(committed.outcome, "revoked");
+    assert.deepEqual(
+      (state.storage.values.get("oauth_token_family_cleanup") as { apiKeyBinding: unknown }).apiKeyBinding,
+      CLAUDE_CORRELATION_BINDING,
+    );
+  }
+});
+
+test("each Worker accepts only its exact profile/resource pair in token-family bodies", async () => {
+  for (const [env, binding] of [[{}, OPENAI_BINDING], [CLAUDE_ENV, CLAUDE_BINDING]] as const) {
+    const { store } = makeStore({ env });
+    const body = {
+      currentKind: "authorization_code",
+      currentHash: "a".repeat(64),
+      expiresAtMs: Date.now() + 60_000,
+      apiKeyBinding: binding,
+    };
+    for (const wrongBinding of [
+      binding.accessProfile === "claude" ? OPENAI_BINDING : CLAUDE_BINDING,
+      { ...binding, oauthResource: binding.accessProfile === "claude" ? OPENAI_BINDING.oauthResource : CLAUDE_BINDING.oauthResource },
+      { ...binding, accessProfile: "full", oauthResource: "https://mcp.frihet.io" },
+      { ...binding, extra: true },
+    ]) {
+      assert.equal((await store.fetch(familyRequest("/token-family", { ...body, apiKeyBinding: wrongBinding }, "PUT"))).status, 400);
+    }
+    assert.equal((await store.fetch(familyRequest("/token-family", body, "PUT"))).status, 204);
+    const begun = await familyJson(store, "/token-family/begin", { kind: "authorization_code", credentialHash: body.currentHash });
+    assert.equal(begun.outcome, "started");
+    assert.equal((await store.fetch(familyRequest("/token-family/commit", {
+      leaseId: begun.leaseId,
+      newRefreshTokenHash: "b".repeat(64),
+      apiKeyBinding: { ...binding, oauthResource: "https://mcp.frihet.io" },
+    }))).status, 400);
+  }
+});
+
+test("only the Claude Worker stamps its profile on records; the existing Worker keeps the earlier record shape", async () => {
+  for (const [env, binding] of [[{}, OPENAI_BINDING], [CLAUDE_ENV, CLAUDE_BINDING]] as const) {
+    const written: Record<string, unknown>[] = [];
+    const record = (state: FakeState) => {
+      const put = state.storage.put.bind(state.storage);
+      state.storage.put = async (key: string, value: unknown) => {
+        written.push(value as Record<string, unknown>);
+        await put(key, value);
+      };
+    };
+
+    const { store, state } = makeStore({ env });
+    record(state);
+    assert.equal(await putState(store, "authorization"), 204);
+    const reserved = await stateJson(store, "/reserve");
+    await stateJson(store, "/attempt", { leaseId: reserved.leaseId, uid: "firebase-user", reconciled: [] });
+    assert.deepEqual(await stateJson(store, "/commit", { leaseId: reserved.leaseId }), { outcome: "committed" });
+    assert.equal((await store.fetch(familyRequest("/token-family", {
+      currentKind: "authorization_code",
+      currentHash: "a".repeat(64),
+      expiresAtMs: Date.now() + 60_000,
+      apiKeyBinding: binding,
+    }, "PUT"))).status, 204);
+    await familyJson(store, "/token-family/revoke", {});
+
+    const unredeemed = makeStore({ env });
+    record(unredeemed.state);
+    assert.equal((await unredeemed.store.fetch(familyRequest("/token-family/supersede", {
+      userId: "firebase-user",
+      grantId: "g".repeat(16),
+    }))).status, 204);
+
+    const kinds = written.map((value) => [value.version, value.status ?? "intent"].join(":"));
+    for (const kind of ["2:pending", "2:committed", "1:active", "1:revoked", "1:intent"]) {
+      assert.ok(kinds.includes(kind), `${binding.accessProfile} writes ${kind}`);
+    }
+    for (const value of written) {
+      if (binding.accessProfile === "claude") assert.equal(value.accessProfile, "claude");
+      else assert.equal("accessProfile" in value, false, JSON.stringify(value));
+    }
+  }
+});
+
+test("misbound DO namespace rejects state and family access before any grant or backend cleanup", async () => {
+  const calls: string[] = [];
+  const cleanupAuthorities: OAuthCleanupAuthorities = {
+    async revokeGrant() { calls.push("grant"); },
+    async revokeBackend() { calls.push("backend"); return true; },
+    async revokeBackendCorrelation() { calls.push("correlation"); return true; },
+  };
+  const original = makeStore({ cleanupAuthorities });
+  assert.equal((await original.store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash: "a".repeat(64),
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: OPENAI_BINDING,
+  }, "PUT"))).status, 204);
+  const wrongWorker = makeStore({ state: original.state, cleanupAuthorities, env: CLAUDE_ENV });
+  for (const path of ["/token-family/begin", "/token-family/check", "/token-family/revoke", "/token-family/abort"]) {
+    await assert.rejects(() => wrongWorker.store.fetch(familyRequest(path, {})), /profile differs from the Worker/u);
+  }
+  await assert.rejects(() => wrongWorker.store.fetch(familyRequest("/token-family/status", undefined, "GET")), /profile differs from the Worker/u);
+  await assert.rejects(() => wrongWorker.store.alarm(), /profile differs from the Worker/u);
+  assert.equal((original.state.storage.values.get("oauth_token_family") as {status: string}).status, "active");
+
+  await familyJson(original.store, "/token-family/revoke", {});
+  await assert.rejects(() => wrongWorker.store.alarm(), /profile differs from the Worker/u);
+  assert.equal(original.state.storage.values.has("oauth_token_family_cleanup"), true);
+
+  const oldState = makeStore({ cleanupAuthorities });
+  assert.equal(await putState(oldState.store, "authorization"), 204);
+  const transplantedState = makeStore({ state: oldState.state, cleanupAuthorities, env: CLAUDE_ENV });
+  await assert.rejects(() => transplantedState.store.fetch(stateRequest("/reserve")), /profile differs from the Worker/u);
+  await assert.rejects(() => transplantedState.store.alarm(), /profile differs from the Worker/u);
+  assert.equal(oldState.state.storage.values.has("oauth_request"), true);
+  assert.deepEqual(calls, []);
+});
+
+test("Claude does not adopt unmarked legacy state or family; missing flags fail closed", async () => {
+  const { store, state } = makeStore({ env: CLAUDE_ENV });
+  await state.storage.put("oauth_request", { version: 1, payload: "legacy", expiresAtMs: Date.now() + 60_000 });
+  await assert.rejects(() => store.fetch(stateRequest("/reserve")), /profile differs from the Worker/u);
+  await assert.rejects(() => store.alarm(), /profile differs from the Worker/u);
+  await state.storage.deleteAll();
+  await state.storage.put("oauth_token_family", {
+    version: 1,
+    status: "active",
+    userId: "firebase-user",
+    grantId: "g".repeat(16),
+    currentKind: "refresh_token",
+    currentHash: "a".repeat(64),
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: OPENAI_BINDING,
+  });
+  await assert.rejects(() => store.fetch(familyRequest("/token-family/revoke", {})), /profile differs from the Worker/u);
+  const missingFlags = makeStore({ env: { FRIHET_OPENAI_MODE: undefined } });
+  await assert.rejects(() => putState(missingFlags.store, "new"), /explicitly set/u);
+});
+
+test("Claude abandoned attempt survives failed cleanup and reconciles through its own authority/secret and unchanged UUID wire", async (context) => {
+  const t0 = 1_800_000_000_000;
+  let now = t0;
+  context.mock.method(Date, "now", () => now);
+  const state = new FakeState();
+  const store = new OAuthStateStore(state as unknown as DurableObjectState, { ...TEST_ENV, ...CLAUDE_ENV });
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  let outcome: "incomplete" | "timeout" | "proof" = "incomplete";
+  context.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    if (outcome === "incomplete") return Response.json({ revoked: true });
+    if (outcome === "timeout") throw new DOMException("Synthetic transport timeout", "TimeoutError");
+    return Response.json({ revoked: true, alreadyRevoked: false, correlationTombstoned: true, activeKeys: 0 });
+  });
+  assert.equal(await putState(store, "claude-authorization"), 204);
+  const reserved = await stateJson(store, "/reserve");
+  await stateJson(store, "/attempt", { leaseId: reserved.leaseId, uid: "firebase-user", reconciled: [] });
+  assert.equal((await store.fetch(stateRequest("/release", { leaseId: reserved.leaseId, outcome: "unknown" }))).status, 204);
+  now += 600_000;
+  await store.alarm();
+  assert.equal(state.storage.values.has("oauth_request"), true);
+  assert.ok((state.storage.alarm ?? 0) > now);
+  outcome = "timeout";
+  await store.alarm();
+  assert.equal(state.storage.values.has("oauth_request"), true);
+  outcome = "proof";
+  await store.alarm();
+  assert.equal(calls.length, 3);
+  for (const call of calls) {
+    assert.equal(call.url, "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning");
+    assert.equal(call.init?.redirect, "manual");
+    assert.equal(new Headers(call.init?.headers).get("x-frihet-oauth-key"), CLAUDE_ENV.FRIHET_CLAUDE_OAUTH_API_KEY);
+    assert.deepEqual(JSON.parse(String(call.init?.body)), { uid: "firebase-user", correlationId: reserved.correlationId });
+  }
+  assert.equal(state.storage.values.size, 0);
 });
 
 test("OAuth state still reads a pre-lease envelope written by an earlier Worker", async () => {
@@ -872,29 +1117,35 @@ test("token family supersede: tombstones the bound family, or leaves a revoked p
   assert.equal((await bound.store.fetch(familyRequest("/token-family/supersede", supersede))).status, 204);
   assert.deepEqual(bound.state.storage.values.get("oauth_token_family_cleanup"), intent, "a replay keeps the outbox");
 
-  const unredeemed = makeStore();
-  assert.equal((await unredeemed.store.fetch(familyRequest("/token-family/supersede", supersede))).status, 204);
-  assert.equal((await familyJson(unredeemed.store, "/token-family/begin", {
-    kind: "authorization_code",
-    credentialHash: "0".repeat(64),
-  })).outcome, "revoked");
-  assert.equal((await unredeemed.store.fetch(familyRequest("/token-family", {
-    currentKind: "authorization_code",
-    currentHash: "1".repeat(64),
-    expiresAtMs: Date.now() + 60_000,
-    apiKeyBinding: OPENAI_BINDING,
-  }, "PUT"))).status, 409, "a late first redemption cannot revive the grant");
-  assert.deepEqual(
-    unredeemed.state.storage.values.get("oauth_token_family_cleanup"),
-    {
-      version: 1,
-      userId: "firebase-user",
-      grantId: "g".repeat(16),
-      grantRevoked: false,
-      backendRevoked: true,
-      attempt: 0,
-    },
-  );
+  for (const [env, binding, profile] of [
+    [{}, OPENAI_BINDING, "openai"],
+    [CLAUDE_ENV, CLAUDE_BINDING, "claude"],
+  ] as const) {
+    const unredeemed = makeStore({ env });
+    assert.equal((await unredeemed.store.fetch(familyRequest("/token-family/supersede", supersede))).status, 204);
+    assert.equal((await familyJson(unredeemed.store, "/token-family/begin", {
+      kind: "authorization_code",
+      credentialHash: "0".repeat(64),
+    })).outcome, "revoked");
+    assert.equal((await unredeemed.store.fetch(familyRequest("/token-family", {
+      currentKind: "authorization_code",
+      currentHash: "1".repeat(64),
+      expiresAtMs: Date.now() + 60_000,
+      apiKeyBinding: binding,
+    }, "PUT"))).status, 409, "a late first redemption cannot revive the grant");
+    assert.deepEqual(
+      unredeemed.state.storage.values.get("oauth_token_family_cleanup"),
+      {
+        version: 1,
+        ...(profile === "claude" ? { accessProfile: profile } : {}),
+        userId: "firebase-user",
+        grantId: "g".repeat(16),
+        grantRevoked: false,
+        backendRevoked: true,
+        attempt: 0,
+      },
+    );
+  }
 });
 
 test("token family supersede rejects another identity and malformed bodies without touching the family", async () => {
@@ -949,3 +1200,148 @@ test("grant replacement: a retried commit keeps the outbox, and the horizon ends
   await store.alarm();
   assert.equal(state.storage.values.size, 0);
 });
+
+test("production default backend revocation for a legacy Claude token family keeps the exact {uid,keyId} body", async (context) => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  context.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return new Response(null, { status: 204 });
+  });
+  const state = new FakeState();
+  // No cleanupAuthorities argument: this exercises DEFAULT_CLEANUP_AUTHORITIES
+  // from production code, not a mirror. OpenAI's secret is configured as well so
+  // a wrong secret binding is observable.
+  const store = new OAuthStateStore(
+    state as unknown as DurableObjectState,
+    { ...TEST_ENV, ...CLAUDE_ENV },
+  );
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token",
+    currentHash: "a".repeat(64),
+    expiresAtMs: Date.now() + 60_000,
+    apiKeyBinding: CLAUDE_BINDING,
+  }, "PUT"))).status, 204);
+  await familyJson(store, "/token-family/revoke", {});
+  // revokeGrant cannot run in Node (cloudflare:workers); allSettled isolates it
+  // and the backend authority must still be invoked.
+  await store.alarm();
+  assert.equal(calls.length, 1);
+  const [call] = calls;
+  assert.equal(call.url, "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning");
+  assert.equal(call.init?.method, "DELETE");
+  assert.equal(call.init?.redirect, "manual");
+  const secret = new Headers(call.init?.headers).get("x-frihet-oauth-key");
+  assert.equal(secret, CLAUDE_ENV.FRIHET_CLAUDE_OAUTH_API_KEY);
+  assert.notEqual(secret, TEST_ENV.FRIHET_OAUTH_API_KEY);
+  assert.deepEqual(JSON.parse(String(call.init?.body)), {
+    uid: CLAUDE_BINDING.uid,
+    keyId: CLAUDE_BINDING.keyId,
+  });
+  assert.equal(
+    (state.storage.values.get("oauth_token_family_cleanup") as { backendRevoked?: boolean } | undefined)?.backendRevoked,
+    true,
+  );
+});
+
+for (const [label, response] of [
+  ["403", () => new Response(null, { status: 403 })],
+  ["404", () => new Response(null, { status: 404 })],
+  ["204", () => new Response(null, { status: 204 })],
+  ["malformed JSON", () => new Response("{", { status: 200 })],
+  ["generic success body", () => Response.json({ ok: true, revoked: true })],
+  ["missing tombstone", () => Response.json({ revoked: true, alreadyRevoked: false, activeKeys: 0 })],
+  ["active key", () => Response.json({ revoked: true, alreadyRevoked: false, correlationTombstoned: true, activeKeys: 1 })],
+  ["extra proof field", () => Response.json({ revoked: true, alreadyRevoked: false, correlationTombstoned: true, activeKeys: 0, ok: true })],
+] as const) {
+  test(`production Claude correlation cleanup keeps its durable outbox on ${label}, then retries after restart`, async (context) => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    context.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return calls.length === 1 ? response() : Response.json({
+        revoked: true, alreadyRevoked: true, correlationTombstoned: true, activeKeys: 0,
+      });
+    });
+    const state = new FakeState();
+    const env = { ...TEST_ENV, ...CLAUDE_ENV };
+    // Only replace the SDK grant authority unavailable in Node. The backend
+    // revoke and proof validation are the exact production implementations.
+    const authorities = { ...DEFAULT_CLEANUP_AUTHORITIES, async revokeGrant() {} };
+    const store = new OAuthStateStore(state as unknown as DurableObjectState, env, authorities);
+    assert.equal((await store.fetch(familyRequest("/token-family", {
+      currentKind: "refresh_token", currentHash: "a".repeat(64),
+      expiresAtMs: Date.now() + 60_000, apiKeyBinding: CLAUDE_CORRELATION_BINDING,
+    }, "PUT"))).status, 204);
+    await familyJson(store, "/token-family/revoke", {});
+    await store.alarm();
+    assert.deepEqual(state.storage.values.get("oauth_token_family_cleanup"), {
+      version: 1, accessProfile: "claude", userId: CLAUDE_BINDING.uid, grantId: "g".repeat(16),
+      apiKeyBinding: CLAUDE_CORRELATION_BINDING, grantRevoked: true, backendRevoked: false, attempt: 1,
+    });
+    assert.ok(state.storage.alarm && state.storage.alarm > Date.now(), "retry remains armed");
+    assert.deepEqual(await (await store.fetch(familyRequest("/token-family/status", undefined, "GET"))).json(), { outcome: "revoked" });
+    const restarted = new OAuthStateStore(state as unknown as DurableObjectState, env, authorities);
+    await restarted.alarm();
+    assert.equal(state.storage.values.has("oauth_token_family_cleanup"), false);
+    assert.deepEqual(await (await restarted.fetch(familyRequest("/token-family/status", undefined, "GET"))).json(), { outcome: "revoked" });
+    assert.equal(calls.length, 2, "failed correlation proof never downgrades to keyId cleanup");
+    for (const call of calls) {
+      assert.equal(call.url, "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning");
+      assert.equal(call.init?.method, "DELETE");
+      assert.equal(call.init?.redirect, "manual");
+      assert.equal(new Headers(call.init?.headers).get("x-frihet-oauth-key"), CLAUDE_ENV.FRIHET_CLAUDE_OAUTH_API_KEY);
+      assert.deepEqual(JSON.parse(String(call.init?.body)), {
+        uid: CLAUDE_BINDING.uid, correlationId: CLAUDE_CORRELATION_BINDING.correlationId,
+      });
+    }
+  });
+}
+
+test("production OpenAI backend cleanup keeps its keyId authority and response contract", async (context) => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  context.mock.method(globalThis, "fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return new Response(null, { status: 404 });
+  });
+  const state = new FakeState();
+  const store = new OAuthStateStore(state as unknown as DurableObjectState, TEST_ENV, {
+    ...DEFAULT_CLEANUP_AUTHORITIES, async revokeGrant() {},
+  });
+  assert.equal((await store.fetch(familyRequest("/token-family", {
+    currentKind: "refresh_token", currentHash: "a".repeat(64),
+    expiresAtMs: Date.now() + 60_000, apiKeyBinding: OPENAI_BINDING,
+  }, "PUT"))).status, 204);
+  await familyJson(store, "/token-family/revoke", {});
+  await store.alarm();
+  assert.equal(state.storage.values.has("oauth_token_family_cleanup"), false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning");
+  assert.equal(new Headers(calls[0].init?.headers).get("x-frihet-oauth-key"), TEST_ENV.FRIHET_OAUTH_API_KEY);
+  assert.deepEqual(JSON.parse(String(calls[0].init?.body)), { uid: OPENAI_BINDING.uid, keyId: OPENAI_BINDING.keyId });
+});
+
+test("#221 L3: commitOAuthState truncates replacedGrantIds to the first 64 entries before calling the DO", async () => {
+  const { store, state } = makeStore();
+  assert.equal(await putState(store, "{}"), 204);
+  const reserved = await stateJson(store, "/reserve");
+  assert.equal(reserved.outcome, "reserved");
+  assert.equal(
+    (await stateJson(store, "/attempt", { leaseId: reserved.leaseId, uid: "firebase-user", reconciled: [] })).outcome,
+    "armed",
+  );
+  const namespace = {
+    idFromName: (name: string) => ({ name }) as unknown as DurableObjectId,
+    get: () => ({
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => store.fetch(new Request(input, init)),
+    }) as unknown as DurableObjectStub,
+  } as unknown as DurableObjectNamespace;
+  const ids = Array.from({ length: 65 }, (_, i) => `grant-${String(i).padStart(10, "0")}`);
+  assert.equal(
+    await commitOAuthState(namespace, "s".repeat(64), String(reserved.leaseId), ids),
+    "committed",
+  );
+  const replacement = state.storage.values.get("oauth_grant_replacement") as { grantIds: string[] } | undefined;
+  assert.ok(replacement);
+  assert.equal(replacement.grantIds.length, 64);
+  assert.deepEqual(replacement.grantIds, ids.slice(0, 64));
+});
+

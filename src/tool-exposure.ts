@@ -43,6 +43,7 @@
 
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod/v4";
+import { READ_STAMP } from "./demo-fixtures.js";
 
 /* ------------------------------------------------------------------ */
 /*  Group taxonomy                                                     */
@@ -207,7 +208,7 @@ const NAME_OVERRIDES: Record<string, ToolGroupId> = {
 
 /**
  * Assign a group by tool NAME. The name-based mapping reproduces the
- * source-file grouping exactly for all 158 current tools (verified), with the
+ * source-file grouping exactly for every current tool (verified), with the
  * eight cross-file cases pinned via NAME_OVERRIDES. Driven off the name (not a
  * hand-kept list) so a future tool lands somewhere sensible automatically.
  *
@@ -375,6 +376,7 @@ export function applyToolExposureProfile(
   options?: {
     allowlist?: ReadonlySet<string>;
     groupMetadata?: Partial<Record<ToolGroupId, GroupMeta>>;
+    describeToolExample?: string;
     capabilityTruth?: {
       metaKey: string;
       localDiscovery: (name: string) => object;
@@ -383,6 +385,7 @@ export function applyToolExposureProfile(
       type: "oauth2";
       scopes: readonly string[];
     }>;
+    demoMode?: boolean;
   },
 ): ToolExposureHandle {
   const catalog = new Map<string, CatalogEntry>();
@@ -501,6 +504,8 @@ export function applyToolExposureProfile(
     groupMetadata,
     options?.capabilityTruth,
     options?.securitySchemes,
+    options?.describeToolExample,
+    options?.demoMode === true,
   );
 
   return handle;
@@ -549,8 +554,11 @@ function registerMetaTools(
     type: "oauth2";
     scopes: readonly string[];
   }>,
+  describeToolExample = "create_invoice",
+  demoMode = false,
 ): void {
   const { catalog, groups } = handle;
+  const demoStamp = demoMode ? READ_STAMP : {};
   const oauthConfig = securitySchemes
     ? {
         securitySchemes: securitySchemes.map((scheme) => ({
@@ -596,7 +604,7 @@ function registerMetaTools(
     name: z
       .string()
       .describe(
-        "Exact tool name as returned by search_tools (e.g. 'create_invoice') / " +
+        `Exact tool name as returned by search_tools (e.g. '${describeToolExample}') / ` +
           "Nombre exacto de la herramienta devuelto por search_tools.",
       ),
   };
@@ -671,6 +679,7 @@ function registerMetaTools(
         }))
         .filter((g) => g.toolCount > 0);
       return textResult({
+        ...demoStamp,
         groups: out,
         totalGroups: out.length,
         totalTools: catalog.size,
@@ -742,6 +751,7 @@ function registerMetaTools(
         }));
 
       return textResult({
+        ...demoStamp,
         query: query || null,
         group: groupFilter ?? null,
         count: scored.length,
@@ -786,6 +796,7 @@ function registerMetaTools(
               type: "text" as const,
               text: JSON.stringify(
                 {
+                  ...demoStamp,
                   error: name
                     ? `No tool named '${name}'.`
                     : "Provide { name } — the exact tool name from search_tools.",
@@ -801,6 +812,7 @@ function registerMetaTools(
         };
       }
       return textResult({
+        ...demoStamp,
         name: entry.name,
         group: entry.group,
         title: entry.title,

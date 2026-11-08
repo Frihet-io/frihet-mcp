@@ -120,6 +120,12 @@ before(async () => {
       res.end('{"data":');
       return;
     }
+    if (url.pathname === "/invoices/octet_stream_pdf/pdf" && req.method === "GET") {
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Length", String(PDF_BYTES.byteLength));
+      res.end(PDF_BYTES);
+      return;
+    }
 
     // ── Cap precheck: server advertises an oversize PDF. End the response
     // normally (no 413 status) so the CLIENT'S precheck fires — that's the
@@ -174,6 +180,8 @@ before(async () => {
     res.end(JSON.stringify({ error: "not_found" }));
   });
 
+  // Under heavy load undici can reuse a socket the default 5 s idle timeout is closing.
+  server.keepAliveTimeout = 60_000;
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${port}`;
@@ -502,5 +510,14 @@ describe("client.ts document responses (PDF / XML) — content-type aware", () =
       assert.match(result.content[0]!.text, /contentType/);
       assert.match(result.content[0]!.text, /sizeBytes/);
     }
+  });
+
+  test("application/octet-stream response with %PDF- header is accepted and satisfies pdfResultOutput", async () => {
+    const client = new FrihetClient("test_key", baseUrl);
+    const doc = await client.getInvoicePdf("octet_stream_pdf");
+    assert.equal(doc.id, "octet_stream_pdf");
+    assert.equal(doc.contentType, "application/pdf");
+    assert.equal(doc.sizeBytes, PDF_BYTES.byteLength);
+    assert.equal(pdfResultOutput.safeParse(doc).success, true);
   });
 });

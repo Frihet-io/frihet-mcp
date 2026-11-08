@@ -1,0 +1,267 @@
+{
+  "accessProfile": "claude",
+  "sha256": "bcf2185915523c60468afc380d1e2456a5c0da5cb2ca4b4820e74886b06b928f",
+  "routes": [
+    "DELETE /clients/:id/contacts/:id",
+    "DELETE /clients/:id/notes/:id",
+    "DELETE /deposits/:id",
+    "DELETE /invoices/:id",
+    "DELETE /portal/domain/:id",
+    "DELETE /products/:id",
+    "DELETE /quotes/:id",
+    "DELETE /recurring/invoices/:id",
+    "DELETE /team/members/:id",
+    "DELETE /time/entries/:id",
+    "DELETE /vendors/:id",
+    "DELETE /webhooks/:id",
+    "PATCH /banking/transactions/:id/categorize",
+    "PATCH /clients/:id",
+    "PATCH /deposits/:id",
+    "PATCH /expenses/:id",
+    "PATCH /invoices/:id",
+    "PATCH /kitchen/tickets/:id",
+    "PATCH /products/:id",
+    "PATCH /quotes/:id",
+    "PATCH /recurring/invoices/:id",
+    "PATCH /team/members/:id/role",
+    "PATCH /time-entries/:id/clock-out",
+    "PATCH /time/entries/:id",
+    "PATCH /vendors/:id",
+    "PATCH /webhooks/:id",
+    "POST /banking/rules",
+    "POST /banking/transactions/:id/match",
+    "POST /clients",
+    "POST /clients/:id/activities",
+    "POST /clients/:id/contacts",
+    "POST /clients/:id/notes",
+    "POST /deposits",
+    "POST /deposits/:id/apply",
+    "POST /deposits/:id/refund",
+    "POST /expenses",
+    "POST /fiscal/verifactu/:id/resubmit",
+    "POST /gestoria/templates",
+    "POST /gl/entries/:id/approve",
+    "POST /gl/entries/:id/reject",
+    "POST /invoices",
+    "POST /invoices/:id/credit-note",
+    "POST /invoices/:id/late-fee",
+    "POST /invoices/:id/paid",
+    "POST /invoices/:id/send",
+    "POST /leaves",
+    "POST /leaves/:id/approve",
+    "POST /leaves/:id/cancel",
+    "POST /leaves/:id/reject",
+    "POST /portal/domain",
+    "POST /portal/domain/:id/verify",
+    "POST /portal/onboard/link",
+    "POST /products",
+    "POST /quotes",
+    "POST /recurring/invoices",
+    "POST /recurring/invoices/:id/pause",
+    "POST /recurring/invoices/:id/resume",
+    "POST /recurring/invoices/:id/run",
+    "POST /team/members/invite",
+    "POST /time-entries/clock-in",
+    "POST /time/entries",
+    "POST /vendors",
+    "POST /webhooks",
+    "POST /webhooks/:id/test"
+  ],
+  "tools": {
+    "apply_deposit": [
+      "POST /deposits/:id/apply"
+    ],
+    "apply_late_fee": [
+      "POST /invoices/:id/late-fee"
+    ],
+    "attendance_clock_in": [
+      "POST /time-entries/clock-in"
+    ],
+    "attendance_clock_out": [
+      "PATCH /time-entries/:id/clock-out"
+    ],
+    "categorize_transaction": [
+      "PATCH /banking/transactions/:id/categorize"
+    ],
+    "create_client": [
+      "POST /clients"
+    ],
+    "create_client_contact": [
+      "POST /clients/:id/contacts"
+    ],
+    "create_client_note": [
+      "POST /clients/:id/notes"
+    ],
+    "create_credit_note": [
+      "POST /invoices/:id/credit-note"
+    ],
+    "create_deposit": [
+      "POST /deposits"
+    ],
+    "create_expense": [
+      "POST /expenses"
+    ],
+    "create_invoice": [
+      "POST /invoices"
+    ],
+    "create_product": [
+      "POST /products"
+    ],
+    "create_quote": [
+      "POST /quotes"
+    ],
+    "create_recurring_invoice": [
+      "POST /recurring/invoices"
+    ],
+    "create_time_entry": [
+      "POST /time/entries"
+    ],
+    "create_vendor": [
+      "POST /vendors"
+    ],
+    "create_webhook": [
+      "POST /webhooks"
+    ],
+    "delete_client_contact": [
+      "DELETE /clients/:id/contacts/:id"
+    ],
+    "delete_client_note": [
+      "DELETE /clients/:id/notes/:id"
+    ],
+    "delete_deposit": [
+      "DELETE /deposits/:id"
+    ],
+    "delete_invoice": [
+      "DELETE /invoices/:id"
+    ],
+    "delete_product": [
+      "DELETE /products/:id"
+    ],
+    "delete_quote": [
+      "DELETE /quotes/:id"
+    ],
+    "delete_recurring_invoice": [
+      "DELETE /recurring/invoices/:id"
+    ],
+    "delete_time_entry": [
+      "DELETE /time/entries/:id"
+    ],
+    "delete_vendor": [
+      "DELETE /vendors/:id"
+    ],
+    "delete_webhook": [
+      "DELETE /webhooks/:id"
+    ],
+    "duplicate_invoice": [
+      "POST /invoices"
+    ],
+    "frihet_bank_rule_create": [
+      "POST /banking/rules"
+    ],
+    "frihet_gl_entry_approve": [
+      "POST /gl/entries/:id/approve"
+    ],
+    "frihet_gl_entry_reject": [
+      "POST /gl/entries/:id/reject"
+    ],
+    "frihet_portal_domain_add": [
+      "POST /portal/domain"
+    ],
+    "frihet_portal_domain_remove": [
+      "DELETE /portal/domain/:id"
+    ],
+    "frihet_portal_domain_verify": [
+      "POST /portal/domain/:id/verify"
+    ],
+    "frihet_portal_onboard_link_generate": [
+      "POST /portal/onboard/link"
+    ],
+    "gestoria_template_create": [
+      "POST /gestoria/templates"
+    ],
+    "invite_team_member": [
+      "POST /team/members/invite"
+    ],
+    "leave_approve": [
+      "POST /leaves/:id/approve"
+    ],
+    "leave_cancel": [
+      "POST /leaves/:id/cancel"
+    ],
+    "leave_reject": [
+      "POST /leaves/:id/reject"
+    ],
+    "leave_request_create": [
+      "POST /leaves"
+    ],
+    "log_client_activity": [
+      "POST /clients/:id/activities"
+    ],
+    "mark_invoice_paid": [
+      "POST /invoices/:id/paid"
+    ],
+    "match_transaction_to_invoice": [
+      "POST /banking/transactions/:id/match"
+    ],
+    "pause_recurring_invoice": [
+      "POST /recurring/invoices/:id/pause"
+    ],
+    "refund_deposit": [
+      "POST /deposits/:id/refund"
+    ],
+    "remove_team_member": [
+      "DELETE /team/members/:id"
+    ],
+    "resume_recurring_invoice": [
+      "POST /recurring/invoices/:id/resume"
+    ],
+    "run_recurring_now": [
+      "POST /recurring/invoices/:id/run"
+    ],
+    "send_invoice": [
+      "POST /invoices/:id/send"
+    ],
+    "test_webhook": [
+      "POST /webhooks/:id/test"
+    ],
+    "update_client": [
+      "PATCH /clients/:id"
+    ],
+    "update_deposit": [
+      "PATCH /deposits/:id"
+    ],
+    "update_expense": [
+      "PATCH /expenses/:id"
+    ],
+    "update_invoice": [
+      "PATCH /invoices/:id"
+    ],
+    "update_kitchen_ticket": [
+      "PATCH /kitchen/tickets/:id"
+    ],
+    "update_product": [
+      "PATCH /products/:id"
+    ],
+    "update_quote": [
+      "PATCH /quotes/:id"
+    ],
+    "update_recurring_invoice": [
+      "PATCH /recurring/invoices/:id"
+    ],
+    "update_team_member_role": [
+      "PATCH /team/members/:id/role"
+    ],
+    "update_time_entry": [
+      "PATCH /time/entries/:id"
+    ],
+    "update_vendor": [
+      "PATCH /vendors/:id"
+    ],
+    "update_webhook": [
+      "PATCH /webhooks/:id"
+    ],
+    "verifactu_resubmit": [
+      "POST /fiscal/verifactu/:id/resubmit"
+    ]
+  }
+}

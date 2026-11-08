@@ -1,0 +1,1 @@
+{"id": "I-B", "invoiceNumber": "INV-B", "clientName": "Cliente B", "status": "overdue", "total": 200, "amountPaid": 0, "remainingBalance": 200, "currency": "USD", "dueDate": "2026-09-15"}

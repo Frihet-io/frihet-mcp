@@ -25,11 +25,24 @@ topology plus a baseline status.
   recorded baseline, including the migration tag.
 
 `scripts/check-full-worker-topology.mjs` implements both checks. It also fails
-if `wrangler.toml` drifts from the reviewed target in the baseline file, but only
-for canonical-format drift: the parse is regex-based, so non-canonical TOML can
-slip past until a follow-up replaces it with Wrangler's own config reader. CI runs
-`scripts/__tests__/release-workflow-contract.test.mjs`, which pins the job
-wiring (ordering, no `if:`, no `continue-on-error`) and the checker's behavior.
+if `wrangler.toml` drifts from the reviewed target in the baseline file. The file
+is parsed with the Worker-locked Wrangler's own offline reader
+(`experimental_readRawConfig`, resolved only from `workers/remote-mcp/node_modules`),
+so indented or quoted keys and commented table headers are read with Wrangler's own
+TOML semantics (the reader runs on a copy of the file; which file Wrangler reads at
+deploy time is pinned separately by `--config wrangler.toml` and a test that no
+redirect config exists). If that Wrangler is not installed, or the invocation path
+cannot be resolved, the gate blocks. Only the listed top-level keys and tables are
+accepted; `[alias]`, `[observability]` and `[dev]` must equal the reviewed content
+exactly (an alias redirects modules inside the production bundle).
+
+`scripts/__tests__/release-workflow-contract.test.mjs` derives, from the workflow
+text, every job that runs the checker or the contract test itself (`npm test`
+included) and fails unless `npm ci --prefix workers/remote-mcp --ignore-scripts`
+(same `if:`) precedes it in that job; in the release workflow a SHA-pinned
+`setup-node` must precede the install too. Today the release jobs are `preflight`,
+`gates` and `deploy-worker`; `ci.yml` and `deploy-openai-mcp.yml` pass the install-order check. The test also pins the job wiring (ordering, no `if:`, no
+`continue-on-error`).
 
 ## Scope of the guard
 
@@ -40,6 +53,13 @@ Wrangler, API or dashboard changes, are unguarded local paths: they would apply
 migration `v2` without consulting the baseline. Wrangler is pointed explicitly
 at `wrangler.toml` in CI so it cannot resolve a different config than the
 checker reads.
+
+The same test runs a fail-closed lexical scan of every workflow, every script in
+the root and `workers/*` manifests, and the repository scripts reachable from them:
+any `wrangler` occurrence that is not read-only, a dry-run, `--env openai` or a
+reviewed line is reported, as are unresolvable subcommands. It does not see a
+command whose name is assembled at run time, code fetched from outside the
+repository, or files under `__tests__`; review owns those.
 
 ## Who decides
 

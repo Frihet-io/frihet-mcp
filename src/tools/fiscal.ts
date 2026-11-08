@@ -22,6 +22,7 @@ import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
 import {
   withToolLogging,
+  confirmationRequiredError,
   formatRecord,
   getContent,
   mutateContent,
@@ -370,18 +371,12 @@ export function registerFiscalTools(server: McpServer, client: IFrihetClient): v
     },
     async ({ invoiceId, confirm }) => withToolLogging("verifactu_resubmit", async () => {
       if (!confirm) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Error: confirm=true is required for VeriFactu resubmission. " +
-                "This is a COMPLIANCE action that submits fiscal data to AEAT. " +
-                "Verify the invoice data is correct before setting confirm=true. / " +
-                "Se requiere confirm=true para el reenvio VeriFactu. Accion de COMPLIANCE que envia datos fiscales a AEAT.",
-            },
-          ],
-          isError: true,
-        };
+        return confirmationRequiredError(
+          "Error: confirm=true is required for VeriFactu resubmission. " +
+          "This is a COMPLIANCE action that submits fiscal data to AEAT. " +
+          "Verify the invoice data is correct before setting confirm=true. / " +
+          "Se requiere confirm=true para el reenvio VeriFactu. Accion de COMPLIANCE que envia datos fiscales a AEAT.",
+        );
       }
       return withBackendGuard("verifactu_resubmit", "/v1/fiscal/verifactu/resubmit", async () => {
         const result = await client.resubmitVerifactu(invoiceId);

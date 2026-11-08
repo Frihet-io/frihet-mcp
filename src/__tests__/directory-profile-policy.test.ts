@@ -1,19 +1,7 @@
 /**
- * Directory-policy invariants for the reviewed connector (openai-mcp.frihet.io),
- * which is the surface submitted to both the ChatGPT app directory and the
- * Claude connectors directory.
- *
- * Anthropic Software Directory Policy (15 Apr 2026,
- * https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy):
- *   4.A  no transfers of money or execution of financial transactions;
- *   5.C  tool names at most 64 characters;
- *   5.E  every tool carries title, readOnlyHint and destructiveHint.
- *
- * The surface is captured through the production composition path
- * (registerMcpSurface + remoteMcpSurfaceComposition(true, false)) over a real
- * MCP client/server pair, so these assertions hold for what a directory client
- * actually receives, not for the profile tables alone. Forced draft status on
- * create_invoice is pinned separately in openai-profile.test.ts.
+ * Frozen OpenAI connector invariants, not blanket Anthropic policy restrictions.
+ * Captures the reviewed 33-tool OpenAI composition over the real MCP wire.
+ * Claude's independent candidate is tested in claude-profile.test.ts.
  */
 
 import { describe, test } from "node:test";
@@ -56,8 +44,8 @@ const FROZEN_REVIEWED_TOOLS: readonly string[] = (
   ) as { tools: Array<{ name: string }> }
 ).tools.map((tool) => tool.name).sort();
 
-/** Side effects a directory submission must not reach. */
-const DIRECTORY_EXCLUDED_EFFECTS: readonly ExternalSideEffect[] = [
+/** Side effects the frozen OpenAI submission must not reach. */
+const OPENAI_EXCLUDED_EFFECTS: readonly ExternalSideEffect[] = [
   "money_movement",
   "email_or_invitation",
   "fiscal_or_einvoice_submission",
@@ -70,7 +58,7 @@ const DIRECTORY_EXCLUDED_EFFECTS: readonly ExternalSideEffect[] = [
  */
 const FORCED_DRAFT_EXCEPTIONS = new Set(["create_invoice"]);
 
-/** Full-catalogue operations the directory brief names explicitly. */
+/** Full-catalogue operations deliberately absent from the frozen OpenAI profile. */
 const NAMED_EXCLUSIONS = [
   "refund_sale",
   "refund_deposit",
@@ -132,7 +120,7 @@ async function connectReviewedSurface(calls: string[]) {
   return { server, client };
 }
 
-describe("reviewed connector satisfies the directory policy on the real MCP wire", () => {
+describe("frozen OpenAI connector retains its reviewed restrictions on the real MCP wire", () => {
   test("tools/list equals the 33 tools of the frozen review snapshot, with no resources, prompts or meta-tools", async () => {
     const { server, client } = await connectReviewedSurface([]);
     try {
@@ -172,7 +160,7 @@ describe("reviewed connector satisfies the directory policy on the real MCP wire
       .filter(([name, annotations]) =>
         !FORCED_DRAFT_EXCEPTIONS.has(name)
         && buildPublicCapabilityTruth(name, annotations as Parameters<typeof buildPublicCapabilityTruth>[1]).externalSideEffects
-          .some((effect) => DIRECTORY_EXCLUDED_EFFECTS.includes(effect)))
+          .some((effect) => OPENAI_EXCLUDED_EFFECTS.includes(effect)))
       .map(([name]) => name);
     // Non-vacuous: the full catalogue really contains the operations at stake.
     for (const name of ["refund_sale", "send_invoice", "send_quote", "ticketbai_submit"]) {

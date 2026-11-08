@@ -15,6 +15,8 @@ import {
   parseProvisionedOAuthApiKey,
   provisionOAuthApiKey,
   reconcileOAuthApiKeyCorrelation,
+  resolveOAuthServiceSecret,
+  type OAuthProvisioningBinding,
 } from "./oauth-provisioning.js";
 import { resolveOAuthApiKeyUrl } from "./api-url.js";
 import { getLoginPage } from "./login-page.js";
@@ -51,16 +53,28 @@ import {
   isVerifiedOpenAIIdentity,
   isValidS256CodeChallenge,
   OPENAI_REVIEW_OAUTH_SCOPES,
-  OPENAI_REVIEW_OAUTH_RESOURCES,
   OPENAI_REVIEW_ORIGIN,
-  resolveFrihetAccessProfile,
   validateOAuthBoundary,
 } from "../../../src/openai-review-oauth.js";
+import { boundOAuthProfile, CLAUDE_ORIGIN, claudeAdmissionUnavailableResponse, isClaudeIdentityAdmitted, isVerifiedClaudeIdentity, resolveWorkerAccessProfile } from "./oauth-profile.js";
 
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 const OAUTH_CALLBACK_MAX_BODY_BYTES = 20 * 1024;
 
 const app = new Hono<{ Bindings: AuthEnv }>();
+
+// full-oauth-release-contract.json holds new full-profile grants until their
+// own credential authority exists. Disclose that before login or consent:
+// showing broad read/write consent for a request for `read` cannot fix it.
+function fullOAuthUnavailableResponse(): Response {
+  return Response.json({
+    error: "temporarily_unavailable",
+    error_description: "New OAuth connections to the general Frihet MCP are temporarily unavailable. No permissions have been granted. A read-only request will not be upgraded to read/write access.",
+  }, {
+    status: 503,
+    headers: { "Cache-Control": "no-store", Pragma: "no-cache" },
+  });
+}
 
 /** Grants the user already holds for this client, listed before a new one exists. */
 async function listClientGrantIds(
@@ -122,7 +136,7 @@ function validateReviewedAuthorizeQuery(request: Request): string | undefined {
 // change ever forwards a reviewed-host request here in error, it must not
 // fall through to the full catalogue below.
 app.get("/", (c) => {
-  if (resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE) === "openai") {
+  if (resolveWorkerAccessProfile(c.env) !== "full") {
     return c.json({ error: "Not found" }, 404);
   }
   return c.json({
@@ -153,7 +167,8 @@ app.get("/health", (c) =>
 );
 
 app.get("/userinfo", async (c) => {
-  if (resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE) !== "openai") {
+  const accessProfile = resolveWorkerAccessProfile(c.env);
+  if (accessProfile === "full") {
     return c.json({ error: "Not found" }, 404);
   }
   const authorization = c.req.header("authorization");
@@ -163,7 +178,7 @@ app.get("/userinfo", async (c) => {
   let userInfo;
   try {
     userInfo = token
-      ? buildOpenAIUserInfo(await c.env.OAUTH_PROVIDER.unwrapToken(token))
+      ? buildOpenAIUserInfo(await c.env.OAUTH_PROVIDER.unwrapToken(token), undefined, boundOAuthProfile(accessProfile))
       : undefined;
     if (
       userInfo
@@ -183,7 +198,7 @@ app.get("/userinfo", async (c) => {
       { error: "invalid_token" },
       401,
       {
-        "WWW-Authenticate": buildOpenAIUnauthorizedChallenge(),
+        "WWW-Authenticate": buildOpenAIUnauthorizedChallenge(boundOAuthProfile(accessProfile).origin),
         "Cache-Control": "no-store",
         Pragma: "no-cache",
       },
@@ -201,8 +216,10 @@ app.get("/userinfo", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.get("/authorize", async (c) => {
-  const accessProfile = resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE);
-  if (accessProfile === "openai") {
+  const accessProfile = resolveWorkerAccessProfile(c.env);
+  if (accessProfile === "full") return fullOAuthUnavailableResponse();
+  const boundaryProfile = boundOAuthProfile(accessProfile);
+  if (boundaryProfile) {
     const queryError = validateReviewedAuthorizeQuery(c.req.raw);
     if (queryError) {
       return c.json({ error: "invalid_request", error_description: queryError }, 400);
@@ -232,7 +249,7 @@ app.get("/authorize", async (c) => {
     return c.text("Invalid OAuth request", 400);
   }
 
-  if (accessProfile === "openai") {
+  if (boundaryProfile) {
     const boundary = validateOAuthBoundary(
       {
         resource: oauthReq.resource,
@@ -240,7 +257,7 @@ app.get("/authorize", async (c) => {
         requireResource: true,
         requireScope: true,
       },
-      OPENAI_REVIEW_OAUTH_RESOURCES,
+      boundaryProfile.acceptedResources,
     );
     if (!boundary.ok) {
       log({
@@ -304,6 +321,7 @@ app.get("/authorize", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.post("/callback", async (c) => {
+  if (resolveWorkerAccessProfile(c.env) === "full") return fullOAuthUnavailableResponse();
   let body: {
     stateKey: string;
     idToken: string;
@@ -384,8 +402,9 @@ app.post("/callback", async (c) => {
     response: Response;
   }> => {
     const oauthReq = lease.request;
-    const accessProfile = resolveFrihetAccessProfile(c.env.FRIHET_OPENAI_MODE);
-    if (accessProfile === "openai") {
+    const accessProfile = resolveWorkerAccessProfile(c.env);
+    const boundaryProfile = accessProfile === "full" ? undefined : boundOAuthProfile(accessProfile);
+    if (boundaryProfile) {
       const boundary = validateOAuthBoundary(
         {
           resource: oauthReq.resource,
@@ -393,7 +412,7 @@ app.post("/callback", async (c) => {
           requireResource: true,
           requireScope: true,
         },
-        OPENAI_REVIEW_OAUTH_RESOURCES,
+        boundaryProfile.acceptedResources,
       );
       if (!boundary.ok) {
         log({
@@ -448,8 +467,11 @@ app.post("/callback", async (c) => {
       emailVerified: decoded.email_verified,
     };
     if (
-      accessProfile === "openai"
-      && !isVerifiedOpenAIIdentity(verifiedIdentity)
+      boundaryProfile
+      && (
+        !isVerifiedOpenAIIdentity(verifiedIdentity)
+        || (accessProfile === "claude" && !isVerifiedClaudeIdentity(verifiedIdentity))
+      )
     ) {
       log({
         level: "warn",
@@ -462,7 +484,23 @@ app.post("/callback", async (c) => {
       };
     }
 
-    const oauthServiceSecret = c.env.FRIHET_OAUTH_API_KEY;
+    // Admission comes only from the verified Firebase identity, before the
+    // state is armed or any backend credential can be provisioned.
+    if (accessProfile === "claude" && !isClaudeIdentityAdmitted(c.env, verifiedIdentity)) {
+      return {
+        settlement: "clean",
+        response: claudeAdmissionUnavailableResponse(),
+      };
+    }
+
+    let oauthServiceSecret: string | undefined;
+    try {
+      oauthServiceSecret = accessProfile === "full"
+        ? c.env.FRIHET_OAUTH_API_KEY
+        : resolveOAuthServiceSecret(c.env, accessProfile);
+    } catch {
+      return { settlement: "clean", response: c.json({ error: "OAuth credential lifecycle is unavailable" }, 503) };
+    }
     if (
       typeof oauthServiceSecret !== "string"
       || new TextEncoder().encode(oauthServiceSecret).byteLength < 32
@@ -478,12 +516,12 @@ app.post("/callback", async (c) => {
       };
     }
 
-    const provisioningUrl = resolveOAuthApiKeyUrl(c.env.FRIHET_API_BASE);
-    const provisioningBinding = {
-      uid: decoded.uid,
-      accessProfile,
-      oauthResource: accessProfile === "openai" ? OPENAI_REVIEW_ORIGIN : FULL_MCP_ORIGIN,
-    } as const;
+    const provisioningUrl = resolveOAuthApiKeyUrl(c.env.FRIHET_API_BASE, accessProfile === "claude" ? "claude" : "openai");
+    const provisioningBinding: OAuthProvisioningBinding = accessProfile === "claude"
+      ? { uid: decoded.uid, accessProfile, oauthResource: CLAUDE_ORIGIN }
+      : accessProfile === "openai"
+        ? { uid: decoded.uid, accessProfile, oauthResource: OPENAI_REVIEW_ORIGIN }
+        : { uid: decoded.uid, accessProfile, oauthResource: FULL_MCP_ORIGIN };
 
     // Refuse here what the provisioning leaf would refuse, before the attempt
     // is recorded as possibly sent (an armed attempt must be reconcilable).
@@ -515,9 +553,8 @@ app.post("/callback", async (c) => {
         provisioningUrl,
         oauthServiceSecret,
         {
+          ...provisioningBinding,
           uid: previous.uid,
-          accessProfile: provisioningBinding.accessProfile,
-          oauthResource: provisioningBinding.oauthResource,
           correlationId: previous.correlationId,
         },
       );
@@ -697,8 +734,8 @@ app.post("/callback", async (c) => {
     // Complete OAuth authorization. The raw API key never leaves encrypted grant
     // props; its opaque keyId is retained so refresh-family replay or explicit
     // grant revocation can disable the exact backend credential later.
-    // Earlier grants for this user+client are replaced only after the commit:
-    // a holder that loses its lease must never revoke the winner's grant.
+    // Earlier grants for this user+client are replaced only by a commit: a
+    // holder that loses its lease never revokes the winner's grant.
     let redirectTo: string;
     let replacedGrantIds: string[];
     try {
@@ -715,10 +752,11 @@ app.post("/callback", async (c) => {
           label: decoded.email || decoded.uid,
         },
         scope: oauthReq.scope,
-        props: accessProfile === "openai"
+        props: boundaryProfile
           ? {
               apiKey: provisioned.apiKey,
               keyId: provisioned.keyId,
+              ...(accessProfile === "claude" ? { correlationId: lease.correlationId } : {}),
               apiKeyExpiresAt: provisioned.expiresAt,
               userId: decoded.uid,
               email: verifiedIdentity.email,
@@ -726,9 +764,9 @@ app.post("/callback", async (c) => {
               accessProfile,
               oauthScope: FRIHET_CONNECTOR_SCOPE,
               oauthScopes: [...OPENAI_REVIEW_OAUTH_SCOPES],
-              oauthIssuer: OPENAI_REVIEW_ORIGIN,
+              oauthIssuer: boundaryProfile.origin,
               oauthAudience: oauthReq.resource,
-              oauthResource: OPENAI_REVIEW_ORIGIN,
+              oauthResource: boundaryProfile.origin,
               authMethod: "oauth",
             }
           : {
@@ -769,11 +807,18 @@ app.post("/callback", async (c) => {
       }
     }
     if (committed !== "committed") {
-      // This lease no longer owns the state (taken over after its TTL, state
-      // expired, or the store is unreachable). Withhold the code: the grant it
-      // unlocks is unreachable and expires with the provider's code TTL. Its
-      // backend credential is revoked so nothing usable remains.
-      const settlement = await reconcileThisAttempt();
+      // This lease no longer owns the state (taken over after its TTL or state
+      // expired), or both commit reads failed (`commit_unavailable`). Withhold
+      // the code, revoke the unredeemed grant in KV, and revoke this attempt's
+      // backend credential; `/release` disarms the replacement outbox if the
+      // first commit landed before its responses were lost (#221 M1).
+      const abortedGrantId = new URL(redirectTo).searchParams.get("code")?.split(":")[1];
+      const [settlement] = await Promise.all([
+        reconcileThisAttempt(),
+        abortedGrantId
+          ? c.env.OAUTH_PROVIDER.revokeGrant(abortedGrantId, decoded.uid).catch(() => undefined)
+          : Promise.resolve(),
+      ]);
       log({
         level: "error",
         message: "OAuth callback: authorization state could not be committed",

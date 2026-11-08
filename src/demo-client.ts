@@ -114,6 +114,8 @@ const DEMO_OWNER_CAPABILITIES = Object.entries(DEMO_PERMISSION_MATRIX.owner!)
   .sort();
 
 export class DemoFrihetClient implements IFrihetClient {
+  readonly isDemoClient = true as const;
+
   // ---------------------------------------------------------------- Invoices
   async listInvoices(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
     return demoPage(demoInvoices, params);

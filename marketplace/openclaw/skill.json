@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "@frihet-io/frihet-erp",
+  "version": "1.1.0",
+  "description": "Governed OpenClaw skill package for European and global business management: invoices, expenses, client profiles, and quarterly tax summaries.",
+  "publisher": {
+    "name": "Frihet",
+    "url": "https://frihet.io"
+  },
+  "runtime": {
+    "protocol": "streamable-http",
+    "endpoint": "https://mcp.frihet.io/mcp",
+    "auth": "bearer"
+  },
+  "safety": {
+    "draftOnly": true,
+    "piiRedaction": true,
+    "idempotency": true,
+    "confirmationRequired": [
+      "create_invoice",
+      "create_expense",
+      "create_client"
+    ]
+  },
+  "capabilities": {
+    "tools": [
+      "get_business_context",
+      "get_monthly_summary",
+      "get_quarterly_taxes",
+      "list_invoices",
+      "get_invoice",
+      "search_invoices",
+      "create_invoice",
+      "list_expenses",
+      "get_expense",
+      "create_expense",
+      "list_clients",
+      "get_client",
+      "create_client",
+      "list_products",
+      "get_product",
+      "list_quotes",
+      "get_quote",
+      "create_quote"
+    ]
+  }
+}

@@ -248,11 +248,36 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
       ),
     },
     async ({ id, newIssueDate, newDueDate }) => withToolLogging("duplicate_invoice", async () => {
-      // 1. Fetch the original invoice (returns the FULL raw stored document —
+      // 1. Validate caller-supplied newIssueDate before touching the API.
+      if (newIssueDate !== undefined) {
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(newIssueDate);
+        const validCalendar = (() => {
+          if (!match) return false;
+          const y = Number(match[1]);
+          const m = Number(match[2]);
+          const d = Number(match[3]);
+          if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+          const dt = new Date(Date.UTC(y, m - 1, d));
+          return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+        })();
+        if (!validCalendar) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Error: invalid newIssueDate "${newIssueDate}". Use a real calendar date in YYYY-MM-DD format.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      // 2. Fetch the original invoice (returns the FULL raw stored document —
       //    payments, verifactu, eInvoice, createdBy, etc.)
       const original = await client.getInvoice(id);
 
-      // 2. Allowlist-PICK only the fields the create endpoint actually accepts.
+      // 3. Allowlist-PICK only the fields the create endpoint actually accepts.
       //    The create POST validates against a Zod `.strict()` schema that
       //    REJECTS unknown keys (HTTP 400). Spreading the raw GET doc and only
       //    blacklisting a handful of fields left stored-only fields (payments,
@@ -281,11 +306,132 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
         "seriesId",
       ] as const;
 
-      // 3. Build the duplicate from the writable subset + new values.
+      const ALLOWED_ADDRESS_KEYS = [
+        "street",
+        "city",
+        "zip",
+        "province",
+        "country",
+        "countryCode",
+        "state",
+        "postalCode",
+      ] as const;
+
+      // 4. Build the duplicate from the writable subset + new values.
+      //    Note: Firestore documents frequently store `null` for unset optional
+      //    fields (e.g. `notes: null`, `seriesId: null`, `clientTaxId: null`), and
+      //    stored `items` often carry computed/UI keys (`total`, `taxRate`,
+      //    `discount`, `productId`) that `invoiceItemSchema.strict()` rejects.
+      //    Economic integrity invariant: NEVER fabricate `0` when `quantity` or
+      //    `unitPrice` is missing, null, non-finite, or invalid. Preserve `0` only
+      //    when it is an explicit finite number (or explicit numeric string).
+      const parseExplicitFiniteNumber = (raw: unknown): number | undefined => {
+        if (typeof raw === "number") {
+          return Number.isFinite(raw) ? raw : undefined;
+        }
+        if (typeof raw === "string") {
+          const trimmed = raw.trim();
+          if (trimmed === "") return undefined;
+          const parsed = Number(trimmed);
+          return Number.isFinite(parsed) ? parsed : undefined;
+        }
+        return undefined;
+      };
+
+      if (typeof original.clientName !== "string" || !original.clientName.trim()) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "Error: cannot duplicate invoice because it is missing a valid clientName. / Error: no se puede duplicar la factura porque falta el nombre del cliente.",
+          }],
+          isError: true,
+        };
+      }
+
+      if (!Array.isArray(original.items) || original.items.length === 0) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "Error: cannot duplicate invoice because it has no valid line items. / Error: no se puede duplicar la factura porque no tiene lineas validas.",
+          }],
+          isError: true,
+        };
+      }
+
+      const sanitizedItems: Array<{ id?: string; description: string; quantity: number; unitPrice: number }> = [];
+      for (let i = 0; i < original.items.length; i++) {
+        const rawItem = original.items[i];
+        if (!rawItem || typeof rawItem !== "object" || Array.isArray(rawItem)) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Error: cannot duplicate invoice: line item ${i + 1} is not a valid object. / Error: no se puede duplicar la factura: la linea ${i + 1} es invalida.`,
+            }],
+            isError: true,
+          };
+        }
+        const itemObj = rawItem as Record<string, unknown>;
+        const description = typeof itemObj.description === "string" ? itemObj.description.trim() : "";
+        if (!description) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Error: cannot duplicate invoice: line item ${i + 1} is missing a description. / Error: no se puede duplicar la factura: falta la descripcion en la linea ${i + 1}.`,
+            }],
+            isError: true,
+          };
+        }
+        const quantity = parseExplicitFiniteNumber(itemObj.quantity);
+        if (quantity === undefined) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Error: cannot duplicate invoice: line item ${i + 1} has a missing or invalid quantity. Refusing to fabricate economic values. / Error: no se puede duplicar la factura: la linea ${i + 1} carece de cantidad valida.`,
+            }],
+            isError: true,
+          };
+        }
+        const unitPrice = parseExplicitFiniteNumber(itemObj.unitPrice);
+        if (unitPrice === undefined) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Error: cannot duplicate invoice: line item ${i + 1} has a missing or invalid unitPrice. Refusing to fabricate economic values. / Error: no se puede duplicar la factura: la linea ${i + 1} carece de precio unitario valido.`,
+            }],
+            isError: true,
+          };
+        }
+        sanitizedItems.push({
+          ...(typeof itemObj.id === "string" && itemObj.id.trim() ? { id: itemObj.id.trim() } : {}),
+          description: itemObj.description as string,
+          quantity,
+          unitPrice,
+        });
+      }
+
       const today = new Date().toISOString().split("T")[0];
-      const invoiceData: Record<string, unknown> = {};
+      const invoiceData: Record<string, unknown> = {
+        clientName: original.clientName,
+        items: sanitizedItems,
+      };
       for (const field of COPYABLE_INVOICE_FIELDS) {
-        if (original[field] !== undefined) invoiceData[field] = original[field];
+        if (field === "items") continue;
+        const val = original[field];
+        if (val === undefined || val === null || val === "") continue;
+        if (field === "clientAddress" && typeof val === "object" && !Array.isArray(val)) {
+          const addrObj = val as Record<string, unknown>;
+          const cleanAddr: Record<string, string> = {};
+          for (const k of ALLOWED_ADDRESS_KEYS) {
+            if (typeof addrObj[k] === "string" && (addrObj[k] as string).trim()) {
+              cleanAddr[k] = (addrObj[k] as string).trim();
+            }
+          }
+          if (Object.keys(cleanAddr).length > 0) {
+            invoiceData.clientAddress = cleanAddr;
+          }
+          continue;
+        }
+        invoiceData[field] = val;
       }
       invoiceData.status = "draft";
       invoiceData.issueDate = newIssueDate || today;
@@ -294,8 +440,16 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
         invoiceData.dueDate = newDueDate;
       }
 
-      // 4. Create the duplicate
-      const result = await client.createInvoice(invoiceData);
+      // 5. Create the duplicate (always as draft, never issued or sent)
+      const rawResult = await client.createInvoice(invoiceData);
+      const result: Record<string, unknown> = {
+        ...(rawResult && typeof rawResult === "object" ? (rawResult as Record<string, unknown>) : {}),
+      };
+      for (const nullableField of ["clientId", "issueDate", "dueDate", "status", "notes", "createdAt", "updatedAt"] as const) {
+        if (result[nullableField] === null) {
+          delete result[nullableField];
+        }
+      }
       return {
         content: [
           mutateContent(
@@ -303,7 +457,7 @@ export function registerIntelligenceTools(server: McpServer, client: IFrihetClie
             `\n\nDuplicated from invoice ${id}. Status set to 'draft'. / Duplicada de la factura ${id}. Estado: borrador.`,
           ),
         ],
-        structuredContent: result as unknown as Record<string, unknown>,
+        structuredContent: result,
       };
     }),
   );

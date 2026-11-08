@@ -34,11 +34,14 @@ import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 
-import { FrihetClient } from "../client.js";
+import { FrihetApiError, FrihetClient } from "../client.js";
 import { registerInvoiceTools } from "../tools/invoices.js";
+import { registerQuoteTools } from "../tools/quotes.js";
 import { registerIntelligenceTools } from "../tools/intelligence.js";
 import { applyOpenAIReviewProfiles } from "../openai-profile.js";
+import { applyClaudeCandidateProfile } from "../claude-profile.js";
 import type { CreateInvoiceInput, Invoice, UpdateInvoiceInput } from "../types.js";
 import {
   invoiceItemOutput,
@@ -117,6 +120,11 @@ before(async () => {
         success: true,
         creditNote: { id: "cn_1", documentNumber: "CN-FRI-0001", originalInvoiceId: "inv_new", reason: "error", fullCredit: true },
       }));
+    }
+    // send invoice (POST action) — receives recipientEmail
+    if (url.pathname === "/invoices/inv_new/send" && req.method === "POST") {
+      invoiceWrites.push({ method: req.method, body });
+      return send(200, envelope({ success: true, message: "Invoice sent" }));
     }
     // create client (201) — sibling-resource envelope (proves the fix is systemic)
     if (url.pathname === "/clients" && req.method === "POST") {
@@ -348,3 +356,352 @@ describe("BUG-2 — output schemas tolerate projections, drafts, and action shap
     assert.equal(invoiceItemOutput.safeParse({ data: FULL_INVOICE, meta: {} }).success, false);
   });
 });
+
+describe("Frihet ERP Backend Contract Compliance — createInvoice and sendInvoice strict schema validation", () => {
+  // Verbatim Zod schemas transcribed directly from Frihet ERP backend
+  // Source: berthelius/Frihet-ERP functions/src/publicApi.ts:835-960 and 6201-6213
+  const erpSendSchema = z.object({
+    recipientEmail: z.string().email().max(255),
+    recipientName: z.string().max(200).optional(),
+    customMessage: z.string().max(5000).optional(),
+    locale: z.enum(["es", "en"]).optional(),
+  }).strict();
+
+  const erpInvoiceItemSchema = z.object({
+    id: z.string().max(128).optional(),
+    description: z.string().max(10000),
+    quantity: z.number(),
+    unitPrice: z.number(),
+  }).strict();
+
+  const erpAddressSchema = z.object({
+    street: z.string().max(10000).optional(),
+    city: z.string().max(10000).optional(),
+    zip: z.string().max(10000).optional(),
+    province: z.string().max(10000).optional(),
+    country: z.string().max(10000).optional(),
+    countryCode: z.string().max(10).optional(),
+    state: z.string().max(10000).optional(),
+    postalCode: z.string().max(10000).optional(),
+  }).strict();
+
+  const erpInvoiceRecurringSchema = z.object({
+    enabled: z.boolean(),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "quarterly", "yearly"]),
+    nextDate: z.string(),
+    endDate: z.string().optional(),
+    maxOccurrences: z.number().int().min(1).optional(),
+    autoSend: z.boolean().default(false),
+  }).strict();
+
+  function isRealCalendarDate(str: string): boolean {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+    if (!match) return false;
+    const y = Number(match[1]);
+    const m = Number(match[2]);
+    const d = Number(match[3]);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  }
+
+  const erpIsoDateOnlySchema = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use ISO date format YYYY-MM-DD")
+    .refine((s) => isRealCalendarDate(s), { message: "Not a valid calendar date" });
+
+  // Verbatim resourceSchemas.invoices from publicApi.ts:910-960
+  const erpInvoiceCreateSchema = z.object({
+    clientName: z.string().max(10000),
+    clientId: z.string().max(10000).optional(),
+    clientAddress: z.union([z.string().max(10000), erpAddressSchema]).optional(),
+    clientTaxId: z.string().max(10000).optional(),
+    documentNumber: z.string().max(50).optional(),
+    documentNature: z.literal("complete").optional(),
+    items: z.array(erpInvoiceItemSchema),
+    issueDate: erpIsoDateOnlySchema.optional(),
+    dueDate: z.string().max(10000).optional(),
+    status: z.enum(["draft", "sent", "partial", "paid", "overdue", "cancelled"]).optional(),
+    notes: z.string().max(10000).optional(),
+    taxRate: z.number().min(0).max(100).optional(),
+    irpfRate: z.number().min(0).max(100).optional(),
+    equivalenceSurchargeRate: z.number().min(0).max(100).optional(),
+    clientLocation: z.enum(["peninsula", "canarias", "ceuta_melilla", "eu", "world"]).optional(),
+    prepayment: z.number().min(0).optional(),
+    seriesId: z.string().max(10000).optional(),
+    discountRate: z.number().min(0).max(100).optional(),
+    poNumber: z.string().max(10000).optional(),
+    operationType: z.enum(["service", "goods"]).optional(),
+    fiscalTreatment: z.enum(["not_subject_location", "export_exempt"]).optional(),
+    recurring: erpInvoiceRecurringSchema.optional(),
+  }).strict();
+
+  const VALID_SYNTHETIC_INVOICE = {
+    clientName: "Acme Corp",
+    items: [{ description: "Consulting services", quantity: 1, unitPrice: 100 }],
+    status: "draft" as const,
+  };
+
+  const VALID_DETAILED_INVOICE = {
+    clientName: "Cliente Canarias S.L.",
+    clientTaxId: "B12345678",
+    items: [{ description: "Servicios profesionales", quantity: 2, unitPrice: 50 }],
+    status: "draft" as const,
+    issueDate: "2026-10-17",
+    taxRate: 7,
+    clientLocation: "canarias" as const,
+    notes: "Factura proforma en borrador",
+  };
+
+  test("createInvoice does NOT inject documentNumberFinal and passes strict ERP invoice create schema", async () => {
+    invoiceWrites.length = 0;
+    const client = makeClient();
+    await client.createInvoice(VALID_SYNTHETIC_INVOICE);
+    assert.equal(invoiceWrites.length, 1);
+    const sentBody = invoiceWrites[0]!.body;
+    assert.equal("documentNumberFinal" in sentBody, false, "documentNumberFinal must NOT be sent to ERP backend");
+    assert.equal(erpInvoiceCreateSchema.safeParse(sentBody).success, true, "Body must satisfy verbatim ERP schema");
+  });
+
+  test("createInvoice with detailed fiscal fields satisfies verbatim ERP schema", async () => {
+    invoiceWrites.length = 0;
+    const client = makeClient();
+    await client.createInvoice(VALID_DETAILED_INVOICE);
+    assert.equal(invoiceWrites.length, 1);
+    const sentBody = invoiceWrites[0]!.body;
+    assert.equal("documentNumberFinal" in sentBody, false);
+    assert.equal(erpInvoiceCreateSchema.safeParse(sentBody).success, true);
+  });
+
+  test("createInvoice with documentNumberFinal is REJECTED by strict ERP schema (proves regression guard)", () => {
+    const invalidBody = { ...VALID_SYNTHETIC_INVOICE, documentNumberFinal: false };
+    const result = erpInvoiceCreateSchema.safeParse(invalidBody);
+    assert.equal(result.success, false, "Strict ERP schema must reject documentNumberFinal");
+  });
+
+  test("createInvoice with unrecognized extra keys (e.g. date, currency) is REJECTED by strict ERP schema", () => {
+    // Neither 'date' nor 'currency' are accepted by publicApi.ts resourceSchemas.invoices.strict()
+    const invalidBodyWithDate = { ...VALID_SYNTHETIC_INVOICE, date: "2026-10-17" };
+    assert.equal(erpInvoiceCreateSchema.safeParse(invalidBodyWithDate).success, false);
+
+    const invalidBodyWithCurrency = { ...VALID_SYNTHETIC_INVOICE, currency: "EUR" };
+    assert.equal(erpInvoiceCreateSchema.safeParse(invalidBodyWithCurrency).success, false);
+  });
+
+  test("createInvoice with calendar-invalid issueDate (e.g. 2026-02-31) is REJECTED by strict ERP schema", () => {
+    const invalidDateBody = { ...VALID_SYNTHETIC_INVOICE, issueDate: "2026-02-31" };
+    assert.equal(erpInvoiceCreateSchema.safeParse(invalidDateBody).success, false, "ERP schema must reject calendar-invalid dates");
+  });
+
+  test("sendInvoice sends ONLY recipientEmail without prohibited aliases (to, email)", async () => {
+    invoiceWrites.length = 0;
+    const client = makeClient();
+    await client.sendInvoice("inv_new", "billing@acme.example");
+    assert.equal(invoiceWrites.length, 1);
+    const sentBody = invoiceWrites[0]!.body;
+    assert.equal("to" in sentBody, false, "prohibited 'to' alias must NOT be sent");
+    assert.equal("email" in sentBody, false, "prohibited 'email' alias must NOT be sent");
+    assert.equal(sentBody.recipientEmail, "billing@acme.example");
+    assert.equal(erpSendSchema.safeParse(sentBody).success, true, "Body must satisfy verbatim ERP sendSchema");
+  });
+
+  test("sendInvoice with forbidden extra keys is REJECTED by strict ERP schema (proves regression guard)", () => {
+    const invalidBody = { recipientEmail: "billing@acme.example", to: "billing@acme.example", email: "billing@acme.example" };
+    const result = erpSendSchema.safeParse(invalidBody);
+    assert.equal(result.success, false, "Strict ERP schema must reject extraneous keys");
+  });
+
+  test("send tools require explicit document-fallback recipient confirmation; Claude retains invoice interlocks and excludes quote sending", async () => {
+    const sentInvoices: Array<{ id: string; to: string }> = [];
+    const sentQuotes: Array<{ id: string; to?: string }> = [];
+
+    const mockClient = {
+      getInvoice: async (id: string) => {
+        if (id === "inv_doc_fallback") {
+          return { id, status: "draft", clientEmail: "  historic-invoice@acme.example  " };
+        }
+        return { id, status: "draft", clientId: "cli_bad_email" };
+      },
+      getQuote: async (id: string) => {
+        if (id === "quo_doc_fallback") {
+          return { id, status: "draft", clientId: "cli_no_email", clientEmail: "historic-quote@acme.example" };
+        }
+        return { id, status: "draft", clientId: "cli_bad_email" };
+      },
+      getClient: async (id: string) => {
+        if (id === "cli_no_email") return { id, name: "No Email Corp", email: "   " };
+        return { id, name: "Bad Email Corp", email: "not-an-email" };
+      },
+      sendInvoice: async (id: string, to: string) => {
+        sentInvoices.push({ id, to });
+        return { success: true, id, sentTo: to };
+      },
+      sendQuote: async (id: string, to?: string) => {
+        sentQuotes.push({ id, to });
+        return { success: true, id, sentTo: to };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+
+    const tools = new Map<string, (args: any) => Promise<any>>();
+    const fakeServer = {
+      registerTool: (name: string, _opts: unknown, handler: (args: any) => Promise<any>) => {
+        tools.set(name, handler);
+      },
+    } as unknown as McpServer;
+
+    registerInvoiceTools(fakeServer, mockClient);
+    registerQuoteTools(fakeServer, mockClient);
+
+    const sendInvoiceTool = tools.get("send_invoice")!;
+    const sendQuoteTool = tools.get("send_quote")!;
+
+    // 1. Whitespace-only `to` is rejected as invalid before sending
+    const wsRes = await sendQuoteTool({ id: "quo_doc_fallback", to: "   ", confirm: true });
+    assert.equal(wsRes.isError, true);
+    assert.equal(sentQuotes.length, 0);
+
+    // 2. Document-only fallback email on invoice: confirm=true alone MUST NOT auto-send;
+    //    it must surface effectiveRecipient and require explicit confirmation via `to`.
+    const invFallbackRefusal = await sendInvoiceTool({ id: "inv_doc_fallback", confirm: true });
+    assert.equal(invFallbackRefusal.isError, true);
+    assert.equal(sentInvoices.length, 0, "Must NOT auto-send to document fallback email without explicit to=<email>");
+    assert.equal(invFallbackRefusal.structuredContent?.effectiveRecipient, "historic-invoice@acme.example");
+    assert.equal(invFallbackRefusal.structuredContent?.recipientSource, "document_fallback");
+    assert.equal(invFallbackRefusal.structuredContent?.requiresExplicitRecipientConfirmation, true);
+    assert.match(invFallbackRefusal.content[0].text, /historic-invoice@acme\.example/);
+
+    // 3. Same refusal for send_quote when linked client has no email and quote has document fallback email
+    const quoFallbackRefusal = await sendQuoteTool({ id: "quo_doc_fallback", confirm: true });
+    assert.equal(quoFallbackRefusal.isError, true);
+    assert.equal(sentQuotes.length, 0, "Must NOT auto-send quote to document fallback email without explicit to=<email>");
+    assert.equal(quoFallbackRefusal.structuredContent?.effectiveRecipient, "historic-quote@acme.example");
+    assert.equal(quoFallbackRefusal.structuredContent?.recipientSource, "document_fallback");
+    assert.equal(quoFallbackRefusal.structuredContent?.requiresExplicitRecipientConfirmation, true);
+
+    // 4. Once the caller explicitly confirms the specific recipient via `to`, sending succeeds and reports effectiveRecipient
+    const invConfirmed = await sendInvoiceTool({
+      id: "inv_doc_fallback",
+      to: "  historic-invoice@acme.example  ",
+      confirm: true,
+    });
+    assert.notEqual(invConfirmed.isError, true);
+    assert.deepEqual(sentInvoices, [{ id: "inv_doc_fallback", to: "historic-invoice@acme.example" }]);
+    assert.equal(invConfirmed.structuredContent?.effectiveRecipient, "historic-invoice@acme.example");
+
+    const quoConfirmed = await sendQuoteTool({
+      id: "quo_doc_fallback",
+      to: "  historic-quote@acme.example  ",
+      confirm: true,
+    });
+    assert.notEqual(quoConfirmed.isError, true);
+    assert.deepEqual(sentQuotes, [{ id: "quo_doc_fallback", to: "historic-quote@acme.example" }]);
+    assert.equal(quoConfirmed.structuredContent?.effectiveRecipient, "historic-quote@acme.example");
+
+    // 5. Invalid stored email on linked client is rejected before calling API
+    const badClientEmail = await sendInvoiceTool({ id: "inv_bad", confirm: true });
+    assert.equal(badClientEmail.isError, true);
+    assert.equal(sentInvoices.length, 1);
+
+    // 6. Claude retains invoice recipient interlocks. Quote sending stays absent
+    //    because recipient binding/retry guarantees are not established for it.
+    const claudeServer = new McpServer({ name: "claude-send-fallback-test", version: "1.0.0" });
+    applyClaudeCandidateProfile(claudeServer);
+    registerInvoiceTools(claudeServer, mockClient);
+    registerQuoteTools(claudeServer, mockClient);
+    const mcpClient = new Client({ name: "claude-send-client", version: "1.0.0" });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([mcpClient.connect(ct), claudeServer.connect(st)]);
+    try {
+      const unconfirmed = await mcpClient.callTool({ name: "send_invoice", arguments: { id: "inv_doc_fallback", confirm: true } });
+      assert.equal(unconfirmed.isError, true);
+      assert.equal(sentInvoices.length, 1);
+      const confirmed = await mcpClient.callTool({ name: "send_invoice", arguments: { id: "inv_doc_fallback", to: "historic-invoice@acme.example", confirm: true } });
+      assert.notEqual(confirmed.isError, true);
+      assert.equal((confirmed.structuredContent as Record<string, unknown>).effectiveRecipient, "historic-invoice@acme.example");
+      assert.equal(sentInvoices.length, 2);
+      const quote = await mcpClient.callTool({ name: "send_quote", arguments: { id: "quo_doc_fallback", to: "explicit@acme.example", confirm: true } });
+      assert.equal(quote.isError, true);
+      assert.match(JSON.stringify(quote.content), /not found/);
+      assert.equal(sentQuotes.length, 1);
+    } finally {
+      await Promise.allSettled([mcpClient.close(), claudeServer.close()]);
+    }
+
+    // 7. When linked clientId returns HTTP 404 (deleted client), send_invoice and send_quote
+    //    safely fall through to the document-level fallback email and demand explicit recipient
+    //    confirmation; whereas HTTP 403 / 5xx / network errors are NOT treated as a missing client.
+    let clientLookupMode: "404" | "403" | "503" = "404";
+    const statusMockClient = {
+      getInvoice: async (id: string) => ({
+        id,
+        status: "draft",
+        clientId: "cli_deleted_or_forbidden",
+        clientEmail: "deleted-client-invoice@acme.example",
+      }),
+      getQuote: async (id: string) => ({
+        id,
+        status: "draft",
+        clientId: "cli_deleted_or_forbidden",
+        clientEmail: "deleted-client-quote@acme.example",
+      }),
+      getClient: async (_id: string) => {
+        if (clientLookupMode === "404") {
+          throw new FrihetApiError(404, "NOT_FOUND", "Client not found");
+        }
+        if (clientLookupMode === "403") {
+          throw new FrihetApiError(403, "FORBIDDEN", "Insufficient scope to read clients");
+        }
+        throw new FrihetApiError(503, "SERVICE_UNAVAILABLE", "Upstream timeout");
+      },
+      sendInvoice: async (id: string, to: string) => {
+        sentInvoices.push({ id, to });
+        return { success: true, id, sentTo: to };
+      },
+      sendQuote: async (id: string, to?: string) => {
+        sentQuotes.push({ id, to: to ?? "" });
+        return { success: true, id, sentTo: to };
+      },
+    } as unknown as import("../client-interface.js").IFrihetClient;
+
+    const statusTools = new Map<string, (args: any) => Promise<any>>();
+    const statusServer = {
+      registerTool: (name: string, _opts: unknown, handler: (args: any) => Promise<any>) => {
+        statusTools.set(name, handler);
+      },
+    } as unknown as McpServer;
+    registerInvoiceTools(statusServer, statusMockClient);
+    registerQuoteTools(statusServer, statusMockClient);
+
+    // 7a. 404 on getClient -> recovers document fallback email and refuses auto-send with effectiveRecipient
+    clientLookupMode = "404";
+    const inv404Fallback = await statusTools.get("send_invoice")!({ id: "inv_404_cli", confirm: true });
+    assert.equal(inv404Fallback.isError, true);
+    assert.equal(inv404Fallback.structuredContent?.effectiveRecipient, "deleted-client-invoice@acme.example");
+    assert.equal(inv404Fallback.structuredContent?.recipientSource, "document_fallback");
+    assert.equal(inv404Fallback.structuredContent?.requiresExplicitRecipientConfirmation, true);
+
+    const quo404Fallback = await statusTools.get("send_quote")!({ id: "quo_404_cli", confirm: true });
+    assert.equal(quo404Fallback.isError, true);
+    assert.equal(quo404Fallback.structuredContent?.effectiveRecipient, "deleted-client-quote@acme.example");
+    assert.equal(quo404Fallback.structuredContent?.recipientSource, "document_fallback");
+    assert.equal(quo404Fallback.structuredContent?.requiresExplicitRecipientConfirmation, true);
+
+    // 7b. 403 on getClient -> must NOT fall back to document email; surfaces permission error
+    clientLookupMode = "403";
+    const inv403 = await statusTools.get("send_invoice")!({ id: "inv_403_cli", confirm: true });
+    assert.equal(inv403.isError, true);
+    assert.equal(inv403.structuredContent, undefined, "403 must not trigger document_fallback structuredContent");
+    assert.match(inv403.content[0].text, /403|FORBIDDEN|access/i);
+
+    const quo403 = await statusTools.get("send_quote")!({ id: "quo_403_cli", confirm: true });
+    assert.equal(quo403.isError, true);
+    assert.equal(quo403.structuredContent, undefined, "403 must not trigger document_fallback structuredContent");
+
+    // 7c. 503 on getClient -> must NOT fall back to document email; surfaces server error
+    clientLookupMode = "503";
+    const inv503 = await statusTools.get("send_invoice")!({ id: "inv_503_cli", confirm: true });
+    assert.equal(inv503.isError, true);
+    assert.equal(inv503.structuredContent, undefined, "503 must not trigger document_fallback structuredContent");
+  });
+});
+

@@ -21,6 +21,7 @@ import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
 import {
   withToolLogging,
+  confirmationRequiredError,
   formatPaginatedResponse,
   formatRecord,
   listContent,
@@ -185,18 +186,12 @@ export function registerBankingTools(server: McpServer, client: IFrihetClient): 
     async ({ transactionId, documentId, documentType, confirm, notes }) =>
       withToolLogging("match_transaction_to_invoice", async () => {
         if (!confirm) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: "Error: confirm=true is required to perform fiscal reconciliation. " +
-                  "This action links a bank transaction to a fiscal document and cannot be undone easily. " +
-                  "Set confirm=true when you are certain about the match. / " +
-                  "Se requiere confirm=true para realizar la conciliacion fiscal.",
-              },
-            ],
-            isError: true,
-          };
+          return confirmationRequiredError(
+            "Error: confirm=true is required to perform fiscal reconciliation. " +
+            "This action links a bank transaction to a fiscal document and cannot be undone easily. " +
+            "Set confirm=true when you are certain about the match. / " +
+            "Se requiere confirm=true para realizar la conciliacion fiscal.",
+          );
         }
         const result = await client.matchTransactionToDocument(transactionId, { documentId, documentType, notes });
         return {

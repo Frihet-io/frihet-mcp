@@ -1,0 +1,83 @@
+{
+  "name": "get_expense",
+  "title": "Get Expense",
+  "description": "Get a single expense by its ID. / Obtiene un gasto por su ID. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "description": "Expense ID / ID del gasto",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "amount": {
+        "type": "number"
+      },
+      "category": {
+        "type": "string"
+      },
+      "date": {
+        "type": "string"
+      },
+      "vendorId": {
+        "type": "string"
+      },
+      "vendor": {
+        "type": "string"
+      },
+      "taxDeductible": {
+        "type": "boolean"
+      },
+      "paidDate": {
+        "type": "string"
+      },
+      "createdAt": {
+        "type": "string"
+      },
+      "updatedAt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "description",
+      "amount"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": {}
+  },
+  "annotations": {
+    "title": "Get Expense",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "get_expense",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}

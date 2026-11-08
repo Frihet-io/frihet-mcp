@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:openapi-fresh && wrangler deploy && npm --prefix ../.. run gate:openapi-fresh:live",
+    "deploy:claude": "npm --prefix ../.. run gate:analytics && npm --prefix ../.. run gate:claude-candidate && npm --prefix ../.. run gate:openai-review-descriptor && node ../../scripts/check-claude-hosted-release.mjs && wrangler deploy --config wrangler.claude.toml",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --import ./src/__tests__/support/register-typescript.mjs --test 'src/__tests__/*.test.ts' 'src/__tests__/*.test.mjs'"
   },

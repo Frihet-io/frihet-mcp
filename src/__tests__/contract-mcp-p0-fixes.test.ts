@@ -236,15 +236,17 @@ describe("P0-5 — apply_deposit input requires invoiceId + invoiceNumber + amou
     assert.ok(!("amount" in oldSchema));
   });
 
-  test("NEW: inputSchema declares invoiceId, invoiceNumber and amount as required", async () => {
+  test("NEW: inputSchema declares invoiceId, invoiceNumber and amount as required and omits notes", async () => {
     const { registerDepositTools } = await import("../tools/deposits.js");
     const server = new StubMcpServer();
     registerDepositTools(asMcp(server), makeRecordingClient().client);
 
-    const schema = server.tools.get("apply_deposit")!.config.inputSchema ?? {};
+    const rawSchema = server.tools.get("apply_deposit")!.config.inputSchema as { shape?: Record<string, unknown> } | undefined;
+    const schema: Record<string, unknown> = rawSchema?.shape ?? (rawSchema as Record<string, unknown> | undefined) ?? {};
     assert.ok("invoiceId" in schema);
     assert.ok("invoiceNumber" in schema, "must require invoiceNumber");
     assert.ok("amount" in schema, "must require amount");
+    assert.ok(!("notes" in schema), "must not advertise unsupported notes field");
   });
 
   test("NEW: client.applyDeposit receives invoiceId + invoiceNumber + amount", async () => {

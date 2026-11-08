@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "kind": "frihet-claude-consultation-served-route-contract",
+  "accessProfile": "claude",
+  "sha256": "c3c534ae3a3ca7c452cd37ce49593b0d6a976807842319e489c4b603ca245928",
+  "routes": [
+    "GET /clients",
+    "GET /expenses",
+    "GET /invoices",
+    "GET /products",
+    "GET /quotes",
+    "GET /vendors"
+  ],
+  "tools": {
+    "describe_tool": [],
+    "list_clients": [
+      "GET /clients"
+    ],
+    "list_expenses": [
+      "GET /expenses"
+    ],
+    "list_invoices": [
+      "GET /invoices"
+    ],
+    "list_products": [
+      "GET /products"
+    ],
+    "list_quotes": [
+      "GET /quotes"
+    ],
+    "list_tool_groups": [],
+    "list_vendors": [
+      "GET /vendors"
+    ],
+    "search_tools": []
+  },
+  "resources": [
+    "frihet://config/currencies"
+  ],
+  "prompts": []
+}

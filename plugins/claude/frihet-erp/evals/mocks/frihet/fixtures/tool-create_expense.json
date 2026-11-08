@@ -1,0 +1,121 @@
+{
+  "name": "create_expense",
+  "title": "Create Expense",
+  "description": "Record a new expense. Requires a description and amount. Useful for tracking business costs, deductible expenses, and vendor payments. Example: description='Office supplies', amount=49.99, category='office', vendor='Amazon', taxDeductible=true, paidDate='2026-03-15' / Registra un nuevo gasto. Requiere descripcion e importe. Util para seguimiento de costes, gastos deducibles y pagos a proveedores. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "description": {
+        "description": "Expense description / Descripcion del gasto",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+      },
+      "amount": {
+        "description": "Amount in EUR / Importe en EUR",
+        "type": "number",
+        "minimum": 0.01,
+        "maximum": 10000000
+      },
+      "category": {
+        "description": "Expense category (e.g. 'office', 'travel', 'software') / Categoria",
+        "type": "string",
+        "maxLength": 10000
+      },
+      "date": {
+        "description": "Expense date in ISO 8601 (YYYY-MM-DD) / Fecha del gasto",
+        "type": "string",
+        "format": "date",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+      },
+      "vendor": {
+        "description": "Vendor/supplier name / Nombre del proveedor",
+        "type": "string",
+        "maxLength": 200
+      },
+      "taxDeductible": {
+        "description": "Whether the expense is tax deductible / Si el gasto es deducible fiscalmente",
+        "type": "boolean"
+      },
+      "paidDate": {
+        "description": "Optional payment date in ISO 8601 (YYYY-MM-DD). Determines when the expense is treated as paid. Must be a real calendar date (2028-02-29 is valid, 2026-02-29 is not). / Fecha de pago opcional en ISO 8601 (YYYY-MM-DD). Determina cuando se considera pagado el gasto.",
+        "type": "string",
+        "format": "date",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+      }
+    },
+    "required": [
+      "description",
+      "amount"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "amount": {
+        "type": "number"
+      },
+      "category": {
+        "type": "string"
+      },
+      "date": {
+        "type": "string"
+      },
+      "vendorId": {
+        "type": "string"
+      },
+      "vendor": {
+        "type": "string"
+      },
+      "taxDeductible": {
+        "type": "boolean"
+      },
+      "paidDate": {
+        "type": "string"
+      },
+      "createdAt": {
+        "type": "string"
+      },
+      "updatedAt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "description",
+      "amount"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": {}
+  },
+  "annotations": {
+    "title": "Create Expense",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "create_expense",
+      "writesFrihet": true,
+      "externalInteraction": true,
+      "externalSideEffects": [
+        "webhook_delivery_or_configuration"
+      ]
+    }
+  }
+}

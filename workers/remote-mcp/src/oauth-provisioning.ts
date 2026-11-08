@@ -1,4 +1,8 @@
 import { rejectRedirectResponse } from "../../../src/fetch-no-redirect.js";
+import {
+  CLAUDE_OAUTH_API_KEY_PROVISIONING_URL,
+  OAUTH_API_KEY_PROVISIONING_URL,
+} from "./api-url.js";
 
 type FetchImplementation = (
   input: string | URL | Request,
@@ -7,8 +11,6 @@ type FetchImplementation = (
 
 const OAUTH_LIFECYCLE_TIMEOUT_MS = 10_000;
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-const OAUTH_API_KEY_PROVISIONING_URL =
-  "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning";
 const FULL_MCP_OAUTH_RESOURCE = "https://mcp.frihet.io";
 
 /**
@@ -69,19 +71,57 @@ export const OAUTH_PROVISIONING_CONTRACT = {
   },
 } as const;
 
-/**
- * The callback still models both Worker profiles locally so this leaf can
- * reject the full profile before any credential-bearing network request.
- */
-export type OAuthProvisioningBinding = {
-  uid: string;
-  accessProfile: "openai" | "full";
-  oauthResource:
-    | (typeof OAUTH_PROVISIONING_CONTRACT.bindings)["openai"]
-    | typeof FULL_MCP_OAUTH_RESOURCE;
+/** Separate authority golden; the OpenAI contract above stays unchanged. */
+export const CLAUDE_OAUTH_PROVISIONING_CONTRACT = {
+  contractVersion: "2026-10-10",
+  accessProfile: "claude",
+  oauthResource: "https://claude-mcp.frihet.io",
+  authorityUrl: "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/claudeOAuthApiKeyProvisioning",
+  permissions: ["read", "write"],
+  candidateLifetimeDays: 30,
+  correlationNamespace: "claude-",
+} as const;
+
+export type OAuthProvisioningBinding = { uid: string } & (
+  | {
+      accessProfile: "openai";
+      oauthResource: (typeof OAUTH_PROVISIONING_CONTRACT.bindings)["openai"];
+    }
+  | {
+      accessProfile: "claude";
+      oauthResource: typeof CLAUDE_OAUTH_PROVISIONING_CONTRACT.oauthResource;
+    }
+  | {
+      accessProfile: "full";
+      oauthResource: typeof FULL_MCP_OAUTH_RESOURCE;
+    }
+);
+
+type OAuthServiceSecrets = {
+  FRIHET_OAUTH_API_KEY?: string;
+  FRIHET_CLAUDE_OAUTH_API_KEY?: string;
 };
 
-export type ProvisionedOAuthApiKey = OAuthProvisioningBinding & {
+export function resolveOAuthServiceSecret(
+  env: OAuthServiceSecrets,
+  accessProfile: "openai" | "claude" | "full",
+): string {
+  let secret: string | undefined;
+  if (accessProfile === "openai") secret = env.FRIHET_OAUTH_API_KEY;
+  else if (accessProfile === "claude") secret = env.FRIHET_CLAUDE_OAUTH_API_KEY;
+  else throw new Error("OAuth API-key authority is unavailable for this profile");
+  if (accessProfile === "claude" && secret !== undefined && secret === env.FRIHET_OAUTH_API_KEY) {
+    throw new Error("Claude OAuth API-key service authentication must be separate from OpenAI");
+  }
+  if (!isValidOAuthServiceSecret(secret)) {
+    throw new Error("OAuth API-key service authentication is not configured");
+  }
+  return secret;
+}
+
+type CandidateProvisioningBinding = Exclude<OAuthProvisioningBinding, { accessProfile: "full" }>;
+
+export type ProvisionedOAuthApiKey = CandidateProvisioningBinding & {
   apiKey: string;
   keyId: string;
   expiresAt: string;
@@ -102,13 +142,22 @@ export function isValidOAuthServiceSecret(value: unknown): value is string {
  * Keep this exact rather than suffix-based: URL credentials, ports, queries,
  * fragments, alternate paths, and lookalike hosts must all fail closed.
  */
-export function isTrustedOAuthApiKeyUrl(value: string): boolean {
-  return value === OAUTH_API_KEY_PROVISIONING_URL;
+export function isTrustedOAuthApiKeyUrl(
+  value: string,
+  accessProfile: "openai" | "claude" | "full" = "openai",
+): boolean {
+  if (accessProfile === "openai") return value === OAUTH_API_KEY_PROVISIONING_URL;
+  if (accessProfile === "claude") return value === CLAUDE_OAUTH_API_KEY_PROVISIONING_URL;
+  return false;
 }
 
-function isExactOpenAiBinding(binding: OAuthProvisioningBinding): boolean {
-  return binding.accessProfile === "openai"
-    && binding.oauthResource === OAUTH_PROVISIONING_CONTRACT.bindings.openai;
+function isExactCandidateBinding(
+  binding: OAuthProvisioningBinding,
+): binding is CandidateProvisioningBinding {
+  return (binding.accessProfile === "openai"
+    && binding.oauthResource === OAUTH_PROVISIONING_CONTRACT.bindings.openai)
+    || (binding.accessProfile === "claude"
+      && binding.oauthResource === CLAUDE_OAUTH_PROVISIONING_CONTRACT.oauthResource);
 }
 
 /** Accept only the exact one-time credential tuple issued by Frihet. */
@@ -116,7 +165,7 @@ export function parseProvisionedOAuthApiKey(
   payload: unknown,
   binding: OAuthProvisioningBinding,
 ): ProvisionedOAuthApiKey | undefined {
-  if (!isRecord(payload)) return undefined;
+  if (!isRecord(payload) || !isExactCandidateBinding(binding)) return undefined;
   const payloadKeys = Object.keys(payload).sort();
   if (
     payloadKeys.length !== OAUTH_PROVISIONING_CONTRACT.responseKeys.length
@@ -137,7 +186,9 @@ export function parseProvisionedOAuthApiKey(
     || !Number.isFinite(expiresAtMs)
     || new Date(expiresAtMs).toISOString() !== expiresAt
     || remainingMs <= 60_000
-    || remainingMs > (OAUTH_PROVISIONING_CONTRACT.candidateLifetimeDays + 1) * 24 * 60 * 60 * 1000
+    || remainingMs > ((binding.accessProfile === "claude"
+      ? CLAUDE_OAUTH_PROVISIONING_CONTRACT.candidateLifetimeDays
+      : OAUTH_PROVISIONING_CONTRACT.candidateLifetimeDays) + 1) * 24 * 60 * 60 * 1000
   ) {
     return undefined;
   }
@@ -155,7 +206,10 @@ export function oauthProvisioningPreflightError(
   binding: OAuthProvisioningBinding,
   correlationId: string,
 ): string | undefined {
-  if (!isTrustedOAuthApiKeyUrl(provisioningUrl)) {
+  if (!isExactCandidateBinding(binding)) {
+    return "OAuth API-key provisioning requires an exact OpenAI or Claude profile binding";
+  }
+  if (!isTrustedOAuthApiKeyUrl(provisioningUrl, binding.accessProfile)) {
     return "OAuth API-key lifecycle authority is not trusted";
   }
   if (!isValidOAuthServiceSecret(serviceSecret)) {
@@ -163,9 +217,6 @@ export function oauthProvisioningPreflightError(
   }
   if (!UUID_V4_PATTERN.test(correlationId)) {
     return "OAuth API-key correlation is invalid";
-  }
-  if (!isExactOpenAiBinding(binding)) {
-    return "OAuth API-key provisioning is restricted to the OpenAI profile";
   }
   return undefined;
 }
@@ -212,14 +263,14 @@ export function revokeOAuthApiKey(
   binding: OAuthProvisioningBinding & { keyId: string },
   fetchImpl: FetchImplementation = globalThis.fetch,
 ): Promise<Response> {
-  if (!isTrustedOAuthApiKeyUrl(provisioningUrl)) {
+  if (!isExactCandidateBinding(binding)) {
+    throw new Error("OAuth API-key revocation requires an exact OpenAI or Claude profile binding");
+  }
+  if (!isTrustedOAuthApiKeyUrl(provisioningUrl, binding.accessProfile)) {
     throw new Error("OAuth API-key lifecycle authority is not trusted");
   }
   if (!isValidOAuthServiceSecret(serviceSecret)) {
     throw new Error("OAuth API-key service authentication is not configured");
-  }
-  if (!isExactOpenAiBinding(binding)) {
-    throw new Error("OAuth API-key revocation is restricted to the OpenAI profile");
   }
   if (!new RegExp(OAUTH_PROVISIONING_CONTRACT.keyIdPattern, "u").test(binding.keyId)) {
     throw new Error("OAuth API-key identifier is invalid");
@@ -247,14 +298,14 @@ export function revokeOAuthApiKeyCorrelation(
   binding: OAuthProvisioningBinding & { correlationId: string },
   fetchImpl: FetchImplementation = globalThis.fetch,
 ): Promise<Response> {
-  if (!isTrustedOAuthApiKeyUrl(provisioningUrl)) {
+  if (!isExactCandidateBinding(binding)) {
+    throw new Error("OAuth API-key revocation requires an exact OpenAI or Claude profile binding");
+  }
+  if (!isTrustedOAuthApiKeyUrl(provisioningUrl, binding.accessProfile)) {
     throw new Error("OAuth API-key lifecycle authority is not trusted");
   }
   if (!isValidOAuthServiceSecret(serviceSecret)) {
     throw new Error("OAuth API-key service authentication is not configured");
-  }
-  if (!isExactOpenAiBinding(binding)) {
-    throw new Error("OAuth API-key revocation is restricted to the OpenAI profile");
   }
   if (!UUID_V4_PATTERN.test(binding.correlationId)) {
     throw new Error("OAuth API-key correlation is invalid");

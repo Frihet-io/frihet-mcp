@@ -602,21 +602,25 @@ test("the state alarm firing mid-attempt fences the armed holder", async (t) => 
   assert.equal((await h.callback(stateKey, idToken)).status, 400);
 });
 
-test("a profile the provisioning leaf refuses is rejected before the attempt is armed", async (t) => {
+test("cross-profile authorization state is rejected before the attempt is armed", async (t) => {
   const h = await createOAuthRouteHarness(t);
   const { clientId, stateKey } = await h.startLogin();
   const idToken = await mintIdToken();
+  // Existing-Worker records carry no profile, so the Claude Worker is the one
+  // that must refuse them.
   h.env.FRIHET_OPENAI_MODE = "false";
+  h.env.FRIHET_CLAUDE_MODE = "true";
   h.namespace.fail("/release", "before");
 
   const refused = await h.callback(stateKey, idToken);
-  assert.equal(refused.status, 502);
-  assert.deepEqual(refused.body, { error: "Failed to provision API key" });
+  assert.equal(refused.status, 503);
+  assert.deepEqual(refused.body, { error: "Authorization state is temporarily unavailable" });
   assert.equal(h.events.includes("do:/attempt"), false);
   assert.equal(h.erp.postCorrelations.length, 0);
 
   // The lease outlives the lost release but holds no armed attempt, so the
   // takeover has nothing to reconcile.
+  delete h.env.FRIHET_CLAUDE_MODE;
   h.env.FRIHET_OPENAI_MODE = "true";
   h.clock.offsetMs += 61_000;
   const retried = await h.callback(stateKey, idToken);
@@ -704,107 +708,91 @@ for (const name of [
   });
 }
 
-// ---------------------------------------------------------------------------
-// FakeErpAuthority extensions: keysPerUid cap + oidMismatch 403 for identity
-// mismatch on DELETE. The route flow itself never sends the collision-shape
-// request, so the test exercises the faked authority directly to pin its
-// contract: a future route wiring that relies on these shapes has a target.
-// ---------------------------------------------------------------------------
-
-test("FakeErpAuthority: keysPerUid cap evicts the oldest active key when a POST would exceed it", async (t) => {
+// #221 M1 (S2): when a commit lands in the Durable Object (arming the grant-
+// replacement outbox) but both commit responses are lost, the callback fails
+// closed on the new attempt (503, new ERP key and unredeemed grant revoked),
+// and `/release` disarms the replacement outbox so the user's earlier working
+// grant and bound ERP key remain active.
+test("#221 M1: a commit that lands in storage whose responses are lost twice revokes the new key and preserves the earlier working grant", async (t) => {
   const h = await createOAuthRouteHarness(t);
-  h.erp.keysPerUid = 1;
+  const idToken = await mintIdToken();
+  const first = await h.startLogin();
+  const c0 = await h.callback(first.stateKey, idToken);
+  assert.equal(c0.status, 200, JSON.stringify(c0.body));
+  const earlier = await h.redeem(first.clientId, c0.body.redirectTo);
 
-  // First POST mints freely under the cap of 1.
-  const first = await h.erp.fetch(new Request(
-    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer xxx",
-        "x-frihet-oauth-key": "route-test-service-secret-0123456789abcdef",
-      },
-      body: JSON.stringify({ uid: "firebase-route-user", correlationId: "corr-1" }),
-    },
-  ));
-  assert.equal(first.status, 200, JSON.stringify(await first.clone().json()));
-  const firstBody = await first.json() as { keyId: string };
-  assert.equal(h.erp.activeKeyIds().length, 1);
+  const { stateKey } = await h.startLogin(first.clientId);
+  h.namespace.fail("/commit", "after", 2);
+  const reconnected = await h.callback(stateKey, idToken);
+  assert.equal(reconnected.status, 503);
 
-  // Second POST must evict the previous active keyId to honour the cap.
-  const second = await h.erp.fetch(new Request(
-    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer xxx",
-        "x-frihet-oauth-key": "route-test-service-secret-0123456789abcdef",
-      },
-      body: JSON.stringify({ uid: "firebase-route-user", correlationId: "corr-2" }),
-    },
-  ));
-  assert.equal(second.status, 200);
-  const secondBody = await second.json() as { keyId: string };
-  assert.notEqual(secondBody.keyId, firstBody.keyId);
-  assert.deepEqual(
-    h.erp.activeKeyIds(),
-    [secondBody.keyId],
-    "the previous key is revoked to honour keysPerUid",
-  );
+  for (let round = 0; round < 6; round += 1) {
+    h.clock.offsetMs += 10_000;
+    await h.runDueAlarms();
+  }
+
+  assert.equal((await h.callMcp(earlier.accessToken)).status, 200, "the earlier working grant survives");
+  assert.deepEqual(h.erp.activeKeyIds(), [earlier.keyId], "only the earlier working ERP key remains active");
+  assert.equal(h.kv.grantKeys().length, 1, "the aborted reconnect grant is removed from KV");
+  assertLogsAreClean(h, [idToken]);
 });
 
-test("FakeErpAuthority: oidMismatch surfaces a 403 instead of a 404 when DELETE's uid does not own the correlation", async (t) => {
+// #221 L1 (S1): two concurrent /callback flows for the same user and client
+// that both list grants before either completes authorization leave two live
+// grants and two bound ERP keys (neither is orphaned; both are replaced and
+// revoked on the next sequential reconnect).
+test("#221 L1: two concurrent callbacks that list grants before either completes keep both bound grants and converge to 1 on the next reconnect", async (t) => {
   const h = await createOAuthRouteHarness(t);
-  h.erp.oidMismatch = { status: 403 };
+  const idToken = await mintIdToken();
+  const loginA = await h.startLogin();
+  const loginB = await h.startLogin(loginA.clientId);
 
-  // Seed a correlation under another uid.
-  const seed = await h.erp.fetch(new Request(
-    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer xxx",
-        "x-frihet-oauth-key": "route-test-service-secret-0123456789abcdef",
-      },
-      body: JSON.stringify({ uid: "another-user", correlationId: "shared-corr" }),
-    },
-  ));
-  assert.equal(seed.status, 200, "the seed POST mints normally");
+  const originalList = h.kv.list.bind(h.kv);
+  let grantListWaiters = 0;
+  let releaseBarrier!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    releaseBarrier = resolve;
+  });
+  h.kv.list = async (options: { prefix?: string } = {}) => {
+    const result = await originalList(options);
+    if (options.prefix?.startsWith("grant:")) {
+      grantListWaiters += 1;
+      if (grantListWaiters >= 2) releaseBarrier();
+      await barrier;
+    }
+    return result;
+  };
 
-  // DELETE under a DIFFERENT uid must now be answered with 403, not 404.
-  const collision = await h.erp.fetch(new Request(
-    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
-    {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        "x-frihet-oauth-key": "route-test-service-secret-0123456789abcdef",
-      },
-      body: JSON.stringify({ uid: "firebase-route-user", correlationId: "shared-corr" }),
-    },
-  ));
-  assert.equal(collision.status, 403, "oidMismatch surfaces the configured status");
-  const collisionBody = await collision.json() as Record<string, unknown>;
-  assert.equal(typeof collisionBody.error, "string", "the faked 403 carries an error code");
-  assert.ok(String(collisionBody.error).includes("uid"), "the error mentions uid mismatch");
+  const [callbackA, callbackB] = await Promise.all([
+    h.callback(loginA.stateKey, idToken),
+    h.callback(loginB.stateKey, idToken),
+  ]);
+  h.kv.list = originalList;
 
-  // Disabling oidMismatch reverts to the production default of 404.
-  h.erp.oidMismatch = undefined;
-  const baseline = await h.erp.fetch(new Request(
-    "https://europe-west1-gen-lang-client-0335716041.cloudfunctions.net/oauthApiKeyProvisioning",
-    {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        "x-frihet-oauth-key": "route-test-service-secret-0123456789abcdef",
-      },
-      body: JSON.stringify({ uid: "firebase-route-user", correlationId: "shared-corr" }),
-    },
-  ));
-  assert.equal(baseline.status, 404, "with oidMismatch off, the production default of 404 returns");
+  assert.equal(callbackA.status, 200);
+  assert.equal(callbackB.status, 200);
+  const redeemedA = await h.redeem(loginA.clientId, callbackA.body.redirectTo);
+  const redeemedB = await h.redeem(loginA.clientId, callbackB.body.redirectTo);
+  assert.equal((await h.callMcp(redeemedA.accessToken)).status, 200);
+  assert.equal((await h.callMcp(redeemedB.accessToken)).status, 200);
+  assert.equal(h.kv.grantKeys().length, 2);
+  assert.equal(h.erp.activeKeyIds().length, 2);
+
+  // Subsequent sequential reconnect replaces both concurrent grants and keys.
+  const loginC = await h.startLogin(loginA.clientId);
+  const callbackC = await h.callback(loginC.stateKey, idToken);
+  assert.equal(callbackC.status, 200);
+  const redeemedC = await h.redeem(loginA.clientId, callbackC.body.redirectTo);
+  for (let round = 0; round < 6; round += 1) {
+    h.clock.offsetMs += 10_000;
+    await h.runDueAlarms();
+  }
+  assert.equal((await h.callMcp(redeemedA.accessToken)).status, 401);
+  assert.equal((await h.callMcp(redeemedB.accessToken)).status, 401);
+  assert.equal((await h.callMcp(redeemedC.accessToken)).status, 200);
+  assert.equal(h.kv.grantKeys().length, 1);
+  assert.deepEqual(h.erp.activeKeyIds(), [redeemedC.keyId]);
+  assertLogsAreClean(h, [idToken]);
 });
 
 // #205 item 1 (review of #216): replacing the earlier grant after the commit

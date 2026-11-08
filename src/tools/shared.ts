@@ -4,7 +4,8 @@
  * This module is used by both the local (stdio) and remote (Cloudflare Workers)
  * MCP servers. It must NOT import concrete classes from either client — error
  * detection uses duck-typing (checking for `statusCode`/`errorCode` properties)
- * so it works regardless of which FrihetApiError class threw the error.
+ * so it works regardless of which FrihetApiError class threw the error. The
+ * client-owned predicate separately verifies local validation provenance.
  */
 
 import type { ToolAnnotations, Annotations } from "@modelcontextprotocol/sdk/types.js";
@@ -13,6 +14,7 @@ import type { PaginatedResponse } from "../types.js";
 import { log, logToolCall } from "../logger.js";
 import { recordToolCall } from "../metrics.js";
 import { sanitizeServerRemediation } from "../redaction.js";
+import { isLocalInputValidationError } from "../client.js";
 
 /* ------------------------------------------------------------------ */
 /*  Safety annotations for MCP tool registrations                      */
@@ -161,9 +163,21 @@ export function handleToolError(error: unknown, toolName?: string): {
         error.statusCode === 409
         && error.errorCode.toUpperCase() === "IDEMPOTENCY_REQUEST_IN_PROGRESS"
       );
+    // Fixed booleans only: private output profiles must preserve definitive
+    // API denial semantics without forwarding provider text, codes or IDs.
+    const definitiveDenial = !operationOutcomeUnknown
+      && (error.statusCode === 404 || error.statusCode === 403);
+    const localValidationRejected = !operationOutcomeUnknown && error.statusCode === 400
+      && isLocalInputValidationError(error);
+    const requestRejected = !operationOutcomeUnknown && error.statusCode === 400
+      && !localValidationRejected;
 
     let friendlyMessage: string;
-    if (error.statusCode === 413 && error.errorCode === "payload_too_large") {
+    if (operationOutcomeUnknown) {
+      friendlyMessage = "Frihet could not confirm whether this request completed. Read the current record before deciding whether to retry. / Frihet no pudo confirmar si la solicitud se completó. Consulta el estado actual antes de decidir si reintentar.";
+    } else if (localValidationRejected) {
+      friendlyMessage = "Input validation failed before sending the request. No action was performed. Correct the ID and input parameters before retrying. / La validación falló antes de enviar la solicitud. No se realizó ninguna acción. Corrige el ID y los parámetros antes de reintentar.";
+    } else if (error.statusCode === 413 && error.errorCode === "payload_too_large") {
       friendlyMessage = `Document response too large: ${error.message} / Respuesta de documento demasiado grande.`;
     } else if (error.statusCode === 403) {
       const guidance = sanitizeServerRemediation(error.detail, error.errorCode)
@@ -185,11 +199,20 @@ export function handleToolError(error: unknown, toolName?: string): {
         },
       ],
       isError: true,
-      ...(error.statusCode === 401 || operationOutcomeUnknown
+      ...(error.statusCode === 401 || operationOutcomeUnknown || definitiveDenial || localValidationRejected || requestRejected
         ? {
             _meta: {
+              ...(definitiveDenial
+                ? { [error.statusCode === 404 ? "io.frihet/resourceNotFound" : "io.frihet/accessDenied"]: true }
+                : {}),
               ...(error.statusCode === 401
                 ? { "io.frihet/authenticationRequired": true }
+                : {}),
+              ...(localValidationRejected
+                ? { "io.frihet/localValidationRejected": true }
+                : {}),
+              ...(requestRejected
+                ? { "io.frihet/requestRejected": true }
                 : {}),
               ...(operationOutcomeUnknown
                 ? { "io.frihet/operationOutcomeUnknown": true }
@@ -249,7 +272,16 @@ export function formatPaginatedResponse(
     lines.push("---");
   }
 
-  if (response.total > response.offset + response.data.length) {
+  const hasMoreByTotal = response.total > response.offset + response.data.length;
+  const isTruncatedScanWindow = Boolean(
+    response.nextCursor && response.data.length < response.limit,
+  );
+
+  if (isTruncatedScanWindow && response.nextCursor) {
+    lines.push(
+      `More results available beyond the current scan window. Continue with after='${response.nextCursor}' to fetch the next page.`,
+    );
+  } else if (hasMoreByTotal) {
     const nextOffset = response.offset + response.data.length;
     lines.push(
       `More results available. Use offset=${nextOffset} to see the next page.`,
@@ -259,6 +291,10 @@ export function formatPaginatedResponse(
         `Cursor pagination: use after='${response.nextCursor}' for efficient cursor-based pagination.`,
       );
     }
+  } else if (response.nextCursor) {
+    lines.push(
+      `Cursor pagination: use after='${response.nextCursor}' for efficient cursor-based pagination.`,
+    );
   }
 
   return truncateResponse(lines.join("\n"));
@@ -1553,6 +1589,15 @@ interface ToolResult {
   content: AnnotatedTextContent[];
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
+}
+
+/** Mark a local confirmation refusal without parsing or exposing provider text. */
+export function confirmationRequiredError(message: string): ToolResult {
+  return {
+    content: [{ type: "text", text: message, annotations: ERROR_CONTENT_ANNOTATIONS }],
+    isError: true,
+    _meta: { "io.frihet/confirmationRequired": true },
+  };
 }
 
 /**

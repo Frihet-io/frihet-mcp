@@ -210,7 +210,7 @@ const PROFILE: OpenAIProfile = {
     create_invoice:
       "Prepare a draft invoice that reserves a document number, advances the numbering counter, and may create/link a client; it cannot issue, email, or file it. " +
       "It requires a client name and at least one line item and always forces draft status. It cannot mark paid, cancel, hash, or submit the invoice to an external filing service. " +
-      "This invoice counts toward the workspace's monthly invoice usage and may emit invoice-creation analytics to PostHog's EU-hosted analytics service. Active owner-configured webhooks may receive the resulting full business events. Frihet may create in-app and Novu notifications for eligible workspace admins or accountants whose preferences allow them. For a referred workspace's first invoice, Frihet may award activation credits to the referring Frihet account. " +
+      "This invoice counts toward the workspace's monthly invoice usage and may emit invoice-creation analytics to PostHog's analytics service. Active owner-configured webhooks may receive the resulting full business events. Frihet may create in-app and Novu notifications for eligible workspace admins or accountants whose preferences allow them. For a referred workspace's first invoice, Frihet may award activation credits to the referring Frihet account. " +
       "/ Prepara una nueva factura en borrador. Este conector siempre fuerza el estado borrador " +
       "y reserva un numero interno; puede crear y vincular el cliente si no existe una coincidencia exacta, pero no emite, envia, marca como pagada, cancela, firma ni presenta la factura.",
 
@@ -1128,7 +1128,7 @@ function customizeReviewedOutputValue(name: string, value: unknown): unknown {
     }
     if (name === "create_invoice") {
       effects.push("The draft counts toward the workspace's monthly invoice usage.");
-      effects.push("Frihet may have sent invoice-creation usage and activation analytics to PostHog's EU-hosted analytics service.");
+      effects.push("Frihet may have sent invoice-creation usage and activation analytics to PostHog's analytics service.");
       effects.push("Frihet may create in-app and Novu notifications for eligible workspace admins or accountants whose preferences allow them.");
       effects.push("If this was a referred workspace's first invoice, Frihet may have awarded activation credits to the referring Frihet account.");
     }
@@ -1331,7 +1331,7 @@ function constrainReviewedDocumentLineItems(
 
 function reviewedConfirmationDescription(name: string): string {
   if (name === "create_invoice") {
-    return "Set true only after the user authorizes creating a numbered draft, advancing the numbering counter, consuming monthly invoice usage, sending invoice-creation analytics to PostHog's EU-hosted analytics service, possibly creating/linking the client, delivering owner-configured webhooks, notifying eligible workspace admins/accountants, and possibly awarding first-use referral credits.";
+    return "Set true only after the user authorizes creating a numbered draft, advancing the numbering counter, consuming monthly invoice usage, sending invoice-creation analytics to PostHog's analytics service, possibly creating/linking the client, delivering owner-configured webhooks, notifying eligible workspace admins/accountants, and possibly awarding first-use referral credits.";
   }
   if (name === "create_quote") {
     return "Set true only after the user authorizes creating a numbered draft, advancing the numbering counter, possibly creating/linking the client, and delivering owner-configured webhooks.";
@@ -1474,7 +1474,7 @@ export function applyOpenAIProfile(server: any): void {
     ) {
       const ow = config.annotations?.openWorldHint;
       const openWorldRationale = name === "create_invoice"
-        ? "may send invoice analytics to PostHog's EU-hosted analytics service, notify eligible admins/accountants through Novu, award referral credits, and deliver full business events to owner-configured webhook endpoints"
+        ? "may send invoice analytics to PostHog's analytics service, notify eligible admins/accountants through Novu, award referral credits, and deliver full business events to owner-configured webhook endpoints"
         : name === "create_expense"
           ? "may notify eligible admins/accountants through Novu, may award referral credits, and may deliver full business events to owner-configured webhook endpoints"
           : name === "delete_quote"

@@ -1,0 +1,134 @@
+{
+  "name": "list_expenses",
+  "title": "List Expenses",
+  "description": "List all expenses with optional pagination and date range filters. Returns expenses sorted by date (newest first). Example: from='2026-01-01', to='2026-03-31', limit=50 / Lista todos los gastos con paginacion y filtros de fecha opcionales. Claude omits sensitive output fields under the shared redaction policy.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "vendorId": {
+        "description": "Filter by vendor ID / Filtrar por ID de proveedor",
+        "type": "string"
+      },
+      "category": {
+        "description": "Filter by expense category (e.g. 'office', 'travel') / Filtrar por categoria",
+        "type": "string"
+      },
+      "from": {
+        "description": "Start date filter (YYYY-MM-DD) / Fecha inicio",
+        "type": "string"
+      },
+      "to": {
+        "description": "End date filter (YYYY-MM-DD) / Fecha fin",
+        "type": "string"
+      },
+      "fields": {
+        "description": "Comma-separated field names to return (e.g. 'id,description,amount') / Campos a devolver",
+        "type": "string"
+      },
+      "limit": {
+        "description": "Max results (1-100) / Resultados maximos",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "offset": {
+        "description": "Offset / Desplazamiento",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "after": {
+        "description": "Cursor for cursor-based pagination (document ID) / Cursor para paginacion basada en cursor",
+        "type": "string"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            },
+            "category": {
+              "type": "string"
+            },
+            "date": {
+              "type": "string"
+            },
+            "vendorId": {
+              "type": "string"
+            },
+            "vendor": {
+              "type": "string"
+            },
+            "taxDeductible": {
+              "type": "boolean"
+            },
+            "paidDate": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "total": {
+        "type": "number"
+      },
+      "limit": {
+        "type": "number"
+      },
+      "offset": {
+        "type": "number"
+      },
+      "nextCursor": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "data",
+      "total",
+      "limit",
+      "offset"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false
+  },
+  "annotations": {
+    "title": "List Expenses",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "execution": {
+    "taskSupport": "forbidden"
+  },
+  "_meta": {
+    "io.frihet/capability": {
+      "registered": true,
+      "callability": "api_dependent",
+      "canonicalOperation": "list_expenses",
+      "writesFrihet": false,
+      "externalInteraction": false,
+      "externalSideEffects": []
+    }
+  }
+}

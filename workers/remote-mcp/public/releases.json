@@ -36,7 +36,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "1.18.0"
+      "version": "2.0.1"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -45,16 +45,25 @@
       "version": "0.1.0"
     }
   },
-  "releasedAt": "2026-09-03",
+  "releasedAt": "2026-11-08",
   "releases": [
     {
-      "version": "1.18.0",
-      "date": "2026-09-03",
+      "version": "2.0.1",
+      "date": "2026-11-08",
       "mcpToolCount": 158,
       "toolNamesCount": 166,
       "resourcesCount": 7,
       "promptsCount": 10,
-      "notes": "Adds the read-only, workspace-scoped global_search canonical operation for invoices, expenses, vendors, clients, and products. The default hosted grouped profile now exposes 156 canonical operations plus 5 fiscal aliases and 3 discovery names; the separately reviewed OpenAI profile is unchanged and is not deployed by the default release workflow. This source release also carries the onboarding tools withdrawal tracked under issue #124 (onboarding_status / onboarding_persona_set removed because the Frihet-ERP /v1/onboarding/* family is not yet shipped — see README 'Onboarding — withdrawn via #124'), corrected e-invoice/client contracts, the offline cross-surface authority gate, the profile-scoped OAuth permission mirror, and the fail-closed npm/full-profile Worker provenance pipeline."
+      "notes": "Documentation and registry metadata release. Ships the rewritten public README front page (#277), MCP Registry listing metadata (websiteUrl and light/dark icons in server.json, #274), and the published-artifact drift issue reporter and remote /health version comparator (#274). No tool, resource, prompt, or runtime behavior changes."
+    },
+    {
+      "version": "2.0.0",
+      "date": "2026-11-05",
+      "mcpToolCount": 156,
+      "toolNamesCount": 164,
+      "resourcesCount": 7,
+      "promptsCount": 10,
+      "notes": "BREAKING: major release. Removes onboarding_status and onboarding_persona_set, and changes required or accepted inputs on thirteen tools (confirm now required on face_submit, ticketbai_submit and run_recurring_now; deposit, bank-rule, GL-reject, gestoria aging, anomaly, leave and e-invoice export contracts changed); see CHANGELOG for the per-tool migration. Adds the read-only, workspace-scoped global_search canonical operation for invoices, expenses, vendors, clients, and products. The default hosted grouped profile now exposes 156 canonical operations plus 5 fiscal aliases and 3 discovery names; the separately reviewed OpenAI profile is unchanged and is not deployed by the default release workflow. This source release also carries the onboarding tools withdrawal tracked under issue #124 (onboarding_status / onboarding_persona_set removed because the Frihet-ERP /v1/onboarding/* family is not yet shipped — see README 'Onboarding — withdrawn via #124'), corrected e-invoice/client contracts, the offline cross-surface authority gate, the profile-scoped OAuth permission mirror, and the fail-closed npm/full-profile Worker provenance pipeline."
     },
     {
       "version": "1.16.4",
@@ -95,7 +104,7 @@
     {
       "version": "1.15.1",
       "date": "2026-07-12",
-      "notes": "Docs/claims refresh: Track B pricing (Pro EUR 9 / Premium EUR 29), 139 countries with fiscal data, honest data-residency statement (EU-US DPF, Firestore nam5). No tool changes."
+      "notes": "Docs/claims refresh: Track B pricing (Pro EUR 9 / Premium EUR 29), honest data-residency statement (EU-US DPF, Firestore nam5). No tool changes."
     },
     {
       "delta": "Envelope unwrap on all mutations + output-schema relax — invoices operable again",
@@ -154,5 +163,5 @@
       "version": "1.7.0-beta.1"
     }
   ],
-  "version": "1.18.0"
+  "version": "2.0.1"
 }

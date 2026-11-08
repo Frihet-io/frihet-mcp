@@ -1,6 +1,6 @@
 # Frihet MCP Server
 
-Open-source MCP server for Frihet ERP. TypeScript, Node >= 20, MIT license. Distributed via npm + Cloudflare Worker (mcp.frihet.io) + Smithery + Anthropic registry.
+Open-source MCP server for Frihet ERP. TypeScript, Node ^22.23.4 || ^24.22.1 || ^26.12.1, MIT license. Distributed via npm + Cloudflare Worker (mcp.frihet.io) + Smithery + Anthropic registry.
 
 ## Build & Test
 
