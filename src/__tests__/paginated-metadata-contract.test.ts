@@ -22,7 +22,7 @@ const PAGINATED_TOOLS = [
   "list_client_contacts", "list_client_activities", "list_client_notes",
   "list_bank_accounts", "list_transactions", "frihet_bank_rules_list",
   "leave_list", "anomaly_list", "list_team_members", "list_time_entries",
-  "list_products", "list_reservations", "list_properties", "list_terminals",
+  "list_products", "list_purchase_orders", "list_reservations", "list_properties", "list_terminals",
   "list_sales", "list_kitchen_tickets", "list_kitchen_stations", "list_menu_items",
 ] as const;
 
@@ -89,7 +89,8 @@ for (const profile of PROFILES) {
       }).map((tool) => tool.name).sort();
       const expected = PAGINATED_TOOLS.filter((name) => tools.some((tool) => tool.name === name)).sort();
       assert.deepEqual(paginated, expected, "every published paginated tool must be exercised");
-      if (profile !== "openai-review") assert.equal(expected.length, 26);
+      if (profile === "general") assert.equal(expected.length, 27);
+      if (profile === "claude") assert.equal(expected.length, 26);
       assert.ok(expected.length > 0);
       for (const name of expected) {
         await t.test(name, async () => {

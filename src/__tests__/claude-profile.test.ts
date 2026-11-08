@@ -32,6 +32,7 @@ const excluded = [
   "refund_sale", "delete_client", "delete_expense", "send_quote",
   "einvoice_export", "face_submit", "face_status", "ticketbai_submit", "ticketbai_status", "send_einvoice",
   "get_einvoice_status", "validate_einvoice_xml", "export_datev", "get_invoice_pdf", "get_invoice_einvoice",
+  "get_purchase_order", "list_purchase_orders",
 ].sort();
 const allowedAliases = Object.entries(FISCAL_MODELO_ALIASES).filter(([, canonical]) => !excluded.includes(canonical));
 const deniedAliases = Object.entries(FISCAL_MODELO_ALIASES).filter(([, canonical]) => excluded.includes(canonical)).map(([alias]) => alias);
@@ -75,9 +76,9 @@ async function denied(client: Client, name: string) {
 }
 
 test("Claude candidate exactly matches the regenerated SDK descriptor and inventory arithmetic", async () => {
-  assert.equal(fullNames.length - Object.keys(FISCAL_MODELO_ALIASES).length, 156);
+  assert.equal(fullNames.length - Object.keys(FISCAL_MODELO_ALIASES).length, 158);
   assert.equal(canonical.length, 125);
-  assert.equal(excluded.length, 31);
+  assert.equal(excluded.length, 33);
   assert.equal(allowedAliases.length, 4);
   assert.deepEqual([...CLAUDE_CANDIDATE_TOOLS].sort(), canonical);
   assert.deepEqual(Object.keys(CLAUDE_EXCLUDED_TOOLS).sort(), excluded);

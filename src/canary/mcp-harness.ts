@@ -27,8 +27,9 @@ export const HARNESS_CONTRACT_VERSION = 1;
 export const INSPECTOR_PINNED_VERSION = "2.3.0";
 // Updated 2026-10-10 by issue #124 (IGIC-pattern withdraw of dead onboarding_status /
 // onboarding_persona_set — the Frihet-ERP /v1/onboarding/* family is absent, so the
-// MCP catalogue now declares 156 canonical operations, down from 158).
-export const CANONICAL_OPERATIONS_COUNT = 156;
+// MCP catalogue then declared 156 canonical operations, down from 158; the two read-only
+// purchase-order tools (ADR 0027 S2) bring it to 158).
+export const CANONICAL_OPERATIONS_COUNT = 158;
 export const FISCAL_ALIASES_COUNT = Object.keys(FISCAL_MODELO_ALIASES).length;
 
 export type CheckStatus = "PASS" | "FAIL" | "UNSUPPORTED" | "NOT_EXERCISED";

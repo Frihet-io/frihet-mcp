@@ -287,6 +287,53 @@ export const demoVendors: Record<string, unknown>[] = [
 ];
 
 /* ------------------------------------------------------------------ */
+/*  Purchase orders (2) — ADR 0027 S2 read-only surface.              */
+/*  Same vendor ids as demoVendors so list+get read coherently.       */
+/* ------------------------------------------------------------------ */
+
+export const demoPurchaseOrders: Record<string, unknown>[] = [
+  {
+    id: "demo_po_001",
+    poNumber: "PO-2026-0001",
+    vendorId: "demo_ven_001",
+    vendorName: "Gestoría Ramírez",
+    status: "sent",
+    items: [
+      { description: "Asesoria contable mensual", quantity: 1, unitPrice: 350, productId: "demo_prod_001" },
+    ],
+    issueDate: "2026-09-01",
+    expectedDate: "2026-10-01",
+    taxRate: 21,
+    subtotal: 350,
+    tax: 73.5,
+    total: 423.5,
+    currency: "EUR",
+    notes: "Renovacion contrato asesoria",
+    createdAt: DEMO_NOW,
+    updatedAt: DEMO_NOW,
+  },
+  {
+    id: "demo_po_002",
+    poNumber: "PO-2026-0002",
+    vendorId: "demo_ven_002",
+    vendorName: "Proveedor Cloud SL",
+    status: "draft",
+    items: [
+      { description: "Hosting VPS 4 vCPU", quantity: 12, unitPrice: 45, productId: "demo_prod_002" },
+      { description: "Backup storage 500 GB", quantity: 1, unitPrice: 80 },
+    ],
+    issueDate: "2026-09-15",
+    taxRate: 21,
+    subtotal: 620,
+    tax: 130.2,
+    total: 750.2,
+    currency: "EUR",
+    createdAt: DEMO_NOW,
+    updatedAt: DEMO_NOW,
+  },
+];
+
+/* ------------------------------------------------------------------ */
 /*  Banking — 1 account + 4 transactions                              */
 /* ------------------------------------------------------------------ */
 

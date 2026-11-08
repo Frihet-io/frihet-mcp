@@ -68,7 +68,7 @@ export function assertClaudeOperationalSurface(candidate, ceiling) {
   assert.equal(candidate.groups.totalTools, 125);
   assert.equal(candidate.groups.totalGroups, 11);
   assert.equal(candidate.groups.groups.reduce((sum, group) => sum + group.toolCount, 0), 125);
-  assert.equal(Object.keys(candidate.exclusions.tools).length, 31);
+  assert.equal(Object.keys(candidate.exclusions.tools).length, 33);
   for (const tool of grouped) {
     assert.ok(tool.title?.trim(), `${tool.name} needs a title`);
     for (const hint of ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"]) {

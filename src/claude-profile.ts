@@ -173,7 +173,9 @@ export const CLAUDE_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
   "period_reopen": "The handler deliberately defers execution; capability truth marks this deferred.",
   "refund_sale": "Executes an actual Stripe money transfer; excluded under Directory policy section 4.A.",
   "send_quote": "Previewed recipient is not atomically bound and delivery is not retry-safe.",
-  "sync_channel": "The handler deliberately defers execution; capability truth marks this deferred."
+  "sync_channel": "The handler deliberately defers execution; capability truth marks this deferred.",
+  "get_purchase_order": "Added after the 176de12 Claude operational candidate freeze; not yet admitted to the Claude profile.",
+  "list_purchase_orders": "Added after the 176de12 Claude operational candidate freeze; not yet admitted to the Claude profile."
 };
 
 export const CLAUDE_CANDIDATE_RESOURCES: ReadonlySet<string> = new Set([
