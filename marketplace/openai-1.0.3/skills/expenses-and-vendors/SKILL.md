@@ -1,0 +1,77 @@
+---
+name: expenses-and-vendors
+description: >-
+  List, inspect, record, and update business expenses and search, inspect,
+  create, or update vendor/supplier records in a connected Frihet workspace. Use
+  when the user asks to review expenses by date or category, check an expense
+  detail, record a new expense, update an expense's description/category/date/
+  deductibility, or search, list, view, create, or update vendors/suppliers
+  (gastos, proveedores, buscar proveedor, registrar gasto).
+license: MIT
+---
+
+# Expenses & Vendors (`expenses-and-vendors`)
+
+Respond in the user's language (English or Spanish). Keep expense proposals and accounting questions distinct from authorized changes in Frihet.
+
+## Supported tools in this workflow
+
+- **Expenses (read-only):** `list_expenses`, `get_expense`
+- **Expenses (write, requires `confirm: true`):** `create_expense`, `update_expense`
+- **Vendors (read-only):** `search_vendors`, `list_vendors`, `get_vendor`
+- **Vendors (write, requires `confirm: true`):** `create_vendor`, `update_vendor`
+
+## 1. Reviewing expenses and searching vendors
+
+1. **Expense queries:**
+   - Call `list_expenses` with optional filters (`from`, `to`, `category`, `vendorId`, `limit`, `offset`, `after`).
+   - Call `get_expense` (`id`) when the user needs full detail on a specific expense (including stored `paidDate`, `taxDeductible`, `vendor`, and `vendorId`).
+2. **Vendor search & directory queries (`search_vendors`, `list_vendors`, `get_vendor`):**
+   - When the user searches for a supplier by commercial name (for example, *"Find vendor Cloud Hosting and check recent expenses"*), call `search_vendors` (`query`, `includeRecentExpenses: true`, optional `limit`, `maxPages`, `after`).
+   - Use `list_vendors` (`limit`, `offset`, `after`) for general directory browsing and `get_vendor` (`id`) to inspect a single vendor by ID (`id`, `name`, `email`, `phone`).
+   - **Commercial-name boundary & coverage truth on `search_vendors`:**
+     - `search_vendors` searches commercial names only and rejects NIF/NIE/CIF/VAT queries; dedicated government-identifier fields and street addresses are omitted from all reviewed vendor DTOs.
+     - Respect `matchStatus` and `coverage`: if `matchStatus === "ambiguous"`, list all matching suppliers and ask the user to disambiguate; if `matchStatus === "partial_scan_single_match"` or `"partial_scan_no_match"` (`coverage.complete === false`), disclose `coverage.uninspectedCount` and use `after: coverage.nextCursor` if a complete scan is needed before mutating or concluding a supplier does not exist.
+3. **Pagination truth (exploratory single-page default vs. exhaustive requests):**
+   - Always check `total`, `limit`, `offset`, and `nextCursor` on `list_expenses` and `list_vendors` (and `coverage.complete` / `coverage.nextCursor` on `search_vendors`).
+   - Never present a single page as the complete set of expenses or vendors when `nextCursor` is present or `total > data.length`. For general browsing, return the first page immediately and state clearly that the response is a partial page (e.g., `Showing 20 of 65 expenses`); when the user explicitly requests all records, a full sort, or an exact sum across all pages, paginate using `after` (`nextCursor`) or `offset` until all pages are retrieved (or until a clear safety limit is reached, disclosing the exact coverage).
+
+## 2. Recording a new expense (`create_expense`)
+
+1. **Required inputs & zero-invention rule:**
+   - `create_expense` requires four explicit business fields plus confirmation:
+     - `description` (non-empty string)
+     - `amount` (positive number, in the schema's monetary unit)
+     - `date` (`YYYY-MM-DD` — determines the expense's accounting and future tax-report period)
+     - `taxDeductible` (`boolean` — records an explicit internal tax-deductible classification without filing any return)
+     - `confirm: true`
+   - Optional fields: `category`, `vendor` (supplier name).
+   - **Never invent `description`, `amount`, `date`, or `taxDeductible`.** Do not assume an expense is tax-deductible (`taxDeductible: true`) or non-deductible (`false`) by default, and do not guess the expense date or amount if the user did not state them. If any of `description`, `amount`, `date`, or `taxDeductible` is missing, do not call `list_vendors`, `search_vendors`, `list_expenses`, or `get_business_context` first—ask the user directly for **only the specific required fields that are actually missing** (for example, if the user already provided `date` and `taxDeductible` but omitted `amount` or `description`, ask only for the missing `amount` / `description` and confirmation without re-asking for `date` or `taxDeductible`) before calling `create_expense`.
+2. **Authorization & lasting/external effects disclosure:**
+   - Before executing an unauthorized `create_expense`, disclose:
+     - The `date` selects the accounting and future tax-report period (no tax return is filed, and the connector does not mark the expense paid).
+     - When `vendor` is provided and no exact vendor match exists, Frihet may create and link the vendor in a **separate backend step** that can remain even if the subsequent expense write fails.
+     - `create_expense` can deliver `expense.created` events to active owner-configured webhooks, notify eligible workspace admins or accountants in-app and via Novu, and award first-use referral activation credits.
+   - **Minimum necessary calls:** Make the minimum calls needed to complete the user's task. When the user's prompt already supplies `description`, `amount`, `date`, and an explicit `taxDeductible` choice along with authorization to record the expense, call `create_expense` with `confirm: true` directly without asking a second confirmation question or performing redundant pre/post reads, unless a lookup (`search_vendors` / `list_vendors` / `get_expense`) is needed to disambiguate an incomplete input, verify an uncertain write outcome, or satisfy an explicit verification request.
+3. **Post-creation reporting:**
+   - Report the new `id`, `description`, `amount`, `date`, `taxDeductible`, `category` / `vendor` / `vendorId` (when stored), and `externalEffects`. Do not claim the expense was paid, reimbursed, or filed with a tax authority.
+
+## 3. Updating an expense (`update_expense`)
+
+1. **Allowed vs. immutable fields:**
+   - `update_expense` requires `id` and `confirm: true`, and can update **only** `description`, `category`, `date`, or `taxDeductible`.
+   - Changing `date` moves the expense's accounting and future tax-report period; changing `taxDeductible` updates internal accounting classification without filing anything; external `expense.updated` webhooks may be delivered.
+   - **`amount` and supplier identity (`vendor` / `vendorId`) cannot be changed** via `update_expense`, and there is **no `delete_expense` tool** in this connector. If the user asks to change an expense amount, change its linked supplier, or delete an expense, explain that limitation clearly and direct them to the Frihet web application.
+
+## 4. Creating and updating vendors (`create_vendor`, `update_vendor`)
+
+1. Before calling `create_vendor` (`name`, `confirm: true`, optional `email`, `phone`), check `search_vendors` or `list_vendors` to avoid creating a duplicate supplier.
+2. For `update_vendor` (`id`, `confirm: true`, optional `name`, `email`, `phone`), note that PATCH semantics overwrite the supplied fields on the selected vendor with no undo operation in this connector.
+3. There is **no `delete_vendor` tool** in this connector. Do not blank out vendor fields to simulate deletion.
+
+## 5. Unknown write outcomes & timeout recovery
+
+If `create_expense`, `update_expense`, `create_vendor`, or `update_vendor` fails with a timeout or ambiguous transport error:
+- **Never retry the write automatically** (especially `create_expense`, which could record a duplicate expense or leave a separately created vendor).
+- Call `list_expenses` (filtering by `from` / `to` around `date`) and `get_expense`, or `search_vendors` / `list_vendors` and `get_vendor`, to verify whether the write succeeded before taking further action.
+- Report any matching record with its `id` and state clearly whether its correlation to the failed request is confirmed or uncertain.
