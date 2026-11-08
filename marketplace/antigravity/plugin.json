@@ -1,0 +1,33 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "frihet",
+  "displayName": "Frihet",
+  "version": "2.0.1",
+  "description": "Connect your Frihet ERP workspace to manage invoices, quotes, expenses, clients, banking, and Spanish/EU fiscal compliance (VeriFactu, TicketBAI).",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Review my pending and overdue invoices by currency and draft payment reminders",
+    "Prepare a draft invoice or quote for a client after verifying tax and NIF details",
+    "Summarize this month's billed, collected, and outstanding amounts with expenses"
+  ],
+  "author": {
+    "name": "Frihet",
+    "email": "hello@frihet.io",
+    "url": "https://frihet.io"
+  },
+  "homepage": "https://docs.frihet.io/desarrolladores/mcp-server",
+  "repository": "https://github.com/Frihet-io/frihet-mcp",
+  "license": "MIT",
+  "keywords": [
+    "frihet",
+    "erp",
+    "invoicing",
+    "expenses",
+    "accounting",
+    "verifactu",
+    "ticketbai",
+    "facturae",
+    "tax-compliance",
+    "receivables"
+  ]
+}

@@ -35,6 +35,10 @@ const JSON_MANIFESTS = [
   'marketplace/postman/frihet-erp.postman_collection.json',
   'marketplace/postman/frihet-erp.postman_environment.json',
   'marketplace/windsurf/mcp_config.json',
+  'marketplace/antigravity/plugin.json',
+  'marketplace/antigravity/mcp_config.json',
+  '.antigravity-plugin/plugin.json',
+  'mcp_config.json',
 ];
 
 const YAML_MANIFESTS = [
