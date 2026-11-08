@@ -2,7 +2,7 @@
   "consumer": "frihet-mcp",
   "pinnedProjection": {
     "source": "workers/remote-mcp/public/openapi.json",
-    "fingerprint": "6ef00ca1d2f14a427f8097297d0939be13539672f24c9082f6bd4fc1732a14e6",
+    "fingerprint": "74a181ddb8d7777b20c81a9cb79c8ef7cabfdfcdaa94a7b7b8f463857cac941a",
     "openapiVersion": "3.1.0",
     "infoVersion": "2026-03-18",
     "rootSecurity": [
@@ -10,7 +10,7 @@
         "ApiKeyAuth": []
       }
     ],
-    "frozenAt": "2026-08-31"
+    "frozenAt": "2026-11-08"
   },
   "required": [
     {

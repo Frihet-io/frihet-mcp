@@ -174,8 +174,30 @@ export function inspectPublishedArtifact(metadata, tarball, requestedVersion) {
   // the count and rewrite public claims with a partial catalogue.
   const adapterFiles = new Set([
     'package/dist/tools/register-all.js', 'package/dist/capability-truth.js',
-    'package/dist/openai-profile.js', 'package/dist/tool-exposure.js',
+    'package/dist/openai-profile.js', 'package/dist/claude-profile.js',
+    'package/dist/google-profile.js', 'package/dist/muse-profile.js',
+    'package/dist/server-composition.js', 'package/dist/tool-exposure.js',
   ]);
+  const isServerRegisterToolBindCall = (expr) =>
+    Boolean(expr) && ts.isCallExpression(expr) && expr.arguments.length === 1 &&
+    ts.isIdentifier(expr.arguments[0]) && expr.arguments[0].text === 'server' &&
+    ts.isPropertyAccessExpression(expr.expression) && expr.expression.name.text === 'bind' &&
+    ts.isPropertyAccessExpression(expr.expression.expression) &&
+    expr.expression.expression.name.text === 'registerTool' &&
+    ts.isIdentifier(expr.expression.expression.expression) &&
+    expr.expression.expression.expression.text === 'server';
+  const isAdapterBoundIdentifier = (path, node) => {
+    if (!adapterFiles.has(path)) return false;
+    const parent = node.parent;
+    if (ts.isVariableDeclaration(parent) && parent.name === node) {
+      return isServerRegisterToolBindCall(parent.initializer);
+    }
+    if (ts.isCallExpression(parent) && parent.expression === node && !parent.questionDotToken) {
+      const firstArg = parent.arguments[0];
+      return parent.arguments.length === 3 && Boolean(firstArg) && ts.isIdentifier(firstArg) && firstArg.text === 'name';
+    }
+    return false;
+  };
   const isAdapterAccess = (path, access) => {
     if (!adapterFiles.has(path) || !ts.isIdentifier(access.expression) || access.expression.text !== 'server') return false;
     const parent = access.parent;
@@ -183,10 +205,7 @@ export function inspectPublishedArtifact(metadata, tarball, requestedVersion) {
     if (ts.isBinaryExpression(parent) && parent.left === access && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
       return ts.isArrowFunction(parent.right) || ts.isFunctionExpression(parent.right);
     }
-    if (!ts.isPropertyAccessExpression(parent) || parent.name.text !== 'bind') return false;
-    const call = parent.parent;
-    return ts.isCallExpression(call) && call.expression === parent && call.arguments.length === 1 &&
-      ts.isIdentifier(call.arguments[0]) && call.arguments[0].text === 'server';
+    return isServerRegisterToolBindCall(parent?.parent) && parent.name.text === 'bind';
   };
   for (const [path, bytes] of files) {
     if (!/\.(?:js|mjs|cjs|jsx)$/.test(path)) continue;
@@ -197,14 +216,17 @@ export function inspectPublishedArtifact(metadata, tarball, requestedVersion) {
     const visit = (node) => {
       if (ts.isIdentifier(node) && node.text === 'registerTool') {
         const access = node.parent;
-        if (!ts.isPropertyAccessExpression(access) || access.name !== node) unsupported();
-        const call = access.parent;
-        if (ts.isCallExpression(call) && call.expression === access) {
-          if (!canonicalFile || access.questionDotToken || call.questionDotToken) unsupported();
-          const name = call.arguments[0];
-          if (!name || !ts.isStringLiteral(name) || names.has(name.text)) throw new Error('published tool registration is dynamic or duplicated');
-          names.add(name.text);
-        } else if (!isAdapterAccess(path, access)) unsupported();
+        if (!ts.isPropertyAccessExpression(access) || access.name !== node) {
+          if (!isAdapterBoundIdentifier(path, node)) unsupported();
+        } else {
+          const call = access.parent;
+          if (ts.isCallExpression(call) && call.expression === access) {
+            if (!canonicalFile || access.questionDotToken || call.questionDotToken) unsupported();
+            const name = call.arguments[0];
+            if (!name || !ts.isStringLiteral(name) || names.has(name.text)) throw new Error('published tool registration is dynamic or duplicated');
+            names.add(name.text);
+          } else if (!isAdapterAccess(path, access)) unsupported();
+        }
       }
       if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.text === 'registerTool') {
         const parent = node.parent;

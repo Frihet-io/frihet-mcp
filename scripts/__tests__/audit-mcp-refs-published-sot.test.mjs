@@ -223,6 +223,13 @@ describe('unsupported published registration layouts fail closed', () => {
     assert.equal(inspectPublishedArtifact(valid.metadata, valid.tarball).toolCount, 157);
     const relocated = publishedFixture({ extra: [['package/dist/new-adapter.js', source]] });
     assert.throws(() => inspectPublishedArtifact(relocated.metadata, relocated.tarball), /unsupported published registerTool/);
+    const profileSource = 'const registerTool = server.registerTool.bind(server); server.registerTool = (name, config, handler) => registerTool(name, config, handler);';
+    for (const adapter of ['package/dist/claude-profile.js', 'package/dist/google-profile.js', 'package/dist/muse-profile.js', 'package/dist/server-composition.js']) {
+      const ok = publishedFixture({ extra: [[adapter, profileSource]] });
+      assert.equal(inspectPublishedArtifact(ok.metadata, ok.tarball).toolCount, 157);
+      const literal = publishedFixture({ extra: [[adapter, 'const registerTool = server.registerTool.bind(server); registerTool("hidden", {}, () => {});']] });
+      assert.throws(() => inspectPublishedArtifact(literal.metadata, literal.tarball), /unsupported published registerTool/);
+    }
   });
 });
 
