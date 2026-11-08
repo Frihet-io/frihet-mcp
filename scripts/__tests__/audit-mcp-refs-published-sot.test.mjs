@@ -230,6 +230,10 @@ describe('unsupported published registration layouts fail closed', () => {
       const literal = publishedFixture({ extra: [[adapter, 'const registerTool = server.registerTool.bind(server); registerTool("hidden", {}, () => {});']] });
       assert.throws(() => inspectPublishedArtifact(literal.metadata, literal.tarball), /unsupported published registerTool/);
     }
+    const mppOk = publishedFixture({ extra: [['package/dist/mpp-sandbox.js', 'server.registerTool("mpp_sandbox_verify_read", {}, () => {});']] });
+    assert.equal(inspectPublishedArtifact(mppOk.metadata, mppOk.tarball).toolCount, 157);
+    const mppBad = publishedFixture({ extra: [['package/dist/mpp-sandbox.js', 'server.registerTool("unexpected_tool", {}, () => {});']] });
+    assert.throws(() => inspectPublishedArtifact(mppBad.metadata, mppBad.tarball), /unsupported published registerTool/);
   });
 });
 

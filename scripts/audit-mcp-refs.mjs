@@ -178,6 +178,13 @@ export function inspectPublishedArtifact(metadata, tarball, requestedVersion) {
     'package/dist/google-profile.js', 'package/dist/muse-profile.js',
     'package/dist/server-composition.js', 'package/dist/tool-exposure.js',
   ]);
+  const optInRegistrationFiles = new Map([
+    ['package/dist/mpp-sandbox.js', new Set(['mpp_sandbox_verify_read'])],
+    ['package/dist/openai-103/openai-expansion-103.js', new Set([
+      'get_daily_operational_brief', 'get_business_period_summary',
+      'search_clients', 'search_vendors',
+    ])],
+  ]);
   const isServerRegisterToolBindCall = (expr) =>
     Boolean(expr) && ts.isCallExpression(expr) && expr.arguments.length === 1 &&
     ts.isIdentifier(expr.arguments[0]) && expr.arguments[0].text === 'server' &&
@@ -221,10 +228,18 @@ export function inspectPublishedArtifact(metadata, tarball, requestedVersion) {
         } else {
           const call = access.parent;
           if (ts.isCallExpression(call) && call.expression === access) {
-            if (!canonicalFile || access.questionDotToken || call.questionDotToken) unsupported();
+            if (access.questionDotToken || call.questionDotToken) unsupported();
             const name = call.arguments[0];
-            if (!name || !ts.isStringLiteral(name) || names.has(name.text)) throw new Error('published tool registration is dynamic or duplicated');
-            names.add(name.text);
+            if (optInRegistrationFiles.has(path)) {
+              if (!ts.isIdentifier(access.expression) || access.expression.text !== 'server' ||
+                  !name || !ts.isStringLiteral(name) || !optInRegistrationFiles.get(path).has(name.text)) {
+                unsupported();
+              }
+            } else {
+              if (!canonicalFile) unsupported();
+              if (!name || !ts.isStringLiteral(name) || names.has(name.text)) throw new Error('published tool registration is dynamic or duplicated');
+              names.add(name.text);
+            }
           } else if (!isAdapterAccess(path, access)) unsupported();
         }
       }
