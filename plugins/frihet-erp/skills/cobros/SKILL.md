@@ -2,8 +2,9 @@
 name: cobros
 description: >-
   Review pending and overdue invoices in a connected Frihet workspace. Use for
-  cobros pendientes, impagos, morosos, antigüedad de saldos, receivables or payment
-  follow-up. Verifies partial payments and currencies, then drafts reminders.
+  cobros pendientes, impagos, morosos, antigüedad de saldos, enlaces de cobro,
+  receivables or payment follow-up. Verifies partial payments and currencies,
+  retrieves server-authoritative portal payment links when available, and drafts reminders.
 license: MIT
 ---
 
@@ -19,10 +20,19 @@ aportados por el usuario, identifica la procedencia y los datos que faltan;
 no afirmes que has consultado Frihet si no lo has hecho.
 
 Entrega una tabla con factura, cliente, vencimiento, días vencidos, saldo y moneda.
-Separa lo vencido de lo todavía no vencido. Muestra saldos desconocidos y cobertura
-parcial. Propón prioridades dentro de cada moneda y redacta recordatorios cuando
-se soliciten. No escales automáticamente a amenazas o reclamaciones legales.
+Separa lo vencido de lo todavía no vencido. Muestra saldos desconocidos (`null`,
+nunca convertidos en `0`) y cobertura parcial. Propón prioridades dentro de cada
+moneda y redacta recordatorios cuando se soliciten. No escales automáticamente a
+amenazas o reclamaciones legales.
 
-Un informe o un borrador de recordatorio no autoriza envíos, marcas de pago,
-conciliaciones, devoluciones ni cambios en clientes. Para enviar, comprueba el
-contenido y destinatario con el usuario y la capacidad real de la herramienta.
+## Obtener enlace de cobro frente a enviar o registrar pago
+
+Cuando el usuario pida *«Dame el enlace para cobrar esta factura y dime qué queda pendiente»*:
+- Usa el contrato dedicado de enlace de portal (`get_invoice_payment_link` cuando esté habilitado en el perfil) para obtener `authorizedPortalUrl` (`https://app.frihet.io/pay/{workspace}/{invoice}/{token}`), `amountRemainingMinor`, `currency`, `collectible` y `unavailableReason` directamente de la autoridad del servidor.
+- **No reconstruyas saldos** sumando campos legacy en el cliente ni conviertas un saldo desconocido (`unknown_degraded` / `null`) en `0`.
+- **Obtener el enlace no cobra ni envía:** devolver `authorizedPortalUrl` concede acceso limitado al portal de pago (donde la cobrabilidad y el saldo se revalidan al abrir y pagar), pero **no envía ningún correo** (`send_invoice`), **no inicia un cargo ni crea reservas de fondos**, **no marca la factura como pagada** (`mark_invoice_paid`) y **no ejecuta conciliación bancaria** (`match_transaction_to_invoice`).
+
+Un informe, un enlace de cobro o un borrador de recordatorio no autoriza envíos,
+marcas de pago, conciliaciones, devoluciones ni cambios en clientes. El envío,
+el registro manual de un cobro, el reembolso y la conciliación siguen siendo
+operaciones separadas con sus permisos y confirmaciones reales.

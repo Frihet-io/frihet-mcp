@@ -180,6 +180,7 @@ export function inspectPublishedArtifact(metadata, tarball, requestedVersion) {
   ]);
   const optInRegistrationFiles = new Map([
     ['package/dist/mpp-sandbox.js', new Set(['mpp_sandbox_verify_read'])],
+    ['package/dist/invoice-payment-link.js', new Set(['get_invoice_payment_link'])],
     ['package/dist/openai-103/openai-expansion-103.js', new Set([
       'get_daily_operational_brief', 'get_business_period_summary',
       'search_clients', 'search_vendors',
