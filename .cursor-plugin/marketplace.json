@@ -2,17 +2,17 @@
   "name": "frihet",
   "owner": {
     "name": "Frihet",
-    "email": "support@frihet.io"
+    "email": "hello@frihet.io"
   },
   "metadata": {
     "description": "AI-native ERP for Spain & the EU — invoicing, CRM, banking and fiscal compliance through natural language.",
-    "version": "1.0.0"
+    "version": "2.0.1"
   },
   "plugins": [
     {
       "name": "frihet-erp",
       "source": "./plugins/frihet-erp",
-      "description": "Connect Cursor to Frihet ERP. The catalogue contains 157 canonical operations for invoicing, expenses, CRM, banking and Spanish/EU fiscal compliance; capability metadata reports runtime status separately."
+      "description": "Connect Cursor to Frihet ERP. The catalogue contains 156 canonical operations for invoicing, expenses, CRM, banking and Spanish/EU fiscal compliance; capability metadata reports runtime status separately."
     }
   ]
 }

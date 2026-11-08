@@ -1,11 +1,11 @@
 {
   "name": "frihet-erp",
   "displayName": "Frihet ERP",
-  "version": "1.0.0",
+  "version": "2.0.1",
   "description": "AI-native ERP for Spain & the EU. Connect your assistant to invoicing, expenses, clients and business workflows in Frihet. Availability depends on your workspace configuration and permissions.",
   "author": {
     "name": "Frihet",
-    "email": "support@frihet.io"
+    "email": "hello@frihet.io"
   },
   "license": "MIT",
   "keywords": [

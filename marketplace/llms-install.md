@@ -101,7 +101,7 @@ Expected: structured list with invoice IDs, clients, amounts, and status.
 
 ## What you get
 
-157 canonical catalogue operations across 20+ domains: invoices, expenses, clients, CRM, quotes, deposits, banking, fiscal, e-invoicing, GL audit, vacation rentals, POS, time tracking, HR, payroll, onboarding, period close, and gestoría. Alias and discovery names are profile-specific and counted separately.
+156 canonical catalogue operations across 20+ domains: invoices, expenses, clients, CRM, quotes, deposits, banking, fiscal, e-invoicing, GL audit, vacation rentals, POS, time tracking, HR, payroll, period close, and gestoría. Alias and discovery names are profile-specific and counted separately.
 
 The local package serves 11 resources and 10 prompts. The grouped remote profile serves 7 static resources and 10 prompts; the OpenAI-reviewed profile serves neither.
 

@@ -6,9 +6,11 @@ by the [Frihet](https://frihet.io) AI-native ERP.
 
 ## Included
 
-- `mcp.json` — the Frihet MCP server (157 canonical catalogue operations across
+- `mcp.json` — the Frihet MCP server (156 canonical catalogue operations across
   invoicing, expenses, CRM, products, quotes, banking, fiscal workflows, POS,
   stay/PMS, and HR/payroll; alias and discovery names are profile-specific).
+- `skills/` — 8 guided business operations skills (`frihet-mcp`, `clientes`,
+  `cobros`, `documentos`, `gastos`, `operaciones`, `revision-mensual`, `tesoreria`).
 - `rules/frihet-fiscal.mdc` — Spanish & EU fiscal context so the agent picks the right
   VAT/IGIC rate, IRPF retención and tax model.
 - `assets/logo.svg` — marketplace logo.
