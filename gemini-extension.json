@@ -1,0 +1,14 @@
+{
+  "name": "frihet",
+  "version": "2.0.1",
+  "contextFileName": "rules/AGENTS.md",
+  "mcpServers": {
+    "frihet": {
+      "url": "https://mcp.frihet.io/mcp",
+      "type": "http",
+      "oauth": {
+        "enabled": true
+      }
+    }
+  }
+}

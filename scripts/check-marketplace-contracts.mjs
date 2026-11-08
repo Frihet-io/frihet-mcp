@@ -38,6 +38,7 @@ const JSON_MANIFESTS = [
   'marketplace/antigravity/plugin.json',
   'marketplace/antigravity/mcp_config.json',
   '.antigravity-plugin/plugin.json',
+  'gemini-extension.json',
   'mcp_config.json',
 ];
 
