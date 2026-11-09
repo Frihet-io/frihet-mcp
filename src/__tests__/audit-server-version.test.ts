@@ -190,7 +190,7 @@ describe("current release projection gate", () => {
       ["default Worker product", (input) => { input.releasesJson.products.mcp_server.version = "0.0.0"; }],
       ["Anthropic root", (input) => { input.anthropicManifest.version = "0.0.0"; }],
       ["Anthropic npm package", (input) => { input.anthropicManifest.packages[0].version = "0.0.0"; }],
-      ["skill frontmatter", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 2.0.1", "  version: 0.0.0"); }],
+      ["skill frontmatter", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 2.0.2", "  version: 0.0.0"); }],
     ];
     for (const [label, mutate] of mutations) {
       const input = releaseProjectionInput();
@@ -248,7 +248,7 @@ describe("current release projection gate", () => {
       ["Glama", (input) => { input.glamaJson.description += ` The grouped remote profile serves ${REMOTE_GROUPED_TOOLS - 1} tool names, 7 resources, and 10 prompts.`; }],
       ["package", (input) => { input.packageJson.description += ` Legacy claim: ${CANONICAL_COUNT - 1} canonical operations.`; }],
       ["Anthropic", (input) => { input.anthropicManifest.description += ` The grouped remote profile exposes ${REMOTE_GROUPED_TOOLS - 1} tool names, 7 resources, and 10 prompts.`; }],
-      ["skill metadata", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 2.0.1", "  version: 2.0.1\n  version: 0.0.0"); }],
+      ["skill metadata", (input) => { input.skillDocuments[0] = input.skillDocuments[0]!.replace("  version: 2.0.2", "  version: 2.0.2\n  version: 0.0.0"); }],
       ["current changelog", (input) => { input.changelog = input.changelog.replace(`The catalogue has ${CANONICAL_COUNT} canonical operations`, `The catalogue has ${CANONICAL_COUNT} canonical operations. The catalogue has ${CANONICAL_COUNT - 1} canonical operations. \`localFull\` exposes 999 tool names, 11 resources, and 10 prompts.`); }],
     ];
     for (const [label, mutate] of mutations) {

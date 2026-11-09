@@ -4,13 +4,25 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+## [2.0.2] — 2026-11-09
+
+### Added
+
+- **Purchase-order read tools (`list_purchase_orders` and `get_purchase_order`, ADR 0027 S2, #223).** Exposes the read-only `/v1/purchase-orders` surface (`status`, `vendorId`, `limit`, `offset` on list; `id` on get) under `purchase-orders:read | purchase-orders:* | *`. Write operations remain unexposed pending human-authority semantics.
+- **Dedicated invoice portal payment link MCP contract (`get_invoice_payment_link`, #281 / Frihet-ERP #3161).** Adds an opt-in candidate contract (`src/invoice-payment-link.ts`) for retrieving a hosted customer payment link for an issued/sent/overdue invoice (bringing total shipped tool contracts across default and opt-in modules to 159).
+- **ChatGPT 1.0.3 candidate package (#259) and MPP M0–M4 sell-side sandbox eligibility (#271).** Adds the 37-tool / 4-skill OpenAI 1.0.3 candidate bundle and HTTP 402 / MCP Payment Protocol sell-side sandbox verification (`src/mpp-sandbox.ts`).
+
+### Changed
+
+- **Release projections now agree on 2.0.2 and the generated runtime inventory.** The catalogue has 158 canonical operations (157 measured in 1.17.0, minus the two withdrawn tools, plus `global_search`, plus the read-only `list_purchase_orders` and `get_purchase_order`; #124 withdrew the dead `onboarding_status` / `onboarding_persona_set` tools pending Frihet-ERP shipping the `/v1/onboarding/*` family). `localFull` exposes 163 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 166 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth.
+
 ## [2.0.1] — 2026-11-08
 
 ### Changed
 
 - **Public README front page rewritten for distribution and quick start (#277).** Leads with distribution surfaces, quick start, and grouped vs. local capability truth; collapses the full operation reference table so npm and GitHub readers reach installation and authentication first without changing any shipped tool, resource, or prompt.
 - **MCP Registry listing metadata and published-drift issue reporting (#274).** Adds `websiteUrl` and light/dark icons to `server.json`, compares `https://mcp.frihet.io/health` version against npm `latest` in `scripts/published-artifact-drift.mjs`, and opens/refreshes/closes a tracking issue from `.github/workflows/published-drift.yml`.
-- **Release projections now agree on 2.0.1 and the generated runtime inventory.** The catalogue has 158 canonical operations (157 measured in 1.17.0, minus the two withdrawn tools, plus `global_search`, plus the read-only `list_purchase_orders` and `get_purchase_order`; #124 withdrew the dead `onboarding_status` / `onboarding_persona_set` tools pending Frihet-ERP shipping the `/v1/onboarding/*` family). `localFull` exposes 163 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 166 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth.
+- **Release projections now agree on 2.0.1 and the generated runtime inventory.** The catalogue has 156 canonical operations (157 measured in 1.17.0, minus the two withdrawn tools, plus `global_search`; #124 withdrew the dead `onboarding_status` / `onboarding_persona_set` tools pending Frihet-ERP shipping the `/v1/onboarding/*` family). `localFull` exposes 161 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 164 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth.
 
 ## [2.0.0] — 2026-11-05
 

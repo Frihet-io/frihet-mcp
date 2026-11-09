@@ -36,7 +36,7 @@
       "install": "npm install @frihet/mcp-server",
       "npm": "@frihet/mcp-server",
       "status": "live",
-      "version": "2.0.1"
+      "version": "2.0.2"
     },
     "sdk": {
       "install": "npm install @frihet/sdk",
@@ -45,13 +45,22 @@
       "version": "0.1.0"
     }
   },
-  "releasedAt": "2026-11-08",
+  "releasedAt": "2026-11-09",
   "releases": [
+    {
+      "version": "2.0.2",
+      "date": "2026-11-09",
+      "mcpToolCount": 158,
+      "toolNamesCount": 166,
+      "resourcesCount": 7,
+      "promptsCount": 10,
+      "notes": "Purchase-order read tools (list_purchase_orders, get_purchase_order; ADR 0027 S2, #223), dedicated invoice portal payment link MCP contract (get_invoice_payment_link, #281), ChatGPT 1.0.3 candidate package (#259), and MPP M0-M4 sell-side sandbox eligibility (#271)."
+    },
     {
       "version": "2.0.1",
       "date": "2026-11-08",
-      "mcpToolCount": 158,
-      "toolNamesCount": 166,
+      "mcpToolCount": 156,
+      "toolNamesCount": 164,
       "resourcesCount": 7,
       "promptsCount": 10,
       "notes": "Documentation and registry metadata release. Ships the rewritten public README front page (#277), MCP Registry listing metadata (websiteUrl and light/dark icons in server.json, #274), and the published-artifact drift issue reporter and remote /health version comparator (#274). No tool, resource, prompt, or runtime behavior changes."
@@ -163,5 +172,5 @@
       "version": "1.7.0-beta.1"
     }
   ],
-  "version": "2.0.1"
+  "version": "2.0.2"
 }

@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "Official Frihet ERP plugin marketplace for Claude Code — invoicing, quotes, expenses, CRM, treasury, operations, and monthly business reviews.",
-    "version": "2.0.1"
+    "version": "2.0.2"
   },
   "plugins": [
     {
