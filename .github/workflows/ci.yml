@@ -36,7 +36,7 @@ jobs:
           test ! -e .npmrc
           test ! -e workers/remote-mcp/npm-shrinkwrap.json
           test ! -e workers/remote-mcp/.npmrc
-          echo "bc62a34a12ad5aebb7c95ec4426195e01fb1cdcb3ce35a2d9585da6224a3dc24  package-lock.json" | sha256sum --check --strict -
+          echo "5eb56bed75fdc60d948235797aa89c17f47410021f349edffee861e3d35a2a4f  package-lock.json" | sha256sum --check --strict -
           echo "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b  workers/remote-mcp/package-lock.json" | sha256sum --check --strict -
 
       - name: Install

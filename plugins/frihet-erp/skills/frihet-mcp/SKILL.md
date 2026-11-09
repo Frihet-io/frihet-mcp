@@ -9,7 +9,7 @@ description: >-
 license: MIT
 metadata:
   author: Frihet
-  version: 2.0.1
+  version: 2.0.2
   mcp-server: frihet
   documentation: https://docs.frihet.io/desarrolladores/mcp-server
 ---
@@ -28,9 +28,9 @@ pidas pegar claves, contraseñas ni tokens en la conversación. La instalación
 local del repositorio mantiene su configuración de API key; consulta el README
 para configurarla fuera de la conversación.
 
-## MCP catalogue (156 canonical operations)
+## MCP catalogue (158 canonical operations)
 
-El catálogo de este código contiene **156 canonical operations**. Es un inventario
+El catálogo de este código contiene **158 canonical operations**. Es un inventario
 de origen: el servidor conectado puede tener otra versión, perfil y permisos.
 Comprueba sus herramientas, esquemas, recursos y metadatos de disponibilidad al
 comenzar y cuando falte una operación. Usa sus nombres reales, incluidos los

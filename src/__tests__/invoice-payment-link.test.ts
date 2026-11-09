@@ -232,7 +232,7 @@ describe("Collections PayLink MCP Contract (#3161)", () => {
       },
     };
 
-    const server = new McpServer({ name: "frihet-paylink-test", version: "2.0.1" });
+    const server = new McpServer({ name: "frihet-paylink-test", version: "2.0.2" });
     registerInvoicePaymentLinkTool(server, transport, { expectedWorkspaceId: "ws_prod_01" });
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
