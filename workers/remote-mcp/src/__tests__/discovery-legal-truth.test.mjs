@@ -366,3 +366,24 @@ test("OpenAI public surfaces bind the Frihet trade name to the exact verified ow
   assert.doesNotMatch(openAIBlock, /support@frihet\.io|https:\/\/frihet\.io(?:["'`/])/);
   assert.doesNotMatch(openAIBlock, /Viktor Berthelius Pato/);
 });
+
+// --------------------------------------------------------------------------
+// VeriFactu / AEAT: no discovery artifact may claim certification or approval
+// --------------------------------------------------------------------------
+
+test("no discovery artifact claims VeriFactu/AEAT certification or approval", () => {
+  const claim = /certified|certificad[oa]s?|homologad[oa]s?|homologated/i;
+  const scope = /verifactu|aeat/i;
+  for (const [label, src] of [
+    ["remote-mcp/src/index.ts", indexSrc],
+    ["api-proxy/worker.js", apiProxySrc],
+    ["remote-mcp/src/server-meta.ts", serverMetaSrc],
+  ]) {
+    src.split("\n").forEach((line, i) => {
+      assert.ok(
+        !(claim.test(line) && scope.test(line)),
+        `${label}:${i + 1} pairs a certification/approval word with VeriFactu/AEAT: ${line.trim()}`,
+      );
+    });
+  }
+});
