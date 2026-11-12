@@ -4,7 +4,7 @@ Connect Google Antigravity (App, CLI, and IDE) to your [Frihet ERP](https://frih
 
 ## Included Components
 
-- **Remote MCP Server (`frihet_erp`)** — Connects to `https://mcp.frihet.io/mcp` over Streamable HTTP with built-in OAuth 2.0 + PKCE browser sign-in (156 canonical operations across invoicing, quotes, expenses, CRM, products, banking, fiscal models, POS, hospitality PMS, and HR/time tracking).
+- **Remote MCP Server (`frihet_erp`)** — Connects to `https://mcp.frihet.io/mcp` over Streamable HTTP with built-in OAuth 2.0 + PKCE browser sign-in (158 canonical operations across invoicing, quotes, expenses, CRM, products, banking, fiscal models, POS, hospitality PMS, and HR/time tracking).
 - **8 Guided Skills**:
   - `/frihet-mcp` — General workspace operations, schema discovery, and multi-currency orchestration.
   - `/clientes` — Client CRM, contacts, notes, deduplication, and commercial follow-up.

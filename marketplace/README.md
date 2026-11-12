@@ -7,9 +7,9 @@ This directory contains public listing copy, official manifests, SDK toolkits, a
 - **npm Package:** `@frihet/mcp-server`
 - **MCP Server Identity:** `io.frihet/erp`
 - **Remote Streamable HTTP Endpoint:** `https://mcp.frihet.io/mcp`
-- **Canonical Catalogue:** 156 operations
-- **Local Full Surface:** 161 tool names, 11 resources, 10 prompts
-- **Grouped Remote Surface:** 164 tool names, 7 resources, 10 prompts
+- **Canonical Catalogue:** 158 operations
+- **Local Full Surface:** 163 tool names, 11 resources, 10 prompts
+- **Grouped Remote Surface:** 166 tool names, 7 resources, 10 prompts
 - **Safety Invariant:** All agent-triggered document creations are non-destructive and strictly in **`draft`** status; irreversible fiscal submissions (AEAT, VeriFactu, TicketBAI) and real-money movements require explicit human confirmation in Frihet ERP web dashboard.
 
 ---
@@ -33,7 +33,7 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 | **Composio Toolkit** | `Remote MCP / REST` | 1500+ agent ecosystem | Full OpenAPI & MCP profile, draft invariant | **`SUBMITTED`** (Email & web form verified) |
 | **Meta Muse Connector** | `src/muse-profile.ts` | WhatsApp & Meta AI SMB | Curated 18-tool profile, forced draft | **`SUBMITTED`** (Catalog submission & server profile) |
 | **Google Connected Apps** | `src/google-profile.ts` | Gemini & Google Search | Curated 18-tool profile, forced draft | **`PREVIEW_APPLIED`** (Form 46 preview access) |
-| **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (156 ops) / Draft invariant | **`PUBLISHED_VERIFIED`** |
+| **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (158 ops) / Draft invariant | **`PUBLISHED_VERIFIED`** |
 | **Vercel AI SDK** | `marketplace/vercel-ai/` | Next.js & TypeScript agents | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |
 | **Google Genkit** | `marketplace/genkit/` | Gemini & Firebase workflows | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |
 | **Microsoft AutoGen** | `marketplace/autogen/` | Python enterprise multi-agent | v0.4+ / v0.2 compatible, Pydantic validation | **`CONTRACT_TESTED`** |

@@ -50,7 +50,7 @@ Seeded from what the audit actually verified: the IGIC 415/425/418 family, AIEM,
 Modelo 200/202/180, `onboarding_status`, `gestoria_aging_consolidated` (404s),
 plus `period_close` / `period_reopen` and the gestoría template / bulk-send /
 messages write routes (501s). Anything absent from the table defaults to
-`"available"` — the table lists exceptions, not the whole 157-tool surface.
+`"available"` — the table lists exceptions, not the whole 158-tool surface.
 
 ### 2. Fields, and who consumes each one
 

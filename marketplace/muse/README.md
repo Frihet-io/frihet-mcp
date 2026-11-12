@@ -26,7 +26,7 @@ flowchart LR
 
 ## 2. First-Release Curated Tool Surface (18 Tools)
 
-Rather than exposing the complete 165-tool internal enterprise catalogue, the Muse connector exposes a curated, high-confidence surface designed for small-to-medium business management:
+Rather than exposing the complete 166-tool internal enterprise catalogue, the Muse connector exposes a curated, high-confidence surface designed for small-to-medium business management:
 
 ### A. Business Health & Financial Context (Read-Only)
 - `get_business_context`: Overview of current business setup, currency, and operating summary.

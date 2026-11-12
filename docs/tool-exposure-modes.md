@@ -51,8 +51,8 @@ Then it adds **three discovery meta-tools** as the entry point:
 | `search_tools(query, group?, limit?)` | Tools matching a free-text query across name/title/summary/group, with their group, summary, read-only flag and input fields. Ranked, with the exact-name match on top. |
 | `describe_tool(name)` | The **full original description** and input fields for one tool, on demand. |
 
-The grouped remote profile serves three meta-tool descriptions plus 162 terse
-business names (157 canonical operations + 5 fiscal aliases), for 165 names in
+The grouped remote profile serves three meta-tool descriptions plus 163 terse
+business names (158 canonical operations + 5 fiscal aliases), for 166 names in
 total. It pulls full depth only for the handful of tools it actually needs.
 
 ```
@@ -95,8 +95,8 @@ tools that say "invoice" but belong to fiscal/compliance) are pinned via a small
   descriptor truth, not new backend capability.
 - **Grouped mode changes description density.** The description string loaded up
   front is collapsed; real tools remain directly invocable.
-- **Audited tool count stays 157.** The exposure layer lives in `src/`, not
-  `src/tools/*.ts`, so `npm run audit:mcp-refs` still counts 157 canonical catalogue operations. The
+- **Audited tool count stays 158.** The exposure layer lives in `src/`, not
+  `src/tools/*.ts`, so `npm run audit:mcp-refs` still counts 158 canonical catalogue operations. The
   three meta-tools are discovery helpers, not ERP tools, and are added only in
   grouped mode.
 - **Composes with `FRIHET_OPENAI_MODE`.** If both are set, the OpenAI allowlist
@@ -112,8 +112,8 @@ depth stays usable inside an agent's context budget as the surface grows.
 
 `src/__tests__/tool-exposure.test.ts` covers mode resolution and the exposure
 interceptor in isolation: full mode adds no meta-tools; grouped mode adds 3
-discovery names + a 157-entry catalogue and collapses descriptions; names,
+discovery names + a 158-entry catalogue and collapses descriptions; names,
 schemas and handler behavior are preserved; `groupForTool`
-reproduces `FILE_TO_GROUP` for all 157 canonical operations; and each discovery tool's runtime
+reproduces `FILE_TO_GROUP` for all 158 canonical operations; and each discovery tool's runtime
 behavior (`list_tool_groups`, `search_tools` with group filter, `describe_tool`
 including the unknown-name error path).

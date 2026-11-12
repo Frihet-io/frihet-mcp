@@ -7,7 +7,7 @@ POS, HR, and Spanish/EU fiscal workflows.
 - package: `@frihet/mcp-server`;
 - MCP identity: `io.frihet/erp`;
 - remote endpoint: `https://mcp.frihet.io/mcp`;
-- catalogue: 156 canonical operations, with aliases and discovery names counted
+- catalogue: 158 canonical operations, with aliases and discovery names counted
   separately by each served profile.
 
 Directory submission ownership and process are intentionally not documented in
