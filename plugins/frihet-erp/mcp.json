@@ -2,9 +2,14 @@
   "mcpServers": {
     "frihet": {
       "command": "npx",
-      "args": ["-y", "@frihet/mcp-server"],
+      "args": [
+        "-y",
+        "@frihet/mcp-server@2.0.2"
+      ],
       "env": {
-        "FRIHET_API_KEY": "${FRIHET_API_KEY}"
+        "FRIHET_API_KEY": "${FRIHET_API_KEY}",
+        "FRIHET_DEMO": "${FRIHET_DEMO}",
+        "FRIHET_TOOL_MODE": "full"
       }
     }
   }

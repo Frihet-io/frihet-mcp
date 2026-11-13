@@ -1,6 +1,5 @@
 {
   "name": "frihet-erp",
-  "displayName": "Frihet ERP",
   "version": "2.0.2",
   "description": "AI-native ERP for Spain & the EU. Connect your assistant to invoicing, expenses, clients and business workflows in Frihet. Availability depends on your workspace configuration and permissions.",
   "author": {
@@ -25,14 +24,27 @@
   "variables": {
     "type": "object",
     "properties": {
+      "FRIHET_DEMO": {
+        "type": "string",
+        "title": "Use synthetic demo data",
+        "description": "0 connects to your Frihet workspace and requires an API key. 1 uses fixed example data without an API key or live API requests; simulated changes are not saved.",
+        "enum": [
+          "0",
+          "1"
+        ],
+        "default": "0"
+      },
       "FRIHET_API_KEY": {
         "type": "string",
         "title": "Frihet API key",
-        "description": "API key for your Frihet workspace"
+        "description": "Required for live mode (FRIHET_DEMO=0). Leave empty for demo mode. Set it only in the host plugin configuration, never in chat.",
+        "default": ""
       }
     },
     "required": [
-      "FRIHET_API_KEY"
+      "FRIHET_DEMO"
     ]
-  }
+  },
+  "homepage": "https://www.frihet.io",
+  "repository": "https://github.com/Frihet-io/frihet-mcp"
 }

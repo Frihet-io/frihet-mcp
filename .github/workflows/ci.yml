@@ -71,6 +71,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Cursor plugin packaging and source startup
+        run: node --test scripts/__tests__/cursor-plugin-package.test.mjs
+
       # The Worker is a separately locked TypeScript project and carries the
       # OAuth, MCP-session, body-limit, host-containment, and legal-surface
       # boundaries used by the official connector. Run its real suite in CI;

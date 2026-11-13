@@ -1,14 +1,29 @@
 ---
-description: Spanish & EU fiscal context for operating the Frihet ERP MCP tools correctly
+description: Fiscal operating safeguards for connected Frihet ERP tools
 alwaysApply: false
 ---
 
-Apply this when using the Frihet MCP tools for invoicing, expenses or tax.
+Apply this when using Frihet tools for invoicing, expenses or tax. Follow the
+plugin's `skills/frihet-mcp/SKILL.md` and the actual connected tool schemas.
 
-- **VAT (IVA):** mainland Spain uses 21% (general), 10% (reduced), 4% (super-reduced). Pick the rate per line item, not per invoice.
-- **Canary Islands:** use **IGIC** (general 7%), not IVA. Ceuta & Melilla use IPSI. Frihet applies the right zone rate automatically — set the client's region.
-- **IRPF retención:** Spanish freelancers may apply professional withholding (15%, or 7% for newly registered). Do not add it for non-Spanish clients.
-- **EU B2B:** reverse-charge / intra-community supplies need a VAT number validated via VIES (`frihet_tax_id_vies_lookup`). Never invent a NIF/CIF/IBAN — ask or look it up.
-- **Compliance is automatic:** VeriFactu (state), TicketBAI (Basque Country) and Facturae/FACe (B2G) are handled by Frihet on issue. Don't fabricate fiscal identifiers or submission acks — read the real status with the `verifactu_status` / `ticketbai_status` / `face_status` tools.
-- **Tax models:** Modelo 303 (quarterly IVA), 130 (quarterly IRPF), 390 (annual IVA), 347 (third parties > €3,005). Use the `get_modelo_*_summary` tools rather than computing by hand.
-- **Confirm before destructive actions** (delete, refund, mark-paid). These mutate real business records.
+- Resolve the workspace, period, currency and requested action before proceeding.
+  Use stored fiscal settings and the user's confirmed transaction treatment;
+  never infer an IVA, IGIC, IPSI, withholding, exemption or reverse-charge treatment
+  from an address alone. Ask when material fiscal inputs are missing.
+- Inspect the connected catalogue and capability metadata before selecting an
+  operation. Tool availability depends on profile, permissions and backing
+  endpoints. Do not invent tool names, tax identifiers, invoice numbers, payment
+  links, submission acknowledgements or permissions.
+- Keep newly authorized documents in draft when supported. Creating a draft can
+  still assign numbering or trigger configured business events. A proposed draft
+  in conversation is not a saved document.
+- Sending, issuing, fiscal submission, refunds and payment bookkeeping have
+  distinct effects and authorization requirements. Explain the exact effect,
+  use required confirmation fields only after authorization and never expand a
+  request to a different operation.
+- Read actual status and provider evidence before claiming acceptance or payment.
+  A queued request is not authority acceptance; recording a payment is not moving
+  money. Do not retry an uncertain write with a new idempotency key.
+- Use available server summaries for the requested period, inspect coverage and
+  separate currencies. Unsupported fiscal routes or missing evidence must be
+  reported as unavailable, incomplete or unknown.

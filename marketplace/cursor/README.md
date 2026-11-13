@@ -1,52 +1,51 @@
 # Frihet ERP for Cursor
 
-Enable AI-assisted financial operations, invoice drafting, and expense management directly inside [Cursor](https://www.cursor.com/) using the Model Context Protocol (MCP).
+The [Frihet Cursor plugin](../../plugins/frihet-erp/README.md) bundles the pinned
+MCP server, eight business workflows and fiscal operating safeguards. Configure
+its variables under **Plugins → Configure**. The plugin includes an explicit
+synthetic demo mode; a live API key is unnecessary for that review.
 
-## Quick Setup
+## Manual MCP configuration
 
-### 1. Configure MCP Server in Cursor
-Open **Cursor Settings** > **Features** > **MCP Servers** > **Add New MCP Server**, or copy the included configuration to `.cursor/mcp.json` in your workspace root:
+For a standalone connection instead of a plugin installation, copy
+[`.cursor/mcp.json`](.cursor/mcp.json) to your project or user Cursor configuration.
+It uses the same pinned `@frihet/mcp-server@2.0.2` version and Cursor's standalone
+`${env:FRIHET_API_KEY}` environment-variable syntax. Keep the key outside the
+repository and conversation. This path configures MCP only; it does not install
+the plugin's skills or rules.
+
+A manual demo connection needs no key:
 
 ```json
 {
   "mcpServers": {
-    "frihet": {
+    "frihet-demo": {
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@frihet/mcp-server@latest"],
+      "args": ["-y", "@frihet/mcp-server@2.0.2"],
       "env": {
-        "FRIHET_API_KEY": "YOUR_FRIHET_API_KEY"
+        "FRIHET_DEMO": "1",
+        "FRIHET_TOOL_MODE": "full",
+        "FRIHET_API_KEY": ""
       }
     }
   }
 }
 ```
 
-*Note: For remote streaming without local Node dependencies, configure the SSE endpoint:*
-```json
-{
-  "mcpServers": {
-    "frihet-remote": {
-      "url": "https://mcp.frihet.io/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_FRIHET_API_KEY"
-      }
-    }
-  }
-}
-```
+The pinned version must be available on npm before installation. The local full
+source profile contains 158 canonical operations and five aliases (163 tool
+names). Demo uses fixed synthetic fixtures; exposed writes are simulations and
+are not saved. For a read-only review, ask the agent to call reads only and apply
+a host tool allowlist if supported.
 
-### 2. Add Cursor Rules
-Copy `.cursor/rules/frihet.mdc` into your project's `.cursor/rules/` directory to ground Cursor Composer and Cursor Agent in Frihet's fiscal invariants (draft-only safeguard, VAT regimes, NIF masking).
+## Example requests
 
-## Example Prompts in Cursor Composer & Agent
+- Summarize the selected workspace and month, with source coverage and separate currencies.
+- Review pending invoices, inspect partial payments and credits, and report unknown balances.
+- Review recent expenses for missing information without changing records or guessing tax treatment.
 
-- **Monthly Health Check:**
-  > "Using Frihet MCP, summarize our revenue, expenses, and pending VAT for this month."
-- **Customer Lookup & Draft Invoicing:**
-  > "Find client 'Acme Corp' in Frihet ERP and draft an invoice for 10 hours of software consulting at €95/hr with 21% IVA."
-- **Expense Categorization:**
-  > "List recent unreviewed expenses and verify if our hosting invoices are properly categorized."
-
-## Safety Guarantees
-- **Strict Draft Mode:** Any tool that creates an invoice defaults to `draft`.
-- **Zero Irreversible Fiscal Submission:** Formal submission to tax authorities (VeriFactu, TicketBAI, AEAT) requires human confirmation in the Frihet ERP web application.
+Check the connected schemas and permissions before any action. Invoice drafts,
+email delivery, payment bookkeeping and fiscal acceptance are distinct outcomes.
+A manual MCP test, a plugin installation, a directory listing and marketplace
+approval each require their own evidence.
