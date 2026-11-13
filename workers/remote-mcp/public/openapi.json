@@ -3,7 +3,7 @@
   "info": {
     "title": "Frihet API",
     "version": "2026-03-18",
-    "description": "The Frihet REST API provides programmatic access to your business data\nin Frihet, the AI-native business management platform for modern businesses.\n\n## Authentication\n\nAll API requests require an API key passed via the `X-API-Key` header.\nGenerate keys from **Settings > API Keys** in the Frihet app.\n\n```\nX-API-Key: fri_your_api_key_here\n```\n\n## Rate Limiting\n\nThe API enforces a rate limit of **100 requests per minute** per API key.\nWhen exceeded, the API returns `429 Too Many Requests` with an integer\ndelta-seconds `Retry-After` header and matching `retryAfter` JSON field.\n\nEvery authenticated response includes rate limit headers:\n\n| Header | Description |\n|--------|-------------|\n| `X-RateLimit-Limit` | Maximum requests per window (100) |\n| `X-RateLimit-Remaining` | Remaining requests in current window |\n| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |\n| `Retry-After` | Integer seconds until the window resets (429 responses) |\n\n## Idempotency\n\nMost POST requests accept an `Idempotency-Key` header to prevent duplicate\nresource creation from network retries. For protected routes, the key is\nreserved against the operation *before* the request is executed, and it stays\nreserved for 24 hours.\n\n```\nIdempotency-Key: 550e8400-e29b-41d4-a716-446655440000\n```\n\nKeys must be at most 64 characters. We recommend UUID v4.\n\nA retry of the same operation gets one of three answers:\n\n| Situation | Response |\n|---|---|\n| The first request finished | The **original status and body**, verbatim, with `X-Idempotent-Replayed: true` |\n| The first request is still running, or its outcome could not be recorded | `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` |\n| The key is live but was used for a **different** operation | `409 IDEMPOTENCY_KEY_REUSED` — the second operation is not executed |\n\nThe replayed status is the **stored** one. A `201` replays as `201`, not `200`.\nThis includes error responses: a request that answered `4xx` or `5xx` replays\nthat same status and body, it does not re-execute.\n\n### When a retry is refused\n\nA `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` after the first request already\nreturned means the outcome could not be recorded — the response was too large\nor unserializable, or the bookkeeping write failed. The API refuses rather than\nexecute a second time, because for a fiscal document a duplicate is not\nrecoverable.\n\n**Reconcile; do not simply retry with a fresh key.** Read the resource back\n(`GET` the collection, or look for the document the operation would have\ncreated) and decide from its actual state. A new key would happily create a\nsecond document, which is exactly what the first key existed to prevent.\n\nAuthentication, rate limiting, and the maximum-request-size check happen before\nthe idempotency gate. Their `401`, `429`, and `413` responses do not reserve a\nkey and are never idempotency replays. Fiscal-send scope authorization also\nhappens before replay for `einvoice/export`, `face/submit`, and\n`ticketbai/submit`; a current `403` does not reserve or alter the key. Authorized\nfiscal sends remain idempotency-protected.\n\nTwo current-state report/check routes deliberately bypass the idempotency gate:\n`POST /v1/gestoria/aging` and\n`POST /v1/portal/domain/{domain}/verify`. They ignore `Idempotency-Key` and\nalways re-evaluate current workspace membership or domain ownership/DNS/SSL.\n\nIdentity note: for every idempotency-protected `POST`, the complete received\nJSON request body and parsed query parameters are part of the operation\nidentity. Object-key order does not matter, including in nested objects, but\narray order does. The credit-note endpoint applies its documented defaults\nfirst, so omitting `fullCredit` is equivalent to sending `fullCredit: true`.\nReusing the same key and path with a different body or query returns\n`409 IDEMPOTENCY_KEY_REUSED` without executing the request.\n\n## API Versioning\n\nEvery response includes an `X-API-Version` header (e.g., `2026-03-18`)\nindicating the current API version. Monitor this header to detect changes.\n\n## Pagination\n\nList endpoints support two pagination strategies:\n\n**Offset pagination:** Use `limit` and `offset` query parameters.\nDefault limit is 50, maximum is 100.\n\n**Cursor pagination:** Use `cursor` and `limit` query parameters.\nPass the `nextCursor` value from a previous response to fetch the next page.\nCursor pagination is more efficient for large datasets and avoids skipped/duplicated\nitems when data changes between requests. When `cursor` is provided, `offset` is ignored.\n\nResponses include `total`, `limit`, `offset`, and optionally `nextCursor`.\n\n## Filtering\n\nList endpoints support filtering by `status` (where applicable), date\nranges using `from` and `to` query parameters in ISO 8601 format (`YYYY-MM-DD`),\nand resource-specific filters like `clientId`, `seriesId`, `vendorId`,\n`category`, `isActive`, and `stage`.\n\n## Field Selection\n\nAll GET endpoints support a `fields` query parameter to select specific fields.\nPass a comma-separated list of field names: `?fields=id,name,total`.\nThe `id` field is always included.\n\n## Errors\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Human-readable error message\",\n  \"details\": [],\n  \"meta\": { \"requestId\": \"uuid\" }\n}\n```\n\nThe `details` array is only present on validation errors (Zod issues).\nThe `meta.requestId` is included on every error response for tracing.\n\n## Resources\n\n- [Documentation](https://docs.frihet.io/desarrolladores/api-rest)\n- [MCP Server](https://mcp.frihet.io)\n- [Status](https://status.frihet.io)\n",
+    "description": "The Frihet REST API provides programmatic access to your business data\nin Frihet, the AI-native business management platform for modern businesses.\n\n## Authentication\n\nAll API requests require an API key passed via the `X-API-Key` header.\nGenerate keys from **Settings > API Keys** in the Frihet app.\n\n```\nX-API-Key: fri_your_api_key_here\n```\n\n### API-key scopes\n\nA key without scopes (no list, or an empty one) is unrestricted. A key with a\nnon-empty scope list gets only what the list grants. On such a key, every\nrequest other than `GET` and `HEAD` needs the `write` scope (or `*`), except\nthe read-only `POST /v1/gestoria/aging` and the POS and purchase-order routes,\nwhich check their own `pos:` and `purchase-orders:` scopes. E-invoicing endpoints need an `einvoice:` scope,\nand the sends (`einvoice/export`, `face/submit`, `ticketbai/submit`) also need\n`write` or `einvoice:write`. A request without the scope it needs gets\n`403 Forbidden` with a `detail` naming that scope. The refusal happens before\nthe idempotency gate, so it does not reserve the `Idempotency-Key`.\n`GET /v1/permissions/me` reports `denied.write`, `denied.einvoice` and\n`denied.einvoiceSend` for the calling key.\n\nInventory (`/v1/inventory/*`) and purchase-order (`/v1/purchase-orders/*`) routes are\nnot released yet: after the scope checks they answer `503` with code\n`INVENTORY_AUTHORITY_NOT_RELEASED`, before the idempotency gate.\n\n## Rate Limiting\n\nThe API enforces a rate limit of **100 requests per minute** per API key.\nWhen exceeded, the API returns `429 Too Many Requests` with an integer\ndelta-seconds `Retry-After` header and matching `retryAfter` JSON field.\n\nEvery authenticated response includes rate limit headers:\n\n| Header | Description |\n|--------|-------------|\n| `X-RateLimit-Limit` | Maximum requests per window (100) |\n| `X-RateLimit-Remaining` | Remaining requests in current window |\n| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |\n| `Retry-After` | Integer seconds until the window resets (429 responses) |\n\n## Idempotency\n\nMost POST requests accept an `Idempotency-Key` header to prevent duplicate\nresource creation from network retries. For protected routes, the key is\nreserved against the operation *before* the request is executed, and it stays\nreserved for 24 hours unless released by an explicit pre-write refusal.\n\n```\nIdempotency-Key: 550e8400-e29b-41d4-a716-446655440000\n```\n\nKeys must be at most 64 characters. We recommend UUID v4.\n\nA retry of the same operation gets one of three answers:\n\n| Situation | Response |\n|---|---|\n| The first request finished | The **original status and body**, verbatim, with `X-Idempotent-Replayed: true` |\n| The first request is still running, or its outcome could not be recorded | `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` |\n| The key is live but was used for a **different** operation | `409 IDEMPOTENCY_KEY_REUSED` — the second operation is not executed |\n\nThe replayed status is the **stored** one. A `201` replays as `201`, not `200`.\nThis includes stored error responses: a request that answered `4xx` or `5xx`\nreplays that same status and body, it does not re-execute — except explicit\npre-mutation refusals on `POST /v1/pos/cash-sessions/{id}/close` (`503` when\nthe workspace POS money-authority grant is not enabled and `403 POS_INACTIVE`\nbefore the POS app is activated), which release the reservation instead of\ncaching the refusal for 24 hours.\n\n### When a retry is refused\n\nA `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` after the first request already\nreturned means the outcome could not be recorded — the response was too large\nor unserializable, or the bookkeeping write failed. The API refuses rather than\nexecute a second time, because for a fiscal document a duplicate is not\nrecoverable.\n\n**Reconcile; do not simply retry with a fresh key.** Read the resource back\n(`GET` the collection, or look for the document the operation would have\ncreated) and decide from its actual state. A new key would happily create a\nsecond document, which is exactly what the first key existed to prevent.\n\nAuthentication, rate limiting, and the maximum-request-size check happen before\nthe idempotency gate. Their `401`, `429`, and `413` responses do not reserve a\nkey and are never idempotency replays. API-key scope authorization also\nhappens before replay: the `write` scope for mutations, and the fiscal-send\nscopes for `einvoice/export`, `face/submit`, and `ticketbai/submit`; a current\n`403` does not reserve or alter the key. Authorized writes and fiscal sends\nremain idempotency-protected.\n\nTwo current-state report/check routes deliberately bypass the idempotency gate:\n`POST /v1/gestoria/aging` and\n`POST /v1/portal/domain/{domain}/verify`. They ignore `Idempotency-Key` and\nalways re-evaluate current workspace membership or domain ownership/DNS/SSL.\n\nIdentity note: for every idempotency-protected `POST`, the complete received\nJSON request body and parsed query parameters are part of the operation\nidentity. Object-key order does not matter, including in nested objects, but\narray order does. The credit-note endpoint applies its documented defaults\nfirst, so omitting `fullCredit` is equivalent to sending `fullCredit: true`.\nReusing the same key and path with a different body or query returns\n`409 IDEMPOTENCY_KEY_REUSED` without executing the request.\n\n## API Versioning\n\nEvery response includes an `X-API-Version` header (e.g., `2026-03-18`)\nindicating the current API version. Monitor this header to detect changes.\n\n## Pagination\n\nList endpoints support two pagination strategies:\n\n**Offset pagination:** Use `limit` and `offset` query parameters.\nDefault limit is 50, maximum is 100.\n\n**Cursor pagination:** Use `cursor` and `limit` query parameters.\nPass the `nextCursor` value from a previous response to fetch the next page.\nCursor pagination is more efficient for large datasets and avoids skipped/duplicated\nitems when data changes between requests. When `cursor` is provided, `offset` is ignored.\n\nResponses include `total`, `limit`, `offset`, and optionally `nextCursor`.\n\n## Filtering\n\nList endpoints support filtering by `status` (where applicable), date\nranges using `from` and `to` query parameters in ISO 8601 format (`YYYY-MM-DD`),\nand resource-specific filters like `clientId`, `seriesId`, `vendorId`,\n`category`, `isActive`, and `stage`.\n\n## Field Selection\n\nAll GET endpoints support a `fields` query parameter to select specific fields.\nPass a comma-separated list of field names: `?fields=id,name,total`.\nThe `id` field is always included.\n\n## Errors\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Human-readable error message\",\n  \"details\": [],\n  \"meta\": { \"requestId\": \"uuid\" }\n}\n```\n\nThe `details` array is only present on validation errors (Zod issues).\nThe `meta.requestId` is included on every error response for tracing.\n\n## Resources\n\n- [Documentation](https://docs.frihet.io/desarrolladores/api-rest)\n- [MCP Server](https://mcp.frihet.io)\n- [Status](https://status.frihet.io)\n",
     "contact": {
       "name": "Frihet API Support",
       "url": "https://docs.frihet.io/desarrolladores/api-rest",
@@ -111,7 +111,7 @@
     },
     {
       "name": "E-Invoicing",
-      "description": "EN16931-compliant e-invoicing export and B2G submission endpoints.\nSupports 9 formats (Facturae, XRechnung-CII/UBL, Factur-X, FatturaPA, PEPPOL-BIS-3, FA-2-KSeF, UBL, CII).\nFACe (Spain B2G portal) and TicketBAI (Bizkaia BATUZ) submission pipelines.\nTrust Area: COMPLIANCE. Requires owner role or API key with `einvoice:*` scope.\n"
+      "description": "EN16931-compliant e-invoicing export and B2G submission endpoints.\nSupports 9 formats (Facturae, XRechnung-CII/UBL, Factur-X, FatturaPA, PEPPOL-BIS-3, FA-2-KSeF, UBL, CII).\nFACe (Spain B2G portal) submission and TicketBAI XML/sandbox preview pipelines (live submission to Basque Haciendas Forales is not enabled).\nTrust Area: COMPLIANCE. Requires owner role or API key with `einvoice:*` scope.\nExport and submit also require `write` or `einvoice:write`.\n"
     }
   ],
   "paths": {
@@ -212,7 +212,7 @@
       "post": {
         "operationId": "gestoriaAgingConsolidated",
         "summary": "Consolidated AR aging across client workspaces",
-        "description": "For an accountant/gestor, returns accounts-receivable aging consolidated across the given client workspaces. Each workspaceId is authorised per-workspace: the caller must be an active accountant or owner member of that workspace, otherwise it is silently rejected and listed in rejectedWorkspaceIds (no data returned for it). This current-state report deliberately ignores Idempotency-Key and re-checks membership on every request; an old completed marker is never replayed.\n",
+        "description": "For an accountant/gestor, returns accounts-receivable aging consolidated across the given client workspaces. Each workspaceId is authorised per-workspace: the caller must be an active accountant or owner member of that workspace, otherwise it is silently rejected and listed in rejectedWorkspaceIds (no data returned for it). This current-state report deliberately ignores Idempotency-Key and re-checks membership on every request; an old completed marker is never replayed. Amounts are never summed across currencies: `currencySummaries` (per workspace and consolidated) carries one entry per invoice currency with an open balance and is authoritative. The single-number fields (`buckets`, `grandTotal`, `totalOverdue`, `topDebtors`, `currency`, and the `consolidated*` totals) are filled only when exactly one currency is present, and are null when open balances span more than one currency. With no open balance they are zero/empty and `currency` is null. A non-empty `failedWorkspaceIds` means the report is partial: those workspaces could not be checked or computed (e.g. a transient error), no data is returned for them and every total excludes them.\n",
         "tags": [
           "Gestoria"
         ],
@@ -276,6 +276,175 @@
                               "ownerName": {
                                 "type": "string"
                               },
+                              "currencySummaries": {
+                                "type": "array",
+                                "description": "One entry per currency with an open balance, sorted by currency code.",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "currency": {
+                                      "type": "string"
+                                    },
+                                    "buckets": {
+                                      "type": "object",
+                                      "properties": {
+                                        "current": {
+                                          "type": "number"
+                                        },
+                                        "days1_30": {
+                                          "type": "number"
+                                        },
+                                        "days31_60": {
+                                          "type": "number"
+                                        },
+                                        "days61_90": {
+                                          "type": "number"
+                                        },
+                                        "days90plus": {
+                                          "type": "number"
+                                        }
+                                      }
+                                    },
+                                    "grandTotal": {
+                                      "type": "number"
+                                    },
+                                    "totalOverdue": {
+                                      "type": "number"
+                                    },
+                                    "topDebtors": {
+                                      "type": "array",
+                                      "description": "Top debtors ranked within this currency only.",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "clientId": {
+                                            "type": "string"
+                                          },
+                                          "clientName": {
+                                            "type": "string"
+                                          },
+                                          "currency": {
+                                            "type": "string"
+                                          },
+                                          "totalOutstanding": {
+                                            "type": "number"
+                                          },
+                                          "daysOldestInvoice": {
+                                            "type": "number"
+                                          },
+                                          "invoiceCount": {
+                                            "type": "number"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "buckets": {
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "description": "Null when open balances span more than one currency.",
+                                "properties": {
+                                  "current": {
+                                    "type": "number"
+                                  },
+                                  "days1_30": {
+                                    "type": "number"
+                                  },
+                                  "days31_60": {
+                                    "type": "number"
+                                  },
+                                  "days61_90": {
+                                    "type": "number"
+                                  },
+                                  "days90plus": {
+                                    "type": "number"
+                                  }
+                                }
+                              },
+                              "grandTotal": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "description": "Null when open balances span more than one currency."
+                              },
+                              "totalOverdue": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "description": "Null when open balances span more than one currency."
+                              },
+                              "asOf": {
+                                "type": "string"
+                              },
+                              "currency": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "The single currency of the open balances; null when there are none or several."
+                              },
+                              "topDebtors": {
+                                "type": [
+                                  "array",
+                                  "null"
+                                ],
+                                "description": "Null when open balances span more than one currency.",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "clientId": {
+                                      "type": "string"
+                                    },
+                                    "clientName": {
+                                      "type": "string"
+                                    },
+                                    "currency": {
+                                      "type": "string"
+                                    },
+                                    "totalOutstanding": {
+                                      "type": "number"
+                                    },
+                                    "daysOldestInvoice": {
+                                      "type": "number"
+                                    },
+                                    "invoiceCount": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "rejectedWorkspaceIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Workspaces the caller is not an authorised member of."
+                        },
+                        "failedWorkspaceIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Requested workspaces whose membership check or aging computation failed in this request. No data is returned for them and all totals exclude them; a non-empty list means the report is partial.\n"
+                        },
+                        "currencySummaries": {
+                          "type": "array",
+                          "description": "Per-currency totals across authorised workspaces, sorted by currency code.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "currency": {
+                                "type": "string"
+                              },
                               "buckets": {
                                 "type": "object",
                                 "properties": {
@@ -301,48 +470,16 @@
                               },
                               "totalOverdue": {
                                 "type": "number"
-                              },
-                              "asOf": {
-                                "type": "string"
-                              },
-                              "currency": {
-                                "type": "string"
-                              },
-                              "topDebtors": {
-                                "type": "array",
-                                "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "clientId": {
-                                      "type": "string"
-                                    },
-                                    "clientName": {
-                                      "type": "string"
-                                    },
-                                    "totalOutstanding": {
-                                      "type": "number"
-                                    },
-                                    "daysOldestInvoice": {
-                                      "type": "number"
-                                    },
-                                    "invoiceCount": {
-                                      "type": "number"
-                                    }
-                                  }
-                                }
                               }
                             }
                           }
                         },
-                        "rejectedWorkspaceIds": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          },
-                          "description": "Workspaces the caller is not an authorised member of."
-                        },
                         "consolidatedBuckets": {
-                          "type": "object",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "Null when the authorised workspaces span more than one currency.",
                           "properties": {
                             "current": {
                               "type": "number"
@@ -362,10 +499,18 @@
                           }
                         },
                         "consolidatedTotal": {
-                          "type": "number"
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "Null when the authorised workspaces span more than one currency."
                         },
                         "consolidatedOverdue": {
-                          "type": "number"
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "Null when the authorised workspaces span more than one currency."
                         },
                         "asOf": {
                           "type": "string"
@@ -509,6 +654,19 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
+          "409": {
+            "description": "The invoice cannot be created in the requested state.\nINVOICE_STATUS_DIRECT_PAYMENT_FORBIDDEN: invoices cannot be created\ndirectly with status `paid` or `partial`. Payment Authority V1\n(`POST /v1/invoices/{id}/paid`) is required.\nINVOICE_STATUS_DIRECT_MUTATION_FORBIDDEN: invoices cannot be created\nwith terminal or derived statuses such as `cancelled` or `overdue`.\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED (`reason`\ncompany_without_tax_id): an invoice created in an issued status, with or\nwithout a supplied number, has no `clientTaxId` (neither in the request nor\non the client record) while its client record declares `clientType`\ncompany. Nothing is written.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -562,7 +720,7 @@
       "put": {
         "operationId": "updateInvoice",
         "summary": "Full update an invoice",
-        "description": "Replace all fields on an existing invoice. All required fields must be provided.",
+        "description": "Replace the writable fields on an existing invoice. All required fields must\nbe provided. Setting status to sent on an unfinal placeholder draft performs\nsynchronous issuance: numbering, counter advancement and field updates commit\nin one transaction before the response. Numbering failures return 400 for\nINVALID_SERIES_ID or 409 for fiscal/sequence conflicts, without committing\nthese edits. Legacy profiles without a reset policy use yearly reset;\nan explicit never policy and yearless patterns remain continuous.\nprovisionalDraft is create-only and is\nignored on updates. Later unhashed edits may echo the existing sent status;\nhashed invoices retain the immutable-field restrictions below.\nOptional ifStatus and ifUpdatedAt preconditions are checked inside the update\ntransaction, against the live document, before any write or numbering side\neffect; neither is persisted or returned. They are rejected on POST. See\nInvoiceUpdatePreconditions for semantics and limits.\n",
         "tags": [
           "Invoices"
         ],
@@ -576,7 +734,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InvoiceCreate"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/InvoiceCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InvoiceUpdatePreconditions"
+                  }
+                ]
               }
             }
           }
@@ -593,13 +758,33 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Invalid request. INVALID_SERIES_ID rejects an unsafe series identifier\nduring synchronous issuance without committing draft or counter changes.\nA malformed ifStatus (not one of the listed statuses) or ifUpdatedAt (not an\nISO 8601 timestamp of at most 64 characters) is rejected here as a validation\nerror; nothing is written. A PATCH that carries only ifStatus and/or\nifUpdatedAt and no field to change returns `No fields provided for update`.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The invoice cannot be changed as requested. INVOICE_FISCAL_FIELDS_IMMUTABLE:\n`reason` verifactu_hash means the invoice carries a VeriFactu hash, so its\nnumber, dates, client, lines, rates, notes, PO number and fiscal identity\ncannot change here (economic corrections need a rectificativa) and its\nstatus cannot go back to draft (`field` status; cancel it instead);\nfinal_number means the server-assigned number is final and cannot change,\nand (`field` status) that an invoice holding a final number cannot go back\nto draft: one marked final by the server, or one whose number is not a\nplaceholder (supplied on create, or numbered before the marker existed).\nCancel it (status cancelled) or issue a rectificativa instead.\nIt also rejects conflicting fiscal-field edits if a draft read by this\nrequest was issued concurrently; `field` then names the conflicting field,\nwhich may be a field other than documentNumber;\nserver_numbering means the number is not final yet: the server assigns it\n(on create or when the invoice is issued), so `documentNumber` cannot be set\nor changed here; supply a number on create instead.\nThe response names the first changed `field`. Resending a stored value\nunchanged is accepted.\nCREDIT_NOTE_RECTIFICATION_REQUIRED: the request changes a POS refund credit\nnote's fiscal identity. INVOICE_PAYMENT_CAPTURE_FENCED: a portal payment\ncapture is in progress; retry after it settles.\nINVOICE_STATUS_DIRECT_PAYMENT_FORBIDDEN: direct mutation to `paid` or `partial`\nis forbidden on generic update; settle invoice outstanding via Payment Authority V1\n(`POST /v1/invoices/{id}/paid`).\nINVOICE_STATUS_DIRECT_OVERDUE_FORBIDDEN: direct mutation to `overdue` is\nforbidden; overdue status is an aging projection derived from `dueDate`.\nINVOICE_STATUS_PAID_TERMINAL: paid invoices are terminal and their status\ncannot be modified on generic update.\nINVOICE_STATUS_CANCELLED_TERMINAL: cancelled invoices are terminal and their\nstatus cannot be modified on generic update. Nothing is written.\nINVOICE_STATUS_PRECONDITION_FAILED: `ifStatus` did not match the stored status\n(`reason` status_mismatch), or `ifStatus` draft was sent for an invoice that\nalready carries issuance evidence (`reason` issuance_evidence_present). The\nevidence is a closed list: a VeriFactu hash, rectificativa numbering authority,\nsentAt, or any of faceStatus, faceNumeroRegistro, faceSubmittedAt, tbaiStatus,\ntbaiCsv. Italian SDI (`eInvoice.sdiSubmission`) and Polish KSeF (`ksefStatus`\nand related) submissions are NOT checked; the body also carries `field`, `expectedStatus`\nand `actualStatus`. INVOICE_REVISION_PRECONDITION_FAILED: `ifUpdatedAt` is not\nthe exact stored `updatedAt` token (`reason` updated_at_mismatch); the body\nalso carries `field`, `expectedUpdatedAt` and `actualUpdatedAt`. Nothing is\nwritten in either case.\nSynchronous draft issuance can also fail with NUMBERING_PATTERN_MISSING_SEQUENCE,\nNUMBERING_PATTERN_MULTIPLE_SEQUENCE or NUMBERING_PATTERN_TOO_LONG for invalid\nsettings; COUNTER_VALUE_CORRUPT or NUMBERING_SEQUENCE_OVERFLOW for unsafe\ncounters; INVOICE_YEAR_BEHIND for an issue year behind a yearly counter;\nNUMBERING_COLLISION_WINDOW_EXHAUSTED after 32 bounded collision probes;\nINVOICE_NUMBER_RESERVED_FOR_POS or RECTIFICATION_SERIES_RESERVED for a\nreserved number space; NUMBERING_PATTERN_READS_AS_PLACEHOLDER when the pattern\nrenders a number that reads as a draft placeholder (empty or starting with\nBORRADOR); SUBSTITUTION_ECONOMIC_PROJECTION_PENDING or\nRECTIFICATION_ISSUANCE_PROOF_REQUIRED for an unproven rectification;\nCOMPLETE_INVOICE_DATA_REQUIRED for incomplete complete-invoice data;\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED when the issued invoice has no\n`clientTaxId` and its client record declares `clientType` company\n(`reason` company_without_tax_id) or no longer exists (`reason`\nclient_record_missing); a request that sets `clientTaxId` while issuing\nis accepted;\nDOCUMENT_NATURE_UNSUPPORTED for an unsupported document nature.\nCREDIT_NOTE_RECTIFICATION_REQUIRED also rejects an invalid credit-note\ncontract during issuance. These failures leave the draft fields and its\nnumbering counter unchanged.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -612,7 +797,7 @@
       "patch": {
         "operationId": "patchInvoice",
         "summary": "Partial update an invoice",
-        "description": "Update only the provided fields on an existing invoice. All fields are optional.",
+        "description": "Update only the provided fields on an existing invoice. All fields are optional.\nSetting status to sent on an unfinal placeholder draft performs synchronous\nissuance: numbering, counter advancement and field updates commit in one\ntransaction before the response. Numbering failures return 400 for\nINVALID_SERIES_ID or 409 for fiscal/sequence conflicts, without committing\nthese edits. Legacy profiles without a reset policy use yearly reset;\nan explicit never policy and yearless patterns remain continuous.\nprovisionalDraft is create-only and is ignored\non updates. Later unhashed edits may echo the existing sent status; hashed\ninvoices retain the immutable-field restrictions below.\nOptional ifStatus and ifUpdatedAt preconditions are checked inside the update\ntransaction, against the live document, before any write or numbering side\neffect; neither is persisted or returned. They are rejected on POST. See\nInvoiceUpdatePreconditions for semantics and limits.\n",
         "tags": [
           "Invoices"
         ],
@@ -626,7 +811,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InvoiceCreate"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/InvoiceCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InvoiceUpdatePreconditions"
+                  }
+                ]
               }
             }
           }
@@ -643,13 +835,33 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Invalid request. INVALID_SERIES_ID rejects an unsafe series identifier\nduring synchronous issuance without committing draft or counter changes.\nA malformed ifStatus (not one of the listed statuses) or ifUpdatedAt (not an\nISO 8601 timestamp of at most 64 characters) is rejected here as a validation\nerror; nothing is written. A PATCH that carries only ifStatus and/or\nifUpdatedAt and no field to change returns `No fields provided for update`.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The invoice cannot be changed as requested. INVOICE_FISCAL_FIELDS_IMMUTABLE:\n`reason` verifactu_hash means the invoice carries a VeriFactu hash, so its\nnumber, dates, client, lines, rates, notes, PO number and fiscal identity\ncannot change here (economic corrections need a rectificativa) and its\nstatus cannot go back to draft (`field` status; cancel it instead);\nfinal_number means the server-assigned number is final and cannot change,\nand (`field` status) that an invoice holding a final number cannot go back\nto draft: one marked final by the server, or one whose number is not a\nplaceholder (supplied on create, or numbered before the marker existed).\nCancel it (status cancelled) or issue a rectificativa instead.\nIt also rejects conflicting fiscal-field edits if a draft read by this\nrequest was issued concurrently; `field` then names the conflicting field,\nwhich may be a field other than documentNumber;\nserver_numbering means the number is not final yet: the server assigns it\n(on create or when the invoice is issued), so `documentNumber` cannot be set\nor changed here; supply a number on create instead.\nThe response names the first changed `field`. Resending a stored value\nunchanged is accepted.\nCREDIT_NOTE_RECTIFICATION_REQUIRED: the request changes a POS refund credit\nnote's fiscal identity. INVOICE_PAYMENT_CAPTURE_FENCED: a portal payment\ncapture is in progress; retry after it settles.\nINVOICE_STATUS_DIRECT_PAYMENT_FORBIDDEN: direct mutation to `paid` or `partial`\nis forbidden on generic update; settle invoice outstanding via Payment Authority V1\n(`POST /v1/invoices/{id}/paid`).\nINVOICE_STATUS_DIRECT_OVERDUE_FORBIDDEN: direct mutation to `overdue` is\nforbidden; overdue status is an aging projection derived from `dueDate`.\nINVOICE_STATUS_PAID_TERMINAL: paid invoices are terminal and their status\ncannot be modified on generic update.\nINVOICE_STATUS_CANCELLED_TERMINAL: cancelled invoices are terminal and their\nstatus cannot be modified on generic update. Nothing is written.\nINVOICE_STATUS_PRECONDITION_FAILED: `ifStatus` did not match the stored status\n(`reason` status_mismatch), or `ifStatus` draft was sent for an invoice that\nalready carries issuance evidence (`reason` issuance_evidence_present). The\nevidence is a closed list: a VeriFactu hash, rectificativa numbering authority,\nsentAt, or any of faceStatus, faceNumeroRegistro, faceSubmittedAt, tbaiStatus,\ntbaiCsv. Italian SDI (`eInvoice.sdiSubmission`) and Polish KSeF (`ksefStatus`\nand related) submissions are NOT checked; the body also carries `field`, `expectedStatus`\nand `actualStatus`. INVOICE_REVISION_PRECONDITION_FAILED: `ifUpdatedAt` is not\nthe exact stored `updatedAt` token (`reason` updated_at_mismatch); the body\nalso carries `field`, `expectedUpdatedAt` and `actualUpdatedAt`. Nothing is\nwritten in either case.\nSynchronous draft issuance can also fail with NUMBERING_PATTERN_MISSING_SEQUENCE,\nNUMBERING_PATTERN_MULTIPLE_SEQUENCE or NUMBERING_PATTERN_TOO_LONG for invalid\nsettings; COUNTER_VALUE_CORRUPT or NUMBERING_SEQUENCE_OVERFLOW for unsafe\ncounters; INVOICE_YEAR_BEHIND for an issue year behind a yearly counter;\nNUMBERING_COLLISION_WINDOW_EXHAUSTED after 32 bounded collision probes;\nINVOICE_NUMBER_RESERVED_FOR_POS or RECTIFICATION_SERIES_RESERVED for a\nreserved number space; NUMBERING_PATTERN_READS_AS_PLACEHOLDER when the pattern\nrenders a number that reads as a draft placeholder (empty or starting with\nBORRADOR); SUBSTITUTION_ECONOMIC_PROJECTION_PENDING or\nRECTIFICATION_ISSUANCE_PROOF_REQUIRED for an unproven rectification;\nCOMPLETE_INVOICE_DATA_REQUIRED for incomplete complete-invoice data;\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED when the issued invoice has no\n`clientTaxId` and its client record declares `clientType` company\n(`reason` company_without_tax_id) or no longer exists (`reason`\nclient_record_missing); a request that sets `clientTaxId` while issuing\nis accepted;\nDOCUMENT_NATURE_UNSUPPORTED for an unsupported document nature.\nCREDIT_NOTE_RECTIFICATION_REQUIRED also rejects an invalid credit-note\ncontract during issuance. These failures leave the draft fields and its\nnumbering counter unchanged.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -662,7 +874,7 @@
       "delete": {
         "operationId": "deleteInvoice",
         "summary": "Delete an invoice",
-        "description": "Delete an invoice. Draft invoices are permanently deleted (204).\nNon-draft invoices are soft-deleted (cancelled) to preserve VeriFactu\nSHA-256 hash chain integrity (RD 1007/2023 compliance), returning 200\nwith the cancelled document body.\n",
+        "description": "Delete an invoice. A draft invoice that has NOT yet received a final\ncorrelative number (its number is empty or a BORRADOR placeholder) is\npermanently deleted (204). A draft that holds a final number is refused\nwith 409 (`reason` final_number), because deleting it would leave a\npermanent gap in the fiscal series: a server-minted number\n(`documentNumberFinal:true`, the default for drafts created through this\nAPI), a number supplied on create, or a legacy number without the marker.\nCancel it (status cancelled) or issue a rectificativa instead.\nNon-draft invoices are soft-deleted (cancelled) to preserve VeriFactu\nSHA-256 hash chain integrity (RD 1007/2023 compliance), returning 200\nwith the cancelled document body. An invoice that carries a VeriFactu\nhash is never permanently deleted: without a non-draft status the\nrequest is refused with 409.\n",
         "tags": [
           "Invoices"
         ],
@@ -713,13 +925,26 @@
             }
           },
           "204": {
-            "description": "Invoice permanently deleted (draft invoices only)"
+            "description": "Invoice permanently deleted (only a draft that has no final correlative number yet; a draft holding one gets 409)"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The invoice cannot be deleted. INVOICE_HASHED_NOT_DELETABLE (`reason`\nverifactu_hash): the invoice is a draft, or has no status, but carries a\nVeriFactu hash, so its registro is already in the hash chain; cancel it\n(status cancelled) or issue a rectificativa instead.\nINVOICE_PAYMENT_CAPTURE_FENCED: a portal payment capture is in progress;\nretry after it settles. Nothing is written.\n(#2225, #2610) `reason` final_number: the invoice is a draft, or has no\nstatus, and already holds a final correlative number (server-minted\n`documentNumberFinal:true`, supplied on create, or a legacy number that\nis not a placeholder); deleting it would leave a permanent gap in the\nfiscal series. Cancel it (status cancelled) or issue a rectificativa\ninstead.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -760,6 +985,26 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The invoice's VeriFactu record cannot be reproduced from the stored data (`code: AEAT_RECORD_IRREPRODUCIBLE`), so no PDF is rendered. Not transient: retrying does not help; the invoice needs review.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Either the workspace fiscal profile (`fiscalInfo`) is not configured yet (`code: MISSING_FISCAL_INFO`), or the invoice owes an AEAT tax QR that cannot be generated for it (`code: AEAT_QR_UNAVAILABLE`, not transient: retrying does not help).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -820,11 +1065,24 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "description": "Sending a draft issues it. COMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED: the invoice has no `clientTaxId` and its client record declares `clientType` company (`reason` company_without_tax_id) or no longer exists (`reason` client_record_missing). Nothing is emailed or written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "Fiscal profile not configured",
+            "description": "The invoice cannot be sent: the fiscal profile is not configured; it has no usable currency; or it still has no final fiscal number after numbering (a cancelled invoice is never numbered by this call, so a cancelled invoice without a final number is refused). The currency is the invoice's own, else the workspace default currency; with neither, or with an invoice currency that is not a three-letter code, the send is refused.",
             "content": {
               "application/json": {
                 "schema": {
@@ -846,13 +1104,16 @@
       "post": {
         "operationId": "markInvoicePaid",
         "summary": "Mark invoice as paid",
-        "description": "Mark an invoice as paid. Optionally specify the payment date.",
+        "description": "Settle an invoice's complete outstanding balance.\n\nFor invoices governed by Payment Authority V1, the `Idempotency-Key`\nheader is required. The caller does not supply an amount: the endpoint\nresolves the complete authoritative outstanding inside the settlement\ntransaction, then writes one canonical payment receipt together with\nthe invoice, settlement, client receivable, client projection, and\ncanonical accounting outcome. General-ledger projections are written\nonly when the workspace is in `posted` mode; an explicit no-chart\nworkspace returns `unposted_no_chart` without fabricating GL entries.\n\n`paidDate` remains optional for client compatibility. When omitted, the\nserver captures one request instant and resolves an explicit business\ndate inside the same Payment Authority transaction that writes the\nreceipt. Authority precedence is: a valid root IANA `timezone`, then an\nexplicit legacy `fiscalInfo.fiscalZone`, then\n`defaults.fiscalZone` only when a non-empty `defaults.country` proves the\nzone was declared rather than seeded. `canarias` maps to\n`Atlantic/Canary`; `peninsula` and `ceuta_melilla` map to\n`Europe/Madrid`. A present but invalid higher-priority authority, or the\nabsence of supported declared authority, fails closed without writing.\nThe endpoint never invents UTC or Peninsular time. The receipt's external\ntransition anchor binds the resolved date, request instant, timezone\ndescriptor, and complete before/after economic edge.\n\nAn explicit-date operation binds that exact date. A workspace-derived\noperation binds the derived intent: after the first commit, a retry with\nthe same key and credential replays the stored receipt date even on a\nlater calendar day and never reconsults current timezone state. Switching\nbetween explicit and derived intent, or changing an explicit date,\ncredential, or invoice fails closed with `409`.\n\nLegacy invoices that have no Payment Authority V1 marker retain their\nstatus-only mutation and do not require `Idempotency-Key`, but an omitted\n`paidDate` uses the same workspace timezone authority above. A partial or\nconflicting V1 state never falls back to legacy.\n",
         "tags": [
           "Invoices"
         ],
         "parameters": [
           {
             "$ref": "#/components/parameters/InvoiceId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "requestBody": {
@@ -864,7 +1125,7 @@
                   "paidDate": {
                     "type": "string",
                     "format": "date",
-                    "description": "Payment date in ISO format. Defaults to today.",
+                    "description": "Real payment date in `YYYY-MM-DD` format and the highest\nauthority when supplied. When omitted for Payment Authority\nV1 or legacy, the server resolves one explicit date from the\nworkspace timezone authority described above.\n",
                     "example": "2026-03-09"
                   }
                 }
@@ -874,25 +1135,91 @@
         },
         "responses": {
           "200": {
-            "description": "Invoice marked as paid",
+            "description": "Invoice settled. Payment Authority V1 responses include\n`paymentReceiptId` and `accountingStatus`; legacy responses preserve\nthe historical `success`/`status`/`paidAt` shape (or the existing\nalready-paid message).\n",
+            "headers": {
+              "X-Idempotent-Replayed": {
+                "$ref": "#/components/headers/X-Idempotent-Replayed"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "additionalProperties": false,
                   "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
+                    "data": {
+                      "type": "object",
+                      "description": "Mark-paid result. `status` is common to every successful\nresponse. A new legacy mutation adds `success` and\n`paidAt`; an already-paid legacy invoice adds `message`;\nPayment Authority V1 adds `success`, `paidAt`,\n`paymentReceiptId`, and `accountingStatus`.\n",
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "success": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "paid"
+                          ]
+                        },
+                        "paidAt": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "paymentReceiptId": {
+                          "type": "string",
+                          "description": "Canonical Payment Authority V1 receipt ID."
+                        },
+                        "accountingStatus": {
+                          "type": "string",
+                          "enum": [
+                            "posted",
+                            "unposted_no_chart"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "description": "Historical message when a legacy invoice was already paid."
+                        }
+                      }
                     },
-                    "status": {
-                      "type": "string",
-                      "example": "paid"
-                    },
-                    "paidAt": {
-                      "type": "string",
-                      "format": "date"
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "requestId",
+                        "timestamp"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "timestamp": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
                     }
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. This includes a non-calendar `paidDate`, or an\nomitted `paidDate` when the workspace has no supported explicit\ntimezone or Spanish fiscal-zone authority. Payment Authority V1 also\nrejects a missing `Idempotency-Key`.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -900,8 +1227,21 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The idempotency identity conflicts or is still in progress; the\ninvoice was paid by another operation; a portal capture fence is\nactive; the workspace declares an invalid IANA timezone; or Payment\nAuthority projections, fiscal period, or accounting configuration\nrequire reconciliation. No payment is written for a refused request.\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED: marking a draft paid issues\nit, and the invoice has no `clientTaxId` while its client record\ndeclares `clientType` company (`reason` company_without_tax_id) or no\nlonger exists (`reason` client_record_missing). Nothing is written.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1023,6 +1363,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -1071,6 +1414,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -1164,8 +1510,27 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The expense is anchored in a closed fiscal year (`PERIOD_CLOSED`).\nEdits to closed-year rows are refused until the year-end closing\nis reversed (there is no API endpoint to reverse it:\n`/v1/periods/{fiscalYear}/reopen` answers 501). The top-level\n`fiscalYear` carries the blocking label and `date` the date that\ntriggered the guard.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "PERIOD_CLOSED",
+                  "message": "Expense fiscal year 2025 is closed; edits that affect the period are not allowed",
+                  "fiscalYear": "2025",
+                  "date": "2025-12-15"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1214,8 +1579,27 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The expense is anchored in a closed fiscal year (`PERIOD_CLOSED`).\nEdits to closed-year rows are refused until the year-end closing\nis reversed (there is no API endpoint to reverse it:\n`/v1/periods/{fiscalYear}/reopen` answers 501). The top-level\n`fiscalYear` carries the blocking label and `date` the date that\ntriggered the guard.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "PERIOD_CLOSED",
+                  "message": "Expense fiscal year 2025 is closed; edits that affect the period are not allowed",
+                  "fiscalYear": "2025",
+                  "date": "2025-12-15"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1244,8 +1628,27 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The expense is anchored in a closed fiscal year (`PERIOD_CLOSED`).\nHard-deletes that would mutate a closed-period GL are refused\nuntil the year-end closing is reversed (there is no API endpoint\nfor that: `/v1/periods/{fiscalYear}/reopen` answers 501). The\ntop-level `fiscalYear` carries the blocking label and `date` the\nstored `date` or `paidDate` that triggered the guard. A row whose\nstored date is missing or cannot be anchored to a fiscal year is\nrefused fail-closed as `PERIOD_CLOSED` with a top-level\n`reason` of `missing_date_anchor` or `invalid_date_anchor`.\nDeleting an expense that does not exist answers 404 (it used to\nbe an idempotent 204).\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "PERIOD_CLOSED",
+                  "message": "Expense fiscal year 2025 is closed; deletes that affect the period are not allowed",
+                  "fiscalYear": "2025",
+                  "date": "2025-12-20"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1308,6 +1711,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -1429,6 +1835,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "409": {
             "description": "A client with this taxId already exists in your workspace.",
             "content": {
@@ -1546,6 +1955,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -1619,6 +2031,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -1670,6 +2085,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -1768,6 +2186,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -1863,6 +2284,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -1895,6 +2319,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -1992,6 +2419,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -2132,6 +2562,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -2227,6 +2660,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -2259,6 +2695,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -2380,6 +2819,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -2469,6 +2911,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -2519,6 +2964,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -2548,6 +2996,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -2680,6 +3131,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -2769,6 +3223,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -2818,6 +3275,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -2888,6 +3348,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -2990,6 +3453,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -3160,6 +3626,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -3249,6 +3718,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -3299,6 +3771,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -3328,6 +3803,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -3422,7 +3900,7 @@
       "get": {
         "operationId": "getQuarterlySummary",
         "summary": "Quarterly tax figures",
-        "description": "Quarterly tax preparation data including Modelo 303 (VAT) and\nModelo 130 (quarterly income payment) pre-filled figures.\nIncludes base imponible, cuotas, and estimated payments.\n",
+        "description": "Quarterly tax preparation data including Modelo 303 (VAT) and\nModelo 130 (quarterly income payment) pre-filled figures.\nIncludes base imponible, cuotas, and estimated payments.\nModelo 303 figures are returned only for a workspace that declares the\npeninsula fiscal zone with country ES; any other workspace gets a typed\nrefusal in `modelo303` instead (no figures); the rest of the payload is\nunchanged.\n",
         "tags": [
           "Intelligence"
         ],
@@ -3544,6 +4022,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -3640,6 +4121,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -3695,6 +4179,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -3724,6 +4211,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -3805,6 +4295,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -3923,6 +4416,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -4012,6 +4508,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -4062,6 +4561,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -4092,6 +4594,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -4108,7 +4613,7 @@
       "post": {
         "operationId": "applyDeposit",
         "summary": "Apply deposit to an invoice",
-        "description": "Apply all or part of a deposit's remaining balance to a specific invoice.\nReturns an error if the requested amount exceeds the remaining balance or\nif the deposit has already been applied to the given invoice.\n",
+        "description": "Apply all or part of a deposit's remaining balance to a specific invoice.\nThe deposit balance and the invoice's deposit settlement are written in one\ntransaction, so an application and a refund racing on the same balance can\nnever both succeed. Returns an error if the requested amount exceeds the\nremaining balance (refunds already reduce it), if the deposit has already\nbeen applied to the given invoice, or if the deposit or invoice does not exist.\n",
         "tags": [
           "Deposits"
         ],
@@ -4193,8 +4698,21 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "INVOICE_PAYMENT_CAPTURE_FENCED: a portal payment capture is in progress\non the invoice; retry after it settles. Nothing is written.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -4209,7 +4727,7 @@
       "post": {
         "operationId": "refundDeposit",
         "summary": "Refund a deposit",
-        "description": "Refund all or part of a deposit's remaining balance to the client.\nIf `amount` is omitted, the full remaining balance is refunded.\nReturns an error if the deposit is already fully refunded or if the\nrequested amount exceeds the remaining balance.\n",
+        "description": "Refund all or part of a deposit's remaining balance to the client.\nIf `amount` is omitted, the full remaining balance is refunded.\nThe refund is decided on the balance read in the same transaction that\nwrites it, so it can never also spend a balance a concurrent application\nconsumed. Returns an error if the deposit is already fully refunded, has no\nremaining balance, or if the requested amount exceeds the remaining balance.\n",
         "tags": [
           "Deposits"
         ],
@@ -4268,6 +4786,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -4407,7 +4928,7 @@
             }
           },
           "400": {
-            "description": "Validation error, or one of `IDEMPOTENCY_KEY_REQUIRED`,\n`PARTIAL_CREDIT_NOT_IMPLEMENTED`, `ORIGINAL_INVOICE_IS_DRAFT`,\n`ORIGINAL_INVOICE_IS_CANCELLED`, `ORIGINAL_INVOICE_FULLY_CREDITED`,\n`ORIGINAL_INVOICE_MISSING_FISCAL_ZONE` (the original invoice has no\n`clientLocation`, so the correct rectificativa form cannot be determined).\n",
+            "description": "Validation error, or one of `IDEMPOTENCY_KEY_REQUIRED`,\n`PARTIAL_CREDIT_NOT_IMPLEMENTED`, `ORIGINAL_INVOICE_IS_DRAFT`,\n`ORIGINAL_INVOICE_IS_CANCELLED`, `ORIGINAL_INVOICE_FULLY_CREDITED`,\n`ORIGINAL_INVOICE_MISSING_FISCAL_ZONE` (the original invoice has no\n`clientLocation`; request fiscal review before correcting it).\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -4433,7 +4954,7 @@
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "Either `IDEMPOTENCY_KEY_REUSED` — the key is live for a DIFFERENT\noperation (another endpoint, or this one with a different body), which\nis refused without executing — or `IDEMPOTENCY_REQUEST_IN_PROGRESS`:\na request with this key is still running, or its outcome could not be\nrecorded. Reconcile the invoice's credit notes before starting another\noperation; a fresh key would create a second document.\n",
+            "description": "`RECTIFICATION_ISSUER_JURISDICTION_REQUIRED` means the server profile\nhas no consistent declared issuer territory. `RECTIFICATION_ISSUER_JURISDICTION_UNSUPPORTED`\nmeans this bounded flow does not support that issuer territory; only\npeninsula, canarias and ceuta_melilla issuers are supported, irrespective\nof recipient location. `RECTIFICATION_ECONOMICS_UNSUPPORTED` requires\nfiscal review of discounts or signed rounding. These refusals create no draft.\nOtherwise `IDEMPOTENCY_KEY_REUSED` — the key is live for a DIFFERENT\noperation (another endpoint, or this one with a different body), which\nis refused without executing — or `IDEMPOTENCY_REQUEST_IN_PROGRESS`:\na request with this key is still running, or its outcome could not be\nrecorded. Reconcile the invoice's credit notes before starting another\noperation; a fresh key would create a second document.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -4521,6 +5042,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -4600,6 +5124,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -4649,6 +5176,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5077,6 +5607,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           }
         }
       }
@@ -5104,6 +5637,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5161,6 +5697,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5250,7 +5789,7 @@
       "post": {
         "operationId": "exportEInvoice",
         "summary": "Export e-invoice XML",
-        "description": "Generate and return an e-invoice XML document for the invoice in one of 9 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, FA-2-KSeF (Polish KSeF FA(3)), UBL 2.1, CII D16B.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
+        "description": "Generate and return an e-invoice XML document for the invoice in one of 9 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, FA-2-KSeF (Polish KSeF FA(3)), UBL 2.1, CII D16B.\n\n**Trust Area: COMPLIANCE** — Requires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -5326,6 +5865,13 @@
                         "format": {
                           "type": "string",
                           "example": "Facturae"
+                        },
+                        "warnings": {
+                          "type": "array",
+                          "description": "EN 16931 validation findings with severity `warning`. They do not block\ngeneration, but a receiving validator may reject the document for them.\nEmpty when there are none.\n",
+                          "items": {
+                            "$ref": "#/components/schemas/EInvoiceValidationIssue"
+                          }
                         }
                       }
                     }
@@ -5348,7 +5894,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5376,7 +5922,7 @@
       "post": {
         "operationId": "submitFaceInvoice",
         "summary": "Submit invoice to FACe B2G portal",
-        "description": "Submit a signed Facturae XML to Spain's FACe B2G portal (face.gob.es).\n\nPipeline: load invoice → generate Facturae XML → sign with XAdES-EPES → submit to FACe.\nResult is persisted to `invoices/{id}/face/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted (registered), returns the prior result\nwith `idempotent: true` — does not resubmit.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\nRequires a PKCS#12 certificate for sandbox/production modes.\n",
+        "description": "Submit a signed Facturae XML to Spain's FACe B2G portal (face.gob.es).\n\nPipeline: load invoice → generate Facturae XML → sign with XAdES-EPES → submit to FACe.\nResult is persisted to `invoices/{id}/face/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted (registered), returns the prior result\nwith `idempotent: true` — does not resubmit.\n\n**Trust Area: COMPLIANCE** — Requires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\nRequires a PKCS#12 certificate for sandbox/production modes.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -5459,7 +6005,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5592,8 +6138,8 @@
     "/v1/invoices/{invoiceId}/ticketbai/submit": {
       "post": {
         "operationId": "submitTicketBaiInvoice",
-        "summary": "Submit invoice to TicketBAI (Bizkaia BATUZ)",
-        "description": "Submit a signed TicketBAI XML to the Bizkaia BATUZ tax authority.\n\nPipeline: fetch BYOC cert → compute hash chain → build TicketBAI XML →\nsign with XAdES-BES → submit to BATUZ → generate QR code.\nResult persisted to `invoices/{id}/tbai/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted, returns the prior result\nwith `idempotent: true` — does not resubmit.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\nRequires a TicketBAI BYOC certificate uploaded in Settings > Integrations > TicketBAI.\n",
+        "summary": "Submit invoice to TicketBAI sandbox/preview (live foral submission not enabled)",
+        "description": "Build and sign a TicketBAI XML and run the sandbox/preview pipeline (live submission to Basque Haciendas Forales / BATUZ is not enabled in the product).\n\nPipeline: fetch BYOC cert → compute hash chain → build TicketBAI XML →\nsign with XAdES-BES → sandbox/preview dispatch → generate QR code.\nResult persisted to `invoices/{id}/tbai/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted, returns the prior result\nwith `idempotent: true` — does not resubmit.\n\n**Trust Area: COMPLIANCE** — Requires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\nRequires a TicketBAI BYOC certificate uploaded in Settings > Integrations > TicketBAI.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -5665,7 +6211,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5703,8 +6249,8 @@
     "/v1/invoices/{invoiceId}/ticketbai/status": {
       "get": {
         "operationId": "getTicketBaiInvoiceStatus",
-        "summary": "Get TicketBAI submission status",
-        "description": "Read the TicketBAI submission record for a previously submitted invoice.\nReturns accepted/rejected status, CSV, identifier, and QR URL from Firestore.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
+        "summary": "Get TicketBAI sandbox/preview status",
+        "description": "Read the TicketBAI sandbox/preview record for a previously processed invoice (live submission to Basque Haciendas Forales is not enabled).\nReturns accepted/rejected status, CSV, identifier, and QR URL from Firestore.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -5909,6 +6455,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -6125,6 +6674,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/PosScopeForbidden"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           }
@@ -6209,6 +6761,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -6244,6 +6799,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -6326,6 +6884,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -6411,6 +6972,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -6446,6 +7010,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -6528,6 +7095,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -6613,6 +7183,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -6648,6 +7221,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -6730,6 +7306,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -6815,6 +7394,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -6850,6 +7432,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -6919,6 +7504,9 @@
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -7039,6 +7627,9 @@
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -7223,6 +7814,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "409": {
             "description": "Conflict — user already a member, invite already pending, or seat limit reached"
@@ -7692,6 +8286,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -7837,6 +8434,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -7901,6 +8501,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/WriteScopeForbidden"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -7916,6 +8519,209 @@
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/inventory/balances": {
+      "get": {
+        "operationId": "listInventoryBalances",
+        "summary": "List inventory balances (on-hand, valuation, currency, coverage)",
+        "description": "Returns one row per `physical`/`trackStock` product of the workspace.\nEach row carries the legacy `stockQuantity`, the ledger atoms at the\nreceiving location (`warehouse/main/stock/sellable`), and the moving-\naverage valuation snapshot when one exists. Items without a valuation\ndocument are returned with `valuation: null`; an opening-run applies\nthe moving-average write to those items.\n\nA restricted API key needs `inventory:read` or `inventory:*`; a key\nwith no scope list is unrestricted by the legacy-key convention.\n",
+        "tags": [
+          "Inventory"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Balances for the workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/InventoryBalance"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/InventoryAuthorityNotReleased"
+          }
+        }
+      }
+    },
+    "/v1/inventory/conservation-report": {
+      "get": {
+        "operationId": "getInventoryConservationReport",
+        "summary": "Conservation report (Σ = 0, valuation drift, uncovered outbound)",
+        "description": "Read-only report over `users/{uid}/inventoryBalances` and\n`users/{uid}/inventoryValuation`. ADR 0027 D1.3 / D4 / S4a-2:\nΣ over every bucket of an item is 0; an item's on-hand equals the\nvaluation's `valuedAtoms + unvaluedAtoms`; the valuation document\npasses the strict reader; and uncovered outbounds are reported.\n\nThe runner is the only writer of the underlying reports\n(conservation reports are read-only at the kernel level); this\nendpoint exposes the same view the conservation runner would issue.\n",
+        "tags": [
+          "Inventory"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conservation report findings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "workspaceUid": {
+                          "type": "string"
+                        },
+                        "itemCount": {
+                          "type": "integer"
+                        },
+                        "findings": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/InventoryConservationFinding"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/InventoryAuthorityNotReleased"
+          }
+        }
+      }
+    },
+    "/v1/inventory/opening-run": {
+      "post": {
+        "operationId": "runInventoryOpeningRun",
+        "summary": "Apply the opening run on the workspace (ADR 0027 D5 / S4a-2)",
+        "description": "Walks every `physical`/`trackStock` product of the workspace, reads\nthe receiving-bucket balance, and posts the per-item valuation\ndelta (`stockQuantity − ledgerAtomsAtReceiving`) as a priced,\nunpriced, shortfall, or no-op outcome. Opening NEVER invents a\nprice: items without a usable `costPrice` book as UNVALUED atoms.\n\nThe run is owner-only on the callable transport (`enforceAppCheck`\n+ workspace-owner-or-admin predicate inside the transaction). On\nthe API transport, restricted keys need `inventory:write` or\n`inventory:*`. A legacy unrestricted key can call it.\n\nThe audit document is written at\n`users/{uid}/inventoryOpeningRuns/{runId}` (deny-all on the\nclient path) with the run's priced/unpriced/shortfall/no-op\ncounts and the total opening value in minor units.\n",
+        "tags": [
+          "Inventory"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "workspaceUid": {
+                    "type": "string",
+                    "description": "Optional. The run always targets the workspace the API key belongs to; if present, the value must equal that workspace, otherwise the request is refused with 403 FORBIDDEN."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Opening-run outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/InventoryOpeningRunOutcome"
+                    },
+                    "auditCollection": {
+                      "type": "string",
+                      "description": "Firestore collection where the audit document is written.",
+                      "example": "inventoryOpeningRuns"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "A pre-existing valued item uses a different currency; the run refuses to overwrite it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/InventoryAuthorityNotReleased"
           }
         }
       }
@@ -8162,7 +8968,7 @@
         "name": "Idempotency-Key",
         "in": "header",
         "required": false,
-        "description": "Unique key to prevent duplicate resource creation from network retries on\nidempotency-protected POST routes. Reserved against the operation (method +\npath + complete received JSON request body + parsed query parameters) before\nthe request runs, and held for 24 hours. Object-key order does not matter,\nincluding in nested objects, but array order does. Only the credit-note\nendpoint applies its documented schema defaults before fingerprinting; all\nother protected POSTs use the received body.\n\nA retry of the same operation returns the ORIGINAL status and body, verbatim,\nwith an `X-Idempotent-Replayed: true` header — a `201` replays as `201`, and\na stored error replays as that same error rather than re-executing. The same\nkey used for a DIFFERENT operation gets `409 IDEMPOTENCY_KEY_REUSED` and the\nsecond operation is not executed; a request still in flight, or one whose\noutcome could not be recorded, gets `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`\n(reconcile the resource rather than retrying with a new key).\n\nAuthentication, rate limiting, maximum-request-size checks, and current\nfiscal-send scope authorization happen before this gate; those refusals do\nnot reserve or alter the key. `POST /v1/gestoria/aging` and\n`POST /v1/portal/domain/{domain}/verify` bypass this gate and ignore the\nheader so current membership, ownership, DNS, and SSL are always rechecked.\n\nMax 64 characters. UUID v4 recommended.\n",
+        "description": "Unique key to prevent duplicate resource creation from network retries on\nidempotency-protected POST routes. Reserved against the operation (method +\npath + complete received JSON request body + parsed query parameters) before\nthe request runs, and held for 24 hours unless released by an explicit\npre-write refusal. Object-key order does not matter,\nincluding in nested objects, but array order does. The credit-note endpoint\napplies its documented schema defaults before fingerprinting. Mark-invoice-\npaid additionally binds a domain-separated digest of the authenticated API\ncredential; other protected POSTs use the received body.\n\nA retry of the same operation returns the ORIGINAL status and body, verbatim,\nwith an `X-Idempotent-Replayed: true` header — a `201` replays as `201`, and\na stored error replays as that same error rather than re-executing (pre-write\n`503` money-grant and `403 POS_INACTIVE` refusals on\n`POST /v1/pos/cash-sessions/{id}/close` release the key instead of storing\nit for 24 hours). The same\nkey used for a DIFFERENT operation gets `409 IDEMPOTENCY_KEY_REUSED` and the\nsecond operation is not executed; a request still in flight, or one whose\noutcome could not be recorded, gets `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`\n(reconcile the resource rather than retrying with a new key).\n\nAuthentication, rate limiting, maximum-request-size checks, and current\nAPI-key scope authorization (the `write` scope and the fiscal-send scopes)\nhappen before this gate; those refusals do\nnot reserve or alter the key. `POST /v1/gestoria/aging` and\n`POST /v1/portal/domain/{domain}/verify` bypass this gate and ignore the\nheader so current membership, ownership, DNS, and SSL are always rechecked.\n\nMax 64 characters. UUID v4 recommended.\n",
         "schema": {
           "type": "string",
           "maxLength": 64,
@@ -8210,6 +9016,122 @@
       }
     },
     "schemas": {
+      "InventoryBalance": {
+        "type": "object",
+        "description": "One balance row from `GET /v1/inventory/balances`. The legacy\n`stockQuantity` is the user-supplied product stock; `ledgerAtoms`\nis the projection at the receiving location; `valuation` is the\nmoving-average snapshot (null until an opening run writes it).\n",
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "locationId": {
+            "type": "string",
+            "example": "warehouse/main/stock/sellable"
+          },
+          "legacyStockQuantity": {
+            "type": "integer",
+            "description": "Stored on `products.stockQuantity`, NOT scaled."
+          },
+          "ledgerAtoms": {
+            "type": "string",
+            "description": "Hex-fixed-point integer at scale 6 (read with BigInt)."
+          },
+          "valuation": {
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "currency": {
+                "type": "string",
+                "nullable": true
+              },
+              "valueMinor": {
+                "type": "string"
+              },
+              "valuedAtoms": {
+                "type": "string"
+              },
+              "unvaluedAtoms": {
+                "type": "string"
+              },
+              "uncoveredAtoms": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "InventoryConservationFinding": {
+        "type": "object",
+        "description": "One finding from `GET /v1/inventory/conservation-report`. The\n`kind` discriminator narrows the payload (see ADR 0027 D1.3 / D4).\n",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "BALANCE_INVALID",
+              "CONSERVATION_BROKEN",
+              "VALUATION_INVALID",
+              "VALUATION_ATOMS_DRIFT",
+              "VALUATION_UNCOVERED_OUTBOUND"
+            ]
+          }
+        }
+      },
+      "InventoryOpeningRunOutcome": {
+        "type": "object",
+        "description": "The opening-run outcome. `runId` is content-addressed over\n`(workspaceUid, sorted items, sorted ledger receipts)` so two runs on\nthe same workspace and same data hash to the same id (the second is a\nno-op).\n",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "pricedItemCount": {
+            "type": "integer"
+          },
+          "unpricedItemCount": {
+            "type": "integer"
+          },
+          "shortfallItemCount": {
+            "type": "integer"
+          },
+          "noOpItemCount": {
+            "type": "integer"
+          },
+          "totalOpeningValueMinor": {
+            "type": "string"
+          },
+          "pricedItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unpricedItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "shortfallItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorUid": {
+            "type": "string"
+          }
+        }
+      },
       "CreditNoteResult": {
         "type": "object",
         "description": "Result of `POST /v1/invoices/{invoiceId}/credit-note`. `status` is always\n`draft` — the endpoint creates, it does not issue.\n",
@@ -8299,6 +9221,9 @@
               "ORIGINAL_INVOICE_IS_CANCELLED",
               "ORIGINAL_INVOICE_FULLY_CREDITED",
               "ORIGINAL_INVOICE_MISSING_FISCAL_ZONE",
+              "RECTIFICATION_ISSUER_JURISDICTION_REQUIRED",
+              "RECTIFICATION_ISSUER_JURISDICTION_UNSUPPORTED",
+              "RECTIFICATION_ECONOMICS_UNSUPPORTED",
               "IDEMPOTENCY_KEY_REUSED",
               "IDEMPOTENCY_REQUEST_IN_PROGRESS"
             ],
@@ -8861,7 +9786,7 @@
           }
         }
       },
-      "InvoiceCreate": {
+      "InvoiceFields": {
         "type": "object",
         "required": [
           "clientName",
@@ -8897,7 +9822,7 @@
               "eu",
               "world"
             ],
-            "description": "Customer fiscal zone. This does not establish an exemption or\nplace-of-supply treatment. Auto-populated from clientId if absent.\n",
+            "description": "Customer fiscal zone. This does not determine an exemption or place\nof supply. Snapshot field; auto-populated from clientId if absent.\n",
             "example": "canarias"
           },
           "operationType": {
@@ -8914,7 +9839,7 @@
               "not_subject_location",
               "export_exempt"
             ],
-            "description": "Explicitly reviewed treatment, optional on drafts. Before issuing a\nzero-rate world invoice, declare an issuer in mainland Spain/Balearics\nand either service + not_subject_location or goods + export_exempt.\nOther ambiguous international cases require review and return 422.\nOn PATCH, changing recipient or operation facts invalidates an old\ntreatment unless explicitly confirmed again. Once hashed, fiscal\nfacts are immutable; a correction requires a separate fiscal operation.\n"
+            "description": "Explicitly reviewed legal treatment, optional on drafts. Required before\nissuing a zero-rate international invoice. The supported scope is an\nissuer established in mainland Spain/Balearics (IVA) and a non-EU customer:\nservice not subject under place-of-supply rules (not_subject_location),\nor goods export exempt under article 21 LIVA (export_exempt).\nDo not infer it from the country or tax ID. Unsupported/contradictory\nfacts return INVOICE_FISCAL_CLASSIFICATION_REQUIRED before issuance.\nImmutable after the fiscal hash exists; legacy rejected records require\nan explicit correction workflow, not editing and resending the old record.\n"
           },
           "clientEmail": {
             "type": "string",
@@ -8924,7 +9849,7 @@
           "documentNumber": {
             "type": "string",
             "maxLength": 50,
-            "description": "Optional caller-supplied invoice number (e.g. migration or\nimport flows carrying an externally-issued number). When\nprovided it is honored verbatim and the workspace auto-numbering\ncounter is NOT advanced. When omitted, a gapless sequential\nnumber is generated from your numbering settings (VeriFactu\nRD 1007/2023).\n",
+            "description": "Optional caller-supplied invoice number (e.g. migration or\nimport flows carrying an externally-issued number). When\nprovided it is honored verbatim and the workspace auto-numbering\ncounter is fast-forwarded when the supplied number belongs to its\nactive number space. On create, omission normally generates a final\nsequential number immediately. The explicit provisionalDraft: true\nopt-in with status draft and no supplied number instead creates an\nunnumbered draft; PATCH or PUT status sent assigns its final number\nsynchronously. The flag is never persisted.\n",
             "example": "FAC-2026-0042"
           },
           "items": {
@@ -8980,6 +9905,84 @@
           }
         }
       },
+      "InvoiceUpdatePreconditions": {
+        "type": "object",
+        "description": "Optional preconditions for PUT and PATCH /v1/invoices/{id}. Rejected on\nPOST /v1/invoices. Evaluated inside the update transaction against the live\ndocument, before any write or numbering side effect. They are never persisted\nand never returned. Omitting both leaves behaviour unchanged.\n",
+        "properties": {
+          "ifStatus": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "sent",
+              "partial",
+              "paid",
+              "overdue",
+              "cancelled"
+            ],
+            "writeOnly": true,
+            "description": "Expected current status. A mismatch returns 409\nINVOICE_STATUS_PRECONDITION_FAILED. With `draft` it also fails when the\ninvoice already carries issuance evidence. The list is closed: a VeriFactu\nhash, rectificativa numbering authority, sentAt, or any of faceStatus,\nfaceNumeroRegistro, faceSubmittedAt, tbaiStatus, tbaiCsv. Anything else is not\nchecked; in particular `eInvoice.sdiSubmission` (Italian SDI) and `ksefStatus`\nand related fields (Polish KSeF) do not block, so a draft with only those\nstill passes `ifStatus` draft.\nIt guards the lifecycle, for example a draft to sent promotion against a\nconcurrent promotion. It does NOT serialize two edits of the same draft:\nconcurrent writers that all send ifStatus draft all succeed and the last\none wins. ifUpdatedAt narrows that window only partly (see its limitation).\n"
+          },
+          "ifUpdatedAt": {
+            "type": "string",
+            "maxLength": 64,
+            "writeOnly": true,
+            "example": "2026-10-01T10:00:00.000Z",
+            "description": "The `updatedAt` value of the invoice, as returned by a previous GET.\nIt is an exact string comparison, not a date comparison (surrounding\nwhitespace is trimmed first): an equivalent instant in another format (no\nmilliseconds, a +01:00 offset) returns 409.\nA value that is not shaped like an ISO 8601 timestamp (date, time and zone;\nfor example month 13) is a 400, so a legacy updatedAt in another format\ncannot be echoed. A well-shaped value that is not a real calendar date, such\nas 2026-02-31T10:00:00Z, is not a 400: it never equals a stored token and\nreturns 409.\nLimitation: this is NOT a general guard against concurrent edits.\n`updatedAt` is not a complete revision counter. It detects only writes that\nraise `updatedAt`. Edits made from the Frihet app or the in-app assistant\nmay not raise it (the app writes the invoice as is, without refreshing\n`updatedAt`), and Payment Authority settlements, invoice amendments and\ndeposits do not either. A match therefore proves only that no\nupdatedAt-raising write happened since the token was read; it can still be\n200 after a person edited the same draft in the app, and an older write can\nrestore an earlier token. An invoice that has no stored `updatedAt` has no\ntoken: GET returns none and every ifUpdatedAt returns 409 with\n`actualUpdatedAt` null. Pair ifUpdatedAt with ifStatus for lifecycle\nsafety; do not rely on it to protect edits.\n"
+          }
+        }
+      },
+      "InvoiceCreate": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/InvoiceFields"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provisionalDraft": {
+                "type": "boolean",
+                "default": false,
+                "writeOnly": true,
+                "description": "Create-only opt-in. true with status draft and no caller-supplied\ndocumentNumber creates an unnumbered draft without consuming a\nsequence. Omitted or false preserves immediate final numbering.\nIgnored for other create cases and on PATCH/PUT; never persisted.\nIssuing the draft with PATCH/PUT status sent assigns the final\nnumber synchronously in the same transaction as the field edits.\n"
+              },
+              "documentNature": {
+                "type": "string",
+                "enum": [
+                  "complete"
+                ],
+                "description": "Explicit declaration for a newly issued complete invoice. Requires\nstatus sent, automatic numbering (omit documentNumber), complete\nstructured issuer and recipient addresses, tax IDs and described\nlines. Draft/import requests with this declaration are rejected.\nNature receipts are server-owned and cannot be supplied or backfilled\nfor historical invoices. Simplified invoice issuance is not enabled\nby this field. Omission preserves the existing ordinary create contract.\n"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/LineItem"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "quantity": {
+                          "type": "number",
+                          "minimum": 0.0001,
+                          "maximum": 1000000
+                        },
+                        "unitPrice": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 10000000,
+                          "description": "Ordinary invoices require non-negative prices. Use the credit-note operation for rectifications."
+                        }
+                      }
+                    }
+                  ]
+                },
+                "minItems": 1
+              }
+            }
+          }
+        ]
+      },
       "Invoice": {
         "allOf": [
           {
@@ -9003,7 +10006,7 @@
             }
           },
           {
-            "$ref": "#/components/schemas/InvoiceCreate"
+            "$ref": "#/components/schemas/InvoiceFields"
           },
           {
             "type": "object",
@@ -10262,6 +11265,120 @@
           }
         ]
       },
+      "WebhookEventType": {
+        "type": "string",
+        "maxLength": 100,
+        "description": "Canonical subscribable webhook event type identifier",
+        "enum": [
+          "invoice.created",
+          "invoice.updated",
+          "invoice.sent",
+          "invoice.paid",
+          "invoice.partially_paid",
+          "invoice.overdue",
+          "invoice.voided",
+          "invoice.draft_created",
+          "invoice.generated",
+          "invoice.one_off_created",
+          "invoice.paid_credit_added",
+          "invoice.payment_failure",
+          "invoice.payment_dispute_lost",
+          "invoice.payment_status_updated",
+          "invoice.resynced",
+          "quote.created",
+          "quote.sent",
+          "quote.accepted",
+          "quote.rejected",
+          "quote.expired",
+          "quote.converted",
+          "quote.updated",
+          "expense.created",
+          "expense.updated",
+          "expense.approved",
+          "expense.rejected",
+          "expense.reimbursed",
+          "payment.created",
+          "payment.succeeded",
+          "payment.failed",
+          "payment.refunded",
+          "payment.disputed",
+          "payment.requires_action",
+          "payment_receipt.created",
+          "payment_receipt.generated",
+          "payment_request.created",
+          "payment_request.payment_status_updated",
+          "payment_request.payment_failure",
+          "client.created",
+          "client.updated",
+          "client.deleted",
+          "client.merged",
+          "client.vies_check",
+          "client.checkout_url_generated",
+          "client.payment_provider_created",
+          "client.payment_provider_error",
+          "client.accounting_provider_created",
+          "client.accounting_provider_error",
+          "client.crm_provider_created",
+          "client.crm_provider_error",
+          "client.tax_provider_error",
+          "product.created",
+          "product.updated",
+          "product.stock_low",
+          "product.discontinued",
+          "subscription.created",
+          "subscription.activated",
+          "subscription.blocked",
+          "subscription.cancelled",
+          "subscription.renewed",
+          "subscription.trial_ending",
+          "subscription.trial_ended",
+          "subscription.updated",
+          "subscription.termination_alert",
+          "subscription.terminated",
+          "subscription.usage_threshold_reached",
+          "credit_note.created",
+          "credit_note.generated",
+          "credit_note.applied",
+          "credit_note.voided",
+          "credit_note.refund_failure",
+          "banking.transaction_imported",
+          "banking.reconciled",
+          "banking.unreconciled",
+          "banking.connection_created",
+          "banking.connection_expired",
+          "tax.filing_due",
+          "tax.report_generated",
+          "ai.ocr_completed",
+          "ai.categorization_completed",
+          "ai.chat_tool_executed",
+          "system.user_invited",
+          "system.user_removed",
+          "system.workspace_updated",
+          "system.integration_connected",
+          "integration.provider_error",
+          "dunning.finished",
+          "wallet.created",
+          "wallet.updated",
+          "wallet.terminated",
+          "wallet.depleted_ongoing_balance",
+          "wallet_transaction.created",
+          "wallet_transaction.updated",
+          "wallet_transaction.payment_failure",
+          "alert.triggered",
+          "reservation.created",
+          "reservation.updated",
+          "reservation.cancelled",
+          "reservation.checked_in",
+          "reservation.checked_out",
+          "property.created",
+          "property.updated",
+          "guest.compliance_completed",
+          "cleaning_task.created",
+          "cleaning_task.completed",
+          "settlement.generated",
+          "channel.sync_completed"
+        ]
+      },
       "WebhookCreate": {
         "type": "object",
         "required": [
@@ -10292,7 +11409,8 @@
             "type": "array",
             "items": {
               "type": "string",
-              "maxLength": 100
+              "maxLength": 100,
+              "x-enum-ref": "#/components/schemas/WebhookEventType"
             },
             "minItems": 1,
             "description": "List of event types to subscribe to",
@@ -10337,7 +11455,8 @@
           "events": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "x-enum-ref": "#/components/schemas/WebhookEventType"
             },
             "minItems": 1
           },
@@ -10806,15 +11925,78 @@
               },
               "modelo303": {
                 "type": "object",
-                "description": "Pre-filled Modelo 303 (VAT return) figures",
+                "description": "Pre-filled Modelo 303 (IVA return) figures. Read-only summary, never submitted. Tax family per invoice = explicit taxType, otherwise the issuer workspace's fiscal zone (peninsula = IVA, canarias = IGIC, ceuta_melilla = IPSI); the client's location never decides it. Figures are returned only for a workspace that declares the peninsula fiscal zone with country ES, and whose fiscal-profile zone (if set) is peninsula too. Any other workspace gets a refusal here instead and NO figures: only `error`, `code` (MODELO_303_NOT_APPLICABLE), `reason`, `applicableModel` and, for zone_not_applicable, `fiscalZone`: the body of the 409 of GET /fiscal/modelo/303 without `meta`. The rest of the payload is unchanged.",
                 "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "MODELO_303_NOT_APPLICABLE"
+                    ],
+                    "description": "Refusal only. Present instead of the figures below."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "zone_undeclared",
+                      "zone_not_applicable",
+                      "zone_country_mismatch"
+                    ],
+                    "description": "Refusal only. zone_undeclared = no declared country and fiscal zone (or an unrecognised fiscal-profile zone); zone_not_applicable = the declared zone does not file Modelo 303; zone_country_mismatch = peninsula declared with a country other than ES."
+                  },
+                  "fiscalZone": {
+                    "type": "string",
+                    "enum": [
+                      "canarias",
+                      "ceuta_melilla",
+                      "eu",
+                      "world"
+                    ],
+                    "description": "Refusal only, when reason is zone_not_applicable."
+                  },
+                  "applicableModel": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Refusal only. The IGIC return a Canary Islands workspace files instead (\"420\"); null otherwise."
+                  },
+                  "error": {
+                    "type": "string",
+                    "description": "Refusal only. Human-readable explanation."
+                  },
                   "baseImponible": {
                     "type": "number",
-                    "description": "Total tax base"
+                    "description": "Total tax base across all tax families (IVA, IGIC, IPSI, exempt)"
                   },
                   "cuotaRepercutida": {
                     "type": "number",
-                    "description": "Output VAT (charged to clients)"
+                    "description": "Output IVA charged to clients (IGIC and IPSI excluded, see outOfScope)"
+                  },
+                  "outOfScope": {
+                    "type": "object",
+                    "description": "IGIC (Canarias) and IPSI (Ceuta/Melilla) base and cuota kept out of the Modelo 303 figures. Informational; not part of the IVA return.",
+                    "properties": {
+                      "igic": {
+                        "type": "object",
+                        "properties": {
+                          "base": {
+                            "type": "number"
+                          },
+                          "cuota": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "ipsi": {
+                        "type": "object",
+                        "properties": {
+                          "base": {
+                            "type": "number"
+                          },
+                          "cuota": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
                   },
                   "baseDeducible": {
                     "type": "number",
@@ -10832,23 +12014,138 @@
               },
               "modelo130": {
                 "type": "object",
-                "description": "Pre-filled Modelo 130 (quarterly income payment) figures",
+                "description": "Pre-filled Modelo 130 (IRPF pago fraccionado, estimación directa) figures. Read-only, never submitted. Per the AEAT instructions every figure is YEAR-TO-DATE (1 January to the last day of the requested quarter), not the quarter alone. Accrual basis (invoice issueDate, expense date); draft and cancelled invoices are excluded. Casillas 13-19 (minoraciones, vivienda habitual, complementaria) are not computed and are returned as null.",
                 "properties": {
                   "ingresos": {
                     "type": "number",
-                    "description": "Total income (tax base)"
+                    "description": "Casilla 01 — computable income, year-to-date"
                   },
                   "gastos": {
                     "type": "number",
-                    "description": "Total deductible expenses"
+                    "description": "Casilla 02 — deductible expenses, year-to-date"
                   },
                   "rendimientoNeto": {
                     "type": "number",
-                    "description": "Net income (ingresos - gastos)"
+                    "description": "Casilla 03 — net income (ingresos - gastos), year-to-date, may be negative"
                   },
                   "pagoFraccionado": {
                     "type": "number",
-                    "description": "Estimated quarterly payment (20% of net income)"
+                    "description": "Casilla 12 — max(0, casilla 07): 20% of the positive year-to-date net income minus prior positive payments of the year and minus retenciones. Before the non-computed reductions of casillas 13-16."
+                  },
+                  "retencionesSoportadas": {
+                    "type": "number",
+                    "description": "Casilla 06 — IRPF withheld on issued invoices, year-to-date"
+                  },
+                  "basis": {
+                    "type": "string",
+                    "enum": [
+                      "ytd"
+                    ]
+                  },
+                  "year": {
+                    "type": "integer"
+                  },
+                  "quarter": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
+                  },
+                  "porcentaje": {
+                    "type": "number",
+                    "description": "Percentage applied in casilla 04 (always 20; see notModelled)"
+                  },
+                  "casillas": {
+                    "type": "object",
+                    "description": "Official AEAT casillas. Non-computed casillas are null.",
+                    "properties": {
+                      "c01": {
+                        "type": "number"
+                      },
+                      "c02": {
+                        "type": "number"
+                      },
+                      "c03": {
+                        "type": "number"
+                      },
+                      "c04": {
+                        "type": "number",
+                        "description": "20% of the positive casilla 03, otherwise 0"
+                      },
+                      "c05": {
+                        "type": "number",
+                        "description": "Sum of the positive casilla 07 of earlier quarters of the same year, recomputed from stored documents"
+                      },
+                      "c06": {
+                        "type": "number"
+                      },
+                      "c07": {
+                        "type": "number",
+                        "description": "c04 - c05 - c06, may be negative"
+                      },
+                      "c12": {
+                        "type": "number",
+                        "description": "max(0, c07)"
+                      },
+                      "c13": {
+                        "type": "null"
+                      },
+                      "c14": {
+                        "type": "null"
+                      },
+                      "c15": {
+                        "type": "null"
+                      },
+                      "c16": {
+                        "type": "null"
+                      },
+                      "c17": {
+                        "type": "null"
+                      },
+                      "c18": {
+                        "type": "null"
+                      },
+                      "c19": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  "pagosAnterioresPorTrimestre": {
+                    "type": "array",
+                    "description": "Recomputed casilla 07 of each earlier quarter of the year (source of c05)",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "quarter": {
+                          "type": "integer"
+                        },
+                        "c07": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  },
+                  "excluded": {
+                    "type": "object",
+                    "description": "Counted invoices / expenses skipped because their date is missing or not ISO YYYY-MM-DD",
+                    "properties": {
+                      "invoicesWithoutValidDate": {
+                        "type": "integer"
+                      },
+                      "expensesWithoutValidDate": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "notModelled": {
+                    "type": "array",
+                    "description": "AEAT rules this summary does not apply",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "sourceUrl": {
+                    "type": "string",
+                    "description": "AEAT Modelo 130 instructions used as ground truth"
                   }
                 }
               },
@@ -10885,6 +12182,37 @@
           }
         }
       },
+      "EInvoiceValidationIssue": {
+        "type": "object",
+        "required": [
+          "severity",
+          "ruleId",
+          "message"
+        ],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning",
+              "info"
+            ]
+          },
+          "ruleId": {
+            "type": "string",
+            "description": "EN 16931 or format rule identifier",
+            "example": "BR-E-10"
+          },
+          "message": {
+            "type": "string",
+            "description": "Rule message in English"
+          },
+          "i18nKey": {
+            "type": "string",
+            "description": "Translation key for the message in the Frihet app, when one exists"
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "required": [
@@ -10894,6 +12222,14 @@
           "error": {
             "type": "string",
             "description": "Human-readable error message"
+          },
+          "code": {
+            "type": "string",
+            "description": "Optional machine-readable code, including MISSING_FISCAL_INFO, AEAT_QR_UNAVAILABLE (422) and AEAT_RECORD_IRREPRODUCIBLE (409) on invoice PDF."
+          },
+          "message": {
+            "type": "string",
+            "description": "Optional explanatory message accompanying the error code."
           },
           "details": {
             "type": "array",
@@ -11332,6 +12668,75 @@
             },
             "example": {
               "error": "Insufficient permissions",
+              "meta": {
+                "requestId": "550e8400-e29b-41d4-a716-446655440000"
+              }
+            }
+          }
+        }
+      },
+      "WriteScopeForbidden": {
+        "description": "Write scope required to mutate, send or submit. The API key must include the `write` scope (or `einvoice:write` for e-invoice sends) or be unrestricted.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Forbidden",
+              "detail": "This API key does not have the write scope required to create, update, delete, send or submit. E-invoice sends also accept einvoice:write. Use an API key with write access.",
+              "meta": {
+                "requestId": "550e8400-e29b-41d4-a716-446655440000"
+              }
+            }
+          }
+        }
+      },
+      "PosScopeForbidden": {
+        "description": "POS mutations require an explicit pos:write or pos:* grant. POS reads require read or pos:read access.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Forbidden",
+              "detail": "POS mutations require an explicit pos:write or pos:* grant. POS reads require read or pos:read access.",
+              "meta": {
+                "requestId": "550e8400-e29b-41d4-a716-446655440000"
+              }
+            }
+          }
+        }
+      },
+      "PurchaseOrderScopeForbidden": {
+        "description": "Purchase order reads require read or purchase-orders:read, edits and transitions require write or purchase-orders:write, and receive/reverse-receipt require an explicit purchase-orders:receive or purchase-orders:* grant.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Forbidden",
+              "detail": "Purchase order reads require read or purchase-orders:read, edits and transitions require write or purchase-orders:write, and receive/reverse-receipt require an explicit purchase-orders:receive or purchase-orders:* grant.",
+              "meta": {
+                "requestId": "550e8400-e29b-41d4-a716-446655440000"
+              }
+            }
+          }
+        }
+      },
+      "InventoryAuthorityNotReleased": {
+        "description": "The inventory authority is not released yet. Every `/v1/inventory/*` and `/v1/purchase-orders/*` route answers 503 with code `INVENTORY_AUTHORITY_NOT_RELEASED` to a key that passed its scope checks. No inventory or purchase-order data is read or written, and the `Idempotency-Key` is not reserved.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Service Unavailable",
+              "code": "INVENTORY_AUTHORITY_NOT_RELEASED",
+              "message": "Inventory and purchase-order routes are not released yet. No inventory or purchase-order data was read or changed. Retry after the inventory authority is released.",
               "meta": {
                 "requestId": "550e8400-e29b-41d4-a716-446655440000"
               }
