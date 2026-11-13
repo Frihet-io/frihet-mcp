@@ -461,7 +461,7 @@ test("semantic gate: delete_quote outcome cannot become optional or ambiguous", 
   const impossibleOutput = asObject(findTool(impossibleStatus, "delete_quote").outputSchema);
   const properties = asObject(impossibleOutput.properties);
   const result = asObject(properties.result);
-  const branches = result.anyOf as JsonValue[];
+  const branches = result.oneOf as JsonValue[];
   const deleted = branches
     .map((branch) => asObject(branch))
     .find((branch) => asObject(asObject(branch.properties).outcome).const === "deleted");
@@ -469,6 +469,17 @@ test("semantic gate: delete_quote outcome cannot become optional or ambiguous", 
   asObject(deleted.properties).status = { const: "cancelled", type: "string" };
   assert.throws(
     () => assertOpenAIReviewContract(impossibleStatus, EXPECTED),
+    /delete_quote output schema must expose exactly two closed result branches/,
+  );
+});
+
+test("semantic gate: delete_quote rejects sibling union combinators", () => {
+  const mixed = cloneExpected();
+  const output = asObject(findTool(mixed, "delete_quote").outputSchema);
+  const result = asObject(asObject(output.properties).result);
+  result.anyOf = result.oneOf;
+  assert.throws(
+    () => assertOpenAIReviewContract(mixed, EXPECTED),
     /delete_quote output schema must expose exactly two closed result branches/,
   );
 });

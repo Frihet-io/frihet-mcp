@@ -100,27 +100,27 @@ export const APPROVED_PACKAGE_RUNTIME_METADATA = Object.freeze({
 });
 export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
   "package.json": {
-    dependencies: { "@modelcontextprotocol/sdk": "1.31.0" },
-    devDependencies: { "@types/node": "^22.0.0", ajv: "8.18.0", typescript: "^5.7.0", zod: "^3.25.1" },
+    dependencies: { "@modelcontextprotocol/sdk": "1.32.2" },
+    devDependencies: { "@types/node": "^22.0.0", ajv: "8.18.0", typescript: "^5.7.0", zod: "^4.6.7" },
     optionalDependencies: {},
     overrides: {
       "@ai-sdk/provider-utils": ">=4.0.33 <5",
-      hono: ">=4.13.13",
-      "ip-address": ">=10.7.3",
+      hono: ">=4.13.16 <5",
+      "ip-address": ">=10.7.6 <11",
       "proxy-addr": ">=2.0.8",
-      qs: ">=6.15.4",
+      qs: ">=6.17.1 <7",
     },
-    peerDependencies: { zod: ">=3.25.1" },
+    peerDependencies: { zod: "^4.6.6" },
     resolutions: {},
   },
   "workers/remote-mcp/package.json": {
     dependencies: {
       "@cloudflare/workers-oauth-provider": "0.3.0",
-      "@modelcontextprotocol/sdk": "1.31.0",
+      "@modelcontextprotocol/sdk": "1.32.2",
       agents: "0.7.5",
       "firebase-auth-cloudflare-workers": "^2.0.6",
-      hono: ">=4.13.13",
-      zod: "^3.25.0",
+      hono: ">=4.13.16 <5",
+      zod: "^4.6.7",
     },
     devDependencies: {
       "@cloudflare/workers-types": "^4.20250306.0",
@@ -130,12 +130,12 @@ export const APPROVED_PACKAGE_DEPENDENCIES = Object.freeze({
     optionalDependencies: {},
     overrides: {
       "@ai-sdk/provider-utils": ">=4.0.33 <5",
-      "@modelcontextprotocol/sdk": { "@hono/node-server": "2.0.12", hono: ">=4.13.13" },
-      agents: { "@modelcontextprotocol/sdk": "1.31.0" },
-      hono: ">=4.13.13",
-      "ip-address": ">=10.7.3",
+      "@modelcontextprotocol/sdk": { "@hono/node-server": "2.1.8", hono: ">=4.13.16 <5" },
+      agents: { "@modelcontextprotocol/sdk": "1.32.2" },
+      hono: ">=4.13.16 <5",
+      "ip-address": ">=10.7.6 <11",
       "proxy-addr": ">=2.0.8",
-      qs: ">=6.15.4",
+      qs: ">=6.17.1 <7",
       nanoid: "5.1.16",
     },
     peerDependencies: {},
@@ -290,8 +290,8 @@ export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/src/oauth-token-family.ts": "fd5b46bd1cf104beeb48ed07cc5dad29789f47d8c208b2473db4dd791a460f30", // #246: reversible policy pause checks the existing internal status without credential rotation; #205: supersede tombstones a replaced grant's family on the same internal Durable Object origin; OAuth/OIDC review: status lookup binds access tokens to the durable family tombstone and reviewed scopes
 });
 export const APPROVED_LOCKFILE_HASHES = Object.freeze({
-  "package-lock.json": "5eb56bed75fdc60d948235797aa89c17f47410021f349edffee861e3d35a2a4f",
-  "workers/remote-mcp/package-lock.json": "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b",
+  "package-lock.json": "25c7329ad057734ed8dbeb5555c5ba10942b1f819039e722e215dd45dfbe0b1e",
+  "workers/remote-mcp/package-lock.json": "a2cc5bf5a695a7c709e040b0fd81cf51ab76bab4c014fe1a9c8f713edde24a88",
 });
 export const APPROVED_CONFIG_FILE_HASHES = Object.freeze({
   "workers/remote-mcp/wrangler.claude.toml": "280c8a3dbac7e9e03421f9f22159c451b6326e05d3ab2e78708d7dbe1c643d5c", // dedicated Claude provider alias and isolated OAUTH_KV namespace 274c7aaa85a04d44b4dc77f5f1dd7ca2
@@ -317,7 +317,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
   "scripts/check-openai-public-surface.mjs": "7ca40c8f4f06d9db2fd056e72f13916b86da6c584fbb170f24bf4f6ee2726a54", // directory-readiness: adds the /.well-known/oauth-protected-resource/mcp probe
   "scripts/__tests__/openai-public-surface.test.mjs": "190249c19229a83ea0c64ad7458e568c608addd927e5f49264e43d10f5c0c979", // directory-readiness: fixture and origin-only case for the path-inserted metadata
-  ".github/workflows/ci.yml": "78bf928352040b317d30692c4194499c3a784dcdd7653ce3d55f0335cf5e6c92",
+  ".github/workflows/ci.yml": "651920e209e382641f5f23ac40b2bc990b2307b990ca0d85b98d7fe36c3ef917",
   "scripts/__tests__/conformance-phase0.test.mjs": "8d297ffab31b3420fbc00d2386f6f090088c958d08e4d7d7973342e1fb5b626b",
   "scripts/__tests__/conformance-provenance.test.mjs": "c12334f25dca21d4c8133a4e9c1bcbf569335b854dbfab4f73683e964cddd8ec",
   "scripts/__tests__/openai-worker-review-wire.test.mjs": "83e0ef30c411c938dfc4ca0ff08cbdc067f470cd93a1111763f3934d77f7ebd5",
@@ -360,7 +360,7 @@ export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
   "marketplace/openai/frihet-composer-dark.png": "7e3d1d5c560ecc41135a42421c343101d2ed043b9cfef979a8e80d57d9471e0b",
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
-  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "7390455199e002fb751823f6fad2d740da0e1b53b74d70b8400b4f37581580e5", // Reviewed invoice reads: three description-only boundaries for unavailable external evidence; schemas, OAuth and 33-tool security schemes unchanged
+  "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "cf60256978068db68e308c5240f76c40f9f3682c4c1c2ab5bedc0e48f4e017c2", // SDK 1.32.2/Zod 4.6.7 schema recapture: safer email regex, nullable types and exclusive delete result; OAuth and the 33-tool inventory are unchanged
   "src/__tests__/fixtures/public-capability-contract.json": "cf7ab3bcdde3f8e270e4517ba2c7d311d8bfe685877c123a8c92c2cb1a46d18d", // Task 1 deposit retry hint and recurring fiscal/webhook capability truth + purchase-order read tools; no new emitter
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });

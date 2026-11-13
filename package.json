@@ -121,17 +121,17 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.31.0"
+    "@modelcontextprotocol/sdk": "1.32.2"
   },
   "overrides": {
-    "hono": ">=4.13.13",
-    "ip-address": ">=10.7.3",
+    "hono": ">=4.13.16 <5",
+    "ip-address": ">=10.7.6 <11",
     "proxy-addr": ">=2.0.8",
-    "qs": ">=6.15.4",
+    "qs": ">=6.17.1 <7",
     "@ai-sdk/provider-utils": ">=4.0.33 <5"
   },
   "peerDependencies": {
-    "zod": ">=3.25.1"
+    "zod": "^4.6.6"
   },
   "peerDependenciesMeta": {
     "zod": {
@@ -142,6 +142,6 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "ajv": "8.18.0",
-    "zod": "^3.25.1"
+    "zod": "^4.6.7"
   }
 }

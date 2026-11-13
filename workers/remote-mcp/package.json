@@ -13,11 +13,11 @@
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "0.3.0",
-    "@modelcontextprotocol/sdk": "1.31.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "agents": "0.7.5",
     "firebase-auth-cloudflare-workers": "^2.0.6",
-    "hono": ">=4.13.13",
-    "zod": "^3.25.0"
+    "hono": ">=4.13.16 <5",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250306.0",
@@ -26,16 +26,16 @@
   },
   "overrides": {
     "@modelcontextprotocol/sdk": {
-      "@hono/node-server": "2.0.12",
-      "hono": ">=4.13.13"
+      "@hono/node-server": "2.1.8",
+      "hono": ">=4.13.16 <5"
     },
     "agents": {
-      "@modelcontextprotocol/sdk": "1.31.0"
+      "@modelcontextprotocol/sdk": "1.32.2"
     },
-    "hono": ">=4.13.13",
-    "ip-address": ">=10.7.3",
+    "hono": ">=4.13.16 <5",
+    "ip-address": ">=10.7.6 <11",
     "proxy-addr": ">=2.0.8",
-    "qs": ">=6.15.4",
+    "qs": ">=6.17.1 <7",
     "@ai-sdk/provider-utils": ">=4.0.33 <5",
     "nanoid": "5.1.16"
   }
