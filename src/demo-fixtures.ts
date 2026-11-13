@@ -65,15 +65,24 @@ export const DEMO_TEST_IBAN = "ES9121000418450200051332";
 
 export type DemoPaginated = PaginatedResponse<Record<string, unknown>>;
 
-/** Wrap a fixture array in a PaginatedResponse. */
+/** Page fixtures after filtering; opt-in string keys sort descending on a copy. */
 export function demoPage(
-  data: Record<string, unknown>[],
+  data: readonly Record<string, unknown>[],
   params?: { limit?: number; offset?: number },
+  descendingKeys?: readonly string[],
 ): DemoPaginated {
   const limit = params?.limit ?? 50;
   const offset = params?.offset ?? 0;
+  const ordered = descendingKeys?.length ? [...data].sort((a, b) => {
+    for (const key of descendingKeys) {
+      const left = String(a[key] ?? "");
+      const right = String(b[key] ?? "");
+      if (left !== right) return left < right ? 1 : -1;
+    }
+    return 0;
+  }) : data;
   return {
-    data: data.slice(offset, offset + limit),
+    data: ordered.slice(offset, offset + limit),
     total: data.length,
     limit,
     offset,

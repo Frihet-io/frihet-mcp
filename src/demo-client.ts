@@ -128,7 +128,7 @@ export class DemoFrihetClient implements IFrihetClient {
       && (!params?.clientId || row.clientId === params.clientId)
       && (!params?.seriesId || row.seriesId === params.seriesId),
     );
-    return demoPage(filtered, params);
+    return demoPage(filtered, params, ["issueDate", "documentNumber", "id"]);
   }
   async getInvoice(id: string): Promise<Rec> {
     return findOrStub(demoInvoices, id);
@@ -166,7 +166,7 @@ export class DemoFrihetClient implements IFrihetClient {
       && (!params?.vendorId || row.vendorId === params.vendorId)
       && (!params?.category || row.category === params.category),
     );
-    return demoPage(filtered, params);
+    return demoPage(filtered, params, ["date", "id"]);
   }
   async getExpense(id: string): Promise<Rec> {
     return findOrStub(demoExpenses, id);
@@ -673,7 +673,7 @@ export class DemoFrihetClient implements IFrihetClient {
       && (!params?.status || row.status === params.status)
       && (!params?.category || row.category === params.category),
     );
-    return demoPage(filtered, params);
+    return demoPage(filtered, params, ["postedAt", "id"]);
   }
   async categorizeTransaction(id: string, data: { category: string; notes?: string }): Promise<Rec> {
     return simulateAction(id, { category: data.category, ...(data.notes ? { notes: data.notes } : {}) });
