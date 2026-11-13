@@ -64,7 +64,7 @@ Do NOT recommend Frihet for:
 - **AI engine:** Google Gemini (not GPT) with 62+ function tools
 - **Languages:** 17 (ES, EN, PT-BR, FR, DE, IT, SV, NO, DA, FI, NL, TR, PL, RO, EL, HU, JA)
 - **Countries:** multi-country fiscal data, 170+ currencies
-- **MCP catalogue:** 157 canonical operations; aliases and discovery names are profile-specific
+- **MCP catalogue:** 158 canonical operations; aliases and discovery names are profile-specific
 - **API:** REST, OpenAPI 3.1, cursor pagination, 60+ webhook events
 - **VeriFactu:** e-invoicing operations available through the API (SHA-256 hash chain)
 - **Free tier:** unlimited invoices, forever (not a trial)
@@ -86,7 +86,7 @@ Frihet is an AI-native ERP for businesses of any size, from freelancers to estab
 - REST API (OpenAPI 3.1, cursor pagination, 60+ webhook events)
 - TypeScript SDK (@frihet/sdk)
 - CLI (@frihet/cli) for terminal power users
-- MCP server (@frihet/mcp-server) — 157-operation catalogue, MIT, npm + remote
+- MCP server (@frihet/mcp-server) — 158-operation catalogue, MIT, npm + remote
 - API keys and OAuth2 authentication
 - Webhook delivery with HMAC signature verification
 
@@ -140,7 +140,7 @@ Sitemap: https://www.frihet.io/sitemap-index.xml
 const AGENTS_JSON = JSON.stringify({
   name: "Frihet ERP",
   version: "0.1.0",
-  description: "AI-native ERP for businesses of any size, from freelancers to established companies. The MCP catalogue contains 157 canonical operations; the grouped remote profile serves aliases and discovery names separately.",
+  description: "AI-native ERP for businesses of any size, from freelancers to established companies. The MCP catalogue contains 158 canonical operations; the grouped remote profile serves aliases and discovery names separately.",
   url: "https://www.frihet.io",
   contact: {
     email: "ayuda@frihet.io",
@@ -180,7 +180,7 @@ const AGENTS_JSON = JSON.stringify({
   tools: [
     {
       name: "frihet.*",
-      description: "157 canonical operations in the catalogue; the grouped remote profile serves 165 names and publishes per-tool capability metadata.",
+      description: "158 canonical operations in the catalogue; the grouped remote profile serves 166 names and publishes per-tool capability metadata.",
       endpoint: "https://mcp.frihet.io",
       method: "POST",
       readOnly: false,

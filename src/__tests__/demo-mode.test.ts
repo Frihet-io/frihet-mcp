@@ -16,8 +16,9 @@ import * as fixtures from "../demo-fixtures.js";
 import { permissionsMatrixOutput, permissionsMeOutput } from "../tools/shared.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv-provider.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { localMcpSurfaceComposition, registerMcpSurface } from "../server-composition.js";
+import { localMcpSurfaceComposition, registerMcpSurface, type McpSurfaceComposition } from "../server-composition.js";
 import { claudeToolResult } from "../claude-output-privacy.js";
 import type { IFrihetClient } from "../client-interface.js";
 
@@ -399,3 +400,133 @@ describe("Grouped meta-tools in demoMode (#118) and Claude diagnostic error allo
     );
   });
 });
+
+
+const PAGINATED_DEMO_TOOLS = [
+  "list_invoices", "search_invoices", "list_quotes", "list_recurring_invoices",
+  "list_deposits", "list_expenses", "list_vendors", "list_clients",
+  "list_client_contacts", "list_client_activities", "list_client_notes",
+  "list_bank_accounts", "list_transactions", "frihet_bank_rules_list",
+  "leave_list", "anomaly_list", "list_team_members", "list_time_entries",
+  "list_products", "list_purchase_orders", "list_reservations", "list_properties",
+  "list_terminals", "list_sales", "list_kitchen_tickets", "list_kitchen_stations",
+  "list_menu_items", "global_search",
+];
+
+const DEMO_PROFILES = [
+  ["general", localMcpSurfaceComposition(false, false)],
+  ["grouped", localMcpSurfaceComposition(false, true)],
+  ["claude", localMcpSurfaceComposition(false, false, true)],
+  ["claude-grouped", localMcpSurfaceComposition(false, true, true)],
+  ["openai", localMcpSurfaceComposition(true, false)],
+  ["openai-review", localMcpSurfaceComposition(true, true)],
+  ["google", localMcpSurfaceComposition(false, false, false, true)],
+  ["muse", localMcpSurfaceComposition(false, false, false, false, true)],
+] as const;
+
+async function withPaginationSdk(
+  api: IFrihetClient,
+  composition: McpSurfaceComposition,
+  run: (client: Client) => Promise<void>,
+): Promise<void> {
+  const server = new McpServer({ name: "demo-pagination", version: "1.0.0" });
+  registerMcpSurface(server, api, composition);
+  const client = new Client({ name: "demo-pagination-client", version: "1.0.0" }, {
+    jsonSchemaValidator: new AjvJsonSchemaValidator(),
+  });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  try {
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    await run(client);
+  } finally {
+    await Promise.allSettled([client.close(), server.close()]);
+  }
+}
+
+for (const [profile, composition] of DEMO_PROFILES) {
+  describe(`Demo pagination through the real MCP SDK: ${profile}`, () => {
+    test("every paginated tool labels empty pages in closed schemas, structured content and text", async (t) => {
+      await withPaginationSdk(new DemoFrihetClient(), composition, async (client) => {
+        const { tools } = await client.listTools();
+        const paginated = tools.filter((tool) => ["data", "total", "limit", "offset"]
+          .every((key) => key in (tool.outputSchema?.properties ?? {})));
+        const expected = PAGINATED_DEMO_TOOLS.filter((name) => tools.some((tool) => tool.name === name));
+        assert.deepEqual(paginated.map((tool) => tool.name).sort(), expected.sort());
+        if (profile === "general" || profile === "grouped") assert.equal(paginated.length, 28);
+        assert.ok(paginated.length > 0);
+        for (const tool of paginated) {
+          await t.test(tool.name, async () => {
+            const result = await client.callTool({ name: tool.name, arguments: {
+              limit: 5, offset: 100,
+              ...(["list_client_contacts", "list_client_activities", "list_client_notes"].includes(tool.name)
+                ? { clientId: "demo_cli_001" } : {}),
+              ...(tool.name === "search_invoices" ? { query: "no-matching-demo-record" } : {}),
+              ...(tool.name === "global_search" ? { q: "no-matching-demo-record" } : {}),
+            } });
+            assert.equal(result.isError, undefined);
+            const structured = result.structuredContent as Record<string, unknown>;
+            assert.deepEqual(structured.data, []);
+            assert.equal(structured._demo, true);
+            assert.equal(structured._demoNotice, fixtures.READ_STAMP._demoNotice);
+            const text = (result.content as Array<{ text: string }>)[0]!.text;
+            assert.deepEqual(JSON.parse(text), structured);
+            assert.ok(tool.outputSchema);
+            assert.equal(tool.outputSchema.additionalProperties, false);
+            const validate = new AjvJsonSchemaValidator().getValidator(tool.outputSchema);
+            assert.equal(validate(structured).valid, true);
+            for (const patch of [
+              { _demo: false }, { _demoNotice: "real data" }, { total: "invalid" },
+              { meta: { private: "must not be allowed" } },
+            ]) assert.equal(validate({ ...structured, ...patch }).valid, false);
+            const { _demo, _demoNotice, ...withoutStamp } = structured;
+            assert.equal(validate(withoutStamp).valid, false, "demo marker is required, never merely optional");
+          });
+        }
+      });
+    });
+
+    test("populated invoice, client and product pages retain identical demo JSON and structured data", async () => {
+      await withPaginationSdk(new DemoFrihetClient(), composition, async (client) => {
+        await client.listTools();
+        for (const name of ["list_invoices", "list_clients", "list_products"]) {
+          const result = await client.callTool({ name, arguments: { limit: 5 } });
+          assert.equal(result.isError, undefined, name);
+          const structured = result.structuredContent as Record<string, unknown>;
+          assert.ok(Array.isArray(structured.data) && structured.data.length > 0);
+          assert.equal(structured._demo, true, name);
+          assert.equal(structured._demoNotice, fixtures.READ_STAMP._demoNotice, name);
+          assert.deepEqual(JSON.parse((result.content as Array<{ text: string }>)[0]!.text), structured);
+          assert.ok((result.content as unknown[]).length > 1, "preserve the existing profile's summary and hints");
+        }
+      });
+    });
+
+    test("live pagination schemas and payloads have no demo fields", async () => {
+      const page = { data: [], total: 0, limit: 5, offset: 0 };
+      const api = new Proxy({}, { get: () => async () => page }) as IFrihetClient;
+      await withPaginationSdk(api, composition, async (client) => {
+        const { tools } = await client.listTools();
+        for (const name of ["list_invoices", "list_clients", "list_products"]) {
+          const descriptor = tools.find((tool) => tool.name === name)!;
+          assert.ok(descriptor.outputSchema);
+          assert.equal("_demo" in (descriptor.outputSchema.properties ?? {}), false);
+          assert.equal("_demoNotice" in (descriptor.outputSchema.properties ?? {}), false);
+          const result = await client.callTool({ name, arguments: { limit: 5 } });
+          assert.equal(result.isError, undefined);
+          assert.deepEqual(result.structuredContent, page);
+          assert.doesNotMatch(JSON.stringify(result.content), /_demo|DEMO MODE/);
+        }
+      });
+    });
+
+    test("error responses are not converted into successful stamped pages", async () => {
+      await withPaginationSdk(new DemoFrihetClient(), composition, async (client) => {
+        await client.listTools();
+        const result = await client.callTool({ name: "list_clients", arguments: { q: "example", after: "cursor" } });
+        assert.equal(result.isError, true);
+        assert.equal(result.structuredContent, undefined);
+        assert.doesNotMatch(JSON.stringify(result.content), /_demo|DEMO MODE/);
+      });
+    });
+  });
+}
