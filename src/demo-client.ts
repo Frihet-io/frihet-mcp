@@ -120,8 +120,15 @@ export class DemoFrihetClient implements IFrihetClient {
   readonly isDemoClient = true as const;
 
   // ---------------------------------------------------------------- Invoices
-  async listInvoices(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
-    return demoPage(demoInvoices, params);
+  async listInvoices(params?: Parameters<IFrihetClient["listInvoices"]>[0]): Promise<PaginatedResponse<Rec>> {
+    const filtered = demoInvoices.filter((row) =>
+      (!params?.from || (typeof row.issueDate === "string" && row.issueDate >= params.from))
+      && (!params?.to || (typeof row.issueDate === "string" && row.issueDate <= params.to))
+      && (!params?.status || row.status === params.status)
+      && (!params?.clientId || row.clientId === params.clientId)
+      && (!params?.seriesId || row.seriesId === params.seriesId),
+    );
+    return demoPage(filtered, params, ["issueDate", "documentNumber", "id"]);
   }
   async getInvoice(id: string): Promise<Rec> {
     return findOrStub(demoInvoices, id);
@@ -152,8 +159,14 @@ export class DemoFrihetClient implements IFrihetClient {
   }
 
   // ---------------------------------------------------------------- Expenses
-  async listExpenses(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
-    return demoPage(demoExpenses, params);
+  async listExpenses(params?: Parameters<IFrihetClient["listExpenses"]>[0]): Promise<PaginatedResponse<Rec>> {
+    const filtered = demoExpenses.filter((row) =>
+      (!params?.from || (typeof row.date === "string" && row.date >= params.from))
+      && (!params?.to || (typeof row.date === "string" && row.date <= params.to))
+      && (!params?.vendorId || row.vendorId === params.vendorId)
+      && (!params?.category || row.category === params.category),
+    );
+    return demoPage(filtered, params, ["date", "id"]);
   }
   async getExpense(id: string): Promise<Rec> {
     return findOrStub(demoExpenses, id);
@@ -652,8 +665,15 @@ export class DemoFrihetClient implements IFrihetClient {
   async getBankAccount(id: string): Promise<Rec> {
     return findOrStub(demoBankAccounts, id);
   }
-  async listTransactions(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Rec>> {
-    return demoPage(demoTransactions, params);
+  async listTransactions(params?: Parameters<IFrihetClient["listTransactions"]>[0]): Promise<PaginatedResponse<Rec>> {
+    const filtered = demoTransactions.filter((row) =>
+      (!params?.from || (typeof row.postedAt === "string" && row.postedAt >= params.from))
+      && (!params?.to || (typeof row.postedAt === "string" && row.postedAt <= params.to))
+      && (!params?.accountId || row.accountId === params.accountId)
+      && (!params?.status || row.status === params.status)
+      && (!params?.category || row.category === params.category),
+    );
+    return demoPage(filtered, params, ["postedAt", "id"]);
   }
   async categorizeTransaction(id: string, data: { category: string; notes?: string }): Promise<Rec> {
     return simulateAction(id, { category: data.category, ...(data.notes ? { notes: data.notes } : {}) });
