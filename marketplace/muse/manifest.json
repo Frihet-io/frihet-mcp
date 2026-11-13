@@ -1,29 +1,14 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "documentType": "candidate-profile-inventory",
+  "status": "SOURCE_PREPARED",
   "name": "Frihet ERP",
   "id": "io.frihet.muse",
   "version": "1.0.0",
-  "description": "AI-native ERP connector for Meta Muse: business health summaries, customer insights, expense tracking, and governed draft invoice generation.",
+  "description": "Candidate inventory for the local Frihet Muse stdio profile. Remote Muse integration, authentication and partner acceptance are not established by this document.",
   "publisher": {
     "name": "Frihet-io",
     "url": "https://frihet.io",
     "supportEmail": "support@frihet.io"
-  },
-  "transport": {
-    "type": "streamable-http",
-    "endpoint": "https://mcp.frihet.io/mcp",
-    "fallbackEndpoint": "https://api.frihet.io/v1"
-  },
-  "authentication": {
-    "type": "oauth2",
-    "authorizationUrl": "https://auth.frihet.io/oauth2/authorize",
-    "tokenUrl": "https://auth.frihet.io/oauth2/token",
-    "scopes": [
-      "openid",
-      "email",
-      "frihet:workspace.manage"
-    ],
-    "apiKeyHeader": "x-frihet-api-key"
   },
   "capabilities": {
     "tools": [
@@ -39,7 +24,7 @@
       },
       {
         "name": "get_quarterly_taxes",
-        "description": "Retrieve estimated tax obligations (VAT/IRPF) and pending fiscal model deadlines for a quarter.",
+        "description": "Retrieve quarterly tax estimates; this read does not file a tax declaration.",
         "readOnly": true
       },
       {
@@ -54,16 +39,16 @@
       },
       {
         "name": "search_invoices",
-        "description": "Search invoices by customer name, reference number, or total amount range.",
+        "description": "Search invoices using the supported server query filters.",
         "readOnly": true
       },
       {
         "name": "create_invoice",
-        "description": "Create a new DRAFT customer invoice. Does not submit to tax authorities or send to customer.",
+        "description": "Create a customer invoice with status forced to draft by the local Muse profile; this tool does not issue or send it.",
         "readOnly": false,
         "governance": {
-          "draftOnly": true,
-          "fiscalAuthoritySubmissionBlocked": true
+          "scope": "local-stdio-profile",
+          "draftOnly": true
         }
       },
       {
@@ -78,11 +63,8 @@
       },
       {
         "name": "create_expense",
-        "description": "Record a new draft business expense with amount, vendor, category, and deductible tax.",
-        "readOnly": false,
-        "governance": {
-          "draftOnly": true
-        }
+        "description": "Create a business expense record with amount, vendor, category and deductible tax; this local profile does not force draft status.",
+        "readOnly": false
       },
       {
         "name": "list_clients",
@@ -91,7 +73,7 @@
       },
       {
         "name": "get_client",
-        "description": "Retrieve client profile, contact details, payment terms, and historical billing summary.",
+        "description": "Retrieve the client profile returned by the API; the local profile applies configured output redaction.",
         "readOnly": true
       },
       {
@@ -121,24 +103,45 @@
       },
       {
         "name": "create_quote",
-        "description": "Create a new commercial quote for a client. Does not automatically send to client.",
+        "description": "Create a commercial quote with status forced to draft by the local Muse profile; this tool does not send it.",
         "readOnly": false,
         "governance": {
+          "scope": "local-stdio-profile",
           "draftOnly": true
         }
       }
     ]
   },
   "governance": {
-    "fiscalIntegrity": {
-      "verifactuDirectSubmission": false,
-      "ticketbaiDirectSubmission": false,
-      "facturaeDirectSubmission": false,
-      "policy": "AI agents operating in Meta Muse can only create draft documents. Official fiscal stamping and transmission require authenticated human review inside the Frihet ERP web dashboard."
+    "scope": "local-stdio-profile",
+    "forcedDraftTools": [
+      "create_invoice",
+      "create_quote"
+    ],
+    "fiscalSubmissionToolsIncluded": false,
+    "outputRedaction": {
+      "implementation": "src/redaction.ts",
+      "policy": "Named sensitive fields are removed from structured results; matching serialized JSON fields are removed from text.",
+      "limit": "This is not general anonymization of names, emails, addresses or arbitrary prose."
     },
-    "privacy": {
-      "piiRedaction": true,
-      "maskedFields": ["taxId", "iban", "vatNumber", "streetAddress"]
-    }
+    "idempotency": {
+      "implementation": "src/client.ts",
+      "policy": "The shared HTTP client supplies a request idempotency key and reuses it for its retries.",
+      "limit": "Separate tool invocations can receive separate keys; semantic deduplication is not guaranteed."
+    },
+    "audit": "Operational logging does not establish a Muse-specific tamper-evident audit trail."
+  },
+  "localProfile": {
+    "transport": "stdio",
+    "modeVariable": "FRIHET_MUSE_MODE",
+    "modeValue": "true",
+    "toolExposureMode": "full",
+    "source": "src/muse-profile.ts",
+    "compositionTest": "src/__tests__/muse-profile.test.ts"
+  },
+  "remoteIntegration": {
+    "status": "NOT_VALIDATED",
+    "configurationProvided": false,
+    "partnerSubmissionOrAcceptance": "NOT_ASSERTED"
   }
 }

@@ -1,85 +1,82 @@
-# Official Frihet Connector for Meta Muse
+# Frihet Muse candidate profile
 
-This directory contains the integration manifest, metadata, and submission contract for publishing **Frihet ERP** as an official connector and business application in **Meta Muse**.
+**Status: `SOURCE_PREPARED`.** This directory contains a repository-owned candidate
+inventory for the local Frihet MCP Muse profile. It does not establish submission,
+partner approval, an official Meta connector, or an enabled remote Muse service.
 
 Tracking issue: [berthelius/Frihet-ERP#2291](https://github.com/berthelius/Frihet-ERP/issues/2291).
 
----
+## Verified local scope
 
-## 1. Architectural Blueprint
+The local stdio entry point reads `FRIHET_MUSE_MODE=true` and selects
+[`src/muse-profile.ts`](../../src/muse-profile.ts) through
+[`localMcpSurfaceComposition`](../../src/server-composition.ts). The existing
+composition tests cover full tool-exposure mode (`FRIHET_TOOL_MODE=full`):
+18 tool names, no resources, no prompts, invoice and quote draft enforcement,
+selected output-redaction cases, and mutually exclusive profiles.
 
-The connector connects Meta Muse directly to Frihet's governed MCP/API gateway rather than creating a fragmented, product-specific backend:
+These are local tests with stubbed API responses. They do not verify a live
+workspace, the remote Worker, Meta authentication, or a partner submission.
+For local package connection requirements, see the [main README](../../README.md).
 
-```mermaid
-flowchart LR
-    MUSE["Meta Muse Agent"] --> OAUTH["OAuth 2.0 / API Key\n(auth.frihet.io)"]
-    OAUTH --> GATEWAY["Governed MCP Gateway\n(https://mcp.frihet.io/mcp)"]
-    GATEWAY --> SAFETY["Safety & Governance Filter\n(Draft-Only & PII Redaction)"]
-    SAFETY --> CORE["Frihet Canonical ERP API\n(api.frihet.io)"]
-```
+## Candidate tool inventory
 
-### Complementary Channels
-- **Official Connector (Direct / Branded):** Direct Meta Muse App integration via `https://mcp.frihet.io/mcp` using the curated 18-tool profile.
-- **Zapier MCP Bridge (Broad Automation):** `Muse → Zapier MCP → Frihet Zapier App → Frihet`.
+| Area | Tool names |
+|---|---|
+| Business context | `get_business_context`, `get_monthly_summary`, `get_quarterly_taxes` |
+| Invoices | `list_invoices`, `get_invoice`, `search_invoices`, `create_invoice` |
+| Expenses | `list_expenses`, `get_expense`, `create_expense` |
+| Clients | `list_clients`, `get_client`, `create_client` |
+| Products | `list_products`, `get_product` |
+| Quotes | `list_quotes`, `get_quote`, `create_quote` |
 
----
+Read the connected session's schemas, tool descriptions and capability metadata
+before invoking tools. Catalogue membership does not establish workspace access
+or successful backend execution.
 
-## 2. First-Release Curated Tool Surface (18 Tools)
+## What the local code enforces
 
-Rather than exposing the complete 165-tool internal enterprise catalogue, the Muse connector exposes a curated, high-confidence surface designed for small-to-medium business management:
+- `create_invoice` and `create_quote` force `status: "draft"`. The Muse profile
+  does not force draft status for `create_expense` or `create_client`, and a draft
+  can still have numbering, usage or other backend effects. The allowlist contains
+  no direct fiscal-submission tool.
+- Results pass through `deepRedact` and `redactText` in
+  [`src/redaction.ts`](../../src/redaction.ts): named sensitive fields are removed
+  from structured data and matching serialized JSON fields from text. This is
+  not general anonymization of names, email addresses, addresses or arbitrary prose.
+- The shared HTTP client supplies a request `Idempotency-Key` and reuses it for
+  its retries. Separate tool invocations can receive separate keys; this does
+  not guarantee deduplication of repeated business intent.
+- Operational logging does not establish a Muse-specific, tamper-evident audit
+  trail with caller identity, workspace and complete parameters.
 
-### A. Business Health & Financial Context (Read-Only)
-- `get_business_context`: Overview of current business setup, currency, and operating summary.
-- `get_monthly_summary`: Revenue, expenses, net margin, and cash summary for a specific calendar month.
-- `get_quarterly_taxes`: Estimated quarterly VAT/IRPF obligations and fiscal calendar deadlines.
+## Remote integration remains unvalidated
 
-### B. Invoicing & Receivables (Read-Only + Draft Mutation)
-- `list_invoices`: Search and list customer invoices (draft, sent, paid, overdue).
-- `get_invoice`: Retrieve full line-item details of a specific invoice.
-- `search_invoices`: Free-text search across client names, invoice references, and totals.
-- `create_invoice`: **Draft-Only** creation. Agents cannot finalize invoices or report them to tax authorities without explicit human approval in the ERP UI.
+The current remote Worker does not select the Muse profile. The generic endpoint
+`https://mcp.frihet.io/mcp` must not be described as an authenticated 18-tool Muse
+service on the strength of these local tests. No validated Muse-specific remote
+authentication configuration is supplied here, and no Zapier-to-Muse deployment
+is asserted.
 
-### C. Expense Tracking & Vendors
-- `list_expenses`: Paginated listing of expenses with date range and category filters.
-- `get_expense`: Detailed view of a recorded expense and associated tax deductibility.
-- `create_expense`: Draft expense registration for receipt review.
+Before describing a hosted Muse connector as available, validate its exact
+endpoint, provider-supported authentication contract, workspace isolation,
+`tools/list` output and relevant read/write behavior. Submission, review and
+publication remain separate states.
 
-### D. Clients & CRM Context
-- `list_clients`: List active clients and customer profiles.
-- `get_client`: Retrieve client billing address, contact information, and payment terms.
-- `create_client`: Register a new customer record.
+## Inventory format and validation
 
-### E. Product Catalog & Quotes
-- `list_products`: Catalog items, standard pricing, and VAT classifications.
-- `get_product`: Detailed SKU lookup.
-- `list_quotes`: Commercial proposals and quotes.
-- `get_quote`: Specific quote line items and status.
-- `create_quote`: Draft commercial quote generation.
+[`manifest.json`](./manifest.json) is a candidate inventory maintained by Frihet,
+not a provider-ready manifest or an official Meta schema. It preserves
+`capabilities.tools` for the repository's existing validator and deliberately
+omits unvalidated remote transport and authentication settings.
 
----
+Run the existing local checks:
 
-## 3. Governance & Safety Guarantees
-
-1. **Draft-Only Invariant:** AI agents cannot finalize or legally issue invoices or file tax declarations (VeriFactu, TicketBAI, Facturae). All agent-generated financial documents enter as `draft`.
-2. **PII Masking & Privacy:** Sensitive identifying information (NIF/CIF tax IDs, IBAN bank account numbers, physical addresses) is automatically redacted in conversational context.
-3. **Idempotency:** All mutations accept an `Idempotency-Key` header ensuring duplicate assistant invocations do not produce double charges or duplicate draft records.
-4. **Tamper-Evident Audit Trail:** Every tool execution records the caller identity (`agent:meta-muse`), timestamp, workspace ID, and parameters in Frihet's security event log.
-
----
-
-## 4. Submission Manifest Contract
-
-The formal metadata descriptor is located in [manifest.json](./manifest.json).
-
-### Validation
-To validate the manifest against standard schemas:
 ```bash
-node -e '
-const fs = require("fs");
-const manifest = JSON.parse(fs.readFileSync("marketplace/muse/manifest.json", "utf8"));
-if (!manifest.capabilities.tools || manifest.capabilities.tools.length !== 18) {
-  throw new Error("Invalid tool count for curated Muse profile");
-}
-console.log("✅ Meta Muse manifest is valid with", manifest.capabilities.tools.length, "tools");
-'
+npm run build
+node --test dist/__tests__/muse-profile.test.js
+node scripts/check-marketplace-contracts.mjs
 ```
+
+The marketplace check verifies JSON parsing and selected repository invariants;
+it does not validate an official Muse schema or demonstrate partner acceptance.
