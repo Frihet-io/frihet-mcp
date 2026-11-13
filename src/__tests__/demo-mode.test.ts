@@ -54,7 +54,107 @@ describe("DemoFrihetClient — reads", () => {
   });
 });
 
+describe("DemoFrihetClient — intelligence reconciles with fixture reads", () => {
+  test("context references existing records and reports receivables as of the frozen demo date", async () => {
+    const client = new DemoFrihetClient();
+    const [context, invoices, clients, expenses] = await Promise.all([
+      client.getBusinessContext(), client.listInvoices(), client.listClients(), client.listExpenses(),
+    ]);
+    const recent = context.recentActivity as Record<string, unknown>;
+    const lastInvoice = recent.lastInvoice as Record<string, unknown>;
+    const lastExpense = recent.lastExpense as Record<string, unknown>;
+    const topClients = context.topClients as Array<{ name: string; totalRevenue: number; invoiceCount: number }>;
+
+    assert.equal(invoices.total, 9);
+    assert.equal(clients.total, 5);
+    assert.ok(invoices.data.some((invoice) => invoice.documentNumber === lastInvoice.number
+      && invoice.issueDate === lastInvoice.date && invoice.clientName === lastInvoice.client));
+    assert.ok(expenses.data.some((expense) => expense.date === lastExpense.date
+      && expense.vendor === lastExpense.vendor && expense.amount === lastExpense.amount));
+    assert.ok(String(lastInvoice.date) <= fixtures.DEMO_NOW.slice(0, 10));
+    assert.ok(String(lastExpense.date) <= fixtures.DEMO_NOW.slice(0, 10));
+    assert.equal(recent.overdueCount, 2, "a sent invoice due before today is also overdue");
+    assert.equal(recent.overdueAmount, 3385.5);
+    assert.equal(recent.unpaidCount, 4, "draft and paid invoices are not outstanding receivables");
+    assert.equal((recent.coverage as Record<string, unknown>).totalAnalyzed, invoices.total);
+    assert.deepEqual(context.series, [{ id: "default", prefix: "F", current: 9, year: 2026 }]);
+    assert.deepEqual(topClients.map((entry) => entry.totalRevenue), [1248, 1089, 770.4]);
+    for (const topClient of topClients) {
+      assert.ok(clients.data.some((entry) => entry.name === topClient.name));
+      const paid = invoices.data.filter((invoice) => invoice.clientName === topClient.name && invoice.status === "paid");
+      assert.equal(topClient.invoiceCount, paid.length);
+      assert.equal(topClient.totalRevenue, paid.reduce((sum, invoice) => sum + Number(invoice.total), 0));
+    }
+    assert.equal(context._demo, true);
+    assert.equal(context._demoNotice, fixtures.READ_STAMP._demoNotice);
+  });
+
+  test("current month agrees with the monthly summary and excludes the two July drafts from revenue", async () => {
+    const client = new DemoFrihetClient();
+    const before = JSON.stringify([fixtures.demoInvoices, fixtures.demoExpenses]);
+    const context = await client.getBusinessContext();
+    const summary = await client.getMonthlySummary();
+    const revenue = summary.revenue as Record<string, number>;
+    const expenses = summary.expenses as Record<string, number>;
+    const profit = summary.profit as Record<string, number>;
+    const invoices = summary.invoices as Record<string, number>;
+    const month = context.currentMonth as Record<string, number>;
+
+    assert.equal(summary.period, fixtures.DEMO_NOW.slice(0, 7));
+    assert.deepEqual(month, { revenue: 0, expenses: 105.4, profit: -105.4, invoiceCount: 2, expenseCount: 2 });
+    assert.equal(month.revenue, revenue.total);
+    assert.equal(month.expenses, expenses.total);
+    assert.equal(month.profit, profit.gross);
+    assert.equal(month.invoiceCount, invoices.created);
+    const plan = context.plan as Record<string, { used: number }>;
+    assert.equal(plan.invoices!.used, month.invoiceCount);
+    assert.equal(plan.expenses!.used, month.expenseCount);
+    assert.deepEqual(revenue, { total: 0, taxBase: 0, tax: 0, irpf: 0 });
+    assert.deepEqual(summary.topClients, []);
+    assert.equal(JSON.stringify([fixtures.demoInvoices, fixtures.demoExpenses]), before, "reads must not mutate fixtures");
+  });
+
+  test("requested months change the records and amounts instead of relabelling a fixed response", async () => {
+    const client = new DemoFrihetClient();
+    const june = await client.getMonthlySummary("2026-06");
+    assert.deepEqual(june.revenue, { total: 7355.4, taxBase: 6540, tax: 815.4, irpf: 0 });
+    assert.deepEqual(june.expenses, { total: 180.2, deductible: 180.2, tax: 0 });
+    assert.deepEqual(june.profit, { gross: 7175.2, net: 6359.8 });
+    assert.deepEqual(june.invoices, { created: 5, sent: 3, paid: 2, overdue: 0 });
+    assert.deepEqual(june.byCategory, { office_supplies: 48.2, meals: 62, travel: 70 });
+    assert.deepEqual(june.taxLiability, { vatPayable: 815.4, irpfRetained: 0, estimatedModel303: 815.4 });
+    assert.equal(june._demo, true);
+
+    const empty = await client.getMonthlySummary("2025-01");
+    assert.deepEqual(empty.revenue, { total: 0, taxBase: 0, tax: 0, irpf: 0 });
+    assert.deepEqual(empty.expenses, { total: 0, deductible: 0, tax: 0 });
+    assert.deepEqual(empty.profit, { gross: 0, net: 0 });
+    assert.deepEqual(empty.invoices, { created: 0, sent: 0, paid: 0, overdue: 0 });
+    assert.deepEqual(empty.topClients, []);
+    assert.deepEqual(empty.byCategory, {});
+  });
+});
+
 describe("DemoFrihetClient — writes are simulated", () => {
+  test("simulated creates cannot alias existing fixture IDs or persist into subsequent reads", async () => {
+    const client = new DemoFrihetClient();
+    const before = JSON.stringify(await client.listClients());
+    const existingIds = new Set(fixtures.demoClients.map((entry) => entry.id));
+    const first = await client.createClient({ name: "Simulated example one", email: "one@example.com" });
+    const second = await client.createClient({ name: "Simulated example two", email: "two@example.com" });
+
+    assert.equal(existingIds.has(first.id), false, "a new simulated client must not resolve to a different fixture client");
+    assert.equal(existingIds.has(second.id), false);
+    assert.notEqual(first.id, second.id);
+    for (const created of [first, second]) {
+      assert.equal(created._demo, true);
+      assert.equal(created._demoNotice, fixtures.WRITE_STAMP._demoNotice);
+      const fetched = await client.getClient(String(created.id));
+      assert.equal(fetched.name, undefined, "simulated creation is not persisted");
+    }
+    assert.equal(JSON.stringify(await client.listClients()), before);
+  });
+
   test("createInvoice returns _demo:true with a demo_-prefixed id, purely", async () => {
     const client = new DemoFrihetClient();
     const res = await client.createInvoice({

@@ -45,6 +45,9 @@ import {
   simulateWrite,
   simulateAction,
   demoClients,
+  demoMoney,
+  demoSum,
+  demoTopClients,
   demoProducts,
   demoInvoices,
   demoExpenses,
@@ -453,6 +456,17 @@ export class DemoFrihetClient implements IFrihetClient {
 
   // ---------------------------------------------------------------- Intelligence
   async getBusinessContext(): Promise<Rec> {
+    const month = DEMO_NOW.slice(0, 7);
+    const today = DEMO_NOW.slice(0, 10);
+    const monthInvoices = demoInvoices.filter((invoice) => String(invoice.issueDate).startsWith(month));
+    const monthExpenses = demoExpenses.filter((expense) => String(expense.date).startsWith(month));
+    // Fixture invoices have no partial payments: paid means settled; drafts are not receivables.
+    const unpaid = demoInvoices.filter((invoice) => invoice.status === "sent" || invoice.status === "overdue");
+    const overdue = unpaid.filter((invoice) => String(invoice.dueDate) < today);
+    const lastInvoice = [...demoInvoices].sort((a, b) => String(b.issueDate).localeCompare(String(a.issueDate)))[0];
+    const lastExpense = [...demoExpenses].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+    const revenue = demoSum(monthInvoices.filter((invoice) => invoice.status !== "draft" && invoice.status !== "cancelled"), "total");
+    const expenses = demoSum(monthExpenses, "amount");
     return {
       business: {
         name: "Demo Studio SL",
@@ -464,39 +478,70 @@ export class DemoFrihetClient implements IFrihetClient {
       defaults: { taxRate: 21, irpfRate: 15, dueDays: 30, currency: "EUR" },
       plan: {
         name: "free",
-        invoices: { used: 5, limit: 999 },
-        expenses: { used: demoExpenses.length, limit: 5 },
+        invoices: { used: monthInvoices.length, limit: 999 },
+        expenses: { used: monthExpenses.length, limit: 5 },
         aiMessages: { used: 2, limit: 30 },
       },
-      series: [{ id: "default", prefix: "F", current: 5, year: 2026 }],
+      series: [{ id: "default", prefix: "F", current: demoInvoices.length, year: Number(DEMO_NOW.slice(0, 4)) }],
       recentActivity: {
-        lastInvoice: { number: "F-2026-005", date: "2026-07-18", client: "Acme Studio" },
-        lastExpense: { date: "2026-07-17", vendor: "Demo Supplies", amount: 405.6 },
-        overdueCount: 1,
-        overdueAmount: 640,
-        unpaidCount: 2,
+        lastInvoice: lastInvoice
+          ? { number: lastInvoice.documentNumber, date: lastInvoice.issueDate, client: lastInvoice.clientName }
+          : null,
+        lastExpense: lastExpense
+          ? { date: lastExpense.date, vendor: lastExpense.vendor, amount: lastExpense.amount }
+          : null,
+        overdueCount: overdue.length,
+        overdueAmount: demoSum(overdue, "total"),
+        unpaidCount: unpaid.length,
+        coverage: { totalAnalyzed: demoInvoices.length, sampleLimit: 500, isTruncated: false, asOf: today, currency: "EUR", excludedForeignInvoices: 0 },
       },
-      topClients: [{ name: "Acme Studio", totalRevenue: 2200, invoiceCount: 2 }],
+      topClients: demoTopClients(demoInvoices.filter((invoice) => invoice.status === "paid")),
       currentMonth: {
-        revenue: 3960.4,
-        expenses: 405.6,
-        profit: 3554.8,
-        invoiceCount: 5,
-        expenseCount: demoExpenses.length,
+        revenue,
+        expenses,
+        profit: demoMoney(revenue - expenses),
+        invoiceCount: monthInvoices.length,
+        expenseCount: monthExpenses.length,
       },
       ...READ_STAMP,
     };
   }
   async getMonthlySummary(month?: string): Promise<Rec> {
+    const period = month ?? DEMO_NOW.slice(0, 7);
+    const invoices = demoInvoices.filter((invoice) => String(invoice.issueDate).startsWith(`${period}-`));
+    const expenses = demoExpenses.filter((expense) => String(expense.date).startsWith(`${period}-`));
+    // Match /v1/monthly: drafts count as created, but do not contribute revenue or tax.
+    const issued = invoices.filter((invoice) => invoice.status !== "draft" && invoice.status !== "cancelled");
+    const deductible = expenses.filter((expense) => expense.taxDeductible !== false);
+    const revenue = {
+      total: demoSum(issued, "total"), taxBase: demoSum(issued, "subtotal"),
+      tax: demoSum(issued, "taxAmount"), irpf: demoSum(issued, "irpfAmount"),
+    };
+    const expenseTotal = demoSum(expenses, "amount");
+    const inputTax = demoSum(deductible, "tax");
+    const byCategory: Record<string, number> = {};
+    for (const expense of expenses) {
+      const category = String(expense.category ?? "other");
+      byCategory[category] = demoMoney((byCategory[category] ?? 0) + Number(expense.amount));
+    }
+    const vatPayable = demoMoney(revenue.tax - inputTax);
     return {
-      period: month ?? "2026-07",
-      revenue: { total: 3960.4, taxBase: 3273.06, tax: 687.34, irpf: 0 },
-      expenses: { total: 405.6, deductible: 405.6, tax: 70.4 },
-      profit: { gross: 3554.8, net: 2937.86 },
-      invoices: { created: 5, sent: 1, paid: 3, overdue: 1 },
-      topClients: [{ name: "Acme Studio", totalRevenue: 2200, invoiceCount: 2 }],
-      byCategory: { supplies: 405.6 },
-      taxLiability: { vatPayable: 616.94, irpfRetained: 0, estimatedModel303: 616.94 },
+      period,
+      revenue,
+      expenses: { total: expenseTotal, deductible: demoSum(deductible, "amount"), tax: inputTax },
+      profit: {
+        gross: demoMoney(revenue.total - expenseTotal),
+        net: demoMoney(revenue.total - expenseTotal - revenue.tax + inputTax + revenue.irpf),
+      },
+      invoices: {
+        created: invoices.length,
+        sent: invoices.filter((invoice) => invoice.status === "sent" || invoice.status === "partial").length,
+        paid: invoices.filter((invoice) => invoice.status === "paid").length,
+        overdue: invoices.filter((invoice) => invoice.status === "overdue").length,
+      },
+      topClients: demoTopClients(issued),
+      byCategory,
+      taxLiability: { vatPayable, irpfRetained: revenue.irpf, estimatedModel303: vatPayable },
       ...READ_STAMP,
     };
   }

@@ -172,7 +172,7 @@ interface DemoLine {
   unitPrice: number;
 }
 
-function money(n: number): number {
+export function demoMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
@@ -189,12 +189,13 @@ function invoice(opts: {
   irpfRate?: number;
   clientLocation?: string;
 }): Record<string, unknown> {
-  const subtotal = money(opts.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0));
-  const taxAmount = money(subtotal * (opts.taxRate / 100));
-  const irpfAmount = opts.irpfRate ? money(subtotal * (opts.irpfRate / 100)) : 0;
-  const total = money(subtotal + taxAmount - irpfAmount);
+  const subtotal = demoMoney(opts.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0));
+  const taxAmount = demoMoney(subtotal * (opts.taxRate / 100));
+  const irpfAmount = opts.irpfRate ? demoMoney(subtotal * (opts.irpfRate / 100)) : 0;
+  const total = demoMoney(subtotal + taxAmount - irpfAmount);
   return {
     id: opts.id,
+    documentNumber: `F-${opts.issueDate.slice(0, 4)}-${opts.id.split("_").at(-1)}`,
     clientId: opts.clientId,
     clientName: opts.clientName,
     items: opts.items,
@@ -225,6 +226,21 @@ export const demoInvoices: Record<string, unknown>[] = [
   invoice({ id: "demo_inv_008", clientId: "demo_cli_003", clientName: "Servicios Insulares Canarias SL", items: [{ description: "Mantenimiento mensual", quantity: 3, unitPrice: 150 }], taxRate: 7, status: "overdue", issueDate: "2026-04-05", dueDate: "2026-05-05", notes: "IGIC 7% — factura vencida", clientLocation: "canarias" }),
   invoice({ id: "demo_inv_009", clientId: "demo_cli_004", clientName: "Marina Delgado (autónoma)", items: [{ description: "Diseño de marca", quantity: 1, unitPrice: 1200 }, { description: "Auditoría SEO", quantity: 1, unitPrice: 600 }], taxRate: 21, status: "draft", issueDate: "2026-07-08", dueDate: "2026-08-08", irpfRate: 15, notes: "Autónoma con retención IRPF 15%", clientLocation: "peninsula" }),
 ];
+
+/** Aggregate stored fixture amounts; never recalculate invoice taxes here. */
+export function demoSum(records: Record<string, unknown>[], field: string): number {
+  return demoMoney(records.reduce((sum, record) => sum + Number(record[field] ?? 0), 0));
+}
+
+/** Rank only the invoices selected by the caller (paid or issued in a month). */
+export function demoTopClients(invoices: Record<string, unknown>[]) {
+  return demoClients.map((client) => {
+    const matched = invoices.filter((invoice) => invoice.clientId === client.id);
+    return { name: String(client.name), totalRevenue: demoSum(matched, "total"), invoiceCount: matched.length };
+  }).filter((client) => client.invoiceCount > 0)
+    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+    .slice(0, 5);
+}
 
 /* ------------------------------------------------------------------ */
 /*  Expenses (6) — categorized                                         */
@@ -374,10 +390,10 @@ export function findOrStub(
 
 let demoIdCounter = 0;
 
-/** Deterministic-ish demo id (no network, no clock dependency). */
+/** Simulated ids cannot alias read-only fixtures (no network or clock dependency). */
 export function demoId(prefix: string): string {
   demoIdCounter += 1;
-  return `${prefix}_${String(demoIdCounter).padStart(3, "0")}`;
+  return `${prefix}_simulated_${String(demoIdCounter).padStart(3, "0")}`;
 }
 
 /**
