@@ -140,7 +140,7 @@
             "description": "Email address / Correo electronico",
             "format": "email",
             "maxLength": 255,
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
             "type": "string"
           },
           "name": {
@@ -247,7 +247,7 @@
             "description": "Email address / Correo electronico",
             "format": "email",
             "maxLength": 255,
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
             "type": "string"
           },
           "isPrimary": {
@@ -656,13 +656,9 @@
             "type": "string"
           },
           "clientName": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "discountRate": {
@@ -981,13 +977,9 @@
             "type": "string"
           },
           "clientName": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "discountRate": {
@@ -1115,7 +1107,7 @@
             "description": "Email address / Correo electronico",
             "format": "email",
             "maxLength": 255,
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
             "type": "string"
           },
           "name": {
@@ -1389,7 +1381,7 @@
             "type": "string"
           },
           "result": {
-            "anyOf": [
+            "oneOf": [
               {
                 "additionalProperties": false,
                 "properties": {
@@ -1417,13 +1409,9 @@
                     "type": "string"
                   },
                   "previousStatus": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "status": {
@@ -1984,13 +1972,9 @@
             "type": "string"
           },
           "clientName": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "discountRate": {
@@ -2194,13 +2178,9 @@
             "type": "string"
           },
           "clientName": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "type": [
+              "string",
+              "null"
             ]
           },
           "discountRate": {
@@ -3037,13 +3017,9 @@
               "additionalProperties": false,
               "properties": {
                 "clientName": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "dueDate": {
@@ -3311,13 +3287,9 @@
               "additionalProperties": false,
               "properties": {
                 "clientName": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "dueDate": {
@@ -3677,13 +3649,9 @@
               "additionalProperties": false,
               "properties": {
                 "clientName": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 },
                 "dueDate": {
@@ -3782,7 +3750,7 @@
             "description": "Email / Correo",
             "format": "email",
             "maxLength": 255,
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
             "type": "string"
           },
           "id": {
@@ -4132,7 +4100,7 @@
             "description": "Email / Correo",
             "format": "email",
             "maxLength": 255,
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
             "type": "string"
           },
           "id": {

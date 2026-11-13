@@ -36,8 +36,8 @@ jobs:
           test ! -e .npmrc
           test ! -e workers/remote-mcp/npm-shrinkwrap.json
           test ! -e workers/remote-mcp/.npmrc
-          echo "5eb56bed75fdc60d948235797aa89c17f47410021f349edffee861e3d35a2a4f  package-lock.json" | sha256sum --check --strict -
-          echo "edc37962a1e629c77322be527de9ed3bed16f0e3b7871a541ab033273ef78e2b  workers/remote-mcp/package-lock.json" | sha256sum --check --strict -
+          echo "25c7329ad057734ed8dbeb5555c5ba10942b1f819039e722e215dd45dfbe0b1e  package-lock.json" | sha256sum --check --strict -
+          echo "a2cc5bf5a695a7c709e040b0fd81cf51ab76bab4c014fe1a9c8f713edde24a88  workers/remote-mcp/package-lock.json" | sha256sum --check --strict -
 
       - name: Install
         # Lifecycle hooks are executable supply-chain surface. Install the

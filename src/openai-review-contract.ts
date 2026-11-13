@@ -859,7 +859,7 @@ export function assertOpenAIReviewContract(
     const outputRequired = outputSchema?.required;
     const success = jsonObject(outputProperties?.success);
     const result = jsonObject(outputProperties?.result);
-    const branches = result?.anyOf;
+    const branches = result?.oneOf;
     const branchObjects = Array.isArray(branches)
       ? branches.map((branch) => jsonObject(branch))
       : [];
@@ -891,6 +891,7 @@ export function assertOpenAIReviewContract(
       outputRequired.length !== 3 ||
       success?.const !== true ||
       !result ||
+      Object.keys(result).length !== 1 ||
       branchObjects.length !== 2 ||
       branchObjects.some((branch) => !branch) ||
       branchByOutcome.size !== 2 ||
