@@ -63,6 +63,16 @@ const publicWorkerSource = ts.transpileModule(`
   (${workerExpression.getText(indexSource)})
 `, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 
+const fullReferenceConstant = findAll(indexSource, (node) => ts.isVariableDeclaration(node)
+  && node.name.getText(indexSource) === "LLMS_FULL_TXT")[0];
+assert.ok(fullReferenceConstant?.initializer);
+const fullReference = vm.runInNewContext(fullReferenceConstant.initializer.getText(indexSource), {
+  MCP_SERVER_VERSION: "test-version",
+  FULL_TOOL_COUNT: 999,
+  LEGAL_PRIVACY_URL: "https://www.frihet.io/es/privacy",
+  LEGAL_TERMS_URL: "https://www.frihet.io/es/terms",
+}, { timeout: 1000 });
+
 function publicWorkerRequest(pathname, method, mode = "true", origin = "https://openai-mcp.frihet.io", claudeMode) {
   const worker = vm.runInNewContext(publicWorkerSource, {
     URL, Request, Response, Headers,
@@ -71,6 +81,7 @@ function publicWorkerRequest(pathname, method, mode = "true", origin = "https://
     OPENAI_CSP: "default-src 'none'",
     OPENAI_SUPPORT_HTML: "<main>reviewed support fixture</main>",
     OPENAI_PRIVACY_HTML: "<main>reviewed privacy fixture</main>",
+    LLMS_FULL_TXT: fullReference,
     isMcpRouteConfusion: () => false,
     isOpenApiLookalikePath: () => false,
     resolveWorkerAccessProfile, boundOAuthProfile, claudePublicSurface, resolveToolMode,
@@ -79,6 +90,33 @@ function publicWorkerRequest(pathname, method, mode = "true", origin = "https://
     FRIHET_OPENAI_MODE: mode, FRIHET_CLAUDE_MODE: claudeMode, FRIHET_TOOL_MODE: "grouped",
   }, {});
 }
+
+test("full-host long reference serves the current MCP identity and scoped capability guidance", async () => {
+  const response = await publicWorkerRequest("/llms-full.txt", "GET", "false", "https://mcp.frihet.io");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "text/plain; charset=utf-8");
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600, stale-while-revalidate=86400");
+  const text = await response.text();
+  assert.match(text, /^# Frihet MCP — Full Surface Reference/u);
+  assert.match(text, /Package version: test-version/u);
+  assert.match(text, /Canonical catalogue: 999 business operations/u);
+  assert.match(text, /https:\/\/mcp\.frihet\.io\/mcp/u);
+  assert.match(text, /_meta\["io\.frihet\/capability"\]/u);
+  assert.match(text, /Catalogue membership\s+alone does not prove/u);
+  assert.match(text, /https:\/\/api\.frihet\.io\/openapi\.json/u);
+  assert.doesNotMatch(text, /VeriFactu certified|all operations are draft-only/iu);
+});
+
+test("long reference never exposes the full catalogue on either reviewed host", async () => {
+  for (const [origin, openai, claude] of [
+    ["https://openai-mcp.frihet.io", "true", undefined],
+    ["https://claude-mcp.frihet.io", "false", "true"],
+  ]) {
+    const response = await publicWorkerRequest("/llms-full.txt", "GET", openai, origin, claude);
+    assert.equal(response.status, 404, origin);
+    assert.doesNotMatch(await response.text(), /Canonical catalogue|api\.frihet\.io|test-version/u);
+  }
+});
 
 for (const page of ["privacy", "support"]) {
   test(`reviewed /${page} HEAD preserves GET HTML metadata with no response body`, async () => {

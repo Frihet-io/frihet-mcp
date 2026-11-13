@@ -70,3 +70,11 @@ The Cloudflare Worker serving `mcp.frihet.io` MUST also serve:
 - `/mcp.json` (200, MCP server manifest)
 - `/.well-known/mcp` (200, well-known endpoint discovery)
 - `/.well-known/ai-plugin.json` (200, ChatGPT plugin spec)
+
+The `ai-plugin.json` item above is an unresolved legacy discovery requirement,
+not an implemented route or the current OpenAI submission format. Current portable
+plugins use root `plugin.json` and `mcp.json` (see `marketplace/openai/SUBMISSION.md`).
+Reconcile this legacy requirement separately; do not point a reviewed connector at
+the full host or treat a discovery response as submission, publication, or acceptance.
+The full `/llms-full.txt` reference must remain unavailable on reviewed OpenAI and
+Claude profiles, which publish their own scoped discovery documents.

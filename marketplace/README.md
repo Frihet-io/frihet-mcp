@@ -21,6 +21,7 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 - **`SUBMITTED`**: Official submission package delivered to partner directory; awaiting reviewer evaluation.
 - **`PREVIEW_APPLIED`**: Formal developer preview access request submitted; awaiting partner onboarding.
 - **`CONTRACT_TESTED`**: Integration code, schemas, and safety invariants pass automated tests in this repository.
+- **`SOURCE_PREPARED`**: Candidate profile and manifest exist in this repository; partner submission and acceptance are not asserted.
 
 | Platform / Surface | Format / Location | Target Surface | Safety Boundary | Verified Lifecycle State |
 |---|---|---|---|---|
@@ -31,7 +32,7 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 | **Smithery Registry** | `smithery.yaml` | AI agent developers | Full stdio / CLI configuration | **`PUBLISHED_VERIFIED`** |
 | **Anthropic Claude Directory** | `marketplace/anthropic/` | Claude Desktop & Enterprise | 132 tools, Sanitized PII | **`SUBMITTED`** (PR open, CI green) |
 | **Composio Toolkit** | `Remote MCP / REST` | 1500+ agent ecosystem | Full OpenAPI & MCP profile, draft invariant | **`SUBMITTED`** (Email & web form verified) |
-| **Meta Muse Connector** | `src/muse-profile.ts` | WhatsApp & Meta AI SMB | Curated 18-tool profile, forced draft | **`SUBMITTED`** (Catalog submission & server profile) |
+| **Meta Muse Connector** | `src/muse-profile.ts` | Meta Muse (candidate) | Curated 18-tool source profile | **`SOURCE_PREPARED`** (Profile and manifest) |
 | **Google Connected Apps** | `src/google-profile.ts` | Gemini & Google Search | Curated 18-tool profile, forced draft | **`PREVIEW_APPLIED`** (Form 46 preview access) |
 | **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (156 ops) / Draft invariant | **`PUBLISHED_VERIFIED`** |
 | **Vercel AI SDK** | `marketplace/vercel-ai/` | Next.js & TypeScript agents | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |

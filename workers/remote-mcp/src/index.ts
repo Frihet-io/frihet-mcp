@@ -326,6 +326,69 @@ Frihet is an AI-native ERP for businesses of any size, from freelancers to estab
 *Generated from @frihet/manifest v0.1.0. Full reference: https://www.frihet.io/llms-full.txt*
 `;
 
+// Full-host reference only: reviewed profiles keep their own public contract.
+// Counts come from server-meta; tool availability comes from the connected session.
+const LLMS_FULL_TXT = `# Frihet MCP — Full Surface Reference
+
+## Identity and scope
+
+Frihet provides business-management tools for invoices, expenses, clients, products,
+quotes, accounting, and other supported ERP workflows.
+
+- Package: @frihet/mcp-server
+- Package version: ${MCP_SERVER_VERSION}
+- Server identity: io.frihet/erp
+- Remote MCP endpoint: https://mcp.frihet.io/mcp
+- Canonical catalogue: ${FULL_TOOL_COUNT} business operations
+- Documentation: https://docs.frihet.io/desarrolladores/mcp-server
+
+This reference describes the full MCP host. It does not describe the separately
+reviewed OpenAI or Claude connector profiles or establish marketplace availability.
+
+## Discover the connected workspace's capabilities
+
+Use the connected session's tools/list response as the current tool interface.
+The canonical catalogue size is not the number of tool names exposed to a client:
+aliases and grouped discovery names are counted separately. Catalogue membership
+alone does not prove that a backing API is enabled for a particular workspace.
+
+Read each tool's inputSchema, outputSchema, standard action annotations, and
+_meta["io.frihet/capability"] before invoking it. Treat readOnlyHint and
+destructiveHint as descriptions of the operation, not permission to perform it.
+Authentication, workspace access, plan entitlements, and backend checks still apply.
+Ask for explicit user authorization before writes with business or external effects.
+
+## Business documents and side effects
+
+Invoice and quote creation tools create drafts. A draft may still reserve a
+business document number or affect usage counters. Other tools can have different
+lifecycle and external effects; inspect their current descriptions and capability
+metadata instead of assuming every operation is draft-only or reversible.
+
+Do not infer legal compliance, filing acceptance, certification, payment execution,
+or successful delivery from a tool name, catalogue entry, or discovery document.
+Use the authoritative result and the relevant Frihet workflow to verify outcomes.
+
+## API and integration reference
+
+- API base: https://api.frihet.io/v1
+- Canonical OpenAPI: https://api.frihet.io/openapi.json
+- REST documentation: https://docs.frihet.io/desarrolladores/api-rest
+- MCP discovery: https://mcp.frihet.io/mcp.json
+- MCP server card: https://mcp.frihet.io/.well-known/mcp.json
+- Product reference: https://www.frihet.io/llms-full.txt
+- Service status: https://status.frihet.io
+
+Use the linked documentation for authentication and connection instructions.
+Never put credentials or private business records in public URLs or discovery files.
+
+## Support and legal information
+
+- Support: ayuda@frihet.io
+- Privacy: ${LEGAL_PRIVACY_URL}
+- Terms: ${LEGAL_TERMS_URL}
+`;
+
 const ROBOTS_TXT = `User-agent: *
 Allow: /
 
@@ -443,6 +506,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <url><loc>https://mcp.frihet.io/.well-known/mcp.json</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
   <url><loc>https://mcp.frihet.io/.well-known/jsonld</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://mcp.frihet.io/llms.txt</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://mcp.frihet.io/llms-full.txt</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
   <url><loc>https://mcp.frihet.io/agents.json</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://mcp.frihet.io/mcp.json</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://mcp.frihet.io/releases.json</loc><changefreq>daily</changefreq><priority>0.7</priority></url>
@@ -1434,6 +1498,22 @@ export default {
 
       if (pathname === "/llms.txt") {
         return new Response(openai ? LLMS_TXT_OPENAI : LLMS_TXT, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+            ...BASE_SECURITY_HEADERS,
+          },
+        });
+      }
+
+      if (pathname === "/llms-full.txt") {
+        if (openai) {
+          return new Response("Not Found", {
+            status: 404,
+            headers: { "Content-Type": "text/plain; charset=utf-8", ...BASE_SECURITY_HEADERS },
+          });
+        }
+        return new Response(LLMS_FULL_TXT, {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
             "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
