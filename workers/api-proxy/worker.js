@@ -444,6 +444,30 @@ export default {
 
     const url = new URL(request.url);
 
+    // Public host-ownership proof for this one Muse submission, not an API credential.
+    // Do not cache it beyond the reviewer-provided expiry or proxy it after expiry.
+    if (
+      url.origin === "https://api.frihet.io" &&
+      url.pathname === "/.well-known/muse-challenge/e664c1dbdfd917b8d656f1f4c7e0dd57d34d73919ec25b5015c18e0a8267b590" &&
+      url.search === "" &&
+      (request.method === "GET" || request.method === "HEAD")
+    ) {
+      const challengeIsActive = Date.now() < Date.parse("2026-11-20T20:52:00.000Z");
+      return new Response(
+        challengeIsActive && request.method === "GET"
+          ? "muse-challenge=e664c1dbdfd917b8d656f1f4c7e0dd57d34d73919ec25b5015c18e0a8267b590"
+          : null,
+        {
+          status: challengeIsActive ? 200 : 404,
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-store",
+            ...SECURITY_HEADERS,
+          },
+        },
+      );
+    }
+
     // ---------------------------------------------------------------------------
     // Static AI-discoverability surface — served before proxy logic
     // Cache-Control: llms.txt + agents.json 1h, robots.txt 24h, .well-known/mcp 5min
