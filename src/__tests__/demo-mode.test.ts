@@ -530,3 +530,103 @@ for (const [profile, composition] of DEMO_PROFILES) {
     });
   });
 }
+
+
+describe("Demo financial list filters", () => {
+  const june = { from: "2026-06-01", to: "2026-06-30" };
+  const ids = (page: { data: Record<string, unknown>[] }) => page.data.map((row) => row.id);
+
+  test("invoice ranges are inclusive and combine with status/client/series before pagination", async () => {
+    const api: IFrihetClient = new DemoFrihetClient();
+    assert.deepEqual(ids(await api.listInvoices(june)), ["demo_inv_001", "demo_inv_002", "demo_inv_003", "demo_inv_005", "demo_inv_007"]);
+    assert.deepEqual(ids(await api.listInvoices({ from: "2026-06-10", to: "2026-06-15" })), ["demo_inv_002", "demo_inv_003", "demo_inv_007"]);
+    assert.deepEqual(ids(await api.listInvoices({ from: "2026-07-01" })), ["demo_inv_004", "demo_inv_009"]);
+    assert.deepEqual(ids(await api.listInvoices({ to: "2026-04-05" })), ["demo_inv_008"]);
+    assert.deepEqual(ids(await api.listInvoices({ from: "2026-07-31", to: "2026-07-01" })), []);
+    assert.deepEqual(ids(await api.listInvoices({ ...june, status: "paid", clientId: "demo_cli_003" })), ["demo_inv_003"]);
+    assert.equal((await api.listInvoices({ ...june, seriesId: "not-a-demo-series" })).total, 0);
+    const page = await api.listInvoices({ ...june, status: "sent", limit: 1, offset: 1 });
+    assert.deepEqual(ids(page), ["demo_inv_005"]);
+    assert.equal(page.total, 3);
+    assert.equal(page.limit, 1);
+    assert.equal(page.offset, 1);
+    const exhausted = await api.listInvoices({ ...june, status: "sent", limit: 1, offset: 3 });
+    assert.deepEqual(exhausted.data, []);
+    assert.equal(exhausted.total, 3);
+  });
+
+  test("expense date/category/vendor filters precede pagination and preserve totals", async () => {
+    const api: IFrihetClient = new DemoFrihetClient();
+    assert.deepEqual(ids(await api.listExpenses(june)), ["demo_exp_002", "demo_exp_003", "demo_exp_004"]);
+    assert.deepEqual(ids(await api.listExpenses({ from: "2026-06-18", to: "2026-06-18" })), ["demo_exp_002"]);
+    assert.deepEqual(ids(await api.listExpenses({ from: "2026-07-01" })), ["demo_exp_001", "demo_exp_005"]);
+    assert.deepEqual(ids(await api.listExpenses({ to: "2026-05-30" })), ["demo_exp_006"]);
+    assert.deepEqual(ids(await api.listExpenses({ ...june, category: "travel" })), ["demo_exp_004"]);
+    assert.equal((await api.listExpenses({ ...june, vendorId: "not-a-demo-vendor" })).total, 0);
+    assert.equal((await api.listExpenses({ from: "2026-07-31", to: "2026-07-01" })).total, 0);
+    const page = await api.listExpenses({ ...june, limit: 1, offset: 1 });
+    assert.deepEqual(ids(page), ["demo_exp_003"]);
+    assert.equal(page.total, 3);
+    const exhausted = await api.listExpenses({ ...june, limit: 1, offset: 3 });
+    assert.deepEqual(exhausted.data, []);
+    assert.equal(exhausted.total, 3);
+  });
+
+  test("bank transaction ranges use postedAt and combine with account/status/category", async () => {
+    const api: IFrihetClient = new DemoFrihetClient();
+    assert.equal((await api.listTransactions(june)).total, 0, "July transactions cannot appear in June");
+    assert.deepEqual(ids(await api.listTransactions({ from: "2026-07-01", to: "2026-07-03" })), ["demo_txn_001", "demo_txn_002", "demo_txn_003"]);
+    assert.deepEqual(ids(await api.listTransactions({ from: "2026-07-12" })), ["demo_txn_004"]);
+    assert.deepEqual(ids(await api.listTransactions({ to: "2026-07-01" })), ["demo_txn_002", "demo_txn_003"]);
+    assert.deepEqual(ids(await api.listTransactions({ from: "2026-07-01", to: "2026-07-01", accountId: "demo_bank_001", status: "posted", category: "software" })), ["demo_txn_003"]);
+    for (const filter of [{ accountId: "not-a-demo-account" }, { status: "pending" }, { category: "not-a-demo-category" }]) {
+      assert.equal((await api.listTransactions(filter)).total, 0);
+    }
+    assert.equal((await api.listTransactions({ from: "2026-07-31", to: "2026-07-01" })).total, 0);
+    const page = await api.listTransactions({ from: "2026-07-01", to: "2026-07-03", limit: 1, offset: 1 });
+    assert.deepEqual(ids(page), ["demo_txn_002"]);
+    assert.equal(page.total, 3);
+    const exhausted = await api.listTransactions({ from: "2026-07-01", to: "2026-07-03", limit: 1, offset: 3 });
+    assert.deepEqual(exhausted.data, []);
+    assert.equal(exhausted.total, 3);
+  });
+
+  test("all expense fixtures explicitly retain EUR through single-record reads", async () => {
+    const api = new DemoFrihetClient();
+    for (const expense of fixtures.demoExpenses) {
+      assert.equal(expense.currency, "EUR", String(expense.id));
+      assert.equal((await api.getExpense(String(expense.id))).currency, "EUR");
+    }
+  });
+
+  test("SDK tools return the requested month, correct totals, demo stamps and expense currency", async () => {
+    const original = JSON.stringify([fixtures.demoInvoices, fixtures.demoExpenses, fixtures.demoTransactions]);
+    await withPaginationSdk(new DemoFrihetClient(), localMcpSurfaceComposition(false, false), async (client) => {
+      await client.listTools();
+      for (const [name, count, field] of [
+        ["list_invoices", 5, "issueDate"], ["list_expenses", 3, "date"], ["list_transactions", 0, "postedAt"],
+      ] as const) {
+        const result = await client.callTool({ name, arguments: { ...june, limit: 2, offset: 0 } });
+        assert.equal(result.isError, undefined);
+        const page = result.structuredContent as Record<string, unknown>;
+        const rows = page.data as Record<string, unknown>[];
+        assert.equal(page.total, count, name);
+        assert.equal(rows.length, Math.min(count, 2), name);
+        assert.equal(page._demo, true);
+        assert.deepEqual(JSON.parse((result.content as Array<{ text: string }>)[0]!.text), page);
+        for (const row of rows) {
+          assert.ok(typeof row[field] === "string" && row[field] >= june.from && row[field] <= june.to);
+          if (name === "list_expenses") assert.equal(row.currency, "EUR");
+        }
+      }
+      const filtered = await client.callTool({ name: "list_transactions", arguments: {
+        from: "2026-07-01", to: "2026-07-01", accountId: "demo_bank_001", status: "posted", category: "software",
+      } });
+      assert.equal(filtered.isError, undefined);
+      const page = filtered.structuredContent as { data: Record<string, unknown>[]; total: number };
+      assert.deepEqual(ids(page), ["demo_txn_003"]);
+      assert.equal(page.total, 1);
+    });
+    assert.equal(JSON.stringify([fixtures.demoInvoices, fixtures.demoExpenses, fixtures.demoTransactions]), original);
+  });
+});

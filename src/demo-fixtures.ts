@@ -247,12 +247,12 @@ export function demoTopClients(invoices: Record<string, unknown>[]) {
 /* ------------------------------------------------------------------ */
 
 export const demoExpenses: Record<string, unknown>[] = [
-  { id: "demo_exp_001", description: "Suscripción software de diseño", amount: 15.4, category: "software", date: "2026-07-01", vendor: "Herramientas Digitales SL", taxDeductible: true, createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
-  { id: "demo_exp_002", description: "Material de oficina", amount: 48.2, category: "office_supplies", date: "2026-06-18", vendor: "Papelería Central", taxDeductible: true, createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
-  { id: "demo_exp_003", description: "Comida de trabajo con cliente", amount: 62.0, category: "meals", date: "2026-06-22", vendor: "Restaurante El Puerto", taxDeductible: true, createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
-  { id: "demo_exp_004", description: "Combustible desplazamiento", amount: 70.0, category: "travel", date: "2026-06-25", vendor: "Estación de Servicio Norte", taxDeductible: true, createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
-  { id: "demo_exp_005", description: "Cuota gestoría mensual", amount: 90.0, category: "professional_services", date: "2026-07-01", vendor: "Gestoría Ramírez", taxDeductible: true, createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
-  { id: "demo_exp_006", description: "Hosting anual", amount: 120.0, category: "software", date: "2026-05-30", vendor: "Proveedor Cloud SL", taxDeductible: true, createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
+  { id: "demo_exp_001", description: "Suscripción software de diseño", amount: 15.4, category: "software", date: "2026-07-01", vendor: "Herramientas Digitales SL", taxDeductible: true, currency: "EUR", createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
+  { id: "demo_exp_002", description: "Material de oficina", amount: 48.2, category: "office_supplies", date: "2026-06-18", vendor: "Papelería Central", taxDeductible: true, currency: "EUR", createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
+  { id: "demo_exp_003", description: "Comida de trabajo con cliente", amount: 62.0, category: "meals", date: "2026-06-22", vendor: "Restaurante El Puerto", taxDeductible: true, currency: "EUR", createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
+  { id: "demo_exp_004", description: "Combustible desplazamiento", amount: 70.0, category: "travel", date: "2026-06-25", vendor: "Estación de Servicio Norte", taxDeductible: true, currency: "EUR", createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
+  { id: "demo_exp_005", description: "Cuota gestoría mensual", amount: 90.0, category: "professional_services", date: "2026-07-01", vendor: "Gestoría Ramírez", taxDeductible: true, currency: "EUR", createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
+  { id: "demo_exp_006", description: "Hosting anual", amount: 120.0, category: "software", date: "2026-05-30", vendor: "Proveedor Cloud SL", taxDeductible: true, currency: "EUR", createdAt: DEMO_NOW, updatedAt: DEMO_NOW },
 ];
 
 /* ------------------------------------------------------------------ */
