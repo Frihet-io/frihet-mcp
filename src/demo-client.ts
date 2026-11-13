@@ -3,12 +3,12 @@
  *
  * A drop-in IFrihetClient that makes ZERO network calls: it serves the canned
  * PII-safe fixtures in demo-fixtures.ts. index.ts swaps this in for FrihetClient
- * when demo mode is on, so tools (which stringify the client's return value)
- * automatically propagate the `_demo`/`_demoNotice` banner without any change
- * under src/tools/.
+ * when demo mode is on. Single-record fixtures carry their own demo stamps;
+ * server-composition.ts stamps paginated MCP results after profile projection
+ * and declares those fields only on demo schemas, preserving live contracts.
  *
  * Response contract (see SPEC-mcp-demo-mode.md option B/C):
- *   - reads/lists → fixture data stamped `_demo:true` (READ notice).
+ *   - reads/lists → MCP fixture data stamped `_demo:true` (READ notice).
  *   - lists without fixtures → EMPTY PaginatedResponse, still stamped.
  *   - writes → plausible fixture-shaped object with a `demo_`-prefixed id
  *     (WRITE notice "…Simulated — not persisted.").
