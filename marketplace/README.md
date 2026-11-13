@@ -25,6 +25,8 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 
 | Platform / Surface | Format / Location | Target Surface | Safety Boundary | Verified Lifecycle State |
 |---|---|---|---|---|
+| **Stripe App Marketplace** | `marketplace.stripe.com/apps/frihet` | Global Stripe merchants | App 1.0.4 approved, one-click invoicing | **`PUBLISHED_VERIFIED`** |
+| **Cursor Directory** | `cursor.directory/plugins/mcp-frihet` | Cursor IDE developers | `.cursor-plugin/marketplace.json` | **`PUBLISHED_VERIFIED`** |
 | **n8n Community Node** | `n8n-nodes-frihet@1.0.2` | n8n self-hosted & cloud | Sigstore provenance, governed credentials | **`PUBLISHED_VERIFIED`** |
 | **OpenAI ChatGPT Store** | `marketplace/openai/` | ChatGPT Plus & Team | 33-tool profile, draft-only mutations | **`PUBLISHED_VERIFIED`** |
 | **ClawHub Registry** | `marketplace/openclaw/` | OpenClaw agent network | Governed skill package (`@frihet-io` v1.1.0) | **`PUBLISHED_VERIFIED`** |
