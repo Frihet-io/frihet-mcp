@@ -3,7 +3,7 @@
   "info": {
     "title": "Frihet API",
     "version": "2026-03-18",
-    "description": "The Frihet REST API provides programmatic access to your business data\nin Frihet, the AI-native business management platform for modern businesses.\n\n## Authentication\n\nAll API requests require an API key passed via the `X-API-Key` header.\nGenerate keys from **Settings > API Keys** in the Frihet app.\n\n```\nX-API-Key: fri_your_api_key_here\n```\n\n### API-key scopes\n\nA key without scopes (no list, or an empty one) is unrestricted. A key with a\nnon-empty scope list gets only what the list grants. On such a key, every\nrequest other than `GET` and `HEAD` needs the `write` scope (or `*`), except\nthe read-only `POST /v1/gestoria/aging` and the POS and purchase-order routes,\nwhich check their own `pos:` and `purchase-orders:` scopes. E-invoicing endpoints need an `einvoice:` scope,\nand the sends (`einvoice/export`, `face/submit`, `ticketbai/submit`) also need\n`write` or `einvoice:write`. A request without the scope it needs gets\n`403 Forbidden` with a `detail` naming that scope. The refusal happens before\nthe idempotency gate, so it does not reserve the `Idempotency-Key`.\n`GET /v1/permissions/me` reports `denied.write`, `denied.einvoice` and\n`denied.einvoiceSend` for the calling key.\n\nInventory (`/v1/inventory/*`) and purchase-order (`/v1/purchase-orders/*`) routes are\nnot released yet: after the scope checks they answer `503` with code\n`INVENTORY_AUTHORITY_NOT_RELEASED`, before the idempotency gate.\n\n## Rate Limiting\n\nThe API enforces a rate limit of **100 requests per minute** per API key.\nWhen exceeded, the API returns `429 Too Many Requests` with an integer\ndelta-seconds `Retry-After` header and matching `retryAfter` JSON field.\n\nEvery authenticated response includes rate limit headers:\n\n| Header | Description |\n|--------|-------------|\n| `X-RateLimit-Limit` | Maximum requests per window (100) |\n| `X-RateLimit-Remaining` | Remaining requests in current window |\n| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |\n| `Retry-After` | Integer seconds until the window resets (429 responses) |\n\n## Idempotency\n\nMost POST requests accept an `Idempotency-Key` header to prevent duplicate\nresource creation from network retries. For protected routes, the key is\nreserved against the operation *before* the request is executed, and it stays\nreserved for 24 hours unless released by an explicit pre-write refusal.\n\n```\nIdempotency-Key: 550e8400-e29b-41d4-a716-446655440000\n```\n\nKeys must be at most 64 characters. We recommend UUID v4.\n\nA retry of the same operation gets one of three answers:\n\n| Situation | Response |\n|---|---|\n| The first request finished | The **original status and body**, verbatim, with `X-Idempotent-Replayed: true` |\n| The first request is still running, or its outcome could not be recorded | `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` |\n| The key is live but was used for a **different** operation | `409 IDEMPOTENCY_KEY_REUSED` — the second operation is not executed |\n\nThe replayed status is the **stored** one. A `201` replays as `201`, not `200`.\nThis includes stored error responses: a request that answered `4xx` or `5xx`\nreplays that same status and body, it does not re-execute — except explicit\npre-mutation refusals on `POST /v1/pos/cash-sessions/{id}/close` (`503` when\nthe workspace POS money-authority grant is not enabled and `403 POS_INACTIVE`\nbefore the POS app is activated), which release the reservation instead of\ncaching the refusal for 24 hours.\n\n### When a retry is refused\n\nA `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` after the first request already\nreturned means the outcome could not be recorded — the response was too large\nor unserializable, or the bookkeeping write failed. The API refuses rather than\nexecute a second time, because for a fiscal document a duplicate is not\nrecoverable.\n\n**Reconcile; do not simply retry with a fresh key.** Read the resource back\n(`GET` the collection, or look for the document the operation would have\ncreated) and decide from its actual state. A new key would happily create a\nsecond document, which is exactly what the first key existed to prevent.\n\nAuthentication, rate limiting, and the maximum-request-size check happen before\nthe idempotency gate. Their `401`, `429`, and `413` responses do not reserve a\nkey and are never idempotency replays. API-key scope authorization also\nhappens before replay: the `write` scope for mutations, and the fiscal-send\nscopes for `einvoice/export`, `face/submit`, and `ticketbai/submit`; a current\n`403` does not reserve or alter the key. Authorized writes and fiscal sends\nremain idempotency-protected.\n\nTwo current-state report/check routes deliberately bypass the idempotency gate:\n`POST /v1/gestoria/aging` and\n`POST /v1/portal/domain/{domain}/verify`. They ignore `Idempotency-Key` and\nalways re-evaluate current workspace membership or domain ownership/DNS/SSL.\n\nIdentity note: for every idempotency-protected `POST`, the complete received\nJSON request body and parsed query parameters are part of the operation\nidentity. Object-key order does not matter, including in nested objects, but\narray order does. The credit-note endpoint applies its documented defaults\nfirst, so omitting `fullCredit` is equivalent to sending `fullCredit: true`.\nReusing the same key and path with a different body or query returns\n`409 IDEMPOTENCY_KEY_REUSED` without executing the request.\n\n## API Versioning\n\nEvery response includes an `X-API-Version` header (e.g., `2026-03-18`)\nindicating the current API version. Monitor this header to detect changes.\n\n## Pagination\n\nList endpoints support two pagination strategies:\n\n**Offset pagination:** Use `limit` and `offset` query parameters.\nDefault limit is 50, maximum is 100.\n\n**Cursor pagination:** Use `cursor` and `limit` query parameters.\nPass the `nextCursor` value from a previous response to fetch the next page.\nCursor pagination is more efficient for large datasets and avoids skipped/duplicated\nitems when data changes between requests. When `cursor` is provided, `offset` is ignored.\n\nResponses include `total`, `limit`, `offset`, and optionally `nextCursor`.\n\n## Filtering\n\nList endpoints support filtering by `status` (where applicable), date\nranges using `from` and `to` query parameters in ISO 8601 format (`YYYY-MM-DD`),\nand resource-specific filters like `clientId`, `seriesId`, `vendorId`,\n`category`, `isActive`, and `stage`.\n\n## Field Selection\n\nAll GET endpoints support a `fields` query parameter to select specific fields.\nPass a comma-separated list of field names: `?fields=id,name,total`.\nThe `id` field is always included.\n\n## Errors\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Human-readable error message\",\n  \"details\": [],\n  \"meta\": { \"requestId\": \"uuid\" }\n}\n```\n\nThe `details` array is only present on validation errors (Zod issues).\nThe `meta.requestId` is included on every error response for tracing.\n\n## Resources\n\n- [Documentation](https://docs.frihet.io/desarrolladores/api-rest)\n- [MCP Server](https://mcp.frihet.io)\n- [Status](https://status.frihet.io)\n",
+    "description": "The Frihet REST API provides programmatic access to your business data\nin Frihet, the AI-native business management platform for modern businesses.\n\n## Authentication\n\nAll API requests require an API key passed via the `X-API-Key` header.\nGenerate keys from **Settings > API Keys** in the Frihet app.\n\n```\nX-API-Key: fri_your_api_key_here\n```\n\n### API-key scopes\n\nA key without scopes (no list, or an empty one) is unrestricted. A key with a\nnon-empty scope list gets only what the list grants. On such a key, every\nrequest other than `GET` and `HEAD` needs the `write` scope (or `*`), except\nthe read-only `POST /v1/gestoria/aging` and the POS and purchase-order routes,\nwhich check their own `pos:` and `purchase-orders:` scopes. E-invoicing endpoints need an `einvoice:` scope,\nand the sends (`einvoice/export`, `face/submit`, `ticketbai/submit`) also need\n`write` or `einvoice:write`. A request without the scope it needs gets\n`403 Forbidden` with a `detail` naming that scope. The refusal happens before\nthe idempotency gate, so it does not reserve the `Idempotency-Key`.\n`GET /v1/permissions/me` reports `denied.write`, `denied.einvoice` and\n`denied.einvoiceSend` for the calling key.\n\n## Rate Limiting\n\nThe API enforces a rate limit of **100 requests per minute** per API key.\nWhen exceeded, the API returns `429 Too Many Requests` with an integer\ndelta-seconds `Retry-After` header and matching `retryAfter` JSON field.\n\nEvery authenticated response includes rate limit headers:\n\n| Header | Description |\n|--------|-------------|\n| `X-RateLimit-Limit` | Maximum requests per window (100) |\n| `X-RateLimit-Remaining` | Remaining requests in current window |\n| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |\n| `Retry-After` | Integer seconds until the window resets (429 responses) |\n\n## Idempotency\n\nMost POST requests accept an `Idempotency-Key` header to prevent duplicate\nresource creation from network retries. For protected routes, the key is\nreserved against the operation *before* the request is executed, and it stays\nreserved for 24 hours unless released by an explicit pre-write refusal.\n\n```\nIdempotency-Key: 550e8400-e29b-41d4-a716-446655440000\n```\n\nKeys must be at most 64 characters. We recommend UUID v4.\n\nA retry of the same operation gets one of three answers:\n\n| Situation | Response |\n|---|---|\n| The first request finished | The **original status and body**, verbatim, with `X-Idempotent-Replayed: true` |\n| The first request is still running, or its outcome could not be recorded | `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` |\n| The key is live but was used for a **different** operation | `409 IDEMPOTENCY_KEY_REUSED` — the second operation is not executed |\n\nThe replayed status is the **stored** one. A `201` replays as `201`, not `200`.\nThis includes stored error responses: a request that answered `4xx` or `5xx`\nreplays that same status and body, it does not re-execute — except explicit\npre-mutation refusals on `POST /v1/pos/cash-sessions/{id}/close` (`503` when\nthe workspace POS money-authority grant is not enabled and `403 POS_INACTIVE`\nbefore the POS app is activated), which release the reservation instead of\ncaching the refusal for 24 hours.\n\n### When a retry is refused\n\nA `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` after the first request already\nreturned means the outcome could not be recorded — the response was too large\nor unserializable, or the bookkeeping write failed. The API refuses rather than\nexecute a second time, because for a fiscal document a duplicate is not\nrecoverable.\n\n**Reconcile; do not simply retry with a fresh key.** Read the resource back\n(`GET` the collection, or look for the document the operation would have\ncreated) and decide from its actual state. A new key would happily create a\nsecond document, which is exactly what the first key existed to prevent.\n\nAuthentication, rate limiting, and the maximum-request-size check happen before\nthe idempotency gate. Their `401`, `429`, and `413` responses do not reserve a\nkey and are never idempotency replays. API-key scope authorization also\nhappens before replay: the `write` scope for mutations, and the fiscal-send\nscopes for `einvoice/export`, `face/submit`, and `ticketbai/submit`; a current\n`403` does not reserve or alter the key. Authorized writes and fiscal sends\nremain idempotency-protected.\n\nTwo current-state report/check routes deliberately bypass the idempotency gate:\n`POST /v1/gestoria/aging` and\n`POST /v1/portal/domain/{domain}/verify`. They ignore `Idempotency-Key` and\nalways re-evaluate current workspace membership or domain ownership/DNS/SSL.\n\nIdentity note: for every idempotency-protected `POST`, the complete received\nJSON request body and parsed query parameters are part of the operation\nidentity. Object-key order does not matter, including in nested objects, but\narray order does. The credit-note endpoint applies its documented defaults\nfirst, so omitting `fullCredit` is equivalent to sending `fullCredit: true`.\nReusing the same key and path with a different body or query returns\n`409 IDEMPOTENCY_KEY_REUSED` without executing the request.\n\n## API Versioning\n\nEvery response includes an `X-API-Version` header (e.g., `2026-03-18`)\nindicating the current API version. Monitor this header to detect changes.\n\n## Pagination\n\nList endpoints support two pagination strategies:\n\n**Offset pagination:** Use `limit` and `offset` query parameters.\nDefault limit is 50, maximum is 100.\n\n**Cursor pagination:** Use `cursor` and `limit` query parameters.\nPass the `nextCursor` value from a previous response to fetch the next page.\nCursor pagination is more efficient for large datasets and avoids skipped/duplicated\nitems when data changes between requests. When `cursor` is provided, `offset` is ignored.\n\nResponses include `total`, `limit`, `offset`, and optionally `nextCursor`.\n\n## Filtering\n\nList endpoints support filtering by `status` (where applicable), date\nranges using `from` and `to` query parameters in ISO 8601 format (`YYYY-MM-DD`),\nand resource-specific filters like `clientId`, `seriesId`, `vendorId`,\n`category`, `isActive`, and `stage`.\n\n## Field Selection\n\nAll GET endpoints support a `fields` query parameter to select specific fields.\nPass a comma-separated list of field names: `?fields=id,name,total`.\nThe `id` field is always included.\n\n## Errors\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Human-readable error message\",\n  \"details\": [],\n  \"meta\": { \"requestId\": \"uuid\" }\n}\n```\n\nThe `details` array is only present on validation errors (Zod issues).\nThe `meta.requestId` is included on every error response for tracing.\n\n## Resources\n\n- [Documentation](https://docs.frihet.io/desarrolladores/api-rest)\n- [MCP Server](https://mcp.frihet.io)\n- [Status](https://status.frihet.io)\n",
     "contact": {
       "name": "Frihet API Support",
       "url": "https://docs.frihet.io/desarrolladores/api-rest",
@@ -14,7 +14,7 @@
       "url": "https://opensource.org/licenses/MIT"
     },
     "x-logo": {
-      "url": "https://frihet.io/logos/frihet-logo.svg"
+      "url": "https://www.frihet.io/brand/frihet-mark-ink.svg"
     }
   },
   "servers": [
@@ -111,7 +111,7 @@
     },
     {
       "name": "E-Invoicing",
-      "description": "EN16931-compliant e-invoicing export and B2G submission endpoints.\nSupports 9 formats (Facturae, XRechnung-CII/UBL, Factur-X, FatturaPA, PEPPOL-BIS-3, FA-2-KSeF, UBL, CII).\nFACe (Spain B2G portal) submission and TicketBAI XML/sandbox preview pipelines (live submission to Basque Haciendas Forales is not enabled).\nTrust Area: COMPLIANCE. Requires owner role or API key with `einvoice:*` scope.\nExport and submit also require `write` or `einvoice:write`.\n"
+      "description": "EN16931-compliant e-invoicing export and B2G submission endpoints.\nSupports 9 formats (Facturae, XRechnung-CII/UBL, Factur-X, FatturaPA, PEPPOL-BIS-3, FA-2-KSeF, UBL, CII).\nFACe (Spain B2G portal) submission and TicketBAI XML/sandbox preview pipelines (live submission to Basque Haciendas Forales is not enabled).\nRequires owner role or API key with `einvoice:*` scope.\nExport and submit also require `write` or `einvoice:write`.\n"
     }
   ],
   "paths": {
@@ -247,7 +247,7 @@
                   },
                   "bustCache": {
                     "type": "boolean",
-                    "description": "Honoured only by the callable CF; REST always computes fresh."
+                    "description": "Not honoured on the REST API, which always computes fresh."
                   }
                 }
               }
@@ -937,7 +937,7 @@
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "The invoice cannot be deleted. INVOICE_HASHED_NOT_DELETABLE (`reason`\nverifactu_hash): the invoice is a draft, or has no status, but carries a\nVeriFactu hash, so its registro is already in the hash chain; cancel it\n(status cancelled) or issue a rectificativa instead.\nINVOICE_PAYMENT_CAPTURE_FENCED: a portal payment capture is in progress;\nretry after it settles. Nothing is written.\n(#2225, #2610) `reason` final_number: the invoice is a draft, or has no\nstatus, and already holds a final correlative number (server-minted\n`documentNumberFinal:true`, supplied on create, or a legacy number that\nis not a placeholder); deleting it would leave a permanent gap in the\nfiscal series. Cancel it (status cancelled) or issue a rectificativa\ninstead.\n",
+            "description": "The invoice cannot be deleted. INVOICE_HASHED_NOT_DELETABLE (`reason`\nverifactu_hash): the invoice is a draft, or has no status, but carries a\nVeriFactu hash, so its registro is already in the hash chain; cancel it\n(status cancelled) or issue a rectificativa instead.\nINVOICE_PAYMENT_CAPTURE_FENCED: a portal payment capture is in progress;\nretry after it settles. Nothing is written.\n`reason` final_number: the invoice is a draft, or has no\nstatus, and already holds a final correlative number (server-minted\n`documentNumberFinal:true`, supplied on create, or a legacy number that\nis not a placeholder); deleting it would leave a permanent gap in the\nfiscal series. Cancel it (status cancelled) or issue a rectificativa\ninstead.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -5711,7 +5711,7 @@
       "post": {
         "operationId": "resendInbound",
         "summary": "Resend inbound email webhook",
-        "description": "Receives inbound emails forwarded to `receipts@<workspace-slug>.frihet.io` via Resend.\nVerifies the Svix webhook signature, extracts PDF/image attachments, and queues\neach one in `receipt_queue/{workspaceUid}/items/{id}` for downstream OCR processing.\n\nThis endpoint is called by Resend's inbound routing — not by API consumers.\nSignature verification uses HMAC-SHA256 with the `RESEND_INBOUND_WEBHOOK_SECRET`\nenvironment variable. Header format follows Svix:\n`svix-id`, `svix-timestamp`, `svix-signature`.\n\n**Supported attachment MIME types:** `application/pdf`, `image/jpeg`, `image/png`,\n`image/webp`, `image/heic`, `image/heif`, `image/tiff`.\n",
+        "description": "Receives inbound emails forwarded to `receipts@<workspace-slug>.frihet.io` via Resend.\nVerifies the Svix webhook signature, extracts PDF/image attachments, and queues\neach one for downstream OCR processing.\n\nThis endpoint is called by Resend's inbound routing — not by API consumers.\nSignature verification uses HMAC-SHA256 with a server-side signing secret.\nHeader format follows Svix:\n`svix-id`, `svix-timestamp`, `svix-signature`.\n\n**Supported attachment MIME types:** `application/pdf`, `image/jpeg`, `image/png`,\n`image/webp`, `image/heic`, `image/heif`, `image/tiff`.\n",
         "tags": [
           "Webhooks"
         ],
@@ -5789,7 +5789,7 @@
       "post": {
         "operationId": "exportEInvoice",
         "summary": "Export e-invoice XML",
-        "description": "Generate and return an e-invoice XML document for the invoice in one of 9 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, FA-2-KSeF (Polish KSeF FA(3)), UBL 2.1, CII D16B.\n\n**Trust Area: COMPLIANCE** — Requires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\n",
+        "description": "Generate and return an e-invoice XML document for the invoice in one of 9 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, FA-2-KSeF (Polish KSeF FA(3)), UBL 2.1, CII D16B.\n\nRequires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -5922,7 +5922,7 @@
       "post": {
         "operationId": "submitFaceInvoice",
         "summary": "Submit invoice to FACe B2G portal",
-        "description": "Submit a signed Facturae XML to Spain's FACe B2G portal (face.gob.es).\n\nPipeline: load invoice → generate Facturae XML → sign with XAdES-EPES → submit to FACe.\nResult is persisted to `invoices/{id}/face/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted (registered), returns the prior result\nwith `idempotent: true` — does not resubmit.\n\n**Trust Area: COMPLIANCE** — Requires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\nRequires a PKCS#12 certificate for sandbox/production modes.\n",
+        "description": "Submit a signed Facturae XML to Spain's FACe B2G portal (face.gob.es).\n\nPipeline: load invoice → generate Facturae XML → sign with XAdES-EPES → submit to FACe.\nResult is persisted to `invoices/{id}/face/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted (registered), returns the prior result\nwith `idempotent: true` — does not resubmit.\n\nRequires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\nRequires a PKCS#12 certificate for sandbox/production modes.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -6052,7 +6052,7 @@
       "get": {
         "operationId": "getFaceInvoiceStatus",
         "summary": "Get FACe submission status",
-        "description": "Query the current tramitación status of a previously submitted FACe invoice.\nReads the saved `numeroRegistro` from Firestore and calls FACe `consultarFactura`.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
+        "description": "Query the current tramitación status of a previously submitted FACe invoice.\nReads the saved `numeroRegistro` and calls FACe `consultarFactura`.\n\nRequires owner role or API key with `einvoice:*` scope.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -6074,7 +6074,7 @@
                       "properties": {
                         "numeroRegistro": {
                           "type": "string",
-                          "description": "FACe registration number (read from Firestore, never fabricated)"
+                          "description": "FACe registration number (read from the stored record, never fabricated)"
                         },
                         "estadoTramitacion": {
                           "type": "string",
@@ -6139,7 +6139,7 @@
       "post": {
         "operationId": "submitTicketBaiInvoice",
         "summary": "Submit invoice to TicketBAI sandbox/preview (live foral submission not enabled)",
-        "description": "Build and sign a TicketBAI XML and run the sandbox/preview pipeline (live submission to Basque Haciendas Forales / BATUZ is not enabled in the product).\n\nPipeline: fetch BYOC cert → compute hash chain → build TicketBAI XML →\nsign with XAdES-BES → sandbox/preview dispatch → generate QR code.\nResult persisted to `invoices/{id}/tbai/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted, returns the prior result\nwith `idempotent: true` — does not resubmit.\n\n**Trust Area: COMPLIANCE** — Requires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\nRequires a TicketBAI BYOC certificate uploaded in Settings > Integrations > TicketBAI.\n",
+        "description": "Build and sign a TicketBAI XML and run the sandbox/preview pipeline (live submission to Basque Haciendas Forales / BATUZ is not enabled in the product).\n\nPipeline: fetch BYOC cert → compute hash chain → build TicketBAI XML →\nsign with XAdES-BES → sandbox/preview dispatch → generate QR code.\nResult persisted to `invoices/{id}/tbai/submission` subdoc.\n\n**Idempotent**: if the invoice was already accepted, returns the prior result\nwith `idempotent: true` — does not resubmit.\n\nRequires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\nRequires a TicketBAI BYOC certificate uploaded in Settings > Integrations > TicketBAI.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -6250,7 +6250,7 @@
       "get": {
         "operationId": "getTicketBaiInvoiceStatus",
         "summary": "Get TicketBAI sandbox/preview status",
-        "description": "Read the TicketBAI sandbox/preview record for a previously processed invoice (live submission to Basque Haciendas Forales is not enabled).\nReturns accepted/rejected status, CSV, identifier, and QR URL from Firestore.\n\n**Trust Area: COMPLIANCE** — Requires owner role or API key with `einvoice:*` scope.\n",
+        "description": "Read the TicketBAI sandbox/preview record for a previously processed invoice (live submission to Basque Haciendas Forales is not enabled).\nReturns accepted/rejected status, CSV, identifier, and QR URL from the stored record.\n\nRequires owner role or API key with `einvoice:*` scope.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -6275,7 +6275,7 @@
                         },
                         "csv": {
                           "type": "string",
-                          "description": "CSV de verificación (read from Firestore, never fabricated)"
+                          "description": "CSV de verificación (read from the stored record, never fabricated)"
                         },
                         "tbaiIdentifier": {
                           "type": "string"
@@ -6315,6 +6315,125 @@
           },
           "404": {
             "description": "No TicketBAI submission found for this invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/fiscal/verifactu/{invoiceId}/status": {
+      "get": {
+        "operationId": "getVerifactuInvoiceStatus",
+        "summary": "Get VeriFactu AEAT submission status",
+        "description": "Read the AEAT submission tracking of an invoice that was submitted to VeriFactu.\nReflects the stored `verifactuSubmission` record (populated by the VeriFactu\nsubmission flow); it never fabricates a status or a CSV.\n\n`sandbox` is the environment the submission was made in: `true` for the AEAT test\nbox, `false` for production, and `null` when the submission recorded no\nenvironment. A `null` environment is UNKNOWN — it does not mean production.\n\nAuthorization: any active API key of the workspace. This route is NOT one of the\nscope-gated e-invoicing endpoints (`/v1/invoices/{id}/{einvoice,face,ticketbai}/…`,\nwhich require an `einvoice:` scope), so it applies no `einvoice:` scope gate; and\nbeing a GET it is not subject to the `write`-scope gate either, so a key whose only\nscope is `read` is admitted. The read is workspace-scoped: a key only ever sees\nthe invoices of its own workspace.\n",
+        "tags": [
+          "E-Invoicing"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoiceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "VeriFactu submission status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "invoiceId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "description": "Submission status (read from the stored record, never fabricated)"
+                        },
+                        "accepted": {
+                          "type": "boolean"
+                        },
+                        "csv": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "submittedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "retryCount": {
+                          "type": "integer"
+                        },
+                        "lastError": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "sandbox": {
+                          "type": [
+                            "boolean",
+                            "null"
+                          ],
+                          "description": "The environment the submission was made in. `null` when the\nsubmission recorded no environment (unknown, not production).\n"
+                        },
+                        "aeatWarnings": {
+                          "type": "array",
+                          "description": "AEAT's codes and descriptions when the record was accepted with errors",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "description": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No invoice, or no VeriFactu submission, found for this invoice",
             "content": {
               "application/json": {
                 "schema": {
@@ -8522,209 +8641,6 @@
           }
         }
       }
-    },
-    "/v1/inventory/balances": {
-      "get": {
-        "operationId": "listInventoryBalances",
-        "summary": "List inventory balances (on-hand, valuation, currency, coverage)",
-        "description": "Returns one row per `physical`/`trackStock` product of the workspace.\nEach row carries the legacy `stockQuantity`, the ledger atoms at the\nreceiving location (`warehouse/main/stock/sellable`), and the moving-\naverage valuation snapshot when one exists. Items without a valuation\ndocument are returned with `valuation: null`; an opening-run applies\nthe moving-average write to those items.\n\nA restricted API key needs `inventory:read` or `inventory:*`; a key\nwith no scope list is unrestricted by the legacy-key convention.\n",
-        "tags": [
-          "Inventory"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100,
-              "default": 50
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Balances for the workspace.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/InventoryBalance"
-                      }
-                    },
-                    "total": {
-                      "type": "integer"
-                    },
-                    "limit": {
-                      "type": "integer"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "503": {
-            "$ref": "#/components/responses/InventoryAuthorityNotReleased"
-          }
-        }
-      }
-    },
-    "/v1/inventory/conservation-report": {
-      "get": {
-        "operationId": "getInventoryConservationReport",
-        "summary": "Conservation report (Σ = 0, valuation drift, uncovered outbound)",
-        "description": "Read-only report over `users/{uid}/inventoryBalances` and\n`users/{uid}/inventoryValuation`. ADR 0027 D1.3 / D4 / S4a-2:\nΣ over every bucket of an item is 0; an item's on-hand equals the\nvaluation's `valuedAtoms + unvaluedAtoms`; the valuation document\npasses the strict reader; and uncovered outbounds are reported.\n\nThe runner is the only writer of the underlying reports\n(conservation reports are read-only at the kernel level); this\nendpoint exposes the same view the conservation runner would issue.\n",
-        "tags": [
-          "Inventory"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Conservation report findings.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "workspaceUid": {
-                          "type": "string"
-                        },
-                        "itemCount": {
-                          "type": "integer"
-                        },
-                        "findings": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/InventoryConservationFinding"
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "503": {
-            "$ref": "#/components/responses/InventoryAuthorityNotReleased"
-          }
-        }
-      }
-    },
-    "/v1/inventory/opening-run": {
-      "post": {
-        "operationId": "runInventoryOpeningRun",
-        "summary": "Apply the opening run on the workspace (ADR 0027 D5 / S4a-2)",
-        "description": "Walks every `physical`/`trackStock` product of the workspace, reads\nthe receiving-bucket balance, and posts the per-item valuation\ndelta (`stockQuantity − ledgerAtomsAtReceiving`) as a priced,\nunpriced, shortfall, or no-op outcome. Opening NEVER invents a\nprice: items without a usable `costPrice` book as UNVALUED atoms.\n\nThe run is owner-only on the callable transport (`enforceAppCheck`\n+ workspace-owner-or-admin predicate inside the transaction). On\nthe API transport, restricted keys need `inventory:write` or\n`inventory:*`. A legacy unrestricted key can call it.\n\nThe audit document is written at\n`users/{uid}/inventoryOpeningRuns/{runId}` (deny-all on the\nclient path) with the run's priced/unpriced/shortfall/no-op\ncounts and the total opening value in minor units.\n",
-        "tags": [
-          "Inventory"
-        ],
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "workspaceUid": {
-                    "type": "string",
-                    "description": "Optional. The run always targets the workspace the API key belongs to; if present, the value must equal that workspace, otherwise the request is refused with 403 FORBIDDEN."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Opening-run outcome.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/InventoryOpeningRunOutcome"
-                    },
-                    "auditCollection": {
-                      "type": "string",
-                      "description": "Firestore collection where the audit document is written.",
-                      "example": "inventoryOpeningRuns"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "description": "A pre-existing valued item uses a different currency; the run refuses to overwrite it.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "$ref": "#/components/responses/InventoryAuthorityNotReleased"
-          }
-        }
-      }
     }
   },
   "components": {
@@ -9016,122 +8932,6 @@
       }
     },
     "schemas": {
-      "InventoryBalance": {
-        "type": "object",
-        "description": "One balance row from `GET /v1/inventory/balances`. The legacy\n`stockQuantity` is the user-supplied product stock; `ledgerAtoms`\nis the projection at the receiving location; `valuation` is the\nmoving-average snapshot (null until an opening run writes it).\n",
-        "properties": {
-          "itemId": {
-            "type": "string"
-          },
-          "locationId": {
-            "type": "string",
-            "example": "warehouse/main/stock/sellable"
-          },
-          "legacyStockQuantity": {
-            "type": "integer",
-            "description": "Stored on `products.stockQuantity`, NOT scaled."
-          },
-          "ledgerAtoms": {
-            "type": "string",
-            "description": "Hex-fixed-point integer at scale 6 (read with BigInt)."
-          },
-          "valuation": {
-            "nullable": true,
-            "type": "object",
-            "properties": {
-              "currency": {
-                "type": "string",
-                "nullable": true
-              },
-              "valueMinor": {
-                "type": "string"
-              },
-              "valuedAtoms": {
-                "type": "string"
-              },
-              "unvaluedAtoms": {
-                "type": "string"
-              },
-              "uncoveredAtoms": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      },
-      "InventoryConservationFinding": {
-        "type": "object",
-        "description": "One finding from `GET /v1/inventory/conservation-report`. The\n`kind` discriminator narrows the payload (see ADR 0027 D1.3 / D4).\n",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "BALANCE_INVALID",
-              "CONSERVATION_BROKEN",
-              "VALUATION_INVALID",
-              "VALUATION_ATOMS_DRIFT",
-              "VALUATION_UNCOVERED_OUTBOUND"
-            ]
-          }
-        }
-      },
-      "InventoryOpeningRunOutcome": {
-        "type": "object",
-        "description": "The opening-run outcome. `runId` is content-addressed over\n`(workspaceUid, sorted items, sorted ledger receipts)` so two runs on\nthe same workspace and same data hash to the same id (the second is a\nno-op).\n",
-        "properties": {
-          "runId": {
-            "type": "string"
-          },
-          "currency": {
-            "type": "string",
-            "nullable": true
-          },
-          "pricedItemCount": {
-            "type": "integer"
-          },
-          "unpricedItemCount": {
-            "type": "integer"
-          },
-          "shortfallItemCount": {
-            "type": "integer"
-          },
-          "noOpItemCount": {
-            "type": "integer"
-          },
-          "totalOpeningValueMinor": {
-            "type": "string"
-          },
-          "pricedItemIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "unpricedItemIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "shortfallItemIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "startedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "completedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "actorUid": {
-            "type": "string"
-          }
-        }
-      },
       "CreditNoteResult": {
         "type": "object",
         "description": "Result of `POST /v1/invoices/{invoiceId}/credit-note`. `status` is always\n`draft` — the endpoint creates, it does not issue.\n",
@@ -9233,7 +9033,7 @@
       },
       "BankAccount": {
         "type": "object",
-        "description": "A connected bank account (backed by the bankConnections collection).",
+        "description": "A connected bank account.",
         "properties": {
           "id": {
             "type": "string"
@@ -9642,63 +9442,6 @@
                 }
               }
             }
-          }
-        }
-      },
-      "ReceiptQueueItem": {
-        "type": "object",
-        "description": "A receipt or invoice queued for OCR processing from an inbound email.",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "processing",
-              "done",
-              "failed"
-            ]
-          },
-          "sourceEmail": {
-            "type": "string",
-            "description": "Email address that sent the attachment"
-          },
-          "originalFilename": {
-            "type": "string"
-          },
-          "mimeType": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "string"
-          },
-          "workspaceUid": {
-            "type": "string"
-          },
-          "receivedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "storagePath": {
-            "type": "string",
-            "description": "Firebase Storage path after upload (available when status=done)",
-            "nullable": true
-          },
-          "expenseId": {
-            "type": "string",
-            "description": "Created expense ID after OCR completes (available when status=done)",
-            "nullable": true
-          },
-          "error": {
-            "type": "string",
-            "description": "Error message when status=failed",
-            "nullable": true
           }
         }
       },
@@ -11071,7 +10814,7 @@
           },
           "truncated": {
             "type": "boolean",
-            "description": "Only present (and `true`) when the underlying search query\nsaturated the internal 500-document cap. `total` therefore reports\nthe size of the first 500 matches, not the full match count.\nNarrow the search query (taxId / fiscal id, exact email) to ensure\nyou see every result.\n",
+            "description": "Only present (and `true`) when the underlying search query\nsaturated the 500-document cap. `total` therefore reports\nthe size of the first 500 matches, not the full match count.\nNarrow the search query (taxId / fiscal id, exact email) to ensure\nyou see every result.\n",
             "example": true
           }
         }
@@ -12719,24 +12462,6 @@
             "example": {
               "error": "Forbidden",
               "detail": "Purchase order reads require read or purchase-orders:read, edits and transitions require write or purchase-orders:write, and receive/reverse-receipt require an explicit purchase-orders:receive or purchase-orders:* grant.",
-              "meta": {
-                "requestId": "550e8400-e29b-41d4-a716-446655440000"
-              }
-            }
-          }
-        }
-      },
-      "InventoryAuthorityNotReleased": {
-        "description": "The inventory authority is not released yet. Every `/v1/inventory/*` and `/v1/purchase-orders/*` route answers 503 with code `INVENTORY_AUTHORITY_NOT_RELEASED` to a key that passed its scope checks. No inventory or purchase-order data is read or written, and the `Idempotency-Key` is not reserved.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Error"
-            },
-            "example": {
-              "error": "Service Unavailable",
-              "code": "INVENTORY_AUTHORITY_NOT_RELEASED",
-              "message": "Inventory and purchase-order routes are not released yet. No inventory or purchase-order data was read or changed. Retry after the inventory authority is released.",
               "meta": {
                 "requestId": "550e8400-e29b-41d4-a716-446655440000"
               }
