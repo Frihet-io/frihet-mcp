@@ -17,16 +17,25 @@ receivables and other available business operations. The publisher is
 
 ## Install and configure
 
-This repository's `.cursor-plugin/marketplace.json` points to this plugin's
-subdirectory. A repository listing and an installed plugin are different from
-marketplace approval. Use the host's plugin installation flow for the repository.
 The local server needs a Node.js version supported by the pinned package
 (`^22.23.4 || ^24.22.1 || ^26.12.1`) and npm/npx. The pinned npm version must be
 published; the configuration does not silently fall back to `latest`.
 
-Set the following plugin variables under **Plugins → Configure** (or the host's
-corresponding plugin configuration screen). `${VAR}` in this plugin is Cursor
-plugin-variable syntax, not a request to paste credentials into a conversation.
+The following local repository installation was verified in Cursor. Marketplace
+review and approval are separate from this local installation.
+
+1. Open **Customize → Plugins → Add → From Local Repo**.
+2. Select the **repository root** containing `.cursor-plugin/marketplace.json`,
+   not the `plugins/frihet-erp` subdirectory.
+3. Add **frihet-erp** from the loaded catalogue. Its installed entry should show
+   **1 MCP server, 8 skills and 1 rule**.
+4. Open the plugin's **Configure** screen and set the variables below. Choose
+   **Save**, then run **Reload Window** from Cursor's command palette after
+   changing variables, before testing the MCP server. In the verified flow,
+   saved changes took effect after this reload.
+
+`${VAR}` in this plugin is Cursor plugin-variable syntax. Set values in
+**Configure**; never paste credentials into a conversation.
 
 | Variable | Default | How to use it |
 | --- | --- | --- |
@@ -40,11 +49,20 @@ The full tool catalogue is not itself a permission grant.
 
 ## Try the demo
 
-Set `FRIHET_DEMO=1`, leave `FRIHET_API_KEY` empty and reconnect the plugin's MCP
-server. Ask for a business summary or a review of overdue invoices and expenses.
-The server labels results as demo. Fixtures use a fixed reference date rather
-than today's business activity. Demo mode serves example data without live API
-requests; any exposed write operations simulate results and do not persist them.
+1. In **Configure**, set `FRIHET_DEMO` to `1` and leave `FRIHET_API_KEY` empty.
+2. Choose **Save**, then run **Reload Window** from the command palette.
+3. Start a new conversation in **Agent** mode. Ask it to call
+   `get_business_context` from **plugin-frihet-erp-frihet**. In the observed
+   local flow, **Ask** mode blocked plugin tool execution.
+4. Authorize only that individual read request; leave **Always Run** disabled.
+5. Verify that the result identifies **Demo Studio SL**, currency **EUR**, and
+   `_demo: true` before continuing with other read-only checks. A connected
+   server and tool count alone do not establish demo mode.
+
+You can then request a business summary or review overdue invoices and expenses,
+approving individual reads as needed. The server labels results as demo.
+Fixtures use a fixed reference date rather than today's business activity. Demo
+mode serves example data without live API requests; any exposed write operations simulate results and do not persist them.
 It is **not** a technical read-only permission boundary: for a read-only review,
 instruct the agent to use reads only and use a host tool allowlist if supported.
 Demo mode wins if a key is present, but leave the key empty to keep it out of the
