@@ -1,19 +1,15 @@
 {
   "mcpServers": {
     "frihet": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@frihet/mcp-server@latest"
+        "@frihet/mcp-server@2.0.2"
       ],
       "env": {
-        "FRIHET_API_KEY": "${env:FRIHET_API_KEY}"
-      }
-    },
-    "frihet-remote": {
-      "url": "https://mcp.frihet.io/mcp",
-      "headers": {
-        "Authorization": "Bearer ${env:FRIHET_API_KEY}"
+        "FRIHET_API_KEY": "${env:FRIHET_API_KEY}",
+        "FRIHET_TOOL_MODE": "full"
       }
     }
   }

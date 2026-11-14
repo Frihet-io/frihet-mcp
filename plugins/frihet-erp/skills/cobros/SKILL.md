@@ -28,7 +28,7 @@ amenazas o reclamaciones legales.
 ## Obtener enlace de cobro frente a enviar o registrar pago
 
 Cuando el usuario pida *«Dame el enlace para cobrar esta factura y dime qué queda pendiente»*:
-- Usa el contrato dedicado de enlace de portal (`get_invoice_payment_link` cuando esté habilitado en el perfil) para obtener `authorizedPortalUrl` (`https://app.frihet.io/pay/{workspace}/{invoice}/{token}`), `amountRemainingMinor`, `currency`, `collectible` y `unavailableReason` directamente de la autoridad del servidor.
+- Comprueba el catálogo conectado y sus esquemas antes de buscar un enlace de cobro. Si el perfil anuncia una operación dedicada y autorizada, usa únicamente el enlace, saldo, moneda y estado de cobrabilidad que devuelva el servidor. Si no existe esa operación o deniega el acceso, indica que el enlace no está disponible en esta conexión; no inventes nombres de herramientas, rutas ni tokens, ni cambies de conexión para eludir la limitación.
 - **No reconstruyas saldos** sumando campos legacy en el cliente ni conviertas un saldo desconocido (`unknown_degraded` / `null`) en `0`.
 - **Obtener el enlace no cobra ni envía:** devolver `authorizedPortalUrl` concede acceso limitado al portal de pago (donde la cobrabilidad y el saldo se revalidan al abrir y pagar), pero **no envía ningún correo** (`send_invoice`), **no inicia un cargo ni crea reservas de fondos**, **no marca la factura como pagada** (`mark_invoice_paid`) y **no ejecuta conciliación bancaria** (`match_transaction_to_invoice`).
 
