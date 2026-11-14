@@ -45,7 +45,7 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 | **LlamaIndex** | `marketplace/llamaindex/` | Financial RAG & data agents | ToolSpec & FunctionTools, Pydantic validation | **`CONTRACT_TESTED`** |
 | **Zapier Platform Schema** | `marketplace/zapier/` | Zapier Platform CLI & AI Actions | Declarative triggers/actions schema (#2101) | **`CONTRACT_TESTED`** |
 | **Google Workspace Add-on** | `googleapps_sdk` | Gmail & Google Drive | OAuth sensitive scope approved, 6 canonical scopes | **`SUBMITTED`** (Marketplace SDK under review) |
-| **Raycast Extension** | `frihet-raycast` | macOS founders & engineers | 5 commands, API client, tenant isolation, read-only | **`SUBMITTED`** (PR [raycast/extensions#33017](https://github.com/raycast/extensions/pull/33017), CI green) |
+| **Raycast Extension** | [Raycast Store](https://raycast.com/viktor_berthelius/frihet) | macOS founders & engineers | 5 commands, API client, tenant isolation, read-only | **`PUBLISHED_VERIFIED`** ([Store Listing](https://raycast.com/viktor_berthelius/frihet), PR #33495 merged) |
 | **Dify Tool Provider** | `marketplace/dify/` | Enterprise LLM workflows | Curated YAML tools, draft-only invariant | **`CONTRACT_TESTED`** |
 | **Flowise Custom Tool** | `marketplace/flowise/` | Drag-and-drop LangChain canvas | JavaScript tool node, draft-only invariant | **`CONTRACT_TESTED`** |
 | **Make.com (Integromat)** | `marketplace/make/` | Visual SMB workflow scenarios | App definition with canonical routes | **`CONTRACT_TESTED`** |
