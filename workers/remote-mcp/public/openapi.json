@@ -658,7 +658,17 @@
             "$ref": "#/components/responses/WriteScopeForbidden"
           },
           "409": {
-            "description": "The invoice cannot be created in the requested state.\nINVOICE_STATUS_DIRECT_PAYMENT_FORBIDDEN: invoices cannot be created\ndirectly with status `paid` or `partial`. Payment Authority V1\n(`POST /v1/invoices/{id}/paid`) is required.\nINVOICE_STATUS_DIRECT_MUTATION_FORBIDDEN: invoices cannot be created\nwith terminal or derived statuses such as `cancelled` or `overdue`.\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED (`reason`\ncompany_without_tax_id): an invoice created in an issued status, with or\nwithout a supplied number, has no `clientTaxId` (neither in the request nor\non the client record) while its client record declares `clientType`\ncompany. Nothing is written.\n",
+            "description": "The invoice cannot be created in the requested state.\nINVOICE_STATUS_DIRECT_PAYMENT_FORBIDDEN: invoices cannot be created\ndirectly with status `paid` or `partial`. Payment Authority V1\n(`POST /v1/invoices/{id}/paid`) is required.\nINVOICE_STATUS_DIRECT_MUTATION_FORBIDDEN: invoices cannot be created\nwith terminal or derived statuses such as `cancelled` or `overdue`.\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED (`reason`\ncompany_without_tax_id): an invoice created in an issued status, with or\nwithout a supplied number, has no `clientTaxId` (neither in the request nor\non the client record) while its client record declares `clientType`\ncompany. Nothing is written.\nISSUER_TAX_ID_REQUIRED: the workspace fiscal profile carries no tax id,\nso an invoice created in an issued status cannot be issued.\nISSUER_TAX_ID_INVALID: the fiscal profile tax id is Spanish-shaped (DNI,\nNIE or CIF, optional `ES` prefix, spaces and hyphens ignored) and its\ncontrol character is wrong. No invoice is written and no fiscal number is\nconsumed in either case.\nRECIPIENT_TAX_ID_INVALID (this refusal answers 422, `reason`\ncontrol_character, `field` clientTaxId): the recipient tax id is\nSpanish-shaped and its control character is wrong. A recipient id that is\nnot Spanish-shaped (a foreign id, an EU VAT id of another country) is not\nchecksum-validated here, and a missing recipient id keeps its own rules.\nNo invoice is written and no fiscal number is consumed. The client\nfind-or-create runs in its own transaction, before the invoice one, so a\nclient row may already exist when the refusal happens (it is built from\nthe request's own tax id, which this check validated).\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The invoice cannot be created in the requested state: the recipient tax id\nis Spanish-shaped (DNI, NIE or CIF, optional `ES` prefix, spaces and hyphens\nignored) and its control character is wrong. `code`\nRECIPIENT_TAX_ID_INVALID, `reason` control_character, `field` clientTaxId.\nA recipient id that is not Spanish-shaped (a foreign id, an EU VAT id of\nanother country) is not checksum-validated here, and a missing recipient id\nkeeps its own rules. No invoice is written and no fiscal number is\nconsumed; the client find-or-create runs in its own transaction, before the\ninvoice one, so a client row may already exist.\nThe invoice cannot be issued in the requested series.\nUNKNOWN_SERIES_ID (`field` `seriesId`): the `seriesId` sent is\nwell-formed but the workspace has no series with that id. Nothing is\nwritten — no invoice and no counter change. Send a `seriesId` from\n`GET /v1/series`, or omit it to use the workspace's default series.\nThe id `default` is always accepted: it names the global\nnumbering space.",
             "content": {
               "application/json": {
                 "schema": {
@@ -777,7 +787,17 @@
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "The invoice cannot be changed as requested. INVOICE_FISCAL_FIELDS_IMMUTABLE:\n`reason` verifactu_hash means the invoice carries a VeriFactu hash, so its\nnumber, dates, client, lines, rates, notes, PO number and fiscal identity\ncannot change here (economic corrections need a rectificativa) and its\nstatus cannot go back to draft (`field` status; cancel it instead);\nfinal_number means the server-assigned number is final and cannot change,\nand (`field` status) that an invoice holding a final number cannot go back\nto draft: one marked final by the server, or one whose number is not a\nplaceholder (supplied on create, or numbered before the marker existed).\nCancel it (status cancelled) or issue a rectificativa instead.\nIt also rejects conflicting fiscal-field edits if a draft read by this\nrequest was issued concurrently; `field` then names the conflicting field,\nwhich may be a field other than documentNumber;\nserver_numbering means the number is not final yet: the server assigns it\n(on create or when the invoice is issued), so `documentNumber` cannot be set\nor changed here; supply a number on create instead.\nThe response names the first changed `field`. Resending a stored value\nunchanged is accepted.\nCREDIT_NOTE_RECTIFICATION_REQUIRED: the request changes a POS refund credit\nnote's fiscal identity. INVOICE_PAYMENT_CAPTURE_FENCED: a portal payment\ncapture is in progress; retry after it settles.\nINVOICE_STATUS_DIRECT_PAYMENT_FORBIDDEN: direct mutation to `paid` or `partial`\nis forbidden on generic update; settle invoice outstanding via Payment Authority V1\n(`POST /v1/invoices/{id}/paid`).\nINVOICE_STATUS_DIRECT_OVERDUE_FORBIDDEN: direct mutation to `overdue` is\nforbidden; overdue status is an aging projection derived from `dueDate`.\nINVOICE_STATUS_PAID_TERMINAL: paid invoices are terminal and their status\ncannot be modified on generic update.\nINVOICE_STATUS_CANCELLED_TERMINAL: cancelled invoices are terminal and their\nstatus cannot be modified on generic update. Nothing is written.\nINVOICE_STATUS_PRECONDITION_FAILED: `ifStatus` did not match the stored status\n(`reason` status_mismatch), or `ifStatus` draft was sent for an invoice that\nalready carries issuance evidence (`reason` issuance_evidence_present). The\nevidence is a closed list: a VeriFactu hash, rectificativa numbering authority,\nsentAt, or any of faceStatus, faceNumeroRegistro, faceSubmittedAt, tbaiStatus,\ntbaiCsv. Italian SDI (`eInvoice.sdiSubmission`) and Polish KSeF (`ksefStatus`\nand related) submissions are NOT checked; the body also carries `field`, `expectedStatus`\nand `actualStatus`. INVOICE_REVISION_PRECONDITION_FAILED: `ifUpdatedAt` is not\nthe exact stored `updatedAt` token (`reason` updated_at_mismatch); the body\nalso carries `field`, `expectedUpdatedAt` and `actualUpdatedAt`. Nothing is\nwritten in either case.\nSynchronous draft issuance can also fail with NUMBERING_PATTERN_MISSING_SEQUENCE,\nNUMBERING_PATTERN_MULTIPLE_SEQUENCE or NUMBERING_PATTERN_TOO_LONG for invalid\nsettings; COUNTER_VALUE_CORRUPT or NUMBERING_SEQUENCE_OVERFLOW for unsafe\ncounters; INVOICE_YEAR_BEHIND for an issue year behind a yearly counter;\nNUMBERING_COLLISION_WINDOW_EXHAUSTED after 32 bounded collision probes;\nINVOICE_NUMBER_RESERVED_FOR_POS or RECTIFICATION_SERIES_RESERVED for a\nreserved number space; NUMBERING_PATTERN_READS_AS_PLACEHOLDER when the pattern\nrenders a number that reads as a draft placeholder (empty or starting with\nBORRADOR); SUBSTITUTION_ECONOMIC_PROJECTION_PENDING or\nRECTIFICATION_ISSUANCE_PROOF_REQUIRED for an unproven rectification;\nCOMPLETE_INVOICE_DATA_REQUIRED for incomplete complete-invoice data;\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED when the issued invoice has no\n`clientTaxId` and its client record declares `clientType` company\n(`reason` company_without_tax_id) or no longer exists (`reason`\nclient_record_missing); a request that sets `clientTaxId` while issuing\nis accepted;\nDOCUMENT_NATURE_UNSUPPORTED for an unsupported document nature.\nCREDIT_NOTE_RECTIFICATION_REQUIRED also rejects an invalid credit-note\ncontract during issuance. These failures leave the draft fields and its\nnumbering counter unchanged.\n",
+            "description": "The invoice cannot be changed as requested. INVOICE_FISCAL_FIELDS_IMMUTABLE:\n`reason` verifactu_hash means the invoice carries a VeriFactu hash, so its\nnumber, dates, client, lines, rates, notes, PO number and fiscal identity\ncannot change here (economic corrections need a rectificativa) and its\nstatus cannot go back to draft (`field` status; cancel it instead);\nfinal_number means the server-assigned number is final and cannot change,\nand (`field` status) that an invoice holding a final number cannot go back\nto draft: one marked final by the server, or one whose number is not a\nplaceholder (supplied on create, or numbered before the marker existed).\nCancel it (status cancelled) or issue a rectificativa instead.\nIt also rejects conflicting fiscal-field edits if a draft read by this\nrequest was issued concurrently; `field` then names the conflicting field,\nwhich may be a field other than documentNumber;\nserver_numbering means the number is not final yet: the server assigns it\n(on create or when the invoice is issued), so `documentNumber` cannot be set\nor changed here; supply a number on create instead.\nThe response names the first changed `field`. Resending a stored value\nunchanged is accepted.\nCREDIT_NOTE_RECTIFICATION_REQUIRED: the request changes a POS refund credit\nnote's fiscal identity. INVOICE_PAYMENT_CAPTURE_FENCED: a portal payment\ncapture is in progress; retry after it settles.\nINVOICE_STATUS_DIRECT_PAYMENT_FORBIDDEN: direct mutation to `paid` or `partial`\nis forbidden on generic update; settle invoice outstanding via Payment Authority V1\n(`POST /v1/invoices/{id}/paid`).\nINVOICE_STATUS_DIRECT_OVERDUE_FORBIDDEN: direct mutation to `overdue` is\nforbidden; overdue status is an aging projection derived from `dueDate`.\nINVOICE_STATUS_PAID_TERMINAL: paid invoices are terminal and their status\ncannot be modified on generic update.\nINVOICE_STATUS_CANCELLED_TERMINAL: cancelled invoices are terminal and their\nstatus cannot be modified on generic update. Nothing is written.\nINVOICE_STATUS_PRECONDITION_FAILED: `ifStatus` did not match the stored status\n(`reason` status_mismatch), or `ifStatus` draft was sent for an invoice that\nalready carries issuance evidence (`reason` issuance_evidence_present). The\nevidence is a closed list: a VeriFactu hash, rectificativa numbering authority,\nsentAt, or any of faceStatus, faceNumeroRegistro, faceSubmittedAt, tbaiStatus,\ntbaiCsv. Italian SDI (`eInvoice.sdiSubmission`) and Polish KSeF (`ksefStatus`\nand related) submissions are NOT checked; the body also carries `field`, `expectedStatus`\nand `actualStatus`. INVOICE_REVISION_PRECONDITION_FAILED: `ifUpdatedAt` is not\nthe exact stored `updatedAt` token (`reason` updated_at_mismatch); the body\nalso carries `field`, `expectedUpdatedAt` and `actualUpdatedAt`. Nothing is\nwritten in either case.\nSynchronous draft issuance can also fail with NUMBERING_PATTERN_MISSING_SEQUENCE,\nNUMBERING_PATTERN_MULTIPLE_SEQUENCE or NUMBERING_PATTERN_TOO_LONG for invalid\nsettings; COUNTER_VALUE_CORRUPT or NUMBERING_SEQUENCE_OVERFLOW for unsafe\ncounters; INVOICE_YEAR_BEHIND for an issue year behind a yearly counter;\nNUMBERING_COLLISION_WINDOW_EXHAUSTED after 32 bounded collision probes;\nINVOICE_NUMBER_RESERVED_FOR_POS or RECTIFICATION_SERIES_RESERVED for a\nreserved number space; NUMBERING_PATTERN_READS_AS_PLACEHOLDER when the pattern\nrenders a number that reads as a draft placeholder (empty or starting with\nBORRADOR); SUBSTITUTION_ECONOMIC_PROJECTION_PENDING or\nRECTIFICATION_ISSUANCE_PROOF_REQUIRED for an unproven rectification;\nCOMPLETE_INVOICE_DATA_REQUIRED for incomplete complete-invoice data;\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED when the issued invoice has no\n`clientTaxId` and its client record declares `clientType` company\n(`reason` company_without_tax_id) or no longer exists (`reason`\nclient_record_missing); a request that sets `clientTaxId` while issuing\nis accepted;\nDOCUMENT_NATURE_UNSUPPORTED for an unsupported document nature.\nCREDIT_NOTE_RECTIFICATION_REQUIRED also rejects an invalid credit-note\ncontract during issuance. These failures leave the draft fields and its\nnumbering counter unchanged.\nISSUER_TAX_ID_REQUIRED: the workspace fiscal profile carries no tax id,\nso the draft cannot be issued. ISSUER_TAX_ID_INVALID: the fiscal profile\ntax id is Spanish-shaped (DNI, NIE or CIF, optional `ES` prefix, spaces\nand hyphens ignored) and its control character is wrong. The draft keeps\nits fields and no fiscal number is consumed in either case.\nRECIPIENT_TAX_ID_INVALID (this refusal answers 422, `reason`\ncontrol_character, `field` clientTaxId): the recipient tax id is\nSpanish-shaped and its control character is wrong. A recipient id that is\nnot Spanish-shaped (a foreign id, an EU VAT id of another country) is not\nchecksum-validated here, and a missing recipient id keeps its own rules.\nThe draft keeps its fields and no fiscal number is consumed.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The invoice cannot be issued by this request: the recipient tax id is\nSpanish-shaped (DNI, NIE or CIF, optional `ES` prefix, spaces and hyphens\nignored) and its control character is wrong. `code`\nRECIPIENT_TAX_ID_INVALID, `reason` control_character, `field` clientTaxId.\nA recipient id that is not Spanish-shaped (a foreign id, an EU VAT id of\nanother country) is not checksum-validated here, and a missing recipient id\nkeeps its own rules. The draft keeps its fields and no fiscal number is\nconsumed.\nThe invoice cannot be issued in the requested series.\nUNKNOWN_SERIES_ID (`field` `seriesId`): the `seriesId` sent is\nwell-formed but the workspace has no series with that id, or the\nstored invoice names a series that no longer exists. Nothing is\nwritten — the draft stays unissued and no counter changes. Send a\n`seriesId` from `GET /v1/series`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -854,7 +874,17 @@
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "The invoice cannot be changed as requested. INVOICE_FISCAL_FIELDS_IMMUTABLE:\n`reason` verifactu_hash means the invoice carries a VeriFactu hash, so its\nnumber, dates, client, lines, rates, notes, PO number and fiscal identity\ncannot change here (economic corrections need a rectificativa) and its\nstatus cannot go back to draft (`field` status; cancel it instead);\nfinal_number means the server-assigned number is final and cannot change,\nand (`field` status) that an invoice holding a final number cannot go back\nto draft: one marked final by the server, or one whose number is not a\nplaceholder (supplied on create, or numbered before the marker existed).\nCancel it (status cancelled) or issue a rectificativa instead.\nIt also rejects conflicting fiscal-field edits if a draft read by this\nrequest was issued concurrently; `field` then names the conflicting field,\nwhich may be a field other than documentNumber;\nserver_numbering means the number is not final yet: the server assigns it\n(on create or when the invoice is issued), so `documentNumber` cannot be set\nor changed here; supply a number on create instead.\nThe response names the first changed `field`. Resending a stored value\nunchanged is accepted.\nCREDIT_NOTE_RECTIFICATION_REQUIRED: the request changes a POS refund credit\nnote's fiscal identity. INVOICE_PAYMENT_CAPTURE_FENCED: a portal payment\ncapture is in progress; retry after it settles.\nINVOICE_STATUS_DIRECT_PAYMENT_FORBIDDEN: direct mutation to `paid` or `partial`\nis forbidden on generic update; settle invoice outstanding via Payment Authority V1\n(`POST /v1/invoices/{id}/paid`).\nINVOICE_STATUS_DIRECT_OVERDUE_FORBIDDEN: direct mutation to `overdue` is\nforbidden; overdue status is an aging projection derived from `dueDate`.\nINVOICE_STATUS_PAID_TERMINAL: paid invoices are terminal and their status\ncannot be modified on generic update.\nINVOICE_STATUS_CANCELLED_TERMINAL: cancelled invoices are terminal and their\nstatus cannot be modified on generic update. Nothing is written.\nINVOICE_STATUS_PRECONDITION_FAILED: `ifStatus` did not match the stored status\n(`reason` status_mismatch), or `ifStatus` draft was sent for an invoice that\nalready carries issuance evidence (`reason` issuance_evidence_present). The\nevidence is a closed list: a VeriFactu hash, rectificativa numbering authority,\nsentAt, or any of faceStatus, faceNumeroRegistro, faceSubmittedAt, tbaiStatus,\ntbaiCsv. Italian SDI (`eInvoice.sdiSubmission`) and Polish KSeF (`ksefStatus`\nand related) submissions are NOT checked; the body also carries `field`, `expectedStatus`\nand `actualStatus`. INVOICE_REVISION_PRECONDITION_FAILED: `ifUpdatedAt` is not\nthe exact stored `updatedAt` token (`reason` updated_at_mismatch); the body\nalso carries `field`, `expectedUpdatedAt` and `actualUpdatedAt`. Nothing is\nwritten in either case.\nSynchronous draft issuance can also fail with NUMBERING_PATTERN_MISSING_SEQUENCE,\nNUMBERING_PATTERN_MULTIPLE_SEQUENCE or NUMBERING_PATTERN_TOO_LONG for invalid\nsettings; COUNTER_VALUE_CORRUPT or NUMBERING_SEQUENCE_OVERFLOW for unsafe\ncounters; INVOICE_YEAR_BEHIND for an issue year behind a yearly counter;\nNUMBERING_COLLISION_WINDOW_EXHAUSTED after 32 bounded collision probes;\nINVOICE_NUMBER_RESERVED_FOR_POS or RECTIFICATION_SERIES_RESERVED for a\nreserved number space; NUMBERING_PATTERN_READS_AS_PLACEHOLDER when the pattern\nrenders a number that reads as a draft placeholder (empty or starting with\nBORRADOR); SUBSTITUTION_ECONOMIC_PROJECTION_PENDING or\nRECTIFICATION_ISSUANCE_PROOF_REQUIRED for an unproven rectification;\nCOMPLETE_INVOICE_DATA_REQUIRED for incomplete complete-invoice data;\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED when the issued invoice has no\n`clientTaxId` and its client record declares `clientType` company\n(`reason` company_without_tax_id) or no longer exists (`reason`\nclient_record_missing); a request that sets `clientTaxId` while issuing\nis accepted;\nDOCUMENT_NATURE_UNSUPPORTED for an unsupported document nature.\nCREDIT_NOTE_RECTIFICATION_REQUIRED also rejects an invalid credit-note\ncontract during issuance. These failures leave the draft fields and its\nnumbering counter unchanged.\n",
+            "description": "The invoice cannot be changed as requested. INVOICE_FISCAL_FIELDS_IMMUTABLE:\n`reason` verifactu_hash means the invoice carries a VeriFactu hash, so its\nnumber, dates, client, lines, rates, notes, PO number and fiscal identity\ncannot change here (economic corrections need a rectificativa) and its\nstatus cannot go back to draft (`field` status; cancel it instead);\nfinal_number means the server-assigned number is final and cannot change,\nand (`field` status) that an invoice holding a final number cannot go back\nto draft: one marked final by the server, or one whose number is not a\nplaceholder (supplied on create, or numbered before the marker existed).\nCancel it (status cancelled) or issue a rectificativa instead.\nIt also rejects conflicting fiscal-field edits if a draft read by this\nrequest was issued concurrently; `field` then names the conflicting field,\nwhich may be a field other than documentNumber;\nserver_numbering means the number is not final yet: the server assigns it\n(on create or when the invoice is issued), so `documentNumber` cannot be set\nor changed here; supply a number on create instead.\nThe response names the first changed `field`. Resending a stored value\nunchanged is accepted.\nCREDIT_NOTE_RECTIFICATION_REQUIRED: the request changes a POS refund credit\nnote's fiscal identity. INVOICE_PAYMENT_CAPTURE_FENCED: a portal payment\ncapture is in progress; retry after it settles.\nINVOICE_STATUS_DIRECT_PAYMENT_FORBIDDEN: direct mutation to `paid` or `partial`\nis forbidden on generic update; settle invoice outstanding via Payment Authority V1\n(`POST /v1/invoices/{id}/paid`).\nINVOICE_STATUS_DIRECT_OVERDUE_FORBIDDEN: direct mutation to `overdue` is\nforbidden; overdue status is an aging projection derived from `dueDate`.\nINVOICE_STATUS_PAID_TERMINAL: paid invoices are terminal and their status\ncannot be modified on generic update.\nINVOICE_STATUS_CANCELLED_TERMINAL: cancelled invoices are terminal and their\nstatus cannot be modified on generic update. Nothing is written.\nINVOICE_STATUS_PRECONDITION_FAILED: `ifStatus` did not match the stored status\n(`reason` status_mismatch), or `ifStatus` draft was sent for an invoice that\nalready carries issuance evidence (`reason` issuance_evidence_present). The\nevidence is a closed list: a VeriFactu hash, rectificativa numbering authority,\nsentAt, or any of faceStatus, faceNumeroRegistro, faceSubmittedAt, tbaiStatus,\ntbaiCsv. Italian SDI (`eInvoice.sdiSubmission`) and Polish KSeF (`ksefStatus`\nand related) submissions are NOT checked; the body also carries `field`, `expectedStatus`\nand `actualStatus`. INVOICE_REVISION_PRECONDITION_FAILED: `ifUpdatedAt` is not\nthe exact stored `updatedAt` token (`reason` updated_at_mismatch); the body\nalso carries `field`, `expectedUpdatedAt` and `actualUpdatedAt`. Nothing is\nwritten in either case.\nSynchronous draft issuance can also fail with NUMBERING_PATTERN_MISSING_SEQUENCE,\nNUMBERING_PATTERN_MULTIPLE_SEQUENCE or NUMBERING_PATTERN_TOO_LONG for invalid\nsettings; COUNTER_VALUE_CORRUPT or NUMBERING_SEQUENCE_OVERFLOW for unsafe\ncounters; INVOICE_YEAR_BEHIND for an issue year behind a yearly counter;\nNUMBERING_COLLISION_WINDOW_EXHAUSTED after 32 bounded collision probes;\nINVOICE_NUMBER_RESERVED_FOR_POS or RECTIFICATION_SERIES_RESERVED for a\nreserved number space; NUMBERING_PATTERN_READS_AS_PLACEHOLDER when the pattern\nrenders a number that reads as a draft placeholder (empty or starting with\nBORRADOR); SUBSTITUTION_ECONOMIC_PROJECTION_PENDING or\nRECTIFICATION_ISSUANCE_PROOF_REQUIRED for an unproven rectification;\nCOMPLETE_INVOICE_DATA_REQUIRED for incomplete complete-invoice data;\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED when the issued invoice has no\n`clientTaxId` and its client record declares `clientType` company\n(`reason` company_without_tax_id) or no longer exists (`reason`\nclient_record_missing); a request that sets `clientTaxId` while issuing\nis accepted;\nDOCUMENT_NATURE_UNSUPPORTED for an unsupported document nature.\nCREDIT_NOTE_RECTIFICATION_REQUIRED also rejects an invalid credit-note\ncontract during issuance. These failures leave the draft fields and its\nnumbering counter unchanged.\nISSUER_TAX_ID_REQUIRED: the workspace fiscal profile carries no tax id,\nso the draft cannot be issued. ISSUER_TAX_ID_INVALID: the fiscal profile\ntax id is Spanish-shaped (DNI, NIE or CIF, optional `ES` prefix, spaces\nand hyphens ignored) and its control character is wrong. The draft keeps\nits fields and no fiscal number is consumed in either case.\nRECIPIENT_TAX_ID_INVALID (this refusal answers 422, `reason`\ncontrol_character, `field` clientTaxId): the recipient tax id is\nSpanish-shaped and its control character is wrong. A recipient id that is\nnot Spanish-shaped (a foreign id, an EU VAT id of another country) is not\nchecksum-validated here, and a missing recipient id keeps its own rules.\nThe draft keeps its fields and no fiscal number is consumed.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The invoice cannot be issued by this request: the recipient tax id is\nSpanish-shaped (DNI, NIE or CIF, optional `ES` prefix, spaces and hyphens\nignored) and its control character is wrong. `code`\nRECIPIENT_TAX_ID_INVALID, `reason` control_character, `field` clientTaxId.\nA recipient id that is not Spanish-shaped (a foreign id, an EU VAT id of\nanother country) is not checksum-validated here, and a missing recipient id\nkeeps its own rules. The draft keeps its fields and no fiscal number is\nconsumed.\nThe invoice cannot be issued in the requested series.\nUNKNOWN_SERIES_ID (`field` `seriesId`): the `seriesId` sent is\nwell-formed but the workspace has no series with that id, or the\nstored invoice names a series that no longer exists. Nothing is\nwritten — the draft stays unissued and no counter changes. Send a\n`seriesId` from `GET /v1/series`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1019,7 +1049,7 @@
       "post": {
         "operationId": "sendInvoice",
         "summary": "Send invoice by email",
-        "description": "Send the invoice to a recipient via email. If the invoice is in `draft` status, it will be automatically changed to `sent`.",
+        "description": "Send the invoice to an explicit recipient. A confirmed provider acceptance is\nstored in a private delivery receipt. Ordinary retries replay that receipt;\nchanging recipient/content or switching between API and web delivery requires\n`resend: true` to open a new generation. An in-flight send cannot be resent.\nAn unknown outcome is reconciled under the same provider key only while safe;\notherwise the response requires explicit resend and warns of a possible duplicate.\nA draft becomes `sent` only if fiscal admission still passes after provider IO.\nA late fiscal refusal returns 409/422 with `emailDelivered: true`, `messageId`\nand `providerMessageId`, while preserving the draft and the confirmed receipt.\nRetrying that request replays the refusal, even after fiscal data is repaired.",
         "tags": [
           "Invoices"
         ],
@@ -1033,14 +1063,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SendEmailRequest"
+                "$ref": "#/components/schemas/SendInvoiceEmailRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Invoice sent",
+            "description": "Confirmed delivery, replay, provider rejection or an unresolved provider outcome",
             "content": {
               "application/json": {
                 "schema": {
@@ -1053,6 +1083,30 @@
                     "messageId": {
                       "type": "string",
                       "description": "Email provider message ID"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "sent",
+                        "failed",
+                        "unknown"
+                      ]
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "reasonCode": {
+                      "type": "string",
+                      "enum": [
+                        "explicit_resend_required",
+                        "possible_duplicate"
+                      ]
+                    },
+                    "possibleDuplicate": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -1072,21 +1126,21 @@
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "Sending a draft issues it. COMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED: the invoice has no `clientTaxId` and its client record declares `clientType` company (`reason` company_without_tax_id) or no longer exists (`reason` client_record_missing). Nothing is emailed or written.",
+            "description": "Sending a draft issues it. COMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED: the invoice has no `clientTaxId` and its client record declares `clientType` company (`reason` company_without_tax_id) or no longer exists (`reason` client_record_missing). Nothing is emailed or written. ISSUER_TAX_ID_REQUIRED: the workspace fiscal profile carries no tax id, so the invoice cannot be issued. ISSUER_TAX_ID_INVALID: the fiscal profile tax id is Spanish-shaped (DNI, NIE or CIF, optional `ES` prefix, spaces and hyphens ignored) and its control character is wrong. Nothing is emailed, written or numbered in either case. The same admission runs again inside the delivery transaction that flips the draft to `sent`, so a row that changes while the email is in flight (an issuer tax id removed, a recipient tax id with a wrong control character) is refused there and the invoice is not issued. Confirmed delivery is recorded and returned as `emailDelivered: true`, with `messageId` and `providerMessageId`. Ordinary retries replay the same refusal without another provider dispatch. EMAIL_DELIVERY_PRECONDITION rejects changed content/surface or an inadmissible resend.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/InvoiceEmailRefusal"
                 }
               }
             }
           },
           "422": {
-            "description": "The invoice cannot be sent: the fiscal profile is not configured; it has no usable currency; or it still has no final fiscal number after numbering (a cancelled invoice is never numbered by this call, so a cancelled invoice without a final number is refused). The currency is the invoice's own, else the workspace default currency; with neither, or with an invoice currency that is not a three-letter code, the send is refused.",
+            "description": "The invoice cannot be sent: the fiscal profile is not configured; it has no usable currency; or it still has no final fiscal number after numbering (a cancelled invoice is never numbered by this call, so a cancelled invoice without a final number is refused). The currency is the invoice's own, else the workspace default currency; with neither, or with an invoice currency that is not a three-letter code, the send is refused. RECIPIENT_TAX_ID_INVALID (`reason` control_character, `field` clientTaxId): the recipient tax id is Spanish-shaped and its control character is wrong. A recipient id that is not Spanish-shaped (a foreign id, an EU VAT id of another country) is not checksum-validated here, and a missing recipient id keeps its own rules. Nothing is emailed or written. The same admission runs again inside the delivery transaction that flips the draft to `sent`, so a row that changes while the email is in flight is refused there and the invoice is not issued. Confirmed delivery is recorded and returned as `emailDelivered: true`, with `messageId` and `providerMessageId`. Ordinary retries replay that refusal without another provider dispatch.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/InvoiceEmailRefusal"
                 }
               }
             }
@@ -1234,7 +1288,17 @@
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "The idempotency identity conflicts or is still in progress; the\ninvoice was paid by another operation; a portal capture fence is\nactive; the workspace declares an invalid IANA timezone; or Payment\nAuthority projections, fiscal period, or accounting configuration\nrequire reconciliation. No payment is written for a refused request.\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED: marking a draft paid issues\nit, and the invoice has no `clientTaxId` while its client record\ndeclares `clientType` company (`reason` company_without_tax_id) or no\nlonger exists (`reason` client_record_missing). Nothing is written.\n",
+            "description": "The idempotency identity conflicts or is still in progress; the\ninvoice was paid by another operation; a portal capture fence is\nactive; the workspace declares an invalid IANA timezone; or Payment\nAuthority projections, fiscal period, or accounting configuration\nrequire reconciliation. No payment is written for a refused request.\nCOMPLETE_INVOICE_RECIPIENT_TAX_ID_REQUIRED: marking a draft paid issues\nit, and the invoice has no `clientTaxId` while its client record\ndeclares `clientType` company (`reason` company_without_tax_id) or no\nlonger exists (`reason` client_record_missing). Nothing is written.\nISSUER_TAX_ID_REQUIRED: the workspace fiscal profile carries no tax id,\nso the draft cannot be issued. ISSUER_TAX_ID_INVALID: the fiscal profile\ntax id is Spanish-shaped (DNI, NIE or CIF, optional `ES` prefix, spaces\nand hyphens ignored) and its control character is wrong. The invoice keeps\nits status and no fiscal number is consumed in either case.\nRECIPIENT_TAX_ID_INVALID (this refusal answers 422, `reason`\ncontrol_character, `field` clientTaxId): marking a draft paid issues it,\nand the recipient tax id is Spanish-shaped with a wrong control\ncharacter. A recipient id that is not Spanish-shaped (a foreign id, an\nEU VAT id of another country) is not checksum-validated here, and a\nmissing recipient id keeps its own rules. No invoice is written and no\nfiscal number is consumed.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The invoice cannot be marked paid: marking a draft paid issues it, and the recipient tax id is Spanish-shaped (DNI, NIE or CIF, optional `ES` prefix, spaces and hyphens ignored) and its control character is wrong. `code` RECIPIENT_TAX_ID_INVALID, `reason` control_character, `field` clientTaxId. A recipient id that is not Spanish-shaped (a foreign id, an EU VAT id of another country) is not checksum-validated here, and a missing recipient id keeps its own rules. No payment is written, the invoice keeps its status and no fiscal number is consumed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3850,6 +3914,57 @@
         }
       }
     },
+    "/v1/series": {
+      "get": {
+        "operationId": "listInvoiceSeries",
+        "summary": "Invoice series",
+        "description": "Lists the CONFIGURATION of the workspace invoice series — the numbering\nspaces an invoice can be issued in: the id, the name, the pattern (and\nits literal prefix), the purpose and the fiscal document family.\n\nRead-only: it consumes no counter and mutates no business state (the\nrequest log and the API-key usage counters are not business state).\n\nA workspace with no configured series has exactly one numbering space\n(the global one); it is reported as the `default` series. The `default`\nid is accepted by an invoice create in every workspace. A workspace that\nDOES configure a `default` series names that series' own number-space:\nits pattern and its counter are the ones reported for it.\n",
+        "tags": [
+          "Intelligence"
+        ],
+        "responses": {
+          "200": {
+            "description": "The workspace invoice series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/InvoiceSeriesSummary"
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "timestamp": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/v1/monthly": {
       "get": {
         "operationId": "getMonthlySummary",
@@ -4846,7 +4961,7 @@
       "post": {
         "operationId": "createCreditNote",
         "summary": "Create a credit note draft",
-        "description": "Create a rectificative invoice (credit note) as a **draft**, by differences\n(`TipoRectificativa = I`), for the full amount of an existing invoice.\n\nThe endpoint never issues. The draft carries no fiscal number, no hash and\nno VeriFactu submission: those happen when a person issues it in the app.\nA previous version created the document with `sent` status — that behaviour\nis gone.\n\nRequirements:\n  * Plan `pro` or above. Otherwise `403 PLAN_UPGRADE_REQUIRED`.\n  * An `Idempotency-Key` header. Otherwise `400 IDEMPOTENCY_KEY_REQUIRED`.\n  * The original invoice must not be `draft`, `cancelled`, or already\n    fully credited.\n\nErrors carry a stable machine-readable `code` alongside `error`.\n",
+        "description": "Create a rectificative invoice (credit note) as a **draft**, by differences\n(`TipoRectificativa = I`), for the full amount of an existing invoice.\n\nThe endpoint never issues. The draft carries no fiscal number, no hash and\nno VeriFactu submission: those happen when the draft is issued in the app\nor headlessly via `POST /v1/invoices/{invoiceId}/issue`.\nA previous version created the document with `sent` status — that behaviour\nis gone.\n\nRequirements:\n  * Plan `pro` or above. Otherwise `403 PLAN_UPGRADE_REQUIRED`.\n  * An `Idempotency-Key` header. Otherwise `400 IDEMPOTENCY_KEY_REQUIRED`.\n  * The original invoice must not be `draft`, `cancelled`, or already\n    fully credited.\n\nErrors carry a stable machine-readable `code` alongside `error`.\n",
         "tags": [
           "Invoices"
         ],
@@ -4959,6 +5074,118 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreditNoteError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/invoices/{invoiceId}/issue": {
+      "post": {
+        "operationId": "issueInvoice",
+        "summary": "Issue a draft invoice",
+        "description": "Issue an existing draft: it gets its fiscal number and its `sent` status,\nand NO email is sent.\n\nThis is the headless issuance path. `POST /v1/invoices/{invoiceId}/send`\nissues too, but it also emails the recipient, which a server-to-server\ncaller must not trigger.\n\nIt is also the headless way to issue a rectificativa created over the\nAPI: `POST /v1/invoices/{invoiceId}/credit-note` creates an unnumbered\ndraft, and a generic update of its status is refused with\n`409 RECTIFICATION_DEDICATED_OPERATION_REQUIRED`.\n\nRequirements:\n  * Write scope on the API key. Otherwise `403 Forbidden`.\n  * An `Idempotency-Key` header. Otherwise `400 IDEMPOTENCY_KEY_REQUIRED`.\n  * For a rectificativa, plan `pro` or above. Otherwise\n    `403 PLAN_UPGRADE_REQUIRED`.\n\nThe invoice is numbered from the series it ALREADY carries — set that\nseries on the draft before issuing it\n(`PATCH /v1/invoices/{invoiceId}`). This request takes no body: a\nbody carrying any field is refused with `400 Validation error`.\n\nThe submission to the tax authority is ASYNCHRONOUS and CONDITIONAL: the\nworkspace's VeriFactu auto-submission submits the issued invoice when\nthat integration is enabled and the invoice is eligible for it. This\nresponse states the issuance and where to read the submission status; it\nnever claims the record was accepted. Read `fiscal.verifactuStatusUrl`\nfor that.\n\nThis route's own refusals carry a stable machine-readable `code`\nalongside `error`. The generic gates in front of it — a body that fails\nvalidation, a key without write scope, an invalid `Idempotency-Key` —\nanswer with `error` alone.\n",
+        "tags": [
+          "Invoices"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoiceId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique key identifying this issuance. REQUIRED: issuing assigns a\nfiscal number, so a retry must replay that same number instead of\nconsuming a second one.\n\nThe key is reserved against the operation — method, path AND request\nbody — before the handler runs. A retry receives the stored `200`\nwith the same body plus the header `X-Idempotent-Replayed: true`; no\nsecond number is assigned. The same key sent with a DIFFERENT body is\na different operation and is refused with\n`409 IDEMPOTENCY_KEY_REUSED`.\n",
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "example": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "description": "This route takes no request body. The schema below accepts no\nproperty at all: a body carrying any field is refused with\n`400 Validation error`.\n",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The invoice was issued: it holds its fiscal number and its `sent`\nstatus. The body describes the invoice as it stands AFTER the\nissuance committed. A retry with the same Idempotency-Key receives\nthis same `200` and the same body, plus\n`X-Idempotent-Replayed: true`.\n",
+            "headers": {
+              "X-Idempotent-Replayed": {
+                "$ref": "#/components/headers/X-Idempotent-Replayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceIssueResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error, or `IDEMPOTENCY_KEY_REQUIRED` when the header is\nmissing. The invoice and its numbering state are left unchanged.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceIssueError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Write scope missing on the API key (`Forbidden`), or the effective\nplan is below `pro` (`PLAN_UPGRADE_REQUIRED`) when the invoice is a\nrectificativa. The invoice and its numbering state are left\nunchanged.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceIssueError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The invoice does not exist (`INVOICE_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceIssueError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`ALREADY_ISSUED` — the invoice already holds its fiscal status;\nthe invoice and its numbering state are left unchanged.\n`INVOICE_CANCELLED` — the invoice is cancelled; the invoice and its\nnumbering state are left unchanged. `INVOICE_STATE_CHANGED` — the\ninvoice changed while it was being issued, so this request did not\nissue it; read the invoice back. `INVOICE_SERIES_CHANGED` — the\ninvoice's `seriesId` changed concurrently between admission and\nnumbering. `ISSUER_TAX_ID_REQUIRED` — the workspace has no issuer\ntax ID configured for issuance.\n`IDEMPOTENCY_KEY_REUSED` — the key is live for a\nDIFFERENT operation, which is refused without executing.\n`IDEMPOTENCY_REQUEST_IN_PROGRESS` — a request with this key is still\nrunning. A rectificativa can also be refused here with the fiscal\ncode that stopped it: `RECTIFICATION_NOT_ACTIVATED` (the workspace\nhas not activated the operation), `RECTIFICATION_SERIES_REQUIRED`\n(the selected series is not a rectificativa series),\n`RECTIFICATION_BALANCE_EXCEEDED` (the credit exceeds what the\noriginal invoice can absorb), `RECTIFICATION_ORIGINAL_REQUIRED`,\n`RECTIFICATION_ORIGINAL_INVALID`, `RECTIFICATION_ORIGINAL_NATURE_REQUIRED`,\n`RECTIFICATION_ORIGINAL_ISSUER_REQUIRED`, `RECTIFICATION_CONTRACT_INVALID`,\n`RECTIFICATION_SERIES_START_REQUIRED`, `RECTIFICATION_SERIES_AMBIGUOUS`,\n`RECTIFICATION_SERIES_ALREADY_USED`, `RECTIFICATION_SERIES_CHANGED`,\n`RECTIFICATION_COUNTER_INVALID`, `RECTIFICATION_NUMBER_COLLISION`,\n`RECTIFICATION_DATE_INVALID`, `RECTIFICATION_ECONOMICS_UNSUPPORTED`,\n`RECTIFICATION_ISSUANCE_PROOF_REQUIRED`, `RECTIFICATION_PAYMENT_STATE_UNSUPPORTED`\nor `INVOICE_STATUS_INVALID`.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceIssueError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`UNKNOWN_SERIES_ID` — the series the invoice carries is not\nconfigured for this workspace, or `RECIPIENT_TAX_ID_INVALID` — the\nSpanish recipient tax ID fails control-character validation. The\ninvoice and its numbering state are left unchanged.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceIssueError"
                 }
               }
             }
@@ -9031,6 +9258,138 @@
           }
         }
       },
+      "InvoiceIssueResult": {
+        "type": "object",
+        "description": "Result of `POST /v1/invoices/{invoiceId}/issue`. The invoice holds its\nfiscal number and its `sent` status. The submission to the tax authority\nis asynchronous and conditional on the workspace's VeriFactu\nauto-submission: `fiscal.verifactuStatusUrl` is where the caller reads\nwhether the record was accepted.\n",
+        "required": [
+          "data",
+          "fiscal",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": [
+              "id",
+              "documentNumber",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "ID of the issued invoice.",
+                "example": "inv_abc123"
+              },
+              "documentNumber": {
+                "type": "string",
+                "description": "The fiscal number the invoice was issued with.",
+                "example": "F20260001"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "sent"
+                ],
+                "description": "The status this route issues to. The flip to `sent` rides the\nsame transaction as the number.\n",
+                "example": "sent"
+              },
+              "issueDate": {
+                "type": "string",
+                "format": "date",
+                "nullable": true,
+                "description": "The date the issued invoice carries, read from the invoice after\nthe issuance committed. `null` when the invoice carries none or\nwhen the committed invoice could not be read.\n",
+                "example": "2026-03-01"
+              },
+              "seriesId": {
+                "type": "string",
+                "nullable": true,
+                "description": "The series the invoice carries — the one the draft already\ncarried, read from the invoice after the issuance committed.\n`null` when it carries none and the number came from the\nworkspace default.\n",
+                "example": "correction"
+              },
+              "currency": {
+                "type": "string",
+                "nullable": true,
+                "example": "EUR"
+              },
+              "clientId": {
+                "type": "string",
+                "nullable": true,
+                "example": "cli_abc123"
+              },
+              "clientName": {
+                "type": "string",
+                "nullable": true,
+                "example": "Acme SL"
+              },
+              "total": {
+                "type": "number",
+                "nullable": true,
+                "description": "Tax-inclusive total of the issued invoice, read from the invoice\nafter the issuance committed. Negative for a credit note. `null`\nwhen the committed invoice could not be read.\n",
+                "example": 121
+              }
+            }
+          },
+          "fiscal": {
+            "type": "object",
+            "required": [
+              "verifactuStatusUrl"
+            ],
+            "properties": {
+              "verifactuStatusUrl": {
+                "type": "string",
+                "description": "Where to read the submission status of the issued invoice. The\nstatus is `pending` until the submission is processed; a `404`\nthere means no submission exists yet.\n",
+                "example": "https://api.frihet.io/v1/fiscal/verifactu/inv_abc123/status"
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "required": [
+              "requestId",
+              "timestamp"
+            ],
+            "properties": {
+              "requestId": {
+                "type": "string",
+                "example": "req_abc123"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2026-03-01T10:00:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      "InvoiceIssueError": {
+        "type": "object",
+        "description": "Issuance refusal, with a stable machine-readable code.",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable message, or machine code when a fiscal or tax-id admission rule refuses issuance (in which case `message` carries the human-readable detail).",
+            "example": "The invoice is already issued. Read it back instead of issuing it again."
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable code. `IDEMPOTENCY_KEY_REQUIRED`,\n`PLAN_UPGRADE_REQUIRED`, `INVOICE_NOT_FOUND`, `ALREADY_ISSUED`,\n`INVOICE_CANCELLED`, `INVOICE_STATE_CHANGED`, `UNKNOWN_SERIES_ID`,\n`INVOICE_SERIES_CHANGED`, `ISSUER_TAX_ID_REQUIRED`,\n`RECIPIENT_TAX_ID_INVALID`, `IDEMPOTENCY_KEY_REUSED`\nand `IDEMPOTENCY_REQUEST_IN_PROGRESS` are the route's own refusals;\nthe other codes come from the fiscal rules that decide whether a\ndocument may be issued at all. The generic gates in front of the\nroute — a body that fails validation, a key without write scope, an\ninvalid `Idempotency-Key` — answer with `error` alone.\n",
+            "example": "ALREADY_ISSUED"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable explanation present on fiscal and tax-id admission refusals."
+          },
+          "field": {
+            "type": "string",
+            "description": "Offending field name when a tax-id or payload admission rule refuses issuance."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Machine sub-reason when provided by a tax-id or fiscal admission refusal."
+          }
+        }
+      },
       "BankAccount": {
         "type": "object",
         "description": "A connected bank account.",
@@ -10645,6 +11004,51 @@
           }
         ]
       },
+      "SendInvoiceEmailRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SendEmailRequest"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "resend": {
+                "type": "boolean",
+                "default": false,
+                "description": "Explicitly open another delivery generation after current admission. Request-only; never persisted on the invoice."
+              }
+            }
+          }
+        ]
+      },
+      "InvoiceEmailRefusal": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Error"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "emailDelivered": {
+                "type": "boolean",
+                "description": "True only when the provider accepted the email and the durable receipt confirmed it, despite fiscal refusal."
+              },
+              "messageId": {
+                "type": "string"
+              },
+              "providerMessageId": {
+                "type": "string"
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "possibleDuplicate": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
       "SendEmailRequest": {
         "type": "object",
         "required": [
@@ -11011,7 +11415,7 @@
       "WebhookEventType": {
         "type": "string",
         "maxLength": 100,
-        "description": "Canonical subscribable webhook event type identifier",
+        "description": "Canonical subscribable webhook event type identifier. The verifactu.submission.accepted / verifactu.submission.rejected / verifactu.submission.failed events publish the AEAT outcome of a VeriFactu submission; their payload is the VerifactuSubmissionEvent envelope.",
         "enum": [
           "invoice.created",
           "invoice.updated",
@@ -11091,6 +11495,9 @@
           "banking.connection_expired",
           "tax.filing_due",
           "tax.report_generated",
+          "verifactu.submission.accepted",
+          "verifactu.submission.rejected",
+          "verifactu.submission.failed",
           "ai.ocr_completed",
           "ai.categorization_completed",
           "ai.chat_tool_executed",
@@ -11248,6 +11655,106 @@
           }
         ]
       },
+      "VerifactuSubmissionEvent": {
+        "type": "object",
+        "description": "Payload of the verifactu.submission.accepted, verifactu.submission.rejected and verifactu.submission.failed events. It reports the AEAT outcome of one VeriFactu submission (alta) and nothing else: no invoice, no raw AEAT response, no certificate, no client data and no free text. A failure is published as machine codes only (errorCode, errorCategory); the details are read from the status endpoint.",
+        "required": [
+          "id",
+          "type",
+          "occurredAt",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable event id. The same outcome of the same invoice in the same AEAT environment always produces the same id, so a consumer deduplicates on it (the delivery happens at least once). It is also sent as the X-Frihet-Event-Id header."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "verifactu.submission.accepted",
+              "verifactu.submission.rejected",
+              "verifactu.submission.failed"
+            ]
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the outcome was persisted."
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "invoiceId",
+              "documentNumber",
+              "operation",
+              "sandbox",
+              "status",
+              "warningCodes",
+              "statusUrl"
+            ],
+            "properties": {
+              "invoiceId": {
+                "type": "string",
+                "description": "The invoice the submission belongs to."
+              },
+              "documentNumber": {
+                "type": "string",
+                "description": "The document number AEAT was sent."
+              },
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "alta"
+                ],
+                "description": "The fiscal operation the outcome belongs to."
+              },
+              "sandbox": {
+                "type": "boolean",
+                "description": "True when the outcome was obtained in the AEAT sandbox."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "rejected",
+                  "halted"
+                ],
+                "description": "The persisted outcome. 'halted' is a deterministic failure that needs an action, not an AEAT rejection."
+              },
+              "csv": {
+                "type": "string",
+                "description": "AEAT's CSV of the accepted envio. Only present for an accepted submission."
+              },
+              "warningCodes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "AEAT's error codes of a record it accepted anyway. Empty when there were none."
+              },
+              "errorCode": {
+                "type": "string",
+                "description": "The machine failure code: AEAT's numeric error code of a rejected submission, AEAT's fault code of a failed one, or the deterministic halt reason when AEAT gave no code. Never a message."
+              },
+              "errorCategory": {
+                "type": "string",
+                "enum": [
+                  "aeat_rejected",
+                  "certificate",
+                  "configuration",
+                  "unknown"
+                ],
+                "description": "The fixed category of the failure: AEAT refused the record or the envio (aeat_rejected), AEAT refused the certificate (certificate), the record could not be built or reproduced (configuration), or nothing more precise is known (unknown)."
+              },
+              "statusUrl": {
+                "type": "string",
+                "description": "The polling endpoint that reports the same state."
+              }
+            }
+          }
+        }
+      },
       "BatchResponse": {
         "type": "object",
         "properties": {
@@ -11270,6 +11777,16 @@
                 "error": {
                   "type": "string",
                   "description": "Error message (only when success is false)"
+                },
+                "code": {
+                  "type": "string",
+                  "description": "The API error code of the refusal (only when success is false\nand the refusal is typed), e.g. `UNKNOWN_SERIES_ID` for a\nseries the workspace does not have.\n",
+                  "example": "UNKNOWN_SERIES_ID"
+                },
+                "field": {
+                  "type": "string",
+                  "description": "The request field the refusal names (only when success is\nfalse and the refusal names one), e.g. `seriesId`.\n",
+                  "example": "seriesId"
                 },
                 "details": {
                   "type": "array",
@@ -11406,6 +11923,7 @@
               },
               "series": {
                 "type": "array",
+                "description": "The workspace invoice series and the counter each one is at. The\ncounters are read through the same counter reader the issuance\npath uses, so they are the counters that drive the numbering. A\nseries whose slot cannot be resolved is reported with a `null`\ncounter instead of failing the endpoint.\n",
                 "items": {
                   "type": "object",
                   "properties": {
@@ -11413,13 +11931,18 @@
                       "type": "string"
                     },
                     "prefix": {
-                      "type": "string"
+                      "type": "string",
+                      "nullable": true
                     },
                     "current": {
-                      "type": "integer"
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "The STORED counter of the series' number-space (the\nsequence the canonical resolver reads). It is a stored\ncounter: issuance resets it on a yearly boundary (a\npattern with {YEAR} under the yearly policy) and advances\nit further to skip collisions or reconcile legacy\ncounters. Null when the series cannot be resolved.\n"
                     },
                     "year": {
-                      "type": "integer"
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "The STORED counter year of this series (null when the\nseries cannot be resolved).\n"
                     }
                   }
                 }
@@ -11518,6 +12041,51 @@
                 "format": "date-time"
               }
             }
+          }
+        }
+      },
+      "InvoiceSeriesSummary": {
+        "type": "object",
+        "description": "The configuration of one invoice series of the workspace: the numbering\nspace an invoice can be issued in.\n\nA series whose slot cannot be resolved (a broken counter, a pattern\nwithout a sequence placeholder) is still listed, with a `null` pattern\nand prefix: one broken series never fails the listing.\n",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The series id (the `seriesId` an invoice create accepts). A workspace\nwith no configured series reports its global numbering space as\n`default`.\n",
+            "example": "consulting"
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the series (the id when the series has none).",
+            "example": "Consulting"
+          },
+          "pattern": {
+            "type": "string",
+            "nullable": true,
+            "description": "The effective numbering pattern of the series (null when it cannot be resolved).",
+            "example": "SER{SEQ4}"
+          },
+          "prefix": {
+            "type": "string",
+            "nullable": true,
+            "description": "The literal prefix of the effective pattern (null when it cannot be resolved).",
+            "example": "SER"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "ordinary",
+              "rectificativa"
+            ],
+            "description": "`ordinary` for the series an ordinary invoice can be issued in;\n`rectificativa` for the series reserved to rectification documents.\n"
+          },
+          "documentFamily": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "complete",
+              "simplified"
+            ],
+            "description": "The fiscal document family of the series, when it declares one\n(null when it declares none).\n"
           }
         }
       },
