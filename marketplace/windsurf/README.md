@@ -21,7 +21,7 @@ Add the Frihet MCP server to your Windsurf configuration at `~/.codeium/windsurf
 }
 ```
 
-Or for remote streaming over SSE:
+Or for the remote Streamable HTTP endpoint:
 
 ```json
 {

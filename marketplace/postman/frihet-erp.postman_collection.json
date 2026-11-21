@@ -1,23 +1,33 @@
 {
   "info": {
-    "name": "Frihet ERP API Collection",
+    "name": "Frihet ERP API v1 Collection",
     "_postman_id": "7b2e8f1c-4e31-412f-90e1-f673190b2026",
-    "description": "Complete collection of Frihet ERP REST endpoints for business intelligence, invoice drafting, expense management, and client records. Conforms to Frihet canonical API and draft-only governance invariants.",
+    "description": "Official Postman collection for the Frihet ERP REST API v1 (https://api.frihet.io/v1). Covers business intelligence, global search, invoices, quotes, expenses, clients, products, vendors, deposits, banking & reconciliation, Spanish/EU fiscal & e-invoicing (VeriFactu, FACe, TicketBAI, Facturae/EN 16931), POS, Stay PMS, Kitchen KDS, webhooks, team, and gestoría. Uses canonical X-API-Key authentication, UUIDv4 Idempotency-Key headers on mutations, and draft-only document creation invariants.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
-    "type": "bearer",
-    "bearer": [
+    "type": "apikey",
+    "apikey": [
       {
-        "key": "token",
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
         "value": "{{apiKey}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
         "type": "string"
       }
     ]
   },
   "item": [
     {
-      "name": "Intelligence & Summaries",
+      "name": "Intelligence, Summaries & Global Search",
       "item": [
         {
           "name": "Get Business Context",
@@ -40,6 +50,28 @@
                   "    var json = pm.response.json();",
                   "    pm.expect(json).to.be.an('object');",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Business Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["summary"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
                 ]
               }
             }
@@ -74,6 +106,35 @@
               ]
             }
           }
+        },
+        {
+          "name": "Global Search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/search/global?q=Acme&types=invoices,clients,expenses",
+              "host": ["{{baseUrl}}"],
+              "path": ["search", "global"],
+              "query": [
+                { "key": "q", "value": "Acme" },
+                { "key": "types", "value": "invoices,clients,expenses" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is JSON object\", function () {",
+                  "    pm.expect(pm.response.json()).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -94,6 +155,18 @@
           }
         },
         {
+          "name": "Get Invoice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}"]
+            }
+          }
+        },
+        {
           "name": "Create Draft Invoice",
           "request": {
             "method": "POST",
@@ -103,7 +176,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"clientId\": \"client_sample_123\",\n  \"items\": [\n    {\n      \"description\": \"Consulting Services\",\n      \"quantity\": 1,\n      \"unitPrice\": 150.00,\n      \"vatRate\": 21\n    }\n  ],\n  \"notes\": \"Reviewable draft invoice.\",\n  \"status\": \"draft\"\n}"
+              "raw": "{\n  \"clientName\": \"Acme Global SL\",\n  \"clientTaxId\": \"B12345678\",\n  \"clientLocation\": \"peninsula\",\n  \"taxRate\": 21,\n  \"items\": [\n    {\n      \"description\": \"Consulting Services\",\n      \"quantity\": 1,\n      \"unitPrice\": 150.00\n    }\n  ],\n  \"notes\": \"Reviewable draft invoice.\",\n  \"status\": \"draft\",\n  \"provisionalDraft\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/invoices",
@@ -119,12 +192,369 @@
                   "pm.test(\"Status code is 201 or 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
                   "pm.test(\"Invoice is strictly in draft status\", function () {",
                   "    var json = pm.response.json();",
-                  "    pm.expect(json.status).to.eql('draft');",
+                  "    var record = json.data || json;",
+                  "    pm.expect(record.status).to.eql('draft');",
                   "});"
                 ]
               }
             }
           ]
+        },
+        {
+          "name": "Create Credit Note Draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"refund\",\n  \"reasonDescription\": \"Partial service credit\",\n  \"fullCredit\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/credit-note",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "credit-note"]
+            }
+          }
+        },
+        {
+          "name": "Download Invoice PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/pdf" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "pdf"]
+            }
+          }
+        },
+        {
+          "name": "List Invoice Series",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/series",
+              "host": ["{{baseUrl}}"],
+              "path": ["series"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fiscal, VeriFactu & E-Invoicing (ES/EU)",
+      "item": [
+        {
+          "name": "Get VeriFactu AEAT Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/fiscal/verifactu/{{invoiceId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["fiscal", "verifactu", "{{invoiceId}}", "status"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Export E-Invoice XML (Facturae / EN 16931)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"Facturae\",\n  \"signed\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/einvoice/export",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "einvoice", "export"]
+            }
+          }
+        },
+        {
+          "name": "Download E-Invoice XML",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/xml" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/xml",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "xml"]
+            }
+          }
+        },
+        {
+          "name": "Get FACe B2G Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/face/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "face", "status"]
+            }
+          }
+        },
+        {
+          "name": "Submit to FACe B2G (Sandbox)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"sandbox\",\n  \"correo\": \"billing@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/face/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "face", "submit"]
+            }
+          }
+        },
+        {
+          "name": "Get TicketBAI Sandbox Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/ticketbai/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "ticketbai", "status"]
+            }
+          }
+        },
+        {
+          "name": "Submit to TicketBAI (Sandbox Preview)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sandbox\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/ticketbai/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "ticketbai", "submit"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Banking & Reconciliation",
+      "item": [
+        {
+          "name": "List Bank Accounts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/banking/accounts?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["banking", "accounts"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Bank Account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/banking/accounts/{{accountId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["banking", "accounts", "{{accountId}}"]
+            }
+          }
+        },
+        {
+          "name": "List Bank Transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/banking/transactions?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["banking", "transactions"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Create Manual Bank Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{accountId}}\",\n  \"amount\": -49.99,\n  \"currency\": \"EUR\",\n  \"date\": \"2026-10-15\",\n  \"description\": \"Cloud Hosting Subscription\",\n  \"category\": \"software\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/banking/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["banking", "transactions"]
+            }
+          }
+        },
+        {
+          "name": "Categorize Bank Transaction",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"software\",\n  \"notes\": \"Monthly SaaS infrastructure\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/banking/transactions/{{transactionId}}/categorize",
+              "host": ["{{baseUrl}}"],
+              "path": ["banking", "transactions", "{{transactionId}}", "categorize"]
+            }
+          }
+        },
+        {
+          "name": "Match Transaction to Invoice or Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"{{invoiceId}}\",\n  \"documentType\": \"invoice\",\n  \"notes\": \"Matched via bank reference\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/banking/transactions/{{transactionId}}/match",
+              "host": ["{{baseUrl}}"],
+              "path": ["banking", "transactions", "{{transactionId}}", "match"]
+            }
+          }
+        },
+        {
+          "name": "Get Reconciliation Suggestions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/banking/transactions/{{transactionId}}/suggestions?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["banking", "transactions", "{{transactionId}}", "suggestions"],
+              "query": [{ "key": "limit", "value": "5" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quotes",
+      "item": [
+        {
+          "name": "List Quotes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Create Draft Quote",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Acme Global SL\",\n  \"items\": [\n    {\n      \"description\": \"Architecture Advisory\",\n      \"quantity\": 5,\n      \"unitPrice\": 120.00\n    }\n  ],\n  \"validUntil\": \"2026-12-31\",\n  \"status\": \"draft\",\n  \"notes\": \"Reviewable draft quote.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 or 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "pm.test(\"Quote is strictly in draft status\", function () {",
+                  "    var json = pm.response.json();",
+                  "    var record = json.data || json;",
+                  "    pm.expect(record.status).to.eql('draft');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download Quote PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/pdf" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}/pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}", "pdf"]
+            }
+          }
         }
       ]
     },
@@ -145,6 +575,18 @@
           }
         },
         {
+          "name": "Get Expense",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/expenses/{{expenseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["expenses", "{{expenseId}}"]
+            }
+          }
+        },
+        {
           "name": "Create Expense",
           "request": {
             "method": "POST",
@@ -154,7 +596,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vendor\": \"Cloud Services Corp\",\n  \"amount\": 49.99,\n  \"vatRate\": 21,\n  \"category\": \"Software\",\n  \"status\": \"draft\"\n}"
+              "raw": "{\n  \"description\": \"Cloud infrastructure monthly invoice\",\n  \"vendor\": \"Cloud Services Corp\",\n  \"amount\": 49.99,\n  \"currency\": \"EUR\",\n  \"date\": \"2026-10-15\",\n  \"category\": \"software\",\n  \"taxDeductible\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/expenses",
@@ -166,7 +608,7 @@
       ]
     },
     {
-      "name": "Clients",
+      "name": "Clients, Products, Vendors & Deposits",
       "item": [
         {
           "name": "List Clients",
@@ -191,12 +633,295 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Acme Global Inc\",\n  \"taxId\": \"B12345678\",\n  \"email\": \"billing@acmeglobal.com\",\n  \"country\": \"ES\"\n}"
+              "raw": "{\n  \"name\": \"Acme Global SL\",\n  \"taxId\": \"B12345678\",\n  \"email\": \"billing@acmeglobal.example\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/clients",
               "host": ["{{baseUrl}}"],
               "path": ["clients"]
+            }
+          }
+        },
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Consulting Hour\",\n  \"unitPrice\": 120.00,\n  \"description\": \"Senior engineering advisory hour\",\n  \"taxRate\": 21\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            }
+          }
+        },
+        {
+          "name": "List Vendors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendors?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendors"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Create Vendor",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cloud Services Corp\",\n  \"email\": \"ar@cloudservices.example\",\n  \"taxId\": \"B87654321\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendors",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendors"]
+            }
+          }
+        },
+        {
+          "name": "List Deposits",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/deposits?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["deposits"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "POS (Point of Sale)",
+      "item": [
+        {
+          "name": "List POS Terminals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/terminals?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "terminals"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "List POS Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/products?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "products"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "List POS Sales",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/sales?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "sales"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "List POS Cash Sessions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pos/cash_sessions?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["pos", "cash_sessions"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stay (Vacation Rentals / PMS) & Kitchen (KDS)",
+      "item": [
+        {
+          "name": "List Stay Properties",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stay/properties?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["stay", "properties"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "List Stay Reservations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stay/reservations?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["stay", "reservations"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Sync Stay Channel",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stay/channels/{{channelId}}/sync",
+              "host": ["{{baseUrl}}"],
+              "path": ["stay", "channels", "{{channelId}}", "sync"]
+            }
+          }
+        },
+        {
+          "name": "List Kitchen Stations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kitchen/stations",
+              "host": ["{{baseUrl}}"],
+              "path": ["kitchen", "stations"]
+            }
+          }
+        },
+        {
+          "name": "List Kitchen Tickets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kitchen/tickets",
+              "host": ["{{baseUrl}}"],
+              "path": ["kitchen", "tickets"]
+            }
+          }
+        },
+        {
+          "name": "List Kitchen Menu Items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kitchen/menu-items",
+              "host": ["{{baseUrl}}"],
+              "path": ["kitchen", "menu-items"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks, Team & Gestoría",
+      "item": [
+        {
+          "name": "List Webhooks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks",
+              "host": ["{{baseUrl}}"],
+              "path": ["webhooks"]
+            }
+          }
+        },
+        {
+          "name": "Create Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Invoice Notifications\",\n  \"url\": \"https://example.com/webhooks/frihet\",\n  \"events\": [\"invoice.created\", \"invoice.paid\"],\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks",
+              "host": ["{{baseUrl}}"],
+              "path": ["webhooks"]
+            }
+          }
+        },
+        {
+          "name": "List Team Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/team/members?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["team", "members"],
+              "query": [{ "key": "limit", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Gestoría Consolidated AR Aging",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workspaceIds\": [\"{{workspaceId}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/gestoria/aging",
+              "host": ["{{baseUrl}}"],
+              "path": ["gestoria", "aging"]
             }
           }
         }

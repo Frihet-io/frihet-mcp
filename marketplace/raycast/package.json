@@ -36,7 +36,7 @@
       "type": "password",
       "required": true,
       "title": "Frihet API Key",
-      "description": "Generate an API key in your Frihet ERP settings (https://app.frihet.io/settings/api-keys)",
+      "description": "Generate an API key in your Frihet ERP settings (https://app.frihet.io/settings/api)",
       "placeholder": "fri_live_..."
     },
     {

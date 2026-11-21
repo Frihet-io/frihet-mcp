@@ -22,9 +22,9 @@ Frihet disponibles, indica cómo conectar o iniciar sesión desde **Customizatio
 en Antigravity (o ejecutando `/mcp` en Antigravity CLI). No pidas pegar claves,
 contraseñas ni tokens en la conversación.
 
-## Catálogo MCP (156 operaciones canónicas)
+## Catálogo MCP (158 operaciones canónicas)
 
-El catálogo de Frihet contiene **156 operaciones canónicas**. El servidor conectado
+El catálogo de Frihet contiene **158 operaciones canónicas**. El servidor conectado
 puede exponer un perfil agrupado o permisos específicos según el espacio de trabajo.
 Comprueba las herramientas disponibles, sus esquemas, recursos y metadatos de
 disponibilidad (`_meta["io.frihet/capability"]`) al comenzar y cuando falte una

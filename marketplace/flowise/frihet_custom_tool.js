@@ -46,7 +46,7 @@ module.exports = async function (input) {
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${apiKey}`,
-    'x-frihet-api-key': apiKey,
+    'X-API-Key': apiKey,
     'User-Agent': 'Frihet-Flowise-Tool/1.0.0',
   };
 

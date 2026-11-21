@@ -7,9 +7,9 @@ This directory contains public listing copy, official manifests, SDK toolkits, a
 - **npm Package:** `@frihet/mcp-server`
 - **MCP Server Identity:** `io.frihet/erp`
 - **Remote Streamable HTTP Endpoint:** `https://mcp.frihet.io/mcp`
-- **Canonical Catalogue:** 156 operations
-- **Local Full Surface:** 161 tool names, 11 resources, 10 prompts
-- **Grouped Remote Surface:** 164 tool names, 7 resources, 10 prompts
+- **Canonical Catalogue:** 158 operations
+- **Local Full Surface:** 163 tool names, 11 resources, 10 prompts
+- **Grouped Remote Surface:** 166 tool names, 7 resources, 10 prompts
 - **Safety Invariant:** All agent-triggered document creations are non-destructive and strictly in **`draft`** status; irreversible fiscal submissions (AEAT, VeriFactu, TicketBAI) and real-money movements require explicit human confirmation in Frihet ERP web dashboard.
 
 ---
@@ -40,7 +40,7 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 | **Docker MCP Registry** | `docker/mcp-registry#1711` | Docker Desktop & MCP Toolkit | Official containerized `@frihet/mcp-server` entry | **`SUBMITTED`** (PR #1711 open) |
 | **Meta Muse Connector** | `src/muse-profile.ts` | Meta Muse (candidate) | Curated 18-tool source profile | **`SOURCE_PREPARED`** (Profile and manifest) |
 | **Google Connected Apps** | `src/google-profile.ts` | Gemini & Google Search | Curated 18-tool profile, forced draft | **`PREVIEW_APPLIED`** (Form 46 preview access) |
-| **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (156 ops) / Draft invariant (`io.frihet/erp@2.0.2`) | **`PUBLISHED_VERIFIED`** |
+| **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (158 ops) / Draft invariant (`io.frihet/erp@2.0.2`) | **`PUBLISHED_VERIFIED`** |
 | **Vercel AI SDK** | `marketplace/vercel-ai/` | Next.js & TypeScript agents | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |
 | **Google Genkit** | `marketplace/genkit/` | Gemini & Firebase workflows | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |
 | **Microsoft AutoGen** | `marketplace/autogen/` | Python enterprise multi-agent | v0.4+ / v0.2 compatible, Pydantic validation | **`CONTRACT_TESTED`** |
@@ -53,7 +53,7 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 | **Dify Tool Provider** | `marketplace/dify/` | Enterprise LLM workflows | Curated YAML tools, draft-only invariant | **`CONTRACT_TESTED`** |
 | **Flowise Custom Tool** | `marketplace/flowise/` | Drag-and-drop LangChain canvas | JavaScript tool node, draft-only invariant | **`CONTRACT_TESTED`** |
 | **Make.com (Integromat)** | `marketplace/make/` | Visual SMB workflow scenarios | App definition with canonical routes | **`CONTRACT_TESTED`** |
-| **Postman Official Collection** | `marketplace/postman/` | API developers & integration QA | Collection v2.1.0 with canonical tests & env | **`CONTRACT_TESTED`** |
+| **Postman Official Collection** | `marketplace/postman/` | API developers & integration QA | Collection v2.1.0 (52 requests, 10 folders, `X-API-Key` + `Idempotency-Key`) | **`CONTRACT_TESTED`** |
 | **Cursor IDE Rules** | `marketplace/cursor/` | Cursor Composer/Agent | `.cursor/mcp.json` & `.mdc` system rules | **`CONTRACT_TESTED`** |
 | **Windsurf IDE (Codeium)** | `marketplace/windsurf/` | Cascade Agent & Composer | `mcp_config.json` & `.windsurfrules` | **`CONTRACT_TESTED`** |
 | **Google Antigravity Plugin** | `marketplace/antigravity/` | Antigravity App, CLI & IDE | `plugin.json`, OAuth MCP, 8 skills, agent & rules | **`SUBMITTED`** (Partner intake & `agy plugin validate --strict`) |

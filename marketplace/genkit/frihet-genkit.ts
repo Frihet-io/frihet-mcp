@@ -56,7 +56,7 @@ export function createFrihetGenkitTools(registrar?: GenkitToolRegistrar, config:
     };
     if (apiKey) {
       headers['Authorization'] = `Bearer ${apiKey}`;
-      headers['x-frihet-api-key'] = apiKey;
+      headers['X-API-Key'] = apiKey;
     }
 
     if (['POST', 'PATCH', 'DELETE'].includes(method)) {

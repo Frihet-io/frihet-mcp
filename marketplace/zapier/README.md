@@ -2,7 +2,7 @@
 
 This package provides the declarative schema definitions (`definition.json`) for connecting **Frihet ERP** to the [Zapier Developer Platform](https://platform.zapier.com/) and the **Zapier MCP AI Actions** bridge.
 
-> **Status:** Zapier Platform Schema & Action Definition (`CONTRACT_TESTED`).
+> **Status:** Zapier Platform Schema & Action Definition (`CONTRACT_TESTED`). Frihet's public Zapier app is live in the [Zapier App Directory](https://zapier.com/apps/frihet/integrations).
 > **Relationship to Backend Zapier Integration ([berthelius/Frihet-ERP#2101](https://github.com/berthelius/Frihet-ERP/issues/2101)):**
 > Server-side webhook delivery and HMAC-SHA256 event signing are implemented in Frihet ERP backend services (`functions/src/webhooks/zapier.ts`). This package provides the complementary client-facing Zapier CLI schema declaring those triggers and governed draft actions for the Zapier partner portal.
 
