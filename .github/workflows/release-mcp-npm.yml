@@ -512,13 +512,32 @@ jobs:
         if: inputs.release_target == 'npm-and-worker'
         # Wrangler returns names only; Cloudflare never exposes secret values.
         # The Langfuse trio is optional in Env and is therefore not an
-        # availability prerequisite. OAuth and session secrets are mandatory.
+        # availability prerequisite. OAuth and session secrets are mandatory,
+        # and the Full OAuth credential name is derived from the checked-in
+        # contract (never the OpenAI-only FRIHET_OAUTH_API_KEY).
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: workers/remote-mcp
         run: |
           set -euo pipefail
+          CONTRACT=full-oauth-release-contract.json
+          git ls-files --error-unmatch "$CONTRACT" >/dev/null
+          if ! FULL_OAUTH_CREDENTIAL_NAME="$(jq -er '
+            select(
+              .schemaVersion == 1
+              and .status == "ready"
+              and .accessProfile == "full"
+              and .oauthResource == "https://mcp.frihet.io"
+              and (.credentialName | type == "string" and test("^[A-Z][A-Z0-9_]{0,127}$"))
+              and .credentialName != "FRIHET_OAUTH_API_KEY"
+              and .sharedOpenAiCredentialAllowed == false
+            )
+            | .credentialName
+          ' "$CONTRACT")"; then
+            echo "::error::full-oauth-release-contract.json does not declare a valid separate Full OAuth credentialName"
+            exit 1
+          fi
           SECRET_INVENTORY="$(./node_modules/.bin/wrangler secret list --env "" --format json)"
           if ! jq -e 'type == "array" and all(.[]; (.name | type) == "string")' \
             <<< "$SECRET_INVENTORY" >/dev/null; then
@@ -530,7 +549,7 @@ jobs:
             COOKIE_ENCRYPTION_KEY \
             FIREBASE_PROJECT_ID \
             FRIHET_API_BASE \
-            FRIHET_OAUTH_API_KEY; do
+            "$FULL_OAUTH_CREDENTIAL_NAME"; do
             if ! jq -e --arg required "$SECRET_NAME" \
               'any(.[]; .name == $required)' <<< "$SECRET_INVENTORY" >/dev/null; then
               MISSING+=("$SECRET_NAME")
@@ -538,6 +557,10 @@ jobs:
           done
           if [ "${#MISSING[@]}" -ne 0 ]; then
             printf '::error::required full-profile Worker secret name is absent: %s\n' "${MISSING[@]}"
+            exit 1
+          fi
+          if jq -e 'any(.[]; .name == "FRIHET_OAUTH_API_KEY")' <<< "$SECRET_INVENTORY" >/dev/null; then
+            echo "::error::full-profile Worker must not carry the OpenAI-only FRIHET_OAUTH_API_KEY secret"
             exit 1
           fi
           echo "OK — required full-profile Worker secret names are present"
@@ -644,7 +667,8 @@ jobs:
     name: Verify npm registry bytes
     needs: [preflight, build-pack, publish-npm]
     runs-on: ubuntu-latest
-    environment: npm-release
+    # Read-only public registry verification (no secrets, no mutations);
+    # intentionally does not bind the protected npm-release environment.
     steps:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -839,7 +863,8 @@ jobs:
     name: Verify full-profile Worker provenance (releaseSha)
     needs: [preflight, deploy-worker]
     runs-on: ubuntu-latest
-    environment: npm-release
+    # Read-only public /health verification (no secrets, no mutations);
+    # intentionally does not bind the protected npm-release environment.
     steps:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
