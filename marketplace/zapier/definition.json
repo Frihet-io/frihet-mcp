@@ -11,7 +11,7 @@
       "method": "GET",
       "headers": {
         "Authorization": "Bearer {{bundle.authData.apiKey}}",
-        "x-frihet-api-key": "{{bundle.authData.apiKey}}"
+        "X-API-Key": "{{bundle.authData.apiKey}}"
       }
     },
     "fields": [
@@ -20,7 +20,7 @@
         "type": "string",
         "required": true,
         "label": "API Key",
-        "helpText": "Create an API key in Frihet (Settings -> Developers -> API Keys)."
+        "helpText": "Create an API key in Frihet under Settings -> API (https://app.frihet.io/settings/api)."
       }
     ]
   },
@@ -37,9 +37,13 @@
         "performSubscribe": {
           "url": "https://api.frihet.io/v1/webhooks",
           "method": "POST",
+          "headers": {
+            "Idempotency-Key": "{{bundle.meta.id}}"
+          },
           "body": {
-            "targetUrl": "{{bundle.targetUrl}}",
-            "event": "invoice.paid"
+            "name": "Zapier — New Paid Invoice",
+            "url": "{{bundle.targetUrl}}",
+            "events": ["invoice.paid"]
           }
         },
         "performUnsubscribe": {
@@ -60,10 +64,18 @@
         "performSubscribe": {
           "url": "https://api.frihet.io/v1/webhooks",
           "method": "POST",
+          "headers": {
+            "Idempotency-Key": "{{bundle.meta.id}}"
+          },
           "body": {
-            "targetUrl": "{{bundle.targetUrl}}",
-            "event": "invoice.created"
+            "name": "Zapier — New Invoice Created",
+            "url": "{{bundle.targetUrl}}",
+            "events": ["invoice.created"]
           }
+        },
+        "performUnsubscribe": {
+          "url": "https://api.frihet.io/v1/webhooks/{{bundle.subscribeData.id}}",
+          "method": "DELETE"
         }
       }
     }
@@ -80,8 +92,12 @@
         "perform": {
           "url": "https://api.frihet.io/v1/invoices",
           "method": "POST",
+          "headers": {
+            "Idempotency-Key": "{{bundle.meta.id}}"
+          },
           "body": {
             "clientId": "{{bundle.inputData.clientId}}",
+            "clientName": "{{bundle.inputData.clientName}}",
             "items": "{{bundle.inputData.items}}",
             "status": "draft"
           }
@@ -99,11 +115,13 @@
         "perform": {
           "url": "https://api.frihet.io/v1/clients",
           "method": "POST",
+          "headers": {
+            "Idempotency-Key": "{{bundle.meta.id}}"
+          },
           "body": {
             "name": "{{bundle.inputData.name}}",
             "email": "{{bundle.inputData.email}}",
-            "taxId": "{{bundle.inputData.taxId}}",
-            "country": "{{bundle.inputData.country}}"
+            "taxId": "{{bundle.inputData.taxId}}"
           }
         }
       }

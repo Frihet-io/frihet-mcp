@@ -12,7 +12,7 @@ Official enterprise tool integration for [Dify](https://dify.ai), enabling LLM-p
 ### Option A: Cloud / Workspace Integration
 1. In your Dify Workspace, navigate to **Tools** > **Custom Tools**.
 2. Select **Import from YAML/OpenAPI** and upload `provider.yaml`.
-3. Provide your `FRIHET_API_KEY` from [https://app.frihet.io/settings/api-keys](https://app.frihet.io/settings/api-keys).
+3. Provide your `FRIHET_API_KEY` from [https://app.frihet.io/settings/api](https://app.frihet.io/settings/api).
 
 ### Option B: Self-Hosted Dify Deployment
 1. Copy the `marketplace/dify/` folder into your Dify backend's `api/core/tools/provider/builtin/frihet/`.

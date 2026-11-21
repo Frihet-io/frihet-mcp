@@ -60,7 +60,7 @@ class FrihetApi:
         }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-            headers["x-frihet-api-key"] = self.api_key
+            headers["X-API-Key"] = self.api_key
 
         if method in ("POST", "PATCH", "DELETE"):
             headers["Idempotency-Key"] = str(uuid.uuid4())

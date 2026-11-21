@@ -38,7 +38,7 @@ The server advertises its OAuth metadata at `https://mcp.frihet.io/.well-known/o
 
 ## Option B — npm (local stdio)
 
-Requires Node.js >= 20. No global install needed via `npx`.
+Requires Node.js 22+ (`^22.23.4 || ^24.22.1 || ^26.12.1`). No global install needed via `npx`.
 
 ```bash
 npx -y @frihet/mcp-server
@@ -101,7 +101,7 @@ Expected: structured list with invoice IDs, clients, amounts, and status.
 
 ## What you get
 
-156 canonical catalogue operations across 20+ domains: invoices, expenses, clients, CRM, quotes, deposits, banking, fiscal, e-invoicing, GL audit, vacation rentals, POS, time tracking, HR, payroll, period close, and gestoría. Alias and discovery names are profile-specific and counted separately.
+158 canonical catalogue operations across 20+ domains: invoices, expenses, clients, CRM, quotes, deposits, banking, fiscal, e-invoicing, GL audit, vacation rentals, POS, time tracking, HR, payroll, period close, and gestoría. Alias and discovery names are profile-specific and counted separately.
 
 The local package serves 11 resources and 10 prompts. The grouped remote profile serves 7 static resources and 10 prompts; the OpenAI-reviewed profile serves neither.
 

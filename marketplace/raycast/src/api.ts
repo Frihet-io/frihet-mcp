@@ -48,7 +48,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${apiKey}`,
-    'x-frihet-api-key': apiKey,
+    'X-API-Key': apiKey,
     'User-Agent': 'Frihet-Raycast-Extension/1.0.0',
   };
 

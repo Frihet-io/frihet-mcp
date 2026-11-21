@@ -2,7 +2,7 @@
 
 Native [Raycast](https://www.raycast.com/) extension for **Frihet ERP**. Manage customer invoices, record deductible expenses, and check real-time European tax and financial health summaries directly from your macOS command bar.
 
-> **Status:** Fully implemented Raycast Extension source package (`CONTRACT_TESTED`), ready for local developer mode (`ray develop`) or submission to the official Raycast Store (`ray publish`).
+> **Status:** Reference Raycast Extension source package (`CONTRACT_TESTED`). The published Raycast Store extension is live at [raycast.com/viktor_berthelius/frihet](https://raycast.com/viktor_berthelius/frihet).
 
 ---
 
@@ -63,5 +63,5 @@ npm run build
 ## Configuration & Credentials
 
 Configured via Raycast Preferences > Extensions > Frihet ERP:
-- `apiKey`: Frihet API Key (`fri_live_...`), obtained at [https://app.frihet.io/settings/api-keys](https://app.frihet.io/settings/api-keys).
+- `apiKey`: Frihet API Key (`fri_live_...`), obtained at [https://app.frihet.io/settings/api](https://app.frihet.io/settings/api).
 - `baseUrl`: API base URL (defaults to production `https://api.frihet.io/v1`).

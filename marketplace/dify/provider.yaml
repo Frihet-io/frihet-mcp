@@ -20,8 +20,8 @@ credentials_for_provider:
       en_US: fri_live_...
       es_ES: fri_live_...
     help:
-      en_US: Generate an API key in your Frihet ERP settings at https://app.frihet.io/settings/api-keys
-      es_ES: Genera tu clave API en los ajustes de Frihet ERP en https://app.frihet.io/settings/api-keys
+      en_US: Generate an API key in your Frihet ERP settings at https://app.frihet.io/settings/api
+      es_ES: Genera tu clave API en los ajustes de Frihet ERP en https://app.frihet.io/settings/api
 
 tools:
   - name: get_business_context
