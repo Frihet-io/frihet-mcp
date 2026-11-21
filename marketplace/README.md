@@ -25,7 +25,10 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 
 | Platform / Surface | Format / Location | Target Surface | Safety Boundary | Verified Lifecycle State |
 |---|---|---|---|---|
-| **Stripe App Marketplace** | `marketplace.stripe.com/apps/frihet` | Global Stripe merchants | App 1.0.4 approved, one-click invoicing | **`PUBLISHED_VERIFIED`** |
+| **Stripe App Marketplace** | [Stripe App Marketplace](https://marketplace.stripe.com/apps/frihet) | Global Stripe merchants | App 1.0.4 approved, one-click invoicing | **`PUBLISHED_VERIFIED`** |
+| **Shopify App Store** | [Shopify App Store](https://apps.shopify.com/frihet-erp) | Shopify merchants | Read-only 4 scopes (`orders`, `customers`, `products`, `inventory`) | **`PUBLISHED_VERIFIED`** |
+| **Chrome Web Store** | [Chrome Web Store](https://chromewebstore.google.com/detail/frihet/omddbkdfcfhhnoiaehahhkfpbljhpafj) | Chrome desktop users | First-party OAuth 2.0 + PKCE side panel, explicit review before saving | **`PUBLISHED_VERIFIED`** |
+| **Hermes Agent** | `Frihet-io/hermes-frihet` | Hermes Agent users | Thin plugin (`v0.2.2`), delegates all calls to canonical MCP | **`PUBLISHED_VERIFIED`** (`NousResearch/hermes-agent#155026` merged) |
 | **Cursor Directory** | `cursor.directory/plugins/mcp-frihet` | Cursor IDE developers | `.cursor-plugin/marketplace.json` | **`PUBLISHED_VERIFIED`** |
 | **n8n Community Node** | `n8n-nodes-frihet@1.0.2` | n8n self-hosted & cloud | Sigstore provenance, governed credentials | **`PUBLISHED_VERIFIED`** |
 | **OpenAI ChatGPT Store** | `marketplace/openai/` | ChatGPT Plus & Team | 33-tool profile, draft-only mutations | **`PUBLISHED_VERIFIED`** |
@@ -34,16 +37,17 @@ Lifecycle states follow a strict, evidence-based taxonomy:
 | **Smithery Registry** | `smithery.yaml` | AI agent developers | Full stdio / CLI configuration | **`PUBLISHED_VERIFIED`** |
 | **Anthropic Claude Directory** | `marketplace/anthropic/` | Claude Desktop & Enterprise | 132 tools, Sanitized PII | **`SUBMITTED`** (PR open, CI green) |
 | **Composio Toolkit** | `Remote MCP / REST` | 1500+ agent ecosystem | Full OpenAPI & MCP profile, draft invariant | **`SUBMITTED`** (Email & web form verified) |
+| **Docker MCP Registry** | `docker/mcp-registry#1711` | Docker Desktop & MCP Toolkit | Official containerized `@frihet/mcp-server` entry | **`SUBMITTED`** (PR #1711 open) |
 | **Meta Muse Connector** | `src/muse-profile.ts` | Meta Muse (candidate) | Curated 18-tool source profile | **`SOURCE_PREPARED`** (Profile and manifest) |
 | **Google Connected Apps** | `src/google-profile.ts` | Gemini & Google Search | Curated 18-tool profile, forced draft | **`PREVIEW_APPLIED`** (Form 46 preview access) |
-| **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (156 ops) / Draft invariant | **`PUBLISHED_VERIFIED`** |
+| **Official MCP Registry** | `server.json` | MCP ecosystem standard | Full (156 ops) / Draft invariant (`io.frihet/erp@2.0.2`) | **`PUBLISHED_VERIFIED`** |
 | **Vercel AI SDK** | `marketplace/vercel-ai/` | Next.js & TypeScript agents | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |
 | **Google Genkit** | `marketplace/genkit/` | Gemini & Firebase workflows | Curated 10 tools, Zod schemas, Idempotency | **`CONTRACT_TESTED`** |
 | **Microsoft AutoGen** | `marketplace/autogen/` | Python enterprise multi-agent | v0.4+ / v0.2 compatible, Pydantic validation | **`CONTRACT_TESTED`** |
 | **LangChain / LangGraph** | `marketplace/langchain/` | LangGraph HITL pipelines | BaseTool definitions, Idempotency, Redaction | **`CONTRACT_TESTED`** |
 | **CrewAI** | `marketplace/crewai/` | Role-based autonomous crews | BaseTool definitions, Idempotency, Redaction | **`CONTRACT_TESTED`** |
 | **LlamaIndex** | `marketplace/llamaindex/` | Financial RAG & data agents | ToolSpec & FunctionTools, Pydantic validation | **`CONTRACT_TESTED`** |
-| **Zapier Platform Schema** | `marketplace/zapier/` | Zapier Platform CLI & AI Actions | Declarative triggers/actions schema (#2101) | **`CONTRACT_TESTED`** |
+| **Zapier** | [Zapier App Directory](https://zapier.com/apps/frihet/integrations) | Zapier workflows & AI Actions | Public app (general availability), governed triggers & actions (`marketplace/zapier/`) | **`PUBLISHED_VERIFIED`** |
 | **Google Workspace Add-on** | `googleapps_sdk` | Gmail & Google Drive | OAuth sensitive scope approved, 6 canonical scopes | **`SUBMITTED`** (Marketplace SDK under review) |
 | **Raycast Extension** | [Raycast Store](https://raycast.com/viktor_berthelius/frihet) | macOS founders & engineers | 5 commands, API client, tenant isolation, read-only | **`PUBLISHED_VERIFIED`** ([Store Listing](https://raycast.com/viktor_berthelius/frihet), PR #33495 merged) |
 | **Dify Tool Provider** | `marketplace/dify/` | Enterprise LLM workflows | Curated YAML tools, draft-only invariant | **`CONTRACT_TESTED`** |
