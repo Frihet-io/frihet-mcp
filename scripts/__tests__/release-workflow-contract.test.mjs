@@ -848,6 +848,20 @@ test("Release workflow — hostile case 7: missing protected environment (declar
       `${id} must be protected by the npm-release environment`,
     );
   }
+  for (const id of ["verify-npm", "verify-worker"]) {
+    const stage = findStage(stages, id);
+    assert.ok(stage, `${id} must exist`);
+    assert.doesNotMatch(
+      stage.body,
+      /^    environment:/m,
+      `${id} is read-only public verification and must not bind the protected npm-release environment`,
+    );
+    assert.doesNotMatch(
+      stage.body,
+      /\bsecrets\./,
+      `${id} must not consume secrets`,
+    );
+  }
 
   const authorize = findStage(stages, "authorize-release");
   assert.ok(authorize, "authorize-release must exist");
@@ -909,7 +923,6 @@ test("Release workflow — hostile case 7: missing protected environment (declar
     "COOKIE_ENCRYPTION_KEY",
     "FIREBASE_PROJECT_ID",
     "FRIHET_API_BASE",
-    "FRIHET_OAUTH_API_KEY",
   ]) {
     assert.match(
       authorize.body,
@@ -917,6 +930,26 @@ test("Release workflow — hostile case 7: missing protected environment (declar
       `authorization must require the ${secretName} Worker secret name`,
     );
   }
+  assert.match(
+    authorize.body,
+    /CONTRACT=full-oauth-release-contract\.json/,
+    "authorization must derive the Full OAuth credential name from full-oauth-release-contract.json",
+  );
+  assert.match(
+    authorize.body,
+    /\.credentialName != "FRIHET_OAUTH_API_KEY"/,
+    "authorization must refuse FRIHET_OAUTH_API_KEY as the Full OAuth credential name",
+  );
+  assert.match(
+    authorize.body,
+    /"\$FULL_OAUTH_CREDENTIAL_NAME"/,
+    "authorization must require the contract-declared Full OAuth Worker secret name",
+  );
+  assert.match(
+    authorize.body,
+    /full-profile Worker must not carry the OpenAI-only FRIHET_OAUTH_API_KEY secret/,
+    "authorization must fail closed if the Full Worker carries the OpenAI-only FRIHET_OAUTH_API_KEY secret",
+  );
   assert.match(
     authorize.body,
     /required full-profile Worker secret name is absent/,
@@ -929,6 +962,105 @@ test("Release workflow — hostile case 7: missing protected environment (declar
       `${id} must depend directly on the guarded authorization job`,
     );
   }
+
+  // Execute the actual authorize-release secret-inventory step against synthetic
+  // contract + Wrangler inventory cases to prove contract/inventory parity.
+  const secretStep = authorize.body
+    .split("      - name: Assert full-profile Worker runtime secret names\n")[1]
+    ?.split("      - name:")[0];
+  assert.ok(secretStep, "Assert full-profile Worker runtime secret names step must exist");
+  const secretShell = secretStep.split("        run: |\n")[1].replace(/^          /gm, "");
+  const runSecretStep = (contractObj, inventoryJson, wranglerShouldRun = true) => {
+    const dir = mkdtempSync(join(tmpdir(), "full-auth-secrets-"));
+    try {
+      const workerDir = join(dir, "workers", "remote-mcp");
+      mkdirSync(join(workerDir, "node_modules", ".bin"), { recursive: true });
+      const marker = join(dir, "wrangler-called");
+      const wranglerStub = join(workerDir, "node_modules", ".bin", "wrangler");
+      writeFileSync(
+        wranglerStub,
+        `#!/usr/bin/env bash\ntouch "${marker}"\nprintf '%s\\n' '${inventoryJson}'\n`,
+        { mode: 0o755 },
+      );
+      chmodSync(wranglerStub, 0o755);
+      writeFileSync(
+        join(workerDir, "full-oauth-release-contract.json"),
+        JSON.stringify(contractObj, null, 2),
+      );
+      const init = spawnSync("git", ["init", "-q"], { cwd: dir, encoding: "utf8" });
+      assert.equal(init.status, 0, init.stderr);
+      const add = spawnSync("git", ["add", "workers/remote-mcp/full-oauth-release-contract.json"], {
+        cwd: dir,
+        encoding: "utf8",
+      });
+      assert.equal(add.status, 0, add.stderr);
+      const res = spawnSync("bash", ["-c", secretShell], { cwd: workerDir, encoding: "utf8" });
+      assert.equal(existsSync(marker), wranglerShouldRun, "unexpected Wrangler invocation state");
+      return res;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  const holdContract = JSON.parse(readFileSync(FULL_OAUTH_RELEASE_CONTRACT, "utf8"));
+  const readyContract = {
+    schemaVersion: 1,
+    status: "ready",
+    reason: null,
+    accessProfile: "full",
+    oauthResource: "https://mcp.frihet.io",
+    authorityUrl: "https://api.frihet.io/oauth/full/provision",
+    credentialName: "FRIHET_FULL_OAUTH_API_KEY",
+    sharedOpenAiCredentialAllowed: false,
+  };
+  const holdRes = runSecretStep(holdContract, "[]", false);
+  assert.notEqual(holdRes.status, 0, "hold contract must fail closed before Wrangler");
+
+  const sharedCredRes = runSecretStep(
+    { ...readyContract, credentialName: "FRIHET_OAUTH_API_KEY" },
+    "[]",
+    false,
+  );
+  assert.notEqual(sharedCredRes.status, 0, "FRIHET_OAUTH_API_KEY in contract must fail closed");
+
+  const validInventory = JSON.stringify([
+    { name: "COOKIE_ENCRYPTION_KEY" },
+    { name: "FIREBASE_PROJECT_ID" },
+    { name: "FRIHET_API_BASE" },
+    { name: "FRIHET_FULL_OAUTH_API_KEY" },
+  ]);
+  const passRes = runSecretStep(readyContract, validInventory, true);
+  assert.equal(passRes.status, 0, `separate Full credential must pass:\n${passRes.stdout}${passRes.stderr}`);
+
+  const missingFullCred = JSON.stringify([
+    { name: "COOKIE_ENCRYPTION_KEY" },
+    { name: "FIREBASE_PROJECT_ID" },
+    { name: "FRIHET_API_BASE" },
+  ]);
+  const missingRes = runSecretStep(readyContract, missingFullCred, true);
+  assert.notEqual(missingRes.status, 0, "missing separate Full credential must fail closed");
+  assert.match(
+    `${missingRes.stdout}${missingRes.stderr}`,
+    /required full-profile Worker secret name is absent: FRIHET_FULL_OAUTH_API_KEY/,
+  );
+
+  const contaminatedInventory = JSON.stringify([
+    { name: "COOKIE_ENCRYPTION_KEY" },
+    { name: "FIREBASE_PROJECT_ID" },
+    { name: "FRIHET_API_BASE" },
+    { name: "FRIHET_FULL_OAUTH_API_KEY" },
+    { name: "FRIHET_OAUTH_API_KEY" },
+  ]);
+  const contaminatedRes = runSecretStep(readyContract, contaminatedInventory, true);
+  assert.notEqual(
+    contaminatedRes.status,
+    0,
+    "Full Worker carrying OpenAI-only FRIHET_OAUTH_API_KEY must fail closed",
+  );
+  assert.match(
+    `${contaminatedRes.stdout}${contaminatedRes.stderr}`,
+    /full-profile Worker must not carry the OpenAI-only FRIHET_OAUTH_API_KEY secret/,
+  );
 });
 
 test("Release workflow — hostile case 8: token fallback (id-token ONLY, NPM_TOKEN rejected)", () => {

@@ -31,7 +31,9 @@ const BUSINESS_DATA = {
   customerName: "Ada Lovelace",
   email: "ada.private@example.test",
   address: "42 Private Street",
-  salary: 98765,
+  // Non-hex decimal sentinel (>2 digits before `.`): cannot collide with
+  // crypto.randomUUID() hex segments, ISO-8601 timestamps, ports, or durationMs.
+  salary: 987654321.45,
   invoiceLine: "Confidential restructuring engagement",
   freeText: "Owner-only commercial negotiation notes",
   apiKey: "fri_PRIVATE_KEY_MATERIAL",
