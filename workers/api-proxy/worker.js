@@ -452,7 +452,7 @@ export default {
       url.search === "" &&
       (request.method === "GET" || request.method === "HEAD")
     ) {
-      const challengeIsActive = Date.now() < Date.parse("2026-11-20T20:52:00.000Z");
+      const challengeIsActive = Date.now() < Date.parse("2026-12-20T20:52:00.000Z");
       return new Response(
         challengeIsActive && request.method === "GET"
           ? "muse-challenge=e664c1dbdfd917b8d656f1f4c7e0dd57d34d73919ec25b5015c18e0a8267b590"

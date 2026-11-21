@@ -6,7 +6,7 @@ const CHALLENGE = "e664c1dbdfd917b8d656f1f4c7e0dd57d34d73919ec25b5015c18e0a8267b
 const PATH = `/.well-known/muse-challenge/${CHALLENGE}`;
 const URL = `https://api.frihet.io${PATH}`;
 const BODY = `muse-challenge=${CHALLENGE}`;
-const EXPIRES_AT = Date.parse("2026-11-20T20:52:00.000Z");
+const EXPIRES_AT = Date.parse("2026-12-20T20:52:00.000Z");
 
 test("Muse proof GET is public, exact, uncached, and never calls upstream", async (t) => {
   t.mock.method(Date, "now", () => EXPIRES_AT - 1);
