@@ -3,14 +3,14 @@
   "generatedBy": "scripts/conformance/run-phase0.mjs",
   "deterministic": "No timestamps, ports, session ids or durations are recorded — rerunning on the same SHA must produce a byte-identical file.",
   "versions": {
-    "serverSha": "298aa3147cf2e207dd73362d8300ddf0afb4b958",
-    "serverPackageVersion": "1.16.6",
-    "sdkVersion": "1.30.0",
-    "sdkDeclaredRange": "^1.27.0",
+    "serverSha": "3ff3840e57288eb4143562b4c450ddd7282ba22d",
+    "serverPackageVersion": "2.0.2",
+    "sdkVersion": "1.32.2",
+    "sdkDeclaredRange": "1.32.2",
     "protocolVersion": "2025-11-25",
     "conformanceVersion": "0.1.16",
     "inspectorVersion": "2.3.0",
-    "nodeVersion": "v22.22.2"
+    "nodeVersion": "v22.23.4"
   },
   "harnessIntegrity": {
     "conformance": "sha512-GI7qiN0r39/MH2srVUR3AXaEN0YLCro20lIBbnvc1frBhszenxvUifBuTzxeVQVagILfBzCIcnungUOma8OrgA==",
@@ -33,7 +33,7 @@
     },
     "serverInfoName": "frihet-erp",
     "inventoryCounts": {
-      "tools": 162,
+      "tools": 163,
       "resources": 11,
       "prompts": 10
     }
