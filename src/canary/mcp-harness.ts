@@ -14,6 +14,10 @@
  * Zero production writes. Zero credential leaks.
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -22,6 +26,15 @@ import { DemoFrihetClient } from "../demo-client.js";
 import { registerMcpSurface, localMcpSurfaceComposition } from "../server-composition.js";
 import { CAPABILITY_META_KEY } from "../capability-truth.js";
 import { FISCAL_MODELO_ALIASES } from "../fiscal-aliases.js";
+
+const PKG_VERSION: string = (() => {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json");
+    return JSON.parse(readFileSync(pkgPath, "utf8")).version as string;
+  } catch {
+    return "0.0.0";
+  }
+})();
 
 export const HARNESS_CONTRACT_VERSION = 1;
 export const INSPECTOR_PINNED_VERSION = "2.3.0";
@@ -100,7 +113,7 @@ export async function runMcpBaseline(): Promise<McpBaselineReport> {
   const demoClient = new DemoFrihetClient();
   const server = new McpServer({
     name: "frihet-erp",
-    version: "1.16.6",
+    version: PKG_VERSION,
     description: "AI-native MCP server for Frihet ERP",
   });
 

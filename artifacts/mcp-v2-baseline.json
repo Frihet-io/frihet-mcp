@@ -5,12 +5,12 @@
   "protocolVersion": null,
   "serverInfo": {
     "name": "frihet-erp",
-    "version": "1.16.6",
+    "version": "2.0.2",
     "description": "AI-native MCP server for Frihet ERP"
   },
   "summary": {
-    "totalTools": 162,
-    "canonicalOperations": 157,
+    "totalTools": 163,
+    "canonicalOperations": 158,
     "fiscalAliases": 5,
     "resources": 11,
     "prompts": 10,
@@ -43,7 +43,7 @@
       "name": "Exhaustive Tool Enumeration",
       "category": "tools",
       "status": "PASS",
-      "detail": "Enumerated 162 tools (157 canonical + 5 aliases)"
+      "detail": "Enumerated 163 tools (158 canonical + 5 aliases)"
     },
     {
       "id": "tools.canonical_names",
@@ -190,30 +190,35 @@
     {
       "name": "anomaly_list",
       "title": "List Anomalies",
-      "description": "List HR / operational / financial anomalies detected by the system. Filter by type (duplicate_clock_in, overtime_spike, missing_clock_out, expense_outlier, etc.), severity (low/medium/high/critical), or period. Useful for daily HR review and compliance audits. / Lista anomalias detectadas (RRHH/operativas/financieras) con filtros opcionales.",
+      "description": "List HR / operational / financial anomalies detected by the system. Filter by type (daily_exceeded, weekly_exceeded, annual_approaching, annual_exceeded, missing_break), severity (warning/critical), or period. Anomalies are COMPUTE-ON-READ over the live attendance records (Art.34/35 ET overtime engine) — there is no stored anomalies collection. Useful for daily HR review and compliance audits. / Lista anomalias detectadas (RRHH/operativas/financieras) con filtros opcionales.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "type": {
             "description": "Filter by anomaly type slug / Tipo",
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "daily_exceeded",
+              "weekly_exceeded",
+              "annual_approaching",
+              "annual_exceeded",
+              "missing_break"
+            ]
           },
           "severity": {
             "description": "Filter by severity / Severidad",
             "type": "string",
             "enum": [
-              "low",
-              "medium",
-              "high",
+              "warning",
               "critical"
             ]
           },
           "from": {
-            "description": "Period start ISO 8601 / Inicio",
+            "description": "Period start ISO 8601 (YYYY-MM-DD) / Inicio",
             "type": "string"
           },
           "to": {
-            "description": "Period end ISO 8601 / Fin",
+            "description": "Period end ISO 8601 (YYYY-MM-DD) / Fin",
             "type": "string"
           },
           "limit": {
@@ -250,27 +255,41 @@
     {
       "name": "apply_deposit",
       "title": "Apply Deposit",
-      "description": "Apply a deposit to an invoice or mark it as used. Transitions the deposit status to 'applied'. Example: id='dep_abc123', invoiceId='inv_xyz' / Aplica un deposito a una factura o lo marca como utilizado.",
+      "description": "Apply a deposit to an invoice or mark it as used. Transitions the deposit status to 'applied'. ERP requires invoiceId + invoiceNumber + amount on the body; id is the deposit ID; notes is not writable. Example: id='dep_abc123', invoiceId='inv_xyz', invoiceNumber='F-2026-007', amount=150 / Aplica un deposito a una factura o lo marca como utilizado. Requiere invoiceId, invoiceNumber y amount; notes no se puede guardar.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "id": {
-            "description": "Deposit ID / ID del deposito",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "description": "Deposit ID / ID del deposito"
           },
           "invoiceId": {
-            "description": "Invoice ID to apply the deposit to / ID de la factura a la que aplicar el deposito",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Invoice ID to apply the deposit to / ID de la factura a la que aplicar el deposito"
           },
-          "notes": {
-            "description": "Application notes / Notas de aplicacion",
-            "type": "string"
+          "invoiceNumber": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Invoice number (document number) the deposit applies to / Numero de la factura"
+          },
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Amount of the deposit to apply in EUR / Importe del deposito a aplicar en EUR"
           }
         },
         "required": [
-          "id"
+          "id",
+          "invoiceId",
+          "invoiceNumber",
+          "amount"
         ],
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
       },
       "hasOutputSchema": true,
       "annotations": {
@@ -291,13 +310,13 @@
     {
       "name": "apply_late_fee",
       "title": "Apply Late Fee",
-      "description": "Apply late payment interest to an overdue invoice. Calculates interest based on EU Late Payment Directive (8% default) or auto-calculates from days overdue. Creates a debit note linked to the original invoice. / Aplica intereses de demora a una factura vencida. Calcula intereses segun la Directiva Europea de Morosidad (8% por defecto) o los calcula automaticamente a partir de los dias de retraso. Crea una nota de debito vinculada a la factura original.",
+      "description": "Apply late payment interest flags to an overdue invoice. Calculates interest based on EU Late Payment Directive (8% default) or auto-calculates from days overdue, and flips the `hasLateFee` / `lateFeeAmount` / `lateFeeDaysOverdue` fields on the invoice. The endpoint does NOT create a debit note — if a separate rectifying invoice is required, issue it explicitly with create_invoice or create_credit_note. / Aplica los indicadores de intereses de demora a una factura vencida. Calcula intereses segun la Directiva Europea de Morosidad (8% por defecto) o a partir de los dias de retraso, y actualiza los flags `hasLateFee` / `lateFeeAmount` / `lateFeeDaysOverdue`. NO crea una nota de debito — si hace falta una factura rectificativa aparte, emitela con create_invoice o create_credit_note.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "ID of the overdue invoice / ID de la factura vencida",
-            "type": "string"
+            "type": "string",
+            "description": "ID of the overdue invoice / ID de la factura vencida"
           },
           "amount": {
             "description": "Override fee amount. If omitted, auto-calculated from days overdue and legal rate. / Importe de la comision. Si se omite, se calcula automaticamente.",
@@ -339,8 +358,8 @@
         "type": "object",
         "properties": {
           "employeeId": {
-            "description": "Employee ID / ID del empleado",
-            "type": "string"
+            "type": "string",
+            "description": "Employee ID / ID del empleado"
           },
           "mood": {
             "description": "Optional mood slug (e.g. 'great','ok','tired') / Estado de animo",
@@ -349,6 +368,11 @@
           "location": {
             "description": "Optional location ('remote','office','site') / Ubicacion",
             "type": "string"
+          },
+          "idempotencyKey": {
+            "description": "Optional idempotency key, max 64 chars. One is generated per call when omitted or blank; pass your own to make a retry replay the stored open entry instead of creating a second clock-in. Reusing a key with a different body returns 409 IDEMPOTENCY_KEY_REUSED — reconcile, do not retry with a new key. / Clave de idempotencia opcional (max 64). Se genera una por llamada si se omite.",
+            "type": "string",
+            "maxLength": 64
           }
         },
         "required": [
@@ -380,8 +404,13 @@
         "type": "object",
         "properties": {
           "entryId": {
-            "description": "Open attendance entry ID / ID de la entrada abierta",
-            "type": "string"
+            "type": "string",
+            "description": "Open attendance entry ID / ID de la entrada abierta"
+          },
+          "idempotencyKey": {
+            "description": "Optional idempotency key, max 64 chars. One is generated per call when omitted or blank; pass your own to make a retry replay the stored close instead of erroring on a closed entry. / Clave de idempotencia opcional (max 64). Se genera una por llamada si se omite.",
+            "type": "string",
+            "maxLength": 64
           }
         },
         "required": [
@@ -413,12 +442,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Transaction ID / ID del movimiento",
-            "type": "string"
+            "type": "string",
+            "description": "Transaction ID / ID del movimiento"
           },
           "category": {
-            "description": "Category slug (e.g. 'supplies', 'travel', 'software') / Categoria",
-            "type": "string"
+            "type": "string",
+            "description": "Category slug (e.g. 'supplies', 'travel', 'software') / Categoria"
           },
           "notes": {
             "description": "Optional notes for this classification / Notas opcionales",
@@ -455,16 +484,23 @@
         "type": "object",
         "properties": {
           "name": {
-            "description": "Client/company name / Nombre del cliente o empresa",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Client/company name / Nombre del cliente o empresa"
           },
           "email": {
             "description": "Email address / Correo electronico",
-            "type": "string"
+            "type": "string",
+            "maxLength": 255,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
           },
           "phone": {
             "description": "Phone number / Telefono",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
           },
           "taxId": {
             "description": "Tax ID (NIF/CIF/VAT) / NIF o CIF",
@@ -505,17 +541,19 @@
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "create_client",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
@@ -526,24 +564,35 @@
         "type": "object",
         "properties": {
           "clientId": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Client ID / ID del cliente"
           },
           "name": {
-            "description": "Contact name / Nombre del contacto",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Contact name / Nombre del contacto"
           },
           "email": {
             "description": "Email address / Correo electronico",
-            "type": "string"
+            "type": "string",
+            "maxLength": 255,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
           },
           "phone": {
             "description": "Phone number / Telefono",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
           },
           "role": {
             "description": "Role or title (e.g. CEO, CTO, Billing) / Cargo o rol",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
           },
           "isPrimary": {
             "description": "Whether this is the primary contact / Si es el contacto principal",
@@ -575,17 +624,21 @@
     {
       "name": "create_client_note",
       "title": "Create Client Note",
-      "description": "Add a note to a client. Notes are free-form text entries useful for keeping context. Example: clientId='abc123', content='Prefers invoices in English. Payment NET 30.' / Anade una nota a un cliente. Las notas son texto libre para mantener contexto.",
+      "description": "Add a note to a client. Notes are free-form text entries useful for keeping context. Do not include passwords, credentials, payment-card data, health data, or official/government identifiers. Example: clientId='abc123', content='Prefers invoices in English. Payment NET 30.' / Anade una nota a un cliente. No incluyas contrasenas, credenciales, datos de tarjetas, datos de salud ni identificadores oficiales.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "clientId": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Client ID / ID del cliente"
           },
           "content": {
-            "description": "Note content / Contenido de la nota",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "description": "Note content; exclude secrets, credentials, card or health data, and official identifiers / Contenido; excluye secretos, credenciales, datos de tarjetas o salud e identificadores oficiales"
           }
         },
         "required": [
@@ -618,11 +671,10 @@
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "ID of the original invoice to credit / ID de la factura original a rectificar",
-            "type": "string"
+            "type": "string",
+            "description": "ID of the original invoice to credit / ID de la factura original a rectificar"
           },
           "reason": {
-            "description": "Reason for the credit note. Maps to Spanish R-types: error→R1 (art. 80.1), refund/discount/cancellation/other→R4 / Motivo de la rectificacion. error→R1, resto→R4",
             "type": "string",
             "enum": [
               "refund",
@@ -630,7 +682,8 @@
               "error",
               "cancellation",
               "other"
-            ]
+            ],
+            "description": "Reason for the credit note. Maps to Spanish R-types: error→R1 (art. 80.1), refund/discount/cancellation/other→R4 / Motivo de la rectificacion. error→R1, resto→R4"
           },
           "reasonDescription": {
             "description": "Optional free-text description of the reason / Descripcion libre del motivo",
@@ -659,72 +712,82 @@
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "create_credit_note",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
       "name": "create_deposit",
       "title": "Create Deposit",
-      "description": "Record a new deposit from a client. Requires clientId and amount. Useful for tracking advance payments, retainers, and security deposits. Example: clientId='abc123', amount=500, currency='EUR', description='Project retainer' / Registra un nuevo deposito de un cliente. Requiere clientId e importe. Util para adelantos, retenciones y depositos de garantia.",
+      "description": "Record a deposit in Frihet's bookkeeping; no money is transferred. Requires clientId, clientName, amount, date and description. The API initializes status='active'; status and notes are not writable. Example: clientId='abc123', clientName='Example Client', amount=500, date='2026-10-21', description='Project retainer' / Registra un depósito contable sin transferir dinero. Requiere clientId, clientName, amount, date y description. La API inicia el estado 'active'; status y notes no son campos editables.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "clientId": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Client ID / ID del cliente"
           },
           "clientName": {
-            "description": "Client name (denormalized) / Nombre del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Client name / Nombre del cliente"
           },
           "amount": {
-            "description": "Deposit amount / Importe del deposito",
-            "type": "number"
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Positive deposit amount / Importe positivo del depósito"
           },
           "currency": {
-            "description": "Currency code (e.g. 'EUR', 'USD') / Codigo de moneda",
-            "type": "string"
+            "description": "Currency code, defaults to EUR / Moneda, EUR por defecto",
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
           },
           "date": {
-            "description": "Deposit date in ISO 8601 (YYYY-MM-DD) / Fecha del deposito",
-            "type": "string"
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Received date (YYYY-MM-DD), sent as receivedDate / Fecha de recepción"
           },
           "description": {
-            "description": "Deposit description / Descripcion del deposito",
-            "type": "string"
-          },
-          "status": {
-            "description": "Status (e.g. 'pending', 'applied', 'refunded') / Estado",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Deposit description / Descripción del depósito"
           },
           "paymentMethod": {
-            "description": "Payment method (e.g. 'bank_transfer', 'card') / Metodo de pago",
-            "type": "string"
+            "description": "Payment method (e.g. bank_transfer) / Método de pago",
+            "type": "string",
+            "maxLength": 200
           },
           "reference": {
-            "description": "External reference or receipt number / Referencia externa",
-            "type": "string"
-          },
-          "notes": {
-            "description": "Internal notes / Notas internas",
-            "type": "string"
+            "description": "Payment reference, sent as paymentReference / Referencia del pago",
+            "type": "string",
+            "maxLength": 200
           }
         },
         "required": [
           "clientId",
-          "amount"
+          "clientName",
+          "amount",
+          "date",
+          "description"
         ],
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
       },
       "hasOutputSchema": true,
       "annotations": {
@@ -750,32 +813,42 @@
         "type": "object",
         "properties": {
           "description": {
-            "description": "Expense description / Descripcion del gasto",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "Expense description / Descripcion del gasto"
           },
           "amount": {
-            "description": "Amount in EUR / Importe en EUR",
-            "type": "number"
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 10000000,
+            "description": "Amount in EUR / Importe en EUR"
           },
           "category": {
             "description": "Expense category (e.g. 'office', 'travel', 'software') / Categoria",
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000
           },
           "date": {
             "description": "Expense date in ISO 8601 (YYYY-MM-DD) / Fecha del gasto",
-            "type": "string"
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "vendor": {
             "description": "Vendor/supplier name / Nombre del proveedor",
-            "type": "string"
+            "type": "string",
+            "maxLength": 200
           },
           "taxDeductible": {
             "description": "Whether the expense is tax deductible / Si el gasto es deducible fiscalmente",
             "type": "boolean"
           },
           "paidDate": {
-            "description": "Optional payment date in ISO 8601 (YYYY-MM-DD). Drives the Modelo 111/115/130 cash-basis period selector. Must be a real calendar date (2028-02-29 is valid, 2026-02-29 is not). / Fecha de pago opcional en ISO 8601 (YYYY-MM-DD). Determina el periodo de caja del Modelo 111/115/130.",
-            "type": "string"
+            "description": "Optional payment date in ISO 8601 (YYYY-MM-DD). Determines when the expense is treated as paid. Must be a real calendar date (2028-02-29 is valid, 2026-02-29 is not). / Fecha de pago opcional en ISO 8601 (YYYY-MM-DD). Determina cuando se considera pagado el gasto.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           }
         },
         "required": [
@@ -788,17 +861,19 @@
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "create_expense",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
@@ -809,11 +884,13 @@
         "type": "object",
         "properties": {
           "clientName": {
-            "description": "Client/customer name / Nombre del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Client/customer name / Nombre del cliente"
           },
           "clientId": {
-            "description": "Existing client ID — server back-fills taxId/address / ID de cliente existente",
+            "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
             "type": "string"
           },
           "clientTaxId": {
@@ -825,39 +902,50 @@
             "type": "string"
           },
           "items": {
-            "description": "Line items (each with description, quantity, unitPrice) / Conceptos de la factura",
             "minItems": 1,
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "description": {
-                  "description": "Description of the line item / Descripcion del concepto",
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "description": "Description of the line item / Descripcion del concepto"
                 },
                 "quantity": {
-                  "description": "Quantity / Cantidad",
-                  "type": "number"
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1000000,
+                  "description": "Quantity / Cantidad"
                 },
                 "unitPrice": {
-                  "description": "Unit price in EUR / Precio unitario en EUR",
-                  "type": "number"
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000000,
+                  "description": "Unit price in EUR / Precio unitario en EUR"
                 }
               },
               "required": [
                 "description",
                 "quantity",
                 "unitPrice"
-              ]
-            }
+              ],
+              "additionalProperties": false
+            },
+            "description": "Line items (each with description, quantity, unitPrice) / Conceptos de la factura"
           },
           "issueDate": {
             "description": "Issue date in ISO 8601 format (YYYY-MM-DD), defaults to today / Fecha de emision",
-            "type": "string"
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "dueDate": {
             "description": "Due date in ISO 8601 format (YYYY-MM-DD) / Fecha de vencimiento",
-            "type": "string"
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "status": {
             "description": "Invoice status (default: draft) / Estado de la factura",
@@ -872,7 +960,8 @@
           },
           "notes": {
             "description": "Additional notes shown on the invoice / Notas adicionales",
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000
           },
           "taxRate": {
             "description": "Tax rate percentage (e.g. 21 for 21% IVA, 7 for IGIC) / Porcentaje de impuesto",
@@ -934,6 +1023,14 @@
               "service",
               "goods"
             ]
+          },
+          "fiscalTreatment": {
+            "description": "Explicit fiscal treatment declared by the user; never inferred / Tratamiento fiscal declarado expresamente por el usuario; nunca inferido",
+            "type": "string",
+            "enum": [
+              "not_subject_location",
+              "export_exempt"
+            ]
           }
         },
         "required": [
@@ -945,17 +1042,20 @@
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "create_invoice",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
+        ]
       }
     },
     {
@@ -966,16 +1066,21 @@
         "type": "object",
         "properties": {
           "name": {
-            "description": "Product/service name / Nombre del producto o servicio",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Product/service name / Nombre del producto o servicio"
           },
           "unitPrice": {
-            "description": "Unit price in EUR / Precio unitario en EUR",
-            "type": "number"
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000,
+            "description": "Unit price in EUR / Precio unitario en EUR"
           },
           "description": {
             "description": "Product description / Descripcion",
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000
           },
           "taxRate": {
             "description": "Default tax rate % (e.g. 21 for 21% IVA) / IVA por defecto",
@@ -993,17 +1098,19 @@
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "create_product",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
@@ -1014,11 +1121,13 @@
         "type": "object",
         "properties": {
           "clientName": {
-            "description": "Client name / Nombre del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Client name / Nombre del cliente"
           },
           "clientId": {
-            "description": "Existing client ID — server back-fills taxId/address / ID de cliente existente",
+            "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
             "type": "string"
           },
           "clientTaxId": {
@@ -1031,11 +1140,15 @@
           },
           "issueDate": {
             "description": "Issue date in ISO 8601 (YYYY-MM-DD), defaults to today / Fecha de emision",
-            "type": "string"
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "dueDate": {
             "description": "Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento",
-            "type": "string"
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "taxRate": {
             "description": "Tax rate % (e.g. 21 IVA, 7 IGIC) / Porcentaje de impuesto",
@@ -1067,39 +1180,49 @@
             ]
           },
           "items": {
-            "description": "Line items (each with description, quantity, unitPrice) / Conceptos del presupuesto",
             "minItems": 1,
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "description": {
-                  "description": "Description of the line item / Descripcion del concepto",
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "description": "Description of the line item / Descripcion del concepto"
                 },
                 "quantity": {
-                  "description": "Quantity / Cantidad",
-                  "type": "number"
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1000000,
+                  "description": "Quantity / Cantidad"
                 },
                 "unitPrice": {
-                  "description": "Unit price in EUR / Precio unitario en EUR",
-                  "type": "number"
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000000,
+                  "description": "Unit price in EUR / Precio unitario en EUR"
                 }
               },
               "required": [
                 "description",
                 "quantity",
                 "unitPrice"
-              ]
-            }
+              ],
+              "additionalProperties": false
+            },
+            "description": "Line items (each with description, quantity, unitPrice) / Conceptos del presupuesto"
           },
           "validUntil": {
             "description": "Expiry date in ISO 8601 (YYYY-MM-DD) / Fecha de validez",
-            "type": "string"
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "notes": {
             "description": "Additional notes shown on the quote / Notas adicionales",
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000
           },
           "status": {
             "description": "Quote status (default: draft) / Estado del presupuesto",
@@ -1122,17 +1245,19 @@
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "create_quote",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
@@ -1143,15 +1268,14 @@
         "type": "object",
         "properties": {
           "templateName": {
-            "description": "Name for this recurring template / Nombre de la plantilla",
-            "type": "string"
+            "type": "string",
+            "description": "Name for this recurring template / Nombre de la plantilla"
           },
           "clientId": {
-            "description": "Client ID (recipient of generated invoices) / ID del cliente destinatario",
-            "type": "string"
+            "type": "string",
+            "description": "Client ID (recipient of generated invoices) / ID del cliente destinatario"
           },
           "frequency": {
-            "description": "Billing frequency / Frecuencia de facturacion",
             "type": "string",
             "enum": [
               "daily",
@@ -1159,25 +1283,25 @@
               "monthly",
               "quarterly",
               "yearly"
-            ]
+            ],
+            "description": "Billing frequency / Frecuencia de facturacion"
           },
           "lineItems": {
-            "description": "Invoice line items / Lineas de la factura",
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "description": {
-                  "description": "Line item description / Descripcion de la linea",
-                  "type": "string"
+                  "type": "string",
+                  "description": "Line item description / Descripcion de la linea"
                 },
                 "quantity": {
-                  "description": "Quantity / Cantidad",
-                  "type": "number"
+                  "type": "number",
+                  "description": "Quantity / Cantidad"
                 },
                 "unitPrice": {
-                  "description": "Unit price / Precio unitario",
-                  "type": "number"
+                  "type": "number",
+                  "description": "Unit price / Precio unitario"
                 }
               },
               "required": [
@@ -1185,7 +1309,8 @@
                 "quantity",
                 "unitPrice"
               ]
-            }
+            },
+            "description": "Invoice line items / Lineas de la factura"
           },
           "startDate": {
             "description": "First billing date ISO 8601 (YYYY-MM-DD). Defaults to next natural cycle date. / Primera fecha de facturacion (por defecto proximo ciclo natural)",
@@ -1232,8 +1357,8 @@
         "type": "object",
         "properties": {
           "propertyId": {
-            "description": "Property ID / ID de propiedad",
-            "type": "string"
+            "type": "string",
+            "description": "Property ID / ID de propiedad"
           },
           "guestId": {
             "description": "Existing guest ID (if known) / ID de huesped existente",
@@ -1244,8 +1369,8 @@
             "type": "object",
             "properties": {
               "name": {
-                "description": "Guest full name / Nombre completo del huesped",
-                "type": "string"
+                "type": "string",
+                "description": "Guest full name / Nombre completo del huesped"
               },
               "email": {
                 "description": "Guest email / Email del huesped",
@@ -1269,18 +1394,18 @@
             ]
           },
           "checkIn": {
-            "description": "Check-in date YYYY-MM-DD / Fecha de entrada",
-            "type": "string"
+            "type": "string",
+            "description": "Check-in date YYYY-MM-DD / Fecha de entrada"
           },
           "checkOut": {
-            "description": "Check-out date YYYY-MM-DD / Fecha de salida",
-            "type": "string"
+            "type": "string",
+            "description": "Check-out date YYYY-MM-DD / Fecha de salida"
           },
           "guestCount": {
-            "description": "Number of guests / Numero de huespedes",
             "type": "integer",
             "minimum": 1,
-            "maximum": 9007199254740991
+            "maximum": 9007199254740991,
+            "description": "Number of guests / Numero de huespedes"
           },
           "channelId": {
             "description": "Booking channel ID (Airbnb, Booking.com, Direct) / Canal de reserva",
@@ -1332,17 +1457,17 @@
         "type": "object",
         "properties": {
           "projectId": {
-            "description": "Project ID / ID del proyecto",
-            "type": "string"
+            "type": "string",
+            "description": "Project ID / ID del proyecto"
           },
           "hours": {
-            "description": "Hours worked (decimal, e.g. 1.5) / Horas trabajadas (decimal)",
             "type": "number",
-            "minimum": 0.01
+            "minimum": 0.01,
+            "description": "Hours worked (decimal, e.g. 1.5) / Horas trabajadas (decimal)"
           },
           "date": {
-            "description": "Work date ISO 8601 (YYYY-MM-DD) / Fecha del trabajo",
-            "type": "string"
+            "type": "string",
+            "description": "Work date ISO 8601 (YYYY-MM-DD) / Fecha del trabajo"
           },
           "description": {
             "description": "Description of work done / Descripcion del trabajo realizado",
@@ -1388,16 +1513,23 @@
         "type": "object",
         "properties": {
           "name": {
-            "description": "Vendor/company name / Nombre del proveedor o empresa",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Vendor/company name / Nombre del proveedor o empresa"
           },
           "email": {
             "description": "Email address / Correo electronico",
-            "type": "string"
+            "type": "string",
+            "maxLength": 255,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
           },
           "phone": {
             "description": "Phone number / Telefono",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
           },
           "taxId": {
             "description": "Tax ID (NIF/CIF/VAT) / NIF o CIF",
@@ -1459,24 +1591,24 @@
         "type": "object",
         "properties": {
           "name": {
-            "description": "Webhook name / Nombre del webhook",
             "type": "string",
-            "maxLength": 200
+            "maxLength": 200,
+            "description": "Webhook name / Nombre del webhook"
           },
           "url": {
-            "description": "Webhook endpoint URL / URL del endpoint del webhook",
             "type": "string",
             "maxLength": 2000,
-            "format": "uri"
+            "format": "uri",
+            "description": "Webhook endpoint URL / URL del endpoint del webhook"
           },
           "events": {
-            "description": "Events to subscribe to (e.g. ['invoice.created', 'invoice.paid']) / Eventos a suscribir",
             "minItems": 1,
             "type": "array",
             "items": {
               "type": "string",
               "maxLength": 100
-            }
+            },
+            "description": "Events to subscribe to (e.g. ['invoice.created', 'invoice.paid']) / Eventos a suscribir"
           },
           "status": {
             "description": "Webhook status (default: active) / Estado del webhook",
@@ -1534,8 +1666,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "description": "Client ID / ID del cliente"
           }
         },
         "required": [
@@ -1567,12 +1699,16 @@
         "type": "object",
         "properties": {
           "clientId": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Client ID / ID del cliente"
           },
           "contactId": {
-            "description": "Contact ID / ID del contacto",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Contact ID / ID del contacto"
           }
         },
         "required": [
@@ -1605,12 +1741,16 @@
         "type": "object",
         "properties": {
           "clientId": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Client ID / ID del cliente"
           },
           "noteId": {
-            "description": "Note ID / ID de la nota",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Note ID / ID de la nota"
           }
         },
         "required": [
@@ -1643,8 +1783,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Deposit ID / ID del deposito",
-            "type": "string"
+            "type": "string",
+            "description": "Deposit ID / ID del deposito"
           }
         },
         "required": [
@@ -1676,8 +1816,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Expense ID / ID del gasto",
-            "type": "string"
+            "type": "string",
+            "description": "Expense ID / ID del gasto"
           }
         },
         "required": [
@@ -1709,12 +1849,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Invoice ID / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice ID / ID de la factura"
           },
           "confirm": {
-            "description": "Must be true to confirm deletion / Debe ser true para confirmar la eliminacion",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to confirm deletion / Debe ser true para confirmar la eliminacion"
           }
         },
         "required": [
@@ -1727,16 +1867,19 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
+        "idempotentHint": false,
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "delete_invoice",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
+        ]
       }
     },
     {
@@ -1747,8 +1890,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Product ID / ID del producto",
-            "type": "string"
+            "type": "string",
+            "description": "Product ID / ID del producto"
           }
         },
         "required": [
@@ -1775,17 +1918,17 @@
     {
       "name": "delete_quote",
       "title": "Delete Quote",
-      "description": "Delete a quote by its ID. Requires confirm=true. Only a DRAFT quote is removed permanently. A sent/accepted/rejected/expired quote is NOT destroyed: the backend CANCELS it (status=cancelled) — the same non-destructive path invoices take — and it stays readable via get_quote. The result reports which happened in `outcome` (\"deleted\" or \"cancelled\"). / Elimina un presupuesto por su ID. Requiere confirm=true. Solo un presupuesto en BORRADOR se elimina de forma permanente. Uno ya enviado/aceptado/rechazado NO se destruye: se CANCELA (status=cancelled) y sigue consultable con get_quote.",
+      "description": "Delete a quote by its ID. Requires confirm=true. Only a clean DRAFT with no delivery, response, attachment, or conversion evidence is removed permanently; a protected draft is refused and left unchanged. A sent/accepted/rejected/expired quote is NOT destroyed: the backend CANCELS it (status=cancelled) — the same non-destructive path invoices take — and it stays readable via get_quote. The result reports which happened in `outcome` (\"deleted\" or \"cancelled\"). / Elimina un presupuesto por su ID. Requiere confirm=true. Solo un BORRADOR limpio sin evidencia de entrega, respuesta, adjuntos o conversion se elimina de forma permanente; un borrador protegido se rechaza sin cambios. Uno ya enviado/aceptado/rechazado NO se destruye: se CANCELA (status=cancelled) y sigue consultable con get_quote.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "id": {
-            "description": "Quote ID / ID del presupuesto",
-            "type": "string"
+            "type": "string",
+            "description": "Quote ID / ID del presupuesto"
           },
           "confirm": {
-            "description": "Must be true to confirm deletion / Debe ser true para confirmar la eliminacion",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to confirm deletion / Debe ser true para confirmar la eliminacion"
           }
         },
         "required": [
@@ -1798,16 +1941,18 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
+        "idempotentHint": false,
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "delete_quote",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
@@ -1818,12 +1963,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Recurring invoice template ID / ID de la plantilla",
-            "type": "string"
+            "type": "string",
+            "description": "Recurring invoice template ID / ID de la plantilla"
           },
           "confirm": {
-            "description": "Must be true to confirm deletion / Debe ser true para confirmar la eliminacion",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to confirm deletion / Debe ser true para confirmar la eliminacion"
           }
         },
         "required": [
@@ -1856,12 +2001,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Time entry ID / ID de la entrada de tiempo",
-            "type": "string"
+            "type": "string",
+            "description": "Time entry ID / ID de la entrada de tiempo"
           },
           "confirm": {
-            "description": "Must be true to confirm deletion / Debe ser true para confirmar la eliminacion",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to confirm deletion / Debe ser true para confirmar la eliminacion"
           }
         },
         "required": [
@@ -1894,8 +2039,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Vendor ID / ID del proveedor",
-            "type": "string"
+            "type": "string",
+            "description": "Vendor ID / ID del proveedor"
           }
         },
         "required": [
@@ -1927,8 +2072,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Webhook ID / ID del webhook",
-            "type": "string"
+            "type": "string",
+            "description": "Webhook ID / ID del webhook"
           }
         },
         "required": [
@@ -1962,8 +2107,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "ID of the invoice to duplicate / ID de la factura a duplicar",
-            "type": "string"
+            "type": "string",
+            "description": "ID of the invoice to duplicate / ID de la factura a duplicar"
           },
           "newIssueDate": {
             "description": "Issue date for the new invoice (YYYY-MM-DD), defaults to today / Fecha de emision de la nueva factura",
@@ -1982,46 +2127,46 @@
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "duplicate_invoice",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
       "name": "einvoice_export",
       "title": "Export E-Invoice XML",
-      "description": "Export an invoice as e-invoicing XML in a specific format. Supports Facturae (ES B2G), XRechnung-CII (DE), XRechnung-UBL (DE), Factur-X profiles (FR), FatturaPA (IT), PEPPOL-BIS-3 (EU network), UBL and CII (generic). For Facturae, set signed=true to get XAdES-enveloped XML for FACe/AEAT submission. Returns a signed download URL valid for 24 hours. \n\n/ Exporta una factura como XML de facturacion electronica en el formato especificado. Para Facturae con signed=true devuelve XML firmado XAdES para envio a FACe/AEAT.",
+      "description": "Export an invoice as inline e-invoicing XML in a specific format. Supports Facturae (ES B2G), XRechnung-CII (DE), XRechnung-UBL (DE), Factur-X EN16931 (FR), FatturaPA (IT), PEPPOL-BIS-3 (EU network), FA-2-KSeF (PL), UBL and CII (generic). Factur-X Extended, Basic and Minimum are not exposed by this endpoint and are refused rather than collapsed to a different profile. For Facturae, set signed=true to get XAdES-enveloped XML for FACe/AEAT submission. Returns the generated XML inline with its MIME type and filename. \n\n/ Exporta una factura como XML de facturacion electronica en el formato especificado. Para Facturae con signed=true devuelve XML firmado XAdES para envio a FACe/AEAT.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "Frihet invoice ID to export / ID de la factura a exportar",
-            "type": "string"
+            "type": "string",
+            "description": "Frihet invoice ID to export / ID de la factura a exportar"
           },
           "format": {
-            "description": "E-invoice format. Choose based on recipient country: ES B2G→facturae, DE→xrechnung-cii/ubl, FR→facturx-*, IT→fatturapa, EU PEPPOL→peppol-bis-3, generic→ubl or cii / Formato de factura electronica.",
             "type": "string",
             "enum": [
               "xrechnung-cii",
               "xrechnung-ubl",
               "facturx-en16931",
-              "facturx-extended",
-              "facturx-basic",
-              "facturx-minimum",
               "fatturapa",
               "ubl",
               "cii",
               "peppol-bis-3",
+              "fa-2-ksef",
               "facturae"
-            ]
+            ],
+            "description": "E-invoice format. Choose based on recipient country: ES B2G→facturae, DE→xrechnung-cii/ubl, FR→facturx-en16931, IT→fatturapa, PL→fa-2-ksef, EU PEPPOL→peppol-bis-3, generic→ubl or cii / Formato de factura electronica."
           },
           "signed": {
             "description": "If true, returns XAdES-enveloped signed XML (Facturae only). Requires workspace signing certificate configured. / Si true, devuelve XML firmado XAdES (solo Facturae). Requiere certificado de firma configurado.",
@@ -2036,7 +2181,7 @@
       },
       "hasOutputSchema": true,
       "annotations": {
-        "readOnlyHint": true,
+        "readOnlyHint": false,
         "destructiveHint": false,
         "idempotentHint": true,
         "openWorldHint": false
@@ -2045,7 +2190,7 @@
         "registered": true,
         "callability": "runtime_checked",
         "canonicalOperation": "einvoice_export",
-        "writesFrihet": false,
+        "writesFrihet": true,
         "externalInteraction": false,
         "externalSideEffects": []
       }
@@ -2058,21 +2203,21 @@
         "type": "object",
         "properties": {
           "periodStart": {
-            "description": "Start of the export period (ISO 8601 YYYY-MM-DD). Inclusive. / Inicio del periodo de exportacion (YYYY-MM-DD). Inclusivo.",
-            "type": "string"
+            "type": "string",
+            "description": "Start of the export period (ISO 8601 YYYY-MM-DD). Inclusive. / Inicio del periodo de exportacion (YYYY-MM-DD). Inclusivo."
           },
           "periodEnd": {
-            "description": "End of the export period (ISO 8601 YYYY-MM-DD). Inclusive. / Fin del periodo de exportacion (YYYY-MM-DD). Inclusivo.",
-            "type": "string"
+            "type": "string",
+            "description": "End of the export period (ISO 8601 YYYY-MM-DD). Inclusive. / Fin del periodo de exportacion (YYYY-MM-DD). Inclusivo."
           },
           "format": {
-            "description": "DATEV EXTF export format: extf-buchungsstapel (journal entries), extf-debitoren (AR master), extf-kreditoren (AP master) / Formato EXTF de DATEV.",
             "type": "string",
             "enum": [
               "extf-buchungsstapel",
               "extf-debitoren",
               "extf-kreditoren"
-            ]
+            ],
+            "description": "DATEV EXTF export format: extf-buchungsstapel (journal entries), extf-debitoren (AR master), extf-kreditoren (AP master) / Formato EXTF de DATEV."
           }
         },
         "required": [
@@ -2106,8 +2251,8 @@
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "Frihet invoice ID (same as used in face_submit) / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Frihet invoice ID (same as used in face_submit) / ID de la factura"
           }
         },
         "required": [
@@ -2136,13 +2281,13 @@
     {
       "name": "face_submit",
       "title": "Submit to FACe (Spain B2G)",
-      "description": "Submit a Facturae-formatted invoice to the Spanish FACe (Punto General de Entrada de Facturas Electrónicas) B2G portal. The invoice must have a recipient with DIR3 administrative unit codes (órgano gestor, unidad tramitadora, oficina contable). Returns a submission reference (registro) that can be used with face_status to poll the portal. \n\nModes:\n  • mock — local simulation only, no network call (safe for dev/test)\n  • sandbox — FACe pre-production endpoint (requires sandbox credentials)\n  • production — live FACe SOAP endpoint (default)\n\n/ Envía una factura Facturae al portal FACe del Estado español. Requiere códigos DIR3 en el destinatario (órgano gestor, unidad tramitadora, oficina contable). Devuelve el número de registro para consulta de estado con face_status.",
+      "description": "Requires confirm=true as a local client/agent interlock before submitting a Facturae invoice to Spain's FACe B2G portal. This flag is not server-verifiable human attestation and is never forwarded to the API. The invoice must have a recipient with DIR3 administrative unit codes (órgano gestor, unidad tramitadora, oficina contable). Returns a submission reference (registro) that can be used with face_status to poll the portal. \n\nModes:\n  • mock — local simulation only, no network call (safe for dev/test)\n  • sandbox — FACe pre-production endpoint (requires sandbox credentials)\n  • production — live FACe SOAP endpoint (default)\n\n/ Envía una factura Facturae al portal FACe del Estado español. Requiere códigos DIR3 en el destinatario (órgano gestor, unidad tramitadora, oficina contable). Devuelve el número de registro para consulta de estado con face_status.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "Frihet invoice ID to submit / ID de la factura a enviar a FACe",
-            "type": "string"
+            "type": "string",
+            "description": "Frihet invoice ID to submit / ID de la factura a enviar a FACe"
           },
           "mode": {
             "description": "Submission mode: mock (local sim), sandbox (FACe pre-prod), production (live). Default: production. / Modo de envío: mock (simulación local), sandbox (pre-producción FACe), production (real). Por defecto: production.",
@@ -2152,10 +2297,15 @@
               "sandbox",
               "production"
             ]
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to pass the local submission interlock in every mode, including mock and sandbox. This is not actor/resource/payload/expiry-bound attestation. / Debe ser true para superar el interlock local en todos los modos."
           }
         },
         "required": [
-          "invoiceId"
+          "invoiceId",
+          "confirm"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
@@ -2180,17 +2330,17 @@
     {
       "name": "frihet_aiem_calculate",
       "title": "Calculate AIEM (Arbitrio Importación Canarias)",
-      "description": "Calculate the AIEM (Arbitrio sobre Importaciones y Entrega de Mercancias) for goods imported to or produced in the Canary Islands. Returns applicable AIEM rate, tax base, and amount due for the given product. AIEM is a Canarian surcharge on top of IGIC for protected local industries. Example: ncCode='8471', amount=1000, description='Ordenadores portatiles'. / Calcula el AIEM para mercancias importadas o producidas en Canarias. Devuelve tipo aplicable, base imponible y cuota. El AIEM protege la industria local canaria.",
+      "description": "NOT DEPLOYED: AIEM (Arbitrio sobre Importaciones y Entrega de Mercancias, Canary Islands) calculation has no Frihet backend yet; calling this tool returns a NOT_DEPLOYED error and never a rate or amount. / NO DESPLEGADO: el calculo del AIEM (Canarias) aun no tiene backend en Frihet; devuelve un error NOT_DEPLOYED y nunca un tipo ni una cuota.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "ncCode": {
-            "description": "Nomenclatura Combinada (NC) tariff code / Codigo NC (nomenclatura combinada)",
-            "type": "string"
+            "type": "string",
+            "description": "Nomenclatura Combinada (NC) tariff code / Codigo NC (nomenclatura combinada)"
           },
           "amount": {
-            "description": "Taxable base amount in EUR / Base imponible en EUR",
-            "type": "number"
+            "type": "number",
+            "description": "Taxable base amount in EUR / Base imponible en EUR"
           },
           "description": {
             "description": "Product description for audit reference / Descripcion del producto (referencia auditoria)",
@@ -2212,7 +2362,7 @@
       },
       "capabilityMeta": {
         "registered": true,
-        "callability": "runtime_checked",
+        "callability": "unavailable",
         "canonicalOperation": "frihet_aiem_calculate",
         "writesFrihet": false,
         "externalInteraction": false,
@@ -2222,47 +2372,47 @@
     {
       "name": "frihet_bank_rule_create",
       "title": "Create Bank Categorization Rule",
-      "description": "Create a new bank auto-categorization rule. Rules apply automatically to matching incoming transactions. A rule has conditions (AND logic) and actions (assign category, tag, or client). Example: name='Mercadona groceries', condition description contains 'MERCADONA', action category='groceries'. / Crea una nueva regla de categorizacion automatica de transacciones bancarias. Las reglas aplican condiciones (logica AND) y acciones (categoria, etiqueta, cliente).",
+      "description": "Create a new bank auto-categorization rule. Rules apply automatically to matching incoming transactions. The ERP new-engine vocabulary: `bankConditions` (AND logic) + a single `action` (`categorize_expense` | `match_invoice` | `match_client` | `ignore` | `create_expense` | `flag_review`) and its `actionConfig` payload. Required actionConfig per action: categorize_expense→{category}, match_client→{clientId}, create_expense→{expenseDefaults:{vendor,category,…}}, flag_review→{flag}; match_invoice and ignore require no config. Example: name='Mercadona groceries', bankConditions=[{field:'description', operator:'contains', value:'MERCADONA'}], action='categorize_expense', actionConfig={category:'groceries'}. / Crea una nueva regla de categorizacion automatica de transacciones bancarias. El nuevo motor ERP espera `bankConditions` (logica AND) y un unico `action` con su `actionConfig`.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "name": {
-            "description": "Rule name for identification / Nombre de la regla",
-            "type": "string"
+            "type": "string",
+            "description": "Rule name for identification / Nombre de la regla"
           },
-          "conditions": {
-            "description": "Rule conditions (AND logic — all must match) / Condiciones (logica AND — todas deben cumplirse)",
+          "bankConditions": {
             "minItems": 1,
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "field": {
-                  "description": "Transaction field to match / Campo de transaccion a comparar",
                   "type": "string",
                   "enum": [
                     "description",
+                    "reference",
                     "amount",
-                    "counterparty",
-                    "iban",
-                    "reference"
-                  ]
+                    "counterparty"
+                  ],
+                  "description": "Transaction field to match / Campo de transaccion a comparar"
                 },
                 "operator": {
-                  "description": "Comparison operator / Operador de comparacion",
                   "type": "string",
                   "enum": [
                     "contains",
-                    "startsWith",
-                    "endsWith",
-                    "equals",
-                    "greaterThan",
-                    "lessThan"
-                  ]
+                    "exact",
+                    "starts_with",
+                    "ends_with",
+                    "regex",
+                    "amount_above",
+                    "amount_below",
+                    "amount_between"
+                  ],
+                  "description": "Comparison operator / Operador de comparacion"
                 },
                 "value": {
-                  "description": "Value to match against / Valor a comparar",
-                  "type": "string"
+                  "type": "string",
+                  "description": "Value to match against / Valor a comparar"
                 }
               },
               "required": [
@@ -2270,34 +2420,28 @@
                 "operator",
                 "value"
               ]
-            }
+            },
+            "description": "Rule conditions (AND logic — all must match) / Condiciones (logica AND — todas deben cumplirse)"
           },
-          "actions": {
-            "description": "Actions to apply when rule matches / Acciones a aplicar cuando la regla se cumple",
-            "minItems": 1,
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "description": "Action type / Tipo de accion",
-                  "type": "string",
-                  "enum": [
-                    "setCategory",
-                    "addTag",
-                    "assignClient"
-                  ]
-                },
-                "value": {
-                  "description": "Action value (category name, tag name, or client ID) / Valor de la accion",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "type",
-                "value"
-              ]
-            }
+          "action": {
+            "type": "string",
+            "enum": [
+              "categorize_expense",
+              "match_invoice",
+              "match_client",
+              "ignore",
+              "create_expense",
+              "flag_review"
+            ],
+            "description": "Action to apply when the rule matches / Accion a aplicar cuando la regla se cumple"
+          },
+          "actionConfig": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Action-specific payload. categorize_expense requires {category:string}. match_client requires {clientId:string}. create_expense requires {expenseDefaults:{vendor:string, category:string, taxRate?:number, description?:string}}. flag_review requires {flag:string}. match_invoice and ignore require no config. / Payload segun la accion."
           },
           "isActive": {
             "description": "Whether the rule is active (default true) / Si la regla esta activa (por defecto true)",
@@ -2306,8 +2450,9 @@
         },
         "required": [
           "name",
-          "conditions",
-          "actions"
+          "bankConditions",
+          "action",
+          "actionConfig"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
@@ -2377,8 +2522,8 @@
         "type": "object",
         "properties": {
           "entryId": {
-            "description": "GL entry ID to approve / ID del asiento contable a aprobar",
-            "type": "string"
+            "type": "string",
+            "description": "GL entry ID to approve / ID del asiento contable a aprobar"
           },
           "notes": {
             "description": "Optional approval notes / Notas de aprobacion opcionales",
@@ -2414,8 +2559,8 @@
         "type": "object",
         "properties": {
           "entryId": {
-            "description": "GL entry ID / ID del asiento contable",
-            "type": "string"
+            "type": "string",
+            "description": "GL entry ID / ID del asiento contable"
           }
         },
         "required": [
@@ -2442,22 +2587,23 @@
     {
       "name": "frihet_gl_entry_reject",
       "title": "Reject GL Entry",
-      "description": "Reject a General Ledger journal entry pending review with a required reason. Sets entry status to 'rejected' and records the rejector + reason in the audit trail. Requires gestor/admin role. This is a TRUST AREA action. Example: entryId='gl_2026_q1_042', reason='Importe incorrecto, revisar factura F-2026-042'. / Rechaza un asiento contable pendiente con una razon obligatoria. Requiere rol gestor/admin.",
+      "description": "Reject a General Ledger journal entry pending review with a required note. Sets entry status to 'rejected' and records the rejector + note in the audit trail. Requires gestor/admin role. This is a TRUST AREA action. Example: entryId='gl_2026_q1_042', note='Importe incorrecto, revisar factura F-2026-042'. / Rechaza un asiento contable pendiente con una nota obligatoria. Requiere rol gestor/admin.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "entryId": {
-            "description": "GL entry ID to reject / ID del asiento contable a rechazar",
-            "type": "string"
+            "type": "string",
+            "description": "GL entry ID to reject / ID del asiento contable a rechazar"
           },
-          "reason": {
-            "description": "Mandatory rejection reason (visible to submitter) / Razon del rechazo (obligatoria, visible al emisor)",
-            "type": "string"
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Mandatory rejection note (visible to submitter) / Nota del rechazo (obligatoria, visible al emisor)"
           }
         },
         "required": [
           "entryId",
-          "reason"
+          "note"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
@@ -2485,7 +2631,7 @@
         "type": "object",
         "properties": {
           "period": {
-            "description": "Period in format YYYY-QN (e.g. '2026-Q1') / Periodo en formato YYYY-QN",
+            "description": "Quarter in format YYYY-QN (e.g. '2026-Q1'); defaults to the current quarter / Trimestre en formato YYYY-QN; por defecto el trimestre actual",
             "type": "string"
           }
         },
@@ -2510,7 +2656,7 @@
     {
       "name": "frihet_modelo_180_summary",
       "title": "Get Modelo 180 Summary (IRPF Rentals Annual)",
-      "description": "Get IRPF annual informative summary for rental income withholdings (Modelo 180, Spain). Returns total retentions per tenant, property, and annual aggregate. Example: period='2025' / Obtiene el resumen anual de retenciones sobre alquileres para el Modelo 180. Devuelve retenciones totales por inquilino, inmueble y agregado anual.",
+      "description": "NOT DEPLOYED: Modelo 180 (annual informative return of IRPF withholdings on rental income, Spain) has no Frihet backend yet; calling this tool returns a NOT_DEPLOYED error and never data. / NO DESPLEGADO: el Modelo 180 (resumen anual de retenciones sobre alquileres) aun no tiene backend en Frihet; esta herramienta devuelve un error NOT_DEPLOYED y nunca datos.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2530,7 +2676,7 @@
       },
       "capabilityMeta": {
         "registered": true,
-        "callability": "runtime_checked",
+        "callability": "unavailable",
         "canonicalOperation": "get_modelo_180_summary",
         "writesFrihet": false,
         "externalInteraction": false,
@@ -2540,7 +2686,7 @@
     {
       "name": "frihet_modelo_200_summary",
       "title": "Get Modelo 200 Summary (Corporate Tax — Annual IS)",
-      "description": "Get Modelo 200 summary — annual corporate income tax return (Impuesto sobre Sociedades) for Spanish SLs and SAs. Returns taxable base, deductions, tax rate, withholdings, installment payments made (M202), and net payable/refundable. Filing deadline: 25 days after 6 months from fiscal year end (typically 25 July for Dec FY). Example: year='2025'. / Resumen Modelo 200 — declaracion anual del Impuesto sobre Sociedades para SL/SA. Devuelve base imponible, deducciones, tipo, retenciones, pagos fraccionados y cuota.",
+      "description": "NOT DEPLOYED: Modelo 200 (annual corporate income tax return, Impuesto sobre Sociedades) has no Frihet backend yet; calling this tool returns a NOT_DEPLOYED error and never data. / NO DESPLEGADO: el Modelo 200 (declaracion anual del Impuesto sobre Sociedades) aun no tiene backend en Frihet; devuelve un error NOT_DEPLOYED y nunca datos.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2560,7 +2706,7 @@
       },
       "capabilityMeta": {
         "registered": true,
-        "callability": "runtime_checked",
+        "callability": "unavailable",
         "canonicalOperation": "frihet_modelo_200_summary",
         "writesFrihet": false,
         "externalInteraction": false,
@@ -2570,7 +2716,7 @@
     {
       "name": "frihet_modelo_202_summary",
       "title": "Get Modelo 202 Summary (Corporate Tax — Installment Payments)",
-      "description": "Get Modelo 202 summary — installment payments (pagos fraccionados) for Impuesto sobre Sociedades. Three annual payments: April (1P), October (2P), December (3P). Returns each installment amount, due date, payment status, and cumulative total vs M200 projection. Example: year='2026', installment='1P'. / Resumen Modelo 202 — pagos fraccionados del Impuesto sobre Sociedades. Tres plazos: abril (1P), octubre (2P), diciembre (3P). Devuelve importes, plazos y estado de pago.",
+      "description": "NOT DEPLOYED: Modelo 202 (Impuesto sobre Sociedades installment payments, 1P/2P/3P) has no Frihet backend yet; calling this tool returns a NOT_DEPLOYED error and never data. / NO DESPLEGADO: el Modelo 202 (pagos fraccionados del Impuesto sobre Sociedades) aun no tiene backend en Frihet; devuelve un error NOT_DEPLOYED y nunca datos.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2599,7 +2745,7 @@
       },
       "capabilityMeta": {
         "registered": true,
-        "callability": "runtime_checked",
+        "callability": "unavailable",
         "canonicalOperation": "frihet_modelo_202_summary",
         "writesFrihet": false,
         "externalInteraction": false,
@@ -2614,7 +2760,7 @@
         "type": "object",
         "properties": {
           "period": {
-            "description": "Period in format YYYY-QN (e.g. '2026-Q1') or YYYY for annual / Periodo en formato YYYY-QN o YYYY",
+            "description": "Quarter in format YYYY-QN (e.g. '2026-Q1'); defaults to the current quarter / Trimestre en formato YYYY-QN; por defecto el trimestre actual",
             "type": "string"
           }
         },
@@ -2699,7 +2845,7 @@
     {
       "name": "frihet_modelo_415_summary",
       "title": "Get Modelo 415 Summary (IGIC Annual Operations >€3,005)",
-      "description": "Get IGIC Modelo 415 summary — annual declaration of operations with third parties exceeding €3,005. Canary Islands equivalent of Modelo 347 (peninsular Spain). Returns counterparty list, operation totals, and filing deadline. Example: year='2025'. / Resumen del Modelo 415 IGIC — declaracion anual de operaciones con terceros > €3.005. Equivalente canario del Modelo 347. Devuelve listado de contrapartes, totales y plazo.",
+      "description": "NOT DEPLOYED: IGIC Modelo 415 (annual declaration of operations with third parties exceeding €3,005, Canary Islands) has no Frihet backend yet; calling this tool returns a NOT_DEPLOYED error and never data. / NO DESPLEGADO: el Modelo 415 IGIC (operaciones con terceros > €3.005) aun no tiene backend en Frihet; devuelve un error NOT_DEPLOYED y nunca datos.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2719,7 +2865,7 @@
       },
       "capabilityMeta": {
         "registered": true,
-        "callability": "runtime_checked",
+        "callability": "unavailable",
         "canonicalOperation": "frihet_modelo_415_summary",
         "writesFrihet": false,
         "externalInteraction": false,
@@ -2728,8 +2874,8 @@
     },
     {
       "name": "frihet_modelo_418_summary",
-      "title": "Get Modelo 418 Summary (IGIC Monthly Large Enterprises)",
-      "description": "Get IGIC Modelo 418 summary — monthly IGIC return for large enterprises (grandes empresas) in the Canary Islands. Returns monthly IGIC collected, deductible, net due, and any carryover. Applicable when annual turnover exceeds the grandes empresas threshold. Example: period='2026-04'. / Resumen del Modelo 418 IGIC — declaracion mensual para grandes empresas en Canarias. Devuelve IGIC repercutido, soportado, cuota a ingresar y saldo a compensar.",
+      "title": "Get Modelo 418 Summary (IGIC Monthly, Group of Entities)",
+      "description": "NOT DEPLOYED: IGIC Modelo 418 is the monthly individual self-assessment filed by each entity (dominant and dependent) under the special regime for groups of entities (regimen especial del grupo de entidades, Agencia Tributaria Canaria). It has no Frihet backend yet; calling this tool returns a NOT_DEPLOYED error and never data. / NO DESPLEGADO: el Modelo 418 IGIC es la autoliquidacion mensual individual de cada entidad del regimen especial del grupo de entidades (ATC). Aun no tiene backend en Frihet; devuelve un error NOT_DEPLOYED y nunca datos.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2749,7 +2895,7 @@
       },
       "capabilityMeta": {
         "registered": true,
-        "callability": "runtime_checked",
+        "callability": "unavailable",
         "canonicalOperation": "frihet_modelo_418_summary",
         "writesFrihet": false,
         "externalInteraction": false,
@@ -2759,7 +2905,7 @@
     {
       "name": "frihet_modelo_425_summary",
       "title": "Get Modelo 425 Summary (IGIC Annual Recap)",
-      "description": "Get IGIC Modelo 425 summary — annual IGIC recap for Canary Islands businesses. Returns aggregated IGIC collected, deductible IGIC, net payable, and filing status. Example: year='2025'. / Resumen del Modelo 425 IGIC — resumen anual IGIC para empresas canarias. Devuelve IGIC repercutido, IGIC soportado, cuota neta y estado de presentacion.",
+      "description": "NOT DEPLOYED: IGIC Modelo 425 (annual IGIC recap, Canary Islands) has no Frihet backend yet; calling this tool returns a NOT_DEPLOYED error and never data. / NO DESPLEGADO: el Modelo 425 IGIC (resumen anual) aun no tiene backend en Frihet; devuelve un error NOT_DEPLOYED y nunca datos.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2779,7 +2925,7 @@
       },
       "capabilityMeta": {
         "registered": true,
-        "callability": "runtime_checked",
+        "callability": "unavailable",
         "canonicalOperation": "frihet_modelo_425_summary",
         "writesFrihet": false,
         "externalInteraction": false,
@@ -2794,8 +2940,8 @@
         "type": "object",
         "properties": {
           "domain": {
-            "description": "Custom domain to add (e.g. 'portal.miempresa.com') / Dominio personalizado (ej. 'portal.miempresa.com')",
-            "type": "string"
+            "type": "string",
+            "description": "Custom domain to add (e.g. 'portal.miempresa.com') / Dominio personalizado (ej. 'portal.miempresa.com')"
           },
           "workspaceId": {
             "description": "Target workspace ID (defaults to caller's workspace) / ID del workspace destino",
@@ -2833,8 +2979,8 @@
         "type": "object",
         "properties": {
           "domain": {
-            "description": "Custom domain to remove / Dominio personalizado a eliminar",
-            "type": "string"
+            "type": "string",
+            "description": "Custom domain to remove / Dominio personalizado a eliminar"
           }
         },
         "required": [
@@ -2868,8 +3014,8 @@
         "type": "object",
         "properties": {
           "domain": {
-            "description": "Custom domain to verify / Dominio personalizado a verificar",
-            "type": "string"
+            "type": "string",
+            "description": "Custom domain to verify / Dominio personalizado a verificar"
           }
         },
         "required": [
@@ -2904,8 +3050,8 @@
         "type": "object",
         "properties": {
           "email": {
-            "description": "Prospective client email address / Email del cliente potencial",
-            "type": "string"
+            "type": "string",
+            "description": "Prospective client email address / Email del cliente potencial"
           },
           "name": {
             "description": "Prospective client name (pre-fills the form) / Nombre del cliente (pre-rellena el formulario)",
@@ -2951,14 +3097,14 @@
         "type": "object",
         "properties": {
           "vatNumber": {
-            "description": "EU VAT number to validate (without country prefix) / Numero de IVA intracomunitario (sin prefijo de pais)",
-            "type": "string"
+            "type": "string",
+            "description": "EU VAT number to validate (without country prefix) / Numero de IVA intracomunitario (sin prefijo de pais)"
           },
           "countryCode": {
-            "description": "ISO 3166-1 alpha-2 country code (e.g. 'ES', 'DE', 'FR') / Codigo de pais ISO (ej. 'ES', 'DE', 'FR')",
             "type": "string",
             "minLength": 2,
-            "maxLength": 2
+            "maxLength": 2,
+            "description": "ISO 3166-1 alpha-2 country code (e.g. 'ES', 'DE', 'FR') / Codigo de pais ISO (ej. 'ES', 'DE', 'FR')"
           }
         },
         "required": [
@@ -2988,13 +3134,25 @@
     {
       "name": "gestoria_aging_consolidated",
       "title": "Consolidated AR Aging (Gestoria)",
-      "description": "Get a cross-client AR aging report for a gestor — totals bucketed by current / 30-60 / 60-90 / 90+ days overdue, a per-workspace breakdown, and the top overdue invoices. Defaults to the authenticated gestor; pass `ownerUid` to query a specific gestor (requires elevated scope). Useful for dunning prioritisation and end-of-month chase lists. / Obtiene un informe de antiguedad de saldos cruzando todos los clientes del gestor — totales por tramo (al dia / 30-60 / 60-90 / 90+ dias), desglose por espacio y top vencidas. Util para priorizar reclamaciones y listas de cobro de fin de mes.",
+      "description": "Get a cross-client AR aging report for a gestor — totals bucketed by current / 30-60 / 60-90 / 90+ days overdue, a per-workspace breakdown, and the top overdue invoices. The ERP requires POST /v1/gestoria/aging with a body listing the workspaces to include (defaults to the authenticated gestor when `workspaceIds` is omitted). Useful for dunning prioritisation and end-of-month chase lists. / Obtiene un informe de antiguedad de saldos cruzando los clientes del gestor — totales por tramo (al dia / 30-60 / 60-90 / 90+ dias), desglose por espacio y top vencidas. Util para priorizar reclamaciones y listas de cobro de fin de mes.",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "ownerUid": {
-            "description": "Gestor UID to query (defaults to authenticated caller; elevated scope required for other UIDs) / UID del gestor (por defecto el llamante)",
+          "workspaceIds": {
+            "description": "Workspace IDs to include (defaults to the authenticated gestor when omitted) / IDs de espacios a incluir (por defecto los del gestor)",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "asOf": {
+            "description": "Reference date in ISO 8601 (YYYY-MM-DD). Defaults to today / Fecha de referencia",
             "type": "string"
+          },
+          "bustCache": {
+            "description": "Force-refresh server cache (default false) / Forzar refresco de cache del servidor",
+            "type": "boolean"
           }
         },
         "$schema": "http://json-schema.org/draft-07/schema#"
@@ -3023,29 +3181,29 @@
         "type": "object",
         "properties": {
           "workspaceId": {
-            "description": "Client workspace ID the thread belongs to / ID del espacio de trabajo del cliente",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "Client workspace ID the thread belongs to / ID del espacio de trabajo del cliente"
           },
           "parentType": {
-            "description": "Thread parent kind / Tipo de hilo: documentRequest (solicitud de documento), filingItem (presentacion fiscal), obligation (obligacion fiscal)",
             "type": "string",
             "enum": [
               "documentRequest",
               "filingItem",
               "obligation"
-            ]
+            ],
+            "description": "Thread parent kind / Tipo de hilo: documentRequest (solicitud de documento), filingItem (presentacion fiscal), obligation (obligacion fiscal)"
           },
           "parentId": {
-            "description": "ID of the parent entity (document request / filing item / obligation) / ID de la entidad padre",
-            "type": "string",
-            "minLength": 1
-          },
-          "body": {
-            "description": "Message body (plain text, 1-4000 chars) / Cuerpo del mensaje (texto plano)",
             "type": "string",
             "minLength": 1,
-            "maxLength": 4000
+            "description": "ID of the parent entity (document request / filing item / obligation) / ID de la entidad padre"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "Message body (plain text, 1-4000 chars) / Cuerpo del mensaje (texto plano)"
           }
         },
         "required": [
@@ -3082,23 +3240,23 @@
         "type": "object",
         "properties": {
           "workspaceId": {
-            "description": "Client workspace ID / ID del espacio de trabajo",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "Client workspace ID / ID del espacio de trabajo"
           },
           "parentType": {
-            "description": "Thread parent kind / Tipo de hilo: documentRequest (solicitud de documento), filingItem (presentacion fiscal), obligation (obligacion fiscal)",
             "type": "string",
             "enum": [
               "documentRequest",
               "filingItem",
               "obligation"
-            ]
+            ],
+            "description": "Thread parent kind / Tipo de hilo: documentRequest (solicitud de documento), filingItem (presentacion fiscal), obligation (obligacion fiscal)"
           },
           "parentId": {
-            "description": "ID of the parent entity / ID de la entidad padre",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "ID of the parent entity / ID de la entidad padre"
           },
           "limit": {
             "description": "Max messages to return (1-100, default 50) / Mensajes maximos",
@@ -3142,52 +3300,40 @@
         "type": "object",
         "properties": {
           "templateId": {
-            "description": "Template ID (from `gestoria_template_create`) / ID de la plantilla",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "Template ID (from `gestoria_template_create`) / ID de la plantilla"
           },
           "clientWorkspaceIds": {
-            "description": "Target client workspace IDs (1-500) / IDs de espacios cliente destino",
             "minItems": 1,
             "maxItems": 500,
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1
-            }
+            },
+            "description": "Target client workspace IDs (1-500) / IDs de espacios cliente destino"
           },
           "periodOverrides": {
             "description": "Override template period variables in the bulk send / Sobrescribir variables de periodo (trimestre, ano, mes)",
             "type": "object",
             "properties": {
               "quarter": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "number"
-                  }
+                "type": [
+                  "string",
+                  "number"
                 ]
               },
               "year": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "number"
-                  }
+                "type": [
+                  "string",
+                  "number"
                 ]
               },
               "month": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "number"
-                  }
+                "type": [
+                  "string",
+                  "number"
                 ]
               }
             }
@@ -3225,28 +3371,28 @@
         "type": "object",
         "properties": {
           "name": {
-            "description": "Internal template name (shown to gestor only) / Nombre interno",
             "type": "string",
             "minLength": 1,
-            "maxLength": 120
+            "maxLength": 120,
+            "description": "Internal template name (shown to gestor only) / Nombre interno"
           },
           "title": {
-            "description": "Title rendered to the client (supports {{variables}}) / Titulo visible al cliente",
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 200,
+            "description": "Title rendered to the client (supports {{variables}}) / Titulo visible al cliente"
           },
           "description": {
-            "description": "Description / instructions for the client (supports {{variables}}) / Descripcion e instrucciones",
             "type": "string",
             "minLength": 1,
-            "maxLength": 4000
+            "maxLength": 4000,
+            "description": "Description / instructions for the client (supports {{variables}}) / Descripcion e instrucciones"
           },
           "dueDateOffsetDays": {
-            "description": "Days from send until due (0-365) / Dias desde envio hasta vencimiento",
             "type": "integer",
             "minimum": 0,
-            "maximum": 365
+            "maximum": 365,
+            "description": "Days from send until due (0-365) / Dias desde envio hasta vencimiento"
           },
           "attachmentRequired": {
             "description": "Require an uploaded file before completion (default: false) / Requiere archivo",
@@ -3259,8 +3405,8 @@
               "type": "object",
               "properties": {
                 "key": {
-                  "description": "Variable placeholder key, e.g. 'quarter' / Clave variable, p.ej. 'trimestre'",
-                  "type": "string"
+                  "type": "string",
+                  "description": "Variable placeholder key, e.g. 'quarter' / Clave variable, p.ej. 'trimestre'"
                 },
                 "label": {
                   "description": "Human label shown in template editor / Etiqueta legible",
@@ -3309,8 +3455,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Bank account ID / ID de la cuenta bancaria",
-            "type": "string"
+            "type": "string",
+            "description": "Bank account ID / ID de la cuenta bancaria"
           }
         },
         "required": [
@@ -3367,8 +3513,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "description": "Client ID / ID del cliente"
           }
         },
         "required": [
@@ -3400,8 +3546,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Deposit ID / ID del deposito",
-            "type": "string"
+            "type": "string",
+            "description": "Deposit ID / ID del deposito"
           }
         },
         "required": [
@@ -3433,8 +3579,8 @@
         "type": "object",
         "properties": {
           "workflowRunId": {
-            "description": "Hatchet workflow run ID returned by send_einvoice / ID del run de workflow",
-            "type": "string"
+            "type": "string",
+            "description": "Hatchet workflow run ID returned by send_einvoice / ID del run de workflow"
           }
         },
         "required": [
@@ -3466,8 +3612,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Expense ID / ID del gasto",
-            "type": "string"
+            "type": "string",
+            "description": "Expense ID / ID del gasto"
           }
         },
         "required": [
@@ -3499,8 +3645,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Invoice ID / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice ID / ID de la factura"
           }
         },
         "required": [
@@ -3532,8 +3678,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Invoice ID / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice ID / ID de la factura"
           }
         },
         "required": [
@@ -3565,8 +3711,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Invoice ID / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice ID / ID de la factura"
           }
         },
         "required": [
@@ -3598,8 +3744,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Ticket ID / ID del ticket",
-            "type": "string"
+            "type": "string",
+            "description": "Ticket ID / ID del ticket"
           }
         },
         "required": [
@@ -3631,7 +3777,7 @@
         "type": "object",
         "properties": {
           "period": {
-            "description": "Period in format YYYY-QN (e.g. '2026-Q1') / Periodo en formato YYYY-QN",
+            "description": "Quarter in format YYYY-QN (e.g. '2026-Q1'); defaults to the current quarter / Trimestre en formato YYYY-QN; por defecto el trimestre actual",
             "type": "string"
           }
         },
@@ -3656,7 +3802,7 @@
     {
       "name": "get_modelo_180_summary",
       "title": "Get Modelo 180 Summary (IRPF Rentals Annual)",
-      "description": "Get IRPF annual informative summary for rental income withholdings (Modelo 180, Spain). Returns total retentions per tenant, property, and annual aggregate. Example: period='2025' / Obtiene el resumen anual de retenciones sobre alquileres para el Modelo 180. Devuelve retenciones totales por inquilino, inmueble y agregado anual.",
+      "description": "NOT DEPLOYED: Modelo 180 (annual informative return of IRPF withholdings on rental income, Spain) has no Frihet backend yet; calling this tool returns a NOT_DEPLOYED error and never data. / NO DESPLEGADO: el Modelo 180 (resumen anual de retenciones sobre alquileres) aun no tiene backend en Frihet; esta herramienta devuelve un error NOT_DEPLOYED y nunca datos.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -3676,7 +3822,7 @@
       },
       "capabilityMeta": {
         "registered": true,
-        "callability": "runtime_checked",
+        "callability": "unavailable",
         "canonicalOperation": "get_modelo_180_summary",
         "writesFrihet": false,
         "externalInteraction": false,
@@ -3691,7 +3837,7 @@
         "type": "object",
         "properties": {
           "period": {
-            "description": "Period in format YYYY-QN (e.g. '2026-Q1') or YYYY for annual / Periodo en formato YYYY-QN o YYYY",
+            "description": "Quarter in format YYYY-QN (e.g. '2026-Q1'); defaults to the current quarter / Trimestre en formato YYYY-QN; por defecto el trimestre actual",
             "type": "string"
           }
         },
@@ -3811,8 +3957,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Product ID / ID del producto",
-            "type": "string"
+            "type": "string",
+            "description": "Product ID / ID del producto"
           }
         },
         "required": [
@@ -3831,6 +3977,41 @@
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "get_product",
+        "writesFrihet": false,
+        "externalInteraction": false,
+        "externalSideEffects": []
+      }
+    },
+    {
+      "name": "get_purchase_order",
+      "title": "Get Purchase Order",
+      "description": "Get a single purchase order by its ID. Returns the full document: vendor, line items, totals, status, issue/expected dates and currency. / Obtiene un pedido de compra por su ID. Devuelve el documento completo: proveedor, lineas, totales, estado, fechas de emision y esperada y moneda.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Purchase-order ID / ID del pedido de compra"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "hasOutputSchema": true,
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "capabilityMeta": {
+        "registered": true,
+        "callability": "api_dependent",
+        "canonicalOperation": "get_purchase_order",
         "writesFrihet": false,
         "externalInteraction": false,
         "externalSideEffects": []
@@ -3874,8 +4055,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Quote ID / ID del presupuesto",
-            "type": "string"
+            "type": "string",
+            "description": "Quote ID / ID del presupuesto"
           }
         },
         "required": [
@@ -3907,8 +4088,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Recurring invoice template ID / ID de la plantilla de factura recurrente",
-            "type": "string"
+            "type": "string",
+            "description": "Recurring invoice template ID / ID de la plantilla de factura recurrente"
           }
         },
         "required": [
@@ -3940,8 +4121,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Reservation ID / ID de reserva",
-            "type": "string"
+            "type": "string",
+            "description": "Reservation ID / ID de reserva"
           }
         },
         "required": [
@@ -3973,8 +4154,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Sale ID / ID de venta",
-            "type": "string"
+            "type": "string",
+            "description": "Sale ID / ID de venta"
           }
         },
         "required": [
@@ -4006,8 +4187,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Time entry ID / ID de la entrada de tiempo",
-            "type": "string"
+            "type": "string",
+            "description": "Time entry ID / ID de la entrada de tiempo"
           }
         },
         "required": [
@@ -4039,12 +4220,12 @@
         "type": "object",
         "properties": {
           "from": {
-            "description": "Start date ISO 8601 (YYYY-MM-DD) / Fecha inicio",
-            "type": "string"
+            "type": "string",
+            "description": "Start date ISO 8601 (YYYY-MM-DD) / Fecha inicio"
           },
           "to": {
-            "description": "End date ISO 8601 (YYYY-MM-DD) / Fecha fin",
-            "type": "string"
+            "type": "string",
+            "description": "End date ISO 8601 (YYYY-MM-DD) / Fecha fin"
           },
           "userId": {
             "description": "Filter to a specific member (omit for workspace total) / Filtrar a un miembro concreto (omitir para total workspace)",
@@ -4094,8 +4275,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Vendor ID / ID del proveedor",
-            "type": "string"
+            "type": "string",
+            "description": "Vendor ID / ID del proveedor"
           }
         },
         "required": [
@@ -4127,8 +4308,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Webhook ID / ID del webhook",
-            "type": "string"
+            "type": "string",
+            "description": "Webhook ID / ID del webhook"
           }
         },
         "required": [
@@ -4154,6 +4335,67 @@
       }
     },
     {
+      "name": "global_search",
+      "title": "Global Search",
+      "description": "Search across invoices, expenses, vendors, clients, and products in one call. Use this to resolve an entity name/email/number when you do not yet know the resource type. Returns per-hit {type, id, name, ...} so the caller can dispatch to the right list/get tool. Read-only and workspace-scoped. Example: q='acme', types=['clients','invoices'], limit=10 / Busca en facturas, gastos, proveedores, clientes y productos en una sola llamada. Util para resolver un nombre/correo/numero cuando no se sabe aun el tipo de recurso.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Free-text query (1-200 chars) / Texto a buscar"
+          },
+          "types": {
+            "description": "Restrict to these resource types. Defaults to all 5. / Tipos a incluir (por defecto todos)",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "invoices",
+                "expenses",
+                "vendors",
+                "clients",
+                "products"
+              ]
+            }
+          },
+          "limit": {
+            "description": "Max results across all types (1-50, default 25) / Resultados maximos",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "offset": {
+            "description": "Offset / Desplazamiento",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "hasOutputSchema": true,
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "capabilityMeta": {
+        "registered": true,
+        "callability": "api_dependent",
+        "canonicalOperation": "global_search",
+        "writesFrihet": false,
+        "externalInteraction": false,
+        "externalSideEffects": []
+      }
+    },
+    {
       "name": "invite_team_member",
       "title": "Invite Team Member",
       "description": "Invite a new member to the workspace by email address. An invitation email is sent — the member must accept before gaining access. Assignable roles: admin, editor, accountant, viewer. Exact access follows the workspace's current role policy. Owner is excluded from invitations and must be transferred via a dedicated flow. Example: email='ana@example.com', role='accountant' / Invita a un nuevo miembro al espacio de trabajo por correo electronico. Se envia un email de invitacion — el miembro debe aceptar antes de acceder. Roles asignables: admin, editor, accountant, viewer. El acceso exacto depende de la politica de roles vigente del espacio. Owner queda excluido de las invitaciones y debe transferirse por un flujo dedicado.",
@@ -4161,20 +4403,20 @@
         "type": "object",
         "properties": {
           "email": {
-            "description": "Email address of the invitee / Email del invitado",
             "type": "string",
             "format": "email",
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+            "description": "Email address of the invitee / Email del invitado"
           },
           "role": {
-            "description": "Role to assign (owner cannot be invited, must be transferred) / Rol a asignar (owner no se puede invitar, debe transferirse)",
             "type": "string",
             "enum": [
               "admin",
               "editor",
               "accountant",
               "viewer"
-            ]
+            ],
+            "description": "Role to assign (owner cannot be invited, must be transferred) / Rol a asignar (owner no se puede invitar, debe transferirse)"
           },
           "name": {
             "description": "Display name for the invitation (optional) / Nombre para la invitacion (opcional)",
@@ -4238,8 +4480,8 @@
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "Frihet invoice ID to submit to KSeF / ID de la factura a enviar a KSeF",
-            "type": "string"
+            "type": "string",
+            "description": "Frihet invoice ID to submit to KSeF / ID de la factura a enviar a KSeF"
           },
           "mode": {
             "description": "Submission mode: mock (local sim), sandbox (KSeF test), production (live KSeF). Default: production. / Modo de envío: mock (simulación), sandbox (test KSeF), production (KSeF real).",
@@ -4280,8 +4522,8 @@
         "type": "object",
         "properties": {
           "leaveId": {
-            "description": "Leave request ID / ID de la solicitud",
-            "type": "string"
+            "type": "string",
+            "description": "Leave request ID / ID de la solicitud"
           },
           "reason": {
             "description": "Optional approval note / Nota de aprobacion opcional",
@@ -4317,8 +4559,8 @@
         "type": "object",
         "properties": {
           "leaveId": {
-            "description": "Leave request ID / ID de la solicitud",
-            "type": "string"
+            "type": "string",
+            "description": "Leave request ID / ID de la solicitud"
           }
         },
         "required": [
@@ -4414,13 +4656,13 @@
         "type": "object",
         "properties": {
           "leaveId": {
-            "description": "Leave request ID / ID de la solicitud",
-            "type": "string"
+            "type": "string",
+            "description": "Leave request ID / ID de la solicitud"
           },
           "reason": {
-            "description": "Required rejection reason / Motivo obligatorio de rechazo",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "Required rejection reason / Motivo obligatorio de rechazo"
           }
         },
         "required": [
@@ -4448,25 +4690,33 @@
     {
       "name": "leave_request_create",
       "title": "Create Leave Request",
-      "description": "Create a new leave/PTO request for an employee. Types: 'vacation', 'sick', 'personal', 'parental', 'unpaid', 'training'. Dates must be ISO 8601 (YYYY-MM-DD). Status starts as 'pending' awaiting manager approval. / Crea una nueva solicitud de vacaciones/permiso. Estado inicial 'pending' pendiente aprobacion.",
+      "description": "Create a new leave/PTO request for an employee. Types: 'vacation', 'sick', 'personal', 'parental', 'bereavement', 'other'. Dates must be ISO 8601 (YYYY-MM-DD). Status starts as 'pending' awaiting manager approval. / Crea una nueva solicitud de vacaciones/permiso. Estado inicial 'pending' pendiente aprobacion.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "employeeId": {
-            "description": "Employee ID / ID del empleado",
-            "type": "string"
+            "type": "string",
+            "description": "Employee ID / ID del empleado"
           },
           "type": {
-            "description": "Leave type slug (vacation, sick, personal, parental, unpaid, training) / Tipo de permiso",
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "vacation",
+              "sick",
+              "personal",
+              "parental",
+              "bereavement",
+              "other"
+            ],
+            "description": "Leave type slug (vacation, sick, personal, parental, bereavement, other) / Tipo de permiso"
           },
           "startDate": {
-            "description": "Start date ISO 8601 (YYYY-MM-DD) / Fecha inicio",
-            "type": "string"
+            "type": "string",
+            "description": "Start date ISO 8601 (YYYY-MM-DD) / Fecha inicio"
           },
           "endDate": {
-            "description": "End date ISO 8601 (YYYY-MM-DD) / Fecha fin",
-            "type": "string"
+            "type": "string",
+            "description": "End date ISO 8601 (YYYY-MM-DD) / Fecha fin"
           },
           "reason": {
             "description": "Optional reason / Motivo opcional",
@@ -4543,8 +4793,10 @@
         "type": "object",
         "properties": {
           "clientId": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Client ID / ID del cliente"
           },
           "limit": {
             "description": "Max results (1-100) / Resultados maximos",
@@ -4588,8 +4840,8 @@
         "type": "object",
         "properties": {
           "clientId": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "description": "Client ID / ID del cliente"
           },
           "limit": {
             "description": "Max results (1-100) / Resultados maximos",
@@ -4633,8 +4885,8 @@
         "type": "object",
         "properties": {
           "clientId": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "description": "Client ID / ID del cliente"
           },
           "limit": {
             "description": "Max results (1-100) / Resultados maximos",
@@ -5184,6 +5436,54 @@
       }
     },
     {
+      "name": "list_purchase_orders",
+      "title": "List Purchase Orders",
+      "description": "List purchase orders in the workspace with optional filters. Returns one entry per PO with vendor, status, line items and totals. Statuses reflect the server-owned lifecycle (ADR 0027 S2): draft → sent → confirmed → received → billed, with cancel as a terminal branch. / Lista pedidos de compra del workspace con filtros opcionales. Devuelve un registro por pedido con proveedor, estado, lineas y totales. Los estados reflejan el ciclo de vida del servidor (ADR 0027 S2): borrador → enviado → confirmado → recibido → facturado, con cancelado como rama terminal.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Filter by PO status (draft, sent, confirmed, received, billed, cancelled) / Filtro por estado del pedido",
+            "type": "string"
+          },
+          "vendorId": {
+            "description": "Filter by vendor ID / Filtro por ID de proveedor",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "limit": {
+            "description": "Max results (1-100) / Resultados maximos",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "description": "Offset / Desplazamiento",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "hasOutputSchema": true,
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "capabilityMeta": {
+        "registered": true,
+        "callability": "api_dependent",
+        "canonicalOperation": "list_purchase_orders",
+        "writesFrihet": false,
+        "externalInteraction": false,
+        "externalSideEffects": []
+      }
+    },
+    {
       "name": "list_quotes",
       "title": "List Quotes",
       "description": "List all quotes/estimates with optional pagination and filters. Quotes are proposals sent to clients before they become invoices. Supports filtering by status (draft/sent/accepted/rejected/expired) and date range. Example: status='sent', from='2026-01-01', limit=20 / Lista todos los presupuestos con paginacion y filtros opcionales. Soporta filtrado por estado y rango de fechas.",
@@ -5439,7 +5739,7 @@
     {
       "name": "list_team_members",
       "title": "List Team Members",
-      "description": "List active workspace team members and pending invitations. The workspace owner is NOT a member row and is excluded. Each row carries member ID, name, email, role, and invite status (pending/active). Useful for reviewing team access and outstanding invitations. / Lista miembros activos del equipo e invitaciones pendientes. El propietario del espacio NO aparece como miembro y queda excluido. Cada fila lleva ID, nombre, email, rol y estado de invitacion (pendiente/activo). Util para revisar el acceso del equipo y las invitaciones pendientes.",
+      "description": "List active workspace team members and pending invitations. The workspace owner is NOT a member row and is excluded. Each row carries member ID, name, email, role, and status (active/pending/expired/invalid; role is null on invalid invitations). Useful for reviewing team access and outstanding invitations. / Lista miembros activos del equipo e invitaciones pendientes. El propietario del espacio NO aparece como miembro y queda excluido. Cada fila lleva ID, nombre, email, rol y estado (active/pending/expired/invalid; rol null en invitaciones invalidas). Util para revisar el acceso del equipo y las invitaciones pendientes.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -5455,11 +5755,13 @@
             ]
           },
           "status": {
-            "description": "Filter by invite status / Filtrar por estado de invitacion",
+            "description": "Filter by status / Filtrar por estado",
             "type": "string",
             "enum": [
               "active",
-              "pending"
+              "pending",
+              "expired",
+              "invalid"
             ]
           },
           "limit": {
@@ -5743,32 +6045,34 @@
     {
       "name": "log_client_activity",
       "title": "Log Client Activity",
-      "description": "Log a CRM activity against a client. Use to track calls, emails, meetings, or tasks. Example: clientId='abc123', type='call', title='Discussed Q2 proposal', description='Client interested in upgrade' / Registra una actividad CRM para un cliente. Usa para rastrear llamadas, emails, reuniones o tareas.",
+      "description": "Log a CRM activity against a client. Use to track calls, emails, meetings, or tasks. Do not include passwords, credentials, payment-card data, health data, or official/government identifiers in free-text fields. Example: clientId='abc123', type='call', title='Discussed Q2 proposal', description='Client interested in upgrade' / Registra una actividad CRM para un cliente. No incluyas contrasenas, credenciales, datos de tarjetas, datos de salud ni identificadores oficiales en los campos de texto libre.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "clientId": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "description": "Client ID / ID del cliente"
           },
           "type": {
-            "description": "Activity type / Tipo de actividad",
             "type": "string",
             "enum": [
               "call",
               "email",
               "meeting",
               "task"
-            ]
+            ],
+            "description": "Activity type / Tipo de actividad"
           },
           "title": {
-            "description": "Activity title / Titulo de la actividad",
             "type": "string",
-            "maxLength": 500
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Activity title / Titulo de la actividad"
           },
           "description": {
-            "description": "Detailed description / Descripcion detallada",
+            "description": "Detailed description; exclude secrets, credentials, card or health data, and official identifiers / Descripcion detallada; excluye secretos, credenciales, datos de tarjetas o salud e identificadores oficiales",
             "type": "string",
+            "minLength": 1,
             "maxLength": 5000
           }
         },
@@ -5783,17 +6087,19 @@
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "log_client_activity",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
@@ -5804,8 +6110,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Invoice ID / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice ID / ID de la factura"
           },
           "paidDate": {
             "description": "Payment date (YYYY-MM-DD), defaults to today / Fecha de pago",
@@ -5821,16 +6127,19 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
+        "idempotentHint": false,
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "mark_invoice_paid",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
+        ]
       }
     },
     {
@@ -5841,24 +6150,24 @@
         "type": "object",
         "properties": {
           "transactionId": {
-            "description": "Bank transaction ID / ID del movimiento bancario",
-            "type": "string"
+            "type": "string",
+            "description": "Bank transaction ID / ID del movimiento bancario"
           },
           "documentId": {
-            "description": "Invoice or expense ID to link / ID de la factura o gasto a vincular",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice or expense ID to link / ID de la factura o gasto a vincular"
           },
           "documentType": {
-            "description": "Type of document being matched / Tipo de documento",
             "type": "string",
             "enum": [
               "invoice",
               "expense"
-            ]
+            ],
+            "description": "Type of document being matched / Tipo de documento"
           },
           "confirm": {
-            "description": "Must be true to confirm fiscal reconciliation / Debe ser true para confirmar conciliacion fiscal",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to confirm fiscal reconciliation / Debe ser true para confirmar conciliacion fiscal"
           },
           "notes": {
             "description": "Optional reconciliation notes / Notas de conciliacion opcionales",
@@ -5890,70 +6199,6 @@
       }
     },
     {
-      "name": "onboarding_persona_set",
-      "title": "Set Onboarding Persona",
-      "description": "Set the workspace persona. Drives module visibility, default chart-of-accounts, and onboarding checklist. Personas:\n  - 'autonomo' — self-employed (autonomo Spain)\n  - 'empresa'  — small/medium business\n  - 'agencia'  — agency / consultancy\n  - 'gestoria' — accounting firm (manages multiple client workspaces)\n\nIdempotent: setting the same persona again is a no-op. / Define la persona del workspace. Determina modulos visibles, plan contable y checklist.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "persona": {
-            "description": "Workspace persona / Persona del workspace",
-            "type": "string",
-            "enum": [
-              "autonomo",
-              "empresa",
-              "agencia",
-              "gestoria"
-            ]
-          }
-        },
-        "required": [
-          "persona"
-        ],
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      },
-      "hasOutputSchema": true,
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
-      },
-      "capabilityMeta": {
-        "registered": true,
-        "callability": "runtime_checked",
-        "canonicalOperation": "onboarding_persona_set",
-        "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
-      }
-    },
-    {
-      "name": "onboarding_status",
-      "title": "Onboarding Status",
-      "description": "Return the current workspace onboarding state — persona, completed steps, pending steps, percent complete. Useful to drive in-app guidance, sales follow-up triggers, and partner program tracking. / Devuelve el estado actual del onboarding del workspace (persona, pasos completados/pendientes).",
-      "inputSchema": {
-        "type": "object",
-        "properties": {},
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      },
-      "hasOutputSchema": true,
-      "annotations": {
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false
-      },
-      "capabilityMeta": {
-        "registered": true,
-        "callability": "runtime_checked",
-        "canonicalOperation": "onboarding_status",
-        "writesFrihet": false,
-        "externalInteraction": false,
-        "externalSideEffects": []
-      }
-    },
-    {
       "name": "overtime_report",
       "title": "Overtime Report",
       "description": "Read the ERP overtime computation for a calendar month or year: daily and weekly overtime, worked/regular/overtime minutes, overtime hours, and compliance alerts computed from records in the selected period. Optionally filter the attendance records by employee. Period format: 'YYYY-MM' or 'YYYY'. / Lee desgloses diarios y semanales, y minutos/horas agregados calculados con los registros del periodo seleccionado, con alertas.",
@@ -5961,9 +6206,9 @@
         "type": "object",
         "properties": {
           "period": {
-            "description": "Period (YYYY-MM or YYYY) / Periodo",
             "type": "string",
-            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$"
+            "pattern": "^\\d{4}(-(0[1-9]|1[0-2]))?$",
+            "description": "Period (YYYY-MM or YYYY) / Periodo"
           },
           "employeeId": {
             "description": "Optional filter by employee / Filtrar por empleado opcional",
@@ -6000,8 +6245,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Recurring invoice template ID / ID de la plantilla de factura recurrente",
-            "type": "string"
+            "type": "string",
+            "description": "Recurring invoice template ID / ID de la plantilla de factura recurrente"
           }
         },
         "required": [
@@ -6033,9 +6278,9 @@
         "type": "object",
         "properties": {
           "month": {
-            "description": "Month in 'YYYY-MM' format / Mes formato 'YYYY-MM'",
             "type": "string",
-            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "Month in 'YYYY-MM' format / Mes formato 'YYYY-MM'"
           }
         },
         "required": [
@@ -6067,19 +6312,19 @@
         "type": "object",
         "properties": {
           "format": {
-            "description": "Echoed destination label; does not change JSON serialization / Etiqueta de destino",
             "type": "string",
             "enum": [
               "a3",
               "contasol",
               "sage",
               "siltra"
-            ]
+            ],
+            "description": "Echoed destination label; does not change JSON serialization / Etiqueta de destino"
           },
           "month": {
-            "description": "Month in 'YYYY-MM' format / Mes formato 'YYYY-MM'",
             "type": "string",
-            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "description": "Month in 'YYYY-MM' format / Mes formato 'YYYY-MM'"
           }
         },
         "required": [
@@ -6112,16 +6357,16 @@
         "type": "object",
         "properties": {
           "type": {
-            "description": "Period type: monthly or quarterly / Tipo: mensual o trimestral",
             "type": "string",
             "enum": [
               "monthly",
               "quarterly"
-            ]
+            ],
+            "description": "Period type: monthly or quarterly / Tipo: mensual o trimestral"
           },
           "confirm": {
-            "description": "Must be true to perform the close / Debe ser true para ejecutar el cierre",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to perform the close / Debe ser true para ejecutar el cierre"
           }
         },
         "required": [
@@ -6185,17 +6430,17 @@
         "type": "object",
         "properties": {
           "periodId": {
-            "description": "Closed period ID to reopen / ID del periodo cerrado",
-            "type": "string"
+            "type": "string",
+            "description": "Closed period ID to reopen / ID del periodo cerrado"
           },
           "reason": {
-            "description": "Required audit reason (logged) / Motivo obligatorio (auditoria)",
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "Required audit reason (logged) / Motivo obligatorio (auditoria)"
           },
           "confirm": {
-            "description": "Must be true to reopen / Debe ser true para reabrir",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to reopen / Debe ser true para reabrir"
           }
         },
         "required": [
@@ -6273,39 +6518,38 @@
     },
     {
       "name": "refund_deposit",
-      "title": "Refund Deposit",
-      "description": "Refund a deposit back to the client. Requires confirm=true. Transitions the deposit status to 'refunded' — a money movement that is not reversible from this tool. Example: id='dep_abc123', reason='Project cancelled', confirm=true / Devuelve un deposito al cliente. Requiere confirm=true. Es un movimiento de dinero que no se puede revertir desde esta herramienta.",
+      "title": "Record Deposit Refund",
+      "description": "Record a full or partial deposit refund in Frihet's bookkeeping; no money is transferred. Requires confirm=true. Omit amount to record a refund of the remaining balance. Only a full refund sets status='refunded'. A new call can record another partial refund; after an uncertain result, check get_deposit before retrying. Example: id='dep_abc123', amount=50, confirm=true / Registra una devolución total o parcial del depósito sin transferir dinero. Requiere confirm=true. Omite amount para registrar la devolución del saldo restante. Solo la devolución total marca el estado 'refunded'. Una nueva llamada puede registrar otra devolución parcial; ante un resultado incierto, consulta get_deposit antes de repetir.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "id": {
-            "description": "Deposit ID / ID del deposito",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "description": "Deposit ID / ID del depósito"
           },
-          "reason": {
-            "description": "Reason for the refund / Motivo de la devolucion",
-            "type": "string"
-          },
-          "notes": {
-            "description": "Refund notes / Notas de la devolucion",
-            "type": "string"
+          "amount": {
+            "description": "Positive refund amount in the deposit currency; omit for the remaining balance / Importe positivo en la moneda del depósito; omite para el saldo restante",
+            "type": "number",
+            "exclusiveMinimum": 0
           },
           "confirm": {
-            "description": "Must be true to confirm the refund / Debe ser true para confirmar la devolucion",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to record the refund; no money is transferred / Debe ser true para registrar la devolución; no se transfiere dinero"
           }
         },
         "required": [
           "id",
           "confirm"
         ],
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
       },
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
+        "idempotentHint": false,
         "openWorldHint": false
       },
       "capabilityMeta": {
@@ -6325,12 +6569,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Sale ID to refund / ID de venta a reembolsar",
-            "type": "string"
+            "type": "string",
+            "description": "Sale ID to refund / ID de venta a reembolsar"
           },
           "confirm": {
-            "description": "Must be true to proceed. Safety gate for destructive action. / Debe ser true para continuar. Confirmacion obligatoria.",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to proceed. Safety gate for destructive action. / Debe ser true para continuar. Confirmacion obligatoria."
           },
           "amountCents": {
             "description": "Partial refund amount in cents. Omit for full refund. / Importe parcial en centimos. Omitir para reembolso completo.",
@@ -6381,12 +6625,12 @@
         "type": "object",
         "properties": {
           "memberId": {
-            "description": "Team member ID / ID del miembro del equipo",
-            "type": "string"
+            "type": "string",
+            "description": "Team member ID / ID del miembro del equipo"
           },
           "confirm": {
-            "description": "Must be true to confirm removal / Debe ser true para confirmar la eliminacion",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to confirm removal / Debe ser true para confirmar la eliminacion"
           }
         },
         "required": [
@@ -6419,8 +6663,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Recurring invoice template ID / ID de la plantilla de factura recurrente",
-            "type": "string"
+            "type": "string",
+            "description": "Recurring invoice template ID / ID de la plantilla de factura recurrente"
           }
         },
         "required": [
@@ -6447,38 +6691,48 @@
     {
       "name": "run_recurring_now",
       "title": "Run Recurring Invoice Now",
-      "description": "Manually trigger immediate generation of the next invoice instance from a recurring template. Useful for billing ahead of schedule or recovering from a missed automated run. The generated invoice is created as a draft; review and send separately. Example: templateId='rec_abc123' / Genera manualmente la siguiente instancia de una factura recurrente. Util para facturar antes de lo programado o recuperar un ciclo perdido. La factura generada se crea como borrador; revisar y enviar por separado.",
+      "description": "Generate an invoice from a recurring template and update its run count and last-run date. Requires confirm=true. draftOnly defaults to true. With draftOnly=false, the invoice is created with status='sent' and may trigger fiscal numbering and automatic tax submission. Both modes may deliver configured invoice-created webhooks and notify workspace admins/accountants; this endpoint does not email the invoice to the client. Each new call can create another invoice; check the template and invoices after an uncertain result before retrying. Example: templateId='rec_abc123', confirm=true / Genera una factura recurrente y actualiza el contador y la fecha de ejecución. Requiere confirm=true. Por defecto crea un borrador; con draftOnly=false crea el estado 'sent' y puede activar la numeración y remisión fiscal automática. Ambas opciones pueden activar webhooks y avisos internos; esta operación no envía la factura por correo al cliente. Una nueva llamada puede crear otra factura; comprueba la plantilla y las facturas antes de repetir un resultado incierto.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "templateId": {
-            "description": "Recurring invoice template ID / ID de la plantilla de factura recurrente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "description": "Recurring invoice template ID / ID de la plantilla de factura recurrente"
           },
           "draftOnly": {
-            "description": "If true, create as draft only (default true). Set false to create and mark as sent immediately. / Si true, crea como borrador. Set false para crear y marcar como enviada.",
+            "description": "Default true creates a draft; false creates status='sent' and may trigger automatic fiscal submission. Neither option emails the client. / Por defecto true crea un borrador; false crea el estado 'sent' y puede activar la remisión fiscal automática. Ninguna opción envía correo al cliente.",
             "type": "boolean"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to authorize invoice creation, configured webhooks and possible fiscal issuance / Debe ser true para autorizar la creación, los webhooks configurados y la posible emisión fiscal"
           }
         },
         "required": [
-          "templateId"
+          "templateId",
+          "confirm"
         ],
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
       },
       "hasOutputSchema": true,
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
         "idempotentHint": false,
-        "openWorldHint": false
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "run_recurring_now",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
+        ]
       }
     },
     {
@@ -6558,11 +6812,10 @@
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "Frihet invoice ID to dispatch / ID de la factura a enviar",
-            "type": "string"
+            "type": "string",
+            "description": "Frihet invoice ID to dispatch / ID de la factura a enviar"
           },
           "format": {
-            "description": "E-invoice format. Choose based on recipient country and channel: DE→xrechnung-cii/ubl, FR→facturx-*, IT→fatturapa, ES B2G→facturae, EU PEPPOL→peppol-bis-3, generic→ubl or cii / Formato de factura electronica.",
             "type": "string",
             "enum": [
               "xrechnung-cii",
@@ -6576,10 +6829,10 @@
               "cii",
               "peppol-bis-3",
               "facturae"
-            ]
+            ],
+            "description": "E-invoice format. Choose based on recipient country and channel: DE→xrechnung-cii/ubl, FR→facturx-*, IT→fatturapa, ES B2G→facturae, EU PEPPOL→peppol-bis-3, generic→ubl or cii / Formato de factura electronica."
           },
           "dispatchMode": {
-            "description": "Transport channel: email=send via Resend, chorus_pro=French portal, sdi=Italian SDI hub, peppol=PEPPOL network, download=generate URL only / Canal de transporte.",
             "type": "string",
             "enum": [
               "email",
@@ -6587,7 +6840,8 @@
               "sdi",
               "peppol",
               "download"
-            ]
+            ],
+            "description": "Transport channel: email=send via Resend, chorus_pro=French portal, sdi=Italian SDI hub, peppol=PEPPOL network, download=generate URL only / Canal de transporte."
           }
         },
         "required": [
@@ -6623,16 +6877,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Invoice ID / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice ID / ID de la factura"
           },
           "to": {
             "description": "Override recipient email / Email destinatario alternativo",
             "type": "string"
           },
           "confirm": {
-            "description": "Must be true to confirm sending / Debe ser true para confirmar el envio",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to confirm sending / Debe ser true para confirmar el envio"
           }
         },
         "required": [
@@ -6655,28 +6909,35 @@
         "writesFrihet": true,
         "externalInteraction": true,
         "externalSideEffects": [
-          "email_or_invitation"
+          "email_or_invitation",
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
         ]
       }
     },
     {
       "name": "send_quote",
       "title": "Send Quote",
-      "description": "Send a quote/estimate to the client via email. Optionally override the recipient email address. The quote must exist and should not already be expired or rejected. / Envia un presupuesto al cliente por email. Opcionalmente se puede cambiar el email destinatario.",
+      "description": "Send a quote/estimate to the client via email. Requires confirm=true. Optionally override the recipient email address. The quote must exist and should not already be expired or rejected. Sending reaches a third party and cannot be recalled. / Envia un presupuesto al cliente por email. Requiere confirm=true. Opcionalmente se puede cambiar el email destinatario. El envio llega a un tercero y no se puede anular.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "id": {
-            "description": "Quote ID / ID del presupuesto",
-            "type": "string"
+            "type": "string",
+            "description": "Quote ID / ID del presupuesto"
           },
           "to": {
             "description": "Override recipient email / Email destinatario alternativo",
             "type": "string"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to confirm sending / Debe ser true para confirmar el envio"
           }
         },
         "required": [
-          "id"
+          "id",
+          "confirm"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
@@ -6694,7 +6955,8 @@
         "writesFrihet": true,
         "externalInteraction": true,
         "externalSideEffects": [
-          "email_or_invitation"
+          "email_or_invitation",
+          "webhook_delivery_or_configuration"
         ]
       }
     },
@@ -6706,8 +6968,8 @@
         "type": "object",
         "properties": {
           "channelId": {
-            "description": "Channel ID / ID de canal",
-            "type": "string"
+            "type": "string",
+            "description": "Channel ID / ID de canal"
           },
           "direction": {
             "description": "Sync direction: pull (import reservations), push (export calendar), or both (default). / Direccion: pull (importar), push (exportar) o both (ambas, por defecto).",
@@ -6750,8 +7012,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Webhook ID / ID del webhook",
-            "type": "string"
+            "type": "string",
+            "description": "Webhook ID / ID del webhook"
           },
           "eventType": {
             "description": "Event type to simulate (default: 'webhook.test') / Tipo de evento a simular",
@@ -6789,8 +7051,8 @@
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "Frihet invoice ID (same as used in ticketbai_submit) / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Frihet invoice ID (same as used in ticketbai_submit) / ID de la factura"
           }
         },
         "required": [
@@ -6817,21 +7079,26 @@
     {
       "name": "ticketbai_submit",
       "title": "Submit TicketBAI (Basque Country)",
-      "description": "Submit an invoice to the Basque Country TicketBAI e-invoicing system. Territory is auto-detected from the workspace address (Bizkaia → BATUZ/LROE, Gipuzkoa → Gipuzkoa TicketBAI, Araba → Araba TicketBAI). Returns the submission TicketBAI ID (TBAI identifier) and QR code URL for printing on the invoice. \n\nUse sandbox=true for test submissions against the hacienda test endpoints. Production submissions require a valid TicketBAI certificate configured in workspace settings. \n\n/ Envía una factura al sistema TicketBAI del País Vasco. El territorio se detecta automáticamente (Bizkaia→BATUZ/LROE, Gipuzkoa, Álava). Devuelve el identificador TBAI y URL del código QR para imprimir en la factura.",
+      "description": "Requires confirm=true as a local client/agent interlock before submitting an invoice to TicketBAI. This flag is not server-verifiable human attestation and is never forwarded to the API. Territory is auto-detected from the workspace address (Bizkaia → BATUZ/LROE, Gipuzkoa → Gipuzkoa TicketBAI, Araba → Araba TicketBAI). Returns the submission TicketBAI ID (TBAI identifier) and QR code URL for printing on the invoice. \n\nUse sandbox=true for test submissions against the hacienda test endpoints. Production submissions require a valid TicketBAI certificate configured in workspace settings. \n\n/ Envía una factura al sistema TicketBAI del País Vasco. El territorio se detecta automáticamente (Bizkaia→BATUZ/LROE, Gipuzkoa, Álava). Devuelve el identificador TBAI y URL del código QR para imprimir en la factura.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "Frihet invoice ID to submit / ID de la factura a enviar",
-            "type": "string"
+            "type": "string",
+            "description": "Frihet invoice ID to submit / ID de la factura a enviar"
           },
           "sandbox": {
             "description": "If true, submits to the hacienda test endpoint instead of production. Default: false. / Si true, envía al entorno de pruebas de la hacienda. Por defecto: false.",
             "type": "boolean"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to pass the local submission interlock in both sandbox and production. This is not actor/resource/payload/expiry-bound attestation. / Debe ser true para superar el interlock local."
           }
         },
         "required": [
-          "invoiceId"
+          "invoiceId",
+          "confirm"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
@@ -6861,20 +7128,29 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Client ID / ID del cliente"
           },
           "name": {
             "description": "Name / Nombre",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
           },
           "email": {
             "description": "Email / Correo",
-            "type": "string"
+            "type": "string",
+            "maxLength": 255,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
           },
           "phone": {
             "description": "Phone / Telefono",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
           },
           "taxId": {
             "description": "Tax ID / NIF/CIF",
@@ -6916,74 +7192,82 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
+        "idempotentHint": false,
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "update_client",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
       "name": "update_deposit",
       "title": "Update Deposit",
-      "description": "Update an existing deposit using PATCH semantics. Only the provided fields will be changed. Example: id='abc123', amount=750, notes='Updated retainer amount' / Actualiza un deposito existente. Solo se modifican los campos proporcionados.",
+      "description": "Update an existing deposit using PATCH semantics. Only the provided fields will be changed. At least one writable field is required; status and notes are not writable. Example: id='abc123', reference='RECEIPT-42' / Actualiza un depósito existente. Requiere al menos un campo editable; status y notes no se pueden guardar.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "id": {
-            "description": "Deposit ID / ID del deposito",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "description": "Deposit ID / ID del depósito"
           },
           "clientId": {
             "description": "Client ID / ID del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
           },
           "clientName": {
             "description": "Client name / Nombre del cliente",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
           },
           "amount": {
-            "description": "Amount / Importe",
-            "type": "number"
+            "description": "Positive amount / Importe positivo",
+            "type": "number",
+            "exclusiveMinimum": 0
           },
           "currency": {
             "description": "Currency code / Moneda",
-            "type": "string"
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
           },
           "date": {
-            "description": "Date (YYYY-MM-DD) / Fecha",
-            "type": "string"
+            "description": "Received date (YYYY-MM-DD) / Fecha de recepción",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           },
           "description": {
-            "description": "Description / Descripcion",
-            "type": "string"
-          },
-          "status": {
-            "description": "Status / Estado",
-            "type": "string"
+            "description": "Description / Descripción",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
           },
           "paymentMethod": {
-            "description": "Payment method / Metodo de pago",
-            "type": "string"
+            "description": "Payment method / Método de pago",
+            "type": "string",
+            "maxLength": 200
           },
           "reference": {
-            "description": "Reference / Referencia",
-            "type": "string"
-          },
-          "notes": {
-            "description": "Notes / Notas",
-            "type": "string"
+            "description": "Payment reference / Referencia del pago",
+            "type": "string",
+            "maxLength": 200
           }
         },
         "required": [
           "id"
         ],
-        "$schema": "http://json-schema.org/draft-07/schema#"
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
       },
       "hasOutputSchema": true,
       "annotations": {
@@ -7009,12 +7293,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Expense ID / ID del gasto",
-            "type": "string"
+            "type": "string",
+            "description": "Expense ID / ID del gasto"
           },
           "description": {
             "description": "Description / Descripcion",
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000
           },
           "amount": {
             "description": "Amount in EUR / Importe",
@@ -7022,11 +7307,14 @@
           },
           "category": {
             "description": "Category / Categoria",
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000
           },
           "date": {
             "description": "Date (YYYY-MM-DD) / Fecha",
-            "type": "string"
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "vendor": {
             "description": "Vendor / Proveedor",
@@ -7046,16 +7334,18 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
+        "idempotentHint": false,
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "update_expense",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
@@ -7066,15 +7356,15 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Invoice ID / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice ID / ID de la factura"
           },
           "clientName": {
             "description": "Client name / Nombre del cliente",
             "type": "string"
           },
           "clientId": {
-            "description": "Existing client ID — server back-fills taxId/address / ID de cliente existente",
+            "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
             "type": "string"
           },
           "clientTaxId": {
@@ -7093,23 +7383,30 @@
               "type": "object",
               "properties": {
                 "description": {
-                  "description": "Description of the line item / Descripcion del concepto",
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "description": "Description of the line item / Descripcion del concepto"
                 },
                 "quantity": {
-                  "description": "Quantity / Cantidad",
-                  "type": "number"
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1000000,
+                  "description": "Quantity / Cantidad"
                 },
                 "unitPrice": {
-                  "description": "Unit price in EUR / Precio unitario en EUR",
-                  "type": "number"
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000000,
+                  "description": "Unit price in EUR / Precio unitario en EUR"
                 }
               },
               "required": [
                 "description",
                 "quantity",
                 "unitPrice"
-              ]
+              ],
+              "additionalProperties": false
             }
           },
           "issueDate": {
@@ -7195,6 +7492,14 @@
               "service",
               "goods"
             ]
+          },
+          "fiscalTreatment": {
+            "description": "Explicit fiscal treatment declared by the user; never inferred / Tratamiento fiscal declarado expresamente por el usuario; nunca inferido",
+            "type": "string",
+            "enum": [
+              "not_subject_location",
+              "export_exempt"
+            ]
           }
         },
         "required": [
@@ -7206,16 +7511,19 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
+        "idempotentHint": false,
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "update_invoice",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
+        ]
       }
     },
     {
@@ -7226,8 +7534,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Ticket ID to update / ID del ticket a actualizar",
-            "type": "string"
+            "type": "string",
+            "description": "Ticket ID to update / ID del ticket a actualizar"
           },
           "status": {
             "description": "New ticket status: on_hold, queued, preparing, ready, served, voided. / Nuevo estado: on_hold, queued, preparing, ready, served, voided.",
@@ -7275,20 +7583,25 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Product ID / ID del producto",
-            "type": "string"
+            "type": "string",
+            "description": "Product ID / ID del producto"
           },
           "name": {
             "description": "Name / Nombre",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
           },
           "unitPrice": {
             "description": "Unit price / Precio unitario",
-            "type": "number"
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000
           },
           "description": {
             "description": "Description / Descripcion",
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000
           },
           "taxRate": {
             "description": "Tax rate % / IVA %",
@@ -7306,16 +7619,18 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
+        "idempotentHint": false,
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "update_product",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
@@ -7326,15 +7641,15 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Quote ID / ID del presupuesto",
-            "type": "string"
+            "type": "string",
+            "description": "Quote ID / ID del presupuesto"
           },
           "clientName": {
             "description": "Client name / Nombre del cliente",
             "type": "string"
           },
           "clientId": {
-            "description": "Existing client ID — server back-fills taxId/address / ID de cliente existente",
+            "description": "Existing client ID — stored client details are used for the document / ID de cliente existente",
             "type": "string"
           },
           "clientTaxId": {
@@ -7347,11 +7662,15 @@
           },
           "issueDate": {
             "description": "Issue date in ISO 8601 (YYYY-MM-DD), defaults to today / Fecha de emision",
-            "type": "string"
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "dueDate": {
             "description": "Due date in ISO 8601 (YYYY-MM-DD) / Fecha de vencimiento",
-            "type": "string"
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "taxRate": {
             "description": "Tax rate % (e.g. 21 IVA, 7 IGIC) / Porcentaje de impuesto",
@@ -7390,23 +7709,30 @@
               "type": "object",
               "properties": {
                 "description": {
-                  "description": "Description of the line item / Descripcion del concepto",
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "description": "Description of the line item / Descripcion del concepto"
                 },
                 "quantity": {
-                  "description": "Quantity / Cantidad",
-                  "type": "number"
+                  "type": "number",
+                  "minimum": 0.0001,
+                  "maximum": 1000000,
+                  "description": "Quantity / Cantidad"
                 },
                 "unitPrice": {
-                  "description": "Unit price in EUR / Precio unitario en EUR",
-                  "type": "number"
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000000,
+                  "description": "Unit price in EUR / Precio unitario en EUR"
                 }
               },
               "required": [
                 "description",
                 "quantity",
                 "unitPrice"
-              ]
+              ],
+              "additionalProperties": false
             }
           },
           "validUntil": {
@@ -7438,16 +7764,18 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
-        "openWorldHint": false
+        "idempotentHint": false,
+        "openWorldHint": true
       },
       "capabilityMeta": {
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "update_quote",
         "writesFrihet": true,
-        "externalInteraction": false,
-        "externalSideEffects": []
+        "externalInteraction": true,
+        "externalSideEffects": [
+          "webhook_delivery_or_configuration"
+        ]
       }
     },
     {
@@ -7458,8 +7786,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Recurring invoice template ID / ID de la plantilla",
-            "type": "string"
+            "type": "string",
+            "description": "Recurring invoice template ID / ID de la plantilla"
           },
           "templateName": {
             "description": "Updated template name / Nombre actualizado",
@@ -7537,18 +7865,18 @@
         "type": "object",
         "properties": {
           "memberId": {
-            "description": "Team member ID / ID del miembro del equipo",
-            "type": "string"
+            "type": "string",
+            "description": "Team member ID / ID del miembro del equipo"
           },
           "role": {
-            "description": "New role to assign / Nuevo rol a asignar",
             "type": "string",
             "enum": [
               "admin",
               "editor",
               "accountant",
               "viewer"
-            ]
+            ],
+            "description": "New role to assign / Nuevo rol a asignar"
           }
         },
         "required": [
@@ -7581,8 +7909,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Time entry ID / ID de la entrada de tiempo",
-            "type": "string"
+            "type": "string",
+            "description": "Time entry ID / ID de la entrada de tiempo"
           },
           "hours": {
             "description": "Updated hours / Horas actualizadas",
@@ -7635,20 +7963,29 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Vendor ID / ID del proveedor",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Vendor ID / ID del proveedor"
           },
           "name": {
             "description": "Name / Nombre",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
           },
           "email": {
             "description": "Email / Correo",
-            "type": "string"
+            "type": "string",
+            "maxLength": 255,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
           },
           "phone": {
             "description": "Phone / Telefono",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
           },
           "taxId": {
             "description": "Tax ID / NIF/CIF",
@@ -7690,7 +8027,7 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
-        "idempotentHint": true,
+        "idempotentHint": false,
         "openWorldHint": false
       },
       "capabilityMeta": {
@@ -7710,8 +8047,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Webhook ID / ID del webhook",
-            "type": "string"
+            "type": "string",
+            "description": "Webhook ID / ID del webhook"
           },
           "name": {
             "description": "Webhook name / Nombre del webhook",
@@ -7788,11 +8125,10 @@
         "type": "object",
         "properties": {
           "xml": {
-            "description": "Raw XML string of the e-invoice document to validate / Contenido XML de la factura electronica",
-            "type": "string"
+            "type": "string",
+            "description": "Raw XML string of the e-invoice document to validate / Contenido XML de la factura electronica"
           },
           "format": {
-            "description": "Format to validate against. Determines which validator and ruleset to apply. / Formato a validar. Determina el validador y conjunto de reglas a aplicar.",
             "type": "string",
             "enum": [
               "xrechnung-cii",
@@ -7806,7 +8142,8 @@
               "cii",
               "peppol-bis-3",
               "facturae"
-            ]
+            ],
+            "description": "Format to validate against. Determines which validator and ruleset to apply. / Formato a validar. Determina el validador y conjunto de reglas a aplicar."
           }
         },
         "required": [
@@ -7839,12 +8176,12 @@
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "Invoice ID to resubmit / ID de la factura a reenviar",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice ID to resubmit / ID de la factura a reenviar"
           },
           "confirm": {
-            "description": "Must be true to confirm VeriFactu resubmission / Debe ser true para confirmar el reenvio",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Must be true to confirm VeriFactu resubmission / Debe ser true para confirmar el reenvio"
           }
         },
         "required": [
@@ -7879,8 +8216,8 @@
         "type": "object",
         "properties": {
           "invoiceId": {
-            "description": "Invoice ID / ID de la factura",
-            "type": "string"
+            "type": "string",
+            "description": "Invoice ID / ID de la factura"
           }
         },
         "required": [
