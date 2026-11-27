@@ -3113,11 +3113,13 @@ test("Full Worker topology guard — hostile case: deploy job cannot skip, reord
 
 test("Full Worker topology guard — pending baseline blocks, target drift blocks", () => {
   const baseline = readJson(FULL_TOPOLOGY_BASELINE);
-  assert.equal(baseline.status, "pending-bootstrap");
-  assert.equal(baseline.baseline, null);
-  const target = runFullTopology([]);
+  assert.equal(baseline.status, "established");
+  assert.ok(baseline.baseline && typeof baseline.baseline === "object");
+  assert.equal(baseline.baseline.topologySha256, topologyFingerprint(baseline.baseline.topology));
+  const pendingContract = { ...baseline, status: "pending-bootstrap", baseline: null };
+  const target = runFullTopology([], { contract: pendingContract });
   assert.equal(target.status, 0, target.stderr);
-  const pending = runFullTopology(["--require-established"]);
+  const pending = runFullTopology(["--require-established"], { contract: pendingContract });
   assert.equal(pending.status, 1);
   assert.match(pending.stderr, /BASELINE_PENDING_BOOTSTRAP/);
   const noV2 = FULL_TOML().replace(/\[\[migrations\]\]\nnew_sqlite_classes = \["OAuthStateStore"\]\ntag = "v2"\n/, "");
@@ -3169,7 +3171,8 @@ test("Full Worker topology guard — established baseline requires an exact, fre
   block("empty JSON object", live, { contract, files: { "--active-deployment": {}, "--live-version": {} } }, /INPUT_INVALID/);
   block("malformed JSON", live, { contract, files: { "--active-deployment": "{", "--live-version": "null" } }, /INPUT_INVALID/);
   // --require-live-match alone must still refuse a pending baseline.
-  block("live match on pending", ["--require-live-match"], { files: inputs() }, /BASELINE_PENDING_BOOTSTRAP/);
+  const pending = { ...readJson(FULL_TOPOLOGY_BASELINE), status: "pending-bootstrap", baseline: null };
+  block("live match on pending", ["--require-live-match"], { contract: pending, files: inputs() }, /BASELINE_PENDING_BOOTSTRAP/);
 });
 
 test("Full Worker topology guard — real named handlers need complete namespace evidence", () => {
