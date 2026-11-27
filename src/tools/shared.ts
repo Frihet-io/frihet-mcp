@@ -112,6 +112,31 @@ const FORBIDDEN_FRIENDLY_MESSAGE =
   "Access denied. Reconnect Frihet or use configured credentials with permission for this action. / Acceso denegado. Vuelve a conectar Frihet o usa credenciales con permiso para esta accion.";
 
 /**
+ * Static, provider-independent remediation hints keyed by normalized backend
+ * `errorCode`. Never interpolate `error.message`, `error.detail`, or IDs here.
+ */
+export const STATIC_ERROR_CODE_REMEDIATION: Readonly<Record<string, string>> = {
+  IDEMPOTENCY_KEY_REUSED:
+    "The same Idempotency-Key was reused with a different request payload. Reconcile the existing record before deciding whether to retry with a new key. / La misma Idempotency-Key se reutilizó con otros parámetros. Consulta el registro existente antes de decidir si reintentar con una nueva clave.",
+  INVOICE_STATUS_PRECONDITION_FAILED:
+    "The invoice status changed or does not allow this operation. Read the invoice with get_invoice before retrying. / El estado de la factura cambió o no permite esta operación. Consulta la factura con get_invoice antes de reintentar.",
+  INVOICE_REVISION_PRECONDITION_FAILED:
+    "The invoice was modified concurrently (stale revision). Read the latest invoice with get_invoice before retrying. / La factura fue modificada concurrentemente. Consulta la última versión con get_invoice antes de reintentar.",
+  TRANSACTION_CONFLICT:
+    "Concurrent update conflict on this record. Read the current record state before retrying. / Conflicto de actualización concurrente en este registro. Consulta el estado actual antes de reintentar.",
+  ALREADY_ISSUED:
+    "This document has already been issued and cannot be issued or edited as a draft again. Read the current record or create a credit note if rectification is needed. / Este documento ya fue emitido y no puede volver a emitirse o editarse como borrador. Consulta el registro actual o crea una rectificativa si corresponde.",
+  PERIOD_CLOSED:
+    "The target fiscal/accounting period is closed. Check the accounting period status before retrying in an open period. / El periodo fiscal/contable está cerrado. Comprueba el estado del periodo antes de reintentar.",
+  ORIGINAL_INVOICE_IS_DRAFT:
+    "A credit note cannot be created for a draft invoice. Issue or finalize the original invoice first, or edit/delete the draft directly. / No se puede crear una rectificativa sobre una factura en borrador. Emite primero la factura original o edita/elimina el borrador.",
+  ORIGINAL_INVOICE_FULLY_CREDITED:
+    "The original invoice has already been fully credited. Read the invoice and existing credit notes before taking further action. / La factura original ya ha sido abonada en su totalidad. Consulta la factura y sus rectificativas antes de continuar.",
+  PLAN_UPGRADE_REQUIRED:
+    "This action requires a higher Frihet workspace plan. Check current plan limits with get_business_context and upgrade the workspace plan if needed. / Esta acción requiere un plan superior de Frihet. Revisa los límites del plan actual con get_business_context.",
+};
+
+/**
  * Maps an error to a user-friendly MCP tool response with error annotations.
  * Emits structured log entries for all errors.
  */
@@ -146,7 +171,9 @@ export function handleToolError(error: unknown, toolName?: string): {
       403: FORBIDDEN_FRIENDLY_MESSAGE,
       404: "Resource not found. / Recurso no encontrado.",
       405: "Method not allowed. / Metodo no permitido.",
+      409: "Conflict or precondition failed. Inspect the current record before retrying. / Conflicto o precondición incumplida. Revisa el estado actual antes de reintentar.",
       413: "Request body too large (max 1MB). / Cuerpo de la solicitud demasiado grande (max 1MB).",
+      422: "Unprocessable entity. Semantic validation failed. / Entidad no procesable. Falló la validación semántica.",
       429: "Rate limit exceeded. Try again later. / Limite de peticiones excedido. Intenta mas tarde.",
       500: "Internal server error. Try again later. / Error interno del servidor.",
       503: "Frihet could not confirm the request outcome because the network connection failed.",
@@ -171,6 +198,16 @@ export function handleToolError(error: unknown, toolName?: string): {
       && isLocalInputValidationError(error);
     const requestRejected = !operationOutcomeUnknown && error.statusCode === 400
       && !localValidationRejected;
+    const conflict = !operationOutcomeUnknown && error.statusCode === 409;
+
+    const normalizedErrorCode = error.errorCode.toUpperCase();
+    const staticHint =
+      !operationOutcomeUnknown
+      && !localValidationRejected
+      && (error.statusCode === 400 || error.statusCode === 403 || error.statusCode === 409 || error.statusCode === 422)
+      && Object.hasOwn(STATIC_ERROR_CODE_REMEDIATION, normalizedErrorCode)
+        ? STATIC_ERROR_CODE_REMEDIATION[normalizedErrorCode]
+        : undefined;
 
     let friendlyMessage: string;
     if (operationOutcomeUnknown) {
@@ -190,6 +227,10 @@ export function handleToolError(error: unknown, toolName?: string): {
         ?? `API error ${error.statusCode}. Contact support if this persists.`;
     }
 
+    if (staticHint) {
+      friendlyMessage = `${friendlyMessage} ${staticHint}`;
+    }
+
     return {
       content: [
         {
@@ -199,7 +240,7 @@ export function handleToolError(error: unknown, toolName?: string): {
         },
       ],
       isError: true,
-      ...(error.statusCode === 401 || operationOutcomeUnknown || definitiveDenial || localValidationRejected || requestRejected
+      ...(error.statusCode === 401 || operationOutcomeUnknown || definitiveDenial || localValidationRejected || requestRejected || conflict
         ? {
             _meta: {
               ...(definitiveDenial
@@ -213,6 +254,9 @@ export function handleToolError(error: unknown, toolName?: string): {
                 : {}),
               ...(requestRejected
                 ? { "io.frihet/requestRejected": true }
+                : {}),
+              ...(conflict
+                ? { "io.frihet/conflict": true }
                 : {}),
               ...(operationOutcomeUnknown
                 ? { "io.frihet/operationOutcomeUnknown": true }

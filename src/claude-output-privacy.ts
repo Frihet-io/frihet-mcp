@@ -149,6 +149,7 @@ const SAFE_META_FLAGS = [
   "io.frihet/transportOutcomeUnknown", "io.frihet/retryable", "io.frihet/operationMayHaveCompleted",
   "io.frihet/resourceNotFound", "io.frihet/accessDenied",
   "io.frihet/confirmationRequired", "io.frihet/localValidationRejected", "io.frihet/requestRejected",
+  "io.frihet/conflict",
   "io.frihet/searchScanTruncated", "io.frihet/cursorWithQueryUnsupported",
 ] as const;
 
@@ -183,6 +184,9 @@ function claudeErrorText(meta: Record<string, unknown>): string {
   if (meta["io.frihet/requestRejected"] === true) {
     return "REQUEST_REJECTED: Frihet rejected this request. Check the ID and input parameters, then read the current record before deciding whether to retry. Do not automatically repeat a write.";
   }
+  if (meta["io.frihet/conflict"] === true) {
+    return "CONFLICT: Frihet rejected this request due to a record conflict or failed precondition. Inspect the current record before deciding whether to retry. Do not automatically repeat a write.";
+  }
   return unknown;
 }
 
@@ -199,6 +203,7 @@ export function claudeToolResult(result: Record<string, unknown>, toolName?: str
     safeMeta["io.frihet/confirmationRequired"] === true
     || safeMeta["io.frihet/localValidationRejected"] === true
     || safeMeta["io.frihet/requestRejected"] === true
+    || safeMeta["io.frihet/conflict"] === true
     || safeMeta["io.frihet/cursorWithQueryUnsupported"] === true
     || safeMeta["io.frihet/searchScanTruncated"] === true
     || safeMeta["io.frihet/operationOutcomeUnknown"] === true

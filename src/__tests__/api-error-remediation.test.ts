@@ -10,7 +10,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
 import { FrihetApiError, FrihetClient, isLocalInputValidationError, toApiEInvoiceExportFormat } from "../client.js";
-import { handleToolError, withToolLogging } from "../tools/shared.js";
+import { STATIC_ERROR_CODE_REMEDIATION, handleToolError, withToolLogging } from "../tools/shared.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -538,6 +538,248 @@ describe("ambiguous transport failures", () => {
           return true;
         },
       );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("409/422 conflict, precondition, and static error-code remediation", () => {
+  const BASE_409 =
+    "Conflict or precondition failed. Inspect the current record before retrying. / Conflicto o precondición incumplida. Revisa el estado actual antes de reintentar.";
+  const BASE_422 =
+    "Unprocessable entity. Semantic validation failed. / Entidad no procesable. Falló la validación semántica.";
+
+  test("maps 409, 422, and static remediation codes without interpolating provider text or secrets", () => {
+    const privateMessage = `PRIVATE_provider_message ${REAL_FORMAT_FRIHET_KEY}`;
+    const privateDetail = `PRIVATE_provider_detail fri_live_TOPSECRET_1234567890abcdef`;
+
+    const cases: Array<{
+      status: number;
+      code: string;
+      expectedBase: string;
+      expectedHint?: string;
+      expectedMeta?: Record<string, boolean>;
+    }> = [
+      {
+        status: 409,
+        code: "IDEMPOTENCY_KEY_REUSED",
+        expectedBase: BASE_409,
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.IDEMPOTENCY_KEY_REUSED,
+        expectedMeta: { "io.frihet/conflict": true },
+      },
+      {
+        status: 409,
+        code: "INVOICE_STATUS_PRECONDITION_FAILED",
+        expectedBase: BASE_409,
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.INVOICE_STATUS_PRECONDITION_FAILED,
+        expectedMeta: { "io.frihet/conflict": true },
+      },
+      {
+        status: 409,
+        code: "INVOICE_REVISION_PRECONDITION_FAILED",
+        expectedBase: BASE_409,
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.INVOICE_REVISION_PRECONDITION_FAILED,
+        expectedMeta: { "io.frihet/conflict": true },
+      },
+      {
+        status: 409,
+        code: "TRANSACTION_CONFLICT",
+        expectedBase: BASE_409,
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.TRANSACTION_CONFLICT,
+        expectedMeta: { "io.frihet/conflict": true },
+      },
+      {
+        status: 409,
+        code: "ALREADY_ISSUED",
+        expectedBase: BASE_409,
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.ALREADY_ISSUED,
+        expectedMeta: { "io.frihet/conflict": true },
+      },
+      {
+        status: 409,
+        code: "PERIOD_CLOSED",
+        expectedBase: BASE_409,
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.PERIOD_CLOSED,
+        expectedMeta: { "io.frihet/conflict": true },
+      },
+      {
+        status: 409,
+        code: "ORIGINAL_INVOICE_FULLY_CREDITED",
+        expectedBase: BASE_409,
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.ORIGINAL_INVOICE_FULLY_CREDITED,
+        expectedMeta: { "io.frihet/conflict": true },
+      },
+      {
+        status: 400,
+        code: "ORIGINAL_INVOICE_IS_DRAFT",
+        expectedBase: "Bad request. Check your input parameters. / Solicitud incorrecta. Revisa los parametros.",
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.ORIGINAL_INVOICE_IS_DRAFT,
+        expectedMeta: { "io.frihet/requestRejected": true },
+      },
+      {
+        status: 403,
+        code: "PLAN_UPGRADE_REQUIRED",
+        expectedBase: GENERIC_403,
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.PLAN_UPGRADE_REQUIRED,
+        expectedMeta: { "io.frihet/accessDenied": true },
+      },
+      {
+        status: 422,
+        code: "VALIDATION_ERROR",
+        expectedBase: BASE_422,
+      },
+      {
+        status: 422,
+        code: "PERIOD_CLOSED",
+        expectedBase: BASE_422,
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.PERIOD_CLOSED,
+      },
+    ];
+
+    for (const c of cases) {
+      for (const rawCode of [c.code, c.code.toLowerCase()]) {
+        const result = handleToolError(new FrihetApiError(c.status, rawCode, privateMessage, privateDetail));
+        assert.equal(result.isError, true);
+        assert.equal(result.structuredContent, undefined);
+        assert.deepEqual(result._meta, c.expectedMeta, `${c.status} ${rawCode}`);
+        const text = result.content[0]!.text;
+        const expected = c.expectedHint ? `Error: ${c.expectedBase} ${c.expectedHint}` : `Error: ${c.expectedBase}`;
+        assert.equal(text, expected, `${c.status} ${rawCode}`);
+        assert.doesNotMatch(JSON.stringify(result), /PRIVATE_|fri_/u, `${c.status} ${rawCode}`);
+      }
+    }
+
+    // Prototype property names and uncertain 409 outcomes never trigger static hints or conflict flags.
+    for (const protoCode of ["toString", "constructor", "__proto__"]) {
+      const result = handleToolError(new FrihetApiError(409, protoCode, privateMessage, privateDetail));
+      assert.equal(result.content[0]!.text, `Error: ${BASE_409}`);
+      assert.deepEqual(result._meta, { "io.frihet/conflict": true });
+      assert.doesNotMatch(JSON.stringify(result), /PRIVATE_|fri_/u);
+    }
+
+    const inProgress = handleToolError(
+      new FrihetApiError(409, "IDEMPOTENCY_REQUEST_IN_PROGRESS", privateMessage, privateDetail),
+    );
+    assert.equal(inProgress._meta?.["io.frihet/conflict"], undefined);
+    assert.deepEqual(inProgress._meta, { "io.frihet/operationOutcomeUnknown": true });
+    assert.doesNotMatch(inProgress.content[0]!.text, new RegExp(BASE_409.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.doesNotMatch(JSON.stringify(inProgress), /PRIVATE_|fri_/u);
+  });
+
+  test("never leaks PRIVATE_ or fri_ strings in any MCP profile across 409, 400, 403, and 422 failures", async () => {
+    const profiles = [
+      { label: "general-local", composition: localMcpSurfaceComposition(false, false, false), claude: false, openai: false },
+      { label: "general-remote", composition: remoteMcpSurfaceComposition(false, false, false), claude: false, openai: false },
+      { label: "claude-local", composition: localMcpSurfaceComposition(false, true, true), claude: true, openai: false },
+      { label: "claude-remote", composition: remoteMcpSurfaceComposition(false, true, true), claude: true, openai: false },
+      { label: "openai-remote", composition: remoteMcpSurfaceComposition(true, false, false), claude: false, openai: true },
+      { label: "google-remote", composition: remoteMcpSurfaceComposition(false, false, false, true, false), claude: false, openai: false },
+      { label: "muse-remote", composition: remoteMcpSurfaceComposition(false, false, false, false, true), claude: false, openai: false },
+    ] as const;
+
+    const scenarios: Array<{
+      status: number;
+      code: string;
+      expectedHint?: string;
+      expectedMeta?: Record<string, boolean>;
+      claudePrefix?: RegExp;
+    }> = [
+      {
+        status: 409,
+        code: "IDEMPOTENCY_KEY_REUSED",
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.IDEMPOTENCY_KEY_REUSED,
+        expectedMeta: { "io.frihet/conflict": true },
+        claudePrefix: /^CONFLICT:/u,
+      },
+      {
+        status: 409,
+        code: "INVOICE_STATUS_PRECONDITION_FAILED",
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.INVOICE_STATUS_PRECONDITION_FAILED,
+        expectedMeta: { "io.frihet/conflict": true },
+        claudePrefix: /^CONFLICT:/u,
+      },
+      {
+        status: 409,
+        code: "TRANSACTION_CONFLICT",
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.TRANSACTION_CONFLICT,
+        expectedMeta: { "io.frihet/conflict": true },
+        claudePrefix: /^CONFLICT:/u,
+      },
+      {
+        status: 400,
+        code: "ORIGINAL_INVOICE_IS_DRAFT",
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.ORIGINAL_INVOICE_IS_DRAFT,
+        expectedMeta: { "io.frihet/requestRejected": true },
+        claudePrefix: /^REQUEST_REJECTED:/u,
+      },
+      {
+        status: 403,
+        code: "PLAN_UPGRADE_REQUIRED",
+        expectedHint: STATIC_ERROR_CODE_REMEDIATION.PLAN_UPGRADE_REQUIRED,
+        expectedMeta: { "io.frihet/accessDenied": true },
+        claudePrefix: /^ACCESS_DENIED:/u,
+      },
+      {
+        status: 422,
+        code: "VALIDATION_ERROR",
+        claudePrefix: /could not complete or confirm/u,
+      },
+    ];
+
+    const originalFetch = globalThis.fetch;
+    let currentScenario = scenarios[0]!;
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      error: currentScenario.code,
+      message: `PRIVATE_body_message ${REAL_FORMAT_FRIHET_KEY}`,
+      detail: `PRIVATE_body_detail fri_live_TOPSECRET_abcdef1234567890`,
+      meta: { requestId: "PRIVATE_request_id" },
+    }), {
+      status: currentScenario.status,
+      headers: { "content-type": "application/json" },
+    });
+
+    try {
+      initLangfuse({});
+      for (const profile of profiles) {
+        const server = new McpServer({ name: `remediation-${profile.label}`, version: "1.0.0" });
+        const api = new FrihetClient("fri_synthetic_not_a_credential", "https://api.example.test/v1");
+        registerMcpSurface(server, api, profile.composition);
+        const client = new Client({ name: `client-${profile.label}`, version: "1.0.0" });
+        const [ct, st] = InMemoryTransport.createLinkedPair();
+        await Promise.all([client.connect(ct), server.connect(st)]);
+
+        try {
+          for (const scenario of scenarios) {
+            currentScenario = scenario;
+            const args = {
+              clientName: "Synthetic Customer",
+              items: [{ description: "Synthetic service", quantity: 1, unitPrice: 100 }],
+              ...(profile.openai ? { confirm: true } : {}),
+            };
+            const result = await client.callTool({ name: "create_invoice", arguments: args });
+            assert.equal(result.isError, true, `${profile.label} ${scenario.status} ${scenario.code}`);
+            assert.equal(result.structuredContent, undefined, `${profile.label} ${scenario.status} ${scenario.code}`);
+            assert.doesNotMatch(
+              JSON.stringify(result),
+              /PRIVATE_|fri_/u,
+              `${profile.label} leaked private marker on ${scenario.status} ${scenario.code}`,
+            );
+
+            const text = (result.content as Array<{ text: string }>)[0]!.text;
+            assert.deepEqual(result._meta, scenario.expectedMeta, `${profile.label} _meta ${scenario.status} ${scenario.code}`);
+            if (profile.claude) {
+              assert.match(text, scenario.claudePrefix!, `${profile.label} ${scenario.status} ${scenario.code}`);
+            } else if (scenario.expectedHint) {
+              assert.ok(text.includes(scenario.expectedHint), `${profile.label} missing static hint for ${scenario.code}`);
+            } else {
+              assert.ok(text.includes(BASE_422), `${profile.label} missing 422 base message`);
+            }
+          }
+        } finally {
+          await Promise.allSettled([client.close(), server.close()]);
+        }
+      }
     } finally {
       globalThis.fetch = originalFetch;
     }
