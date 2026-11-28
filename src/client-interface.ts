@@ -7,6 +7,7 @@
  */
 
 import type {
+  BankTransactionSuggestions,
   CreateWebhookInput,
   CreateWebhookResult,
   PaginatedResponse,
@@ -189,6 +190,7 @@ export interface IFrihetClient {
   listBankAccounts(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
   getBankAccount(id: string): Promise<Record<string, unknown>>;
   listTransactions(params?: { accountId?: string; from?: string; to?: string; status?: string; category?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  getBankingTransactionSuggestions(transactionId: string, params?: { limit?: number }): Promise<BankTransactionSuggestions>;
   categorizeTransaction(id: string, data: { category: string; notes?: string }): Promise<Record<string, unknown>>;
   matchTransactionToDocument(transactionId: string, data: { documentId: string; documentType: "invoice" | "expense"; notes?: string }): Promise<Record<string, unknown>>;
 

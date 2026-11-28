@@ -180,3 +180,29 @@ export interface UpdateWebhookInput {
 
 /** Create may echo only the caller-supplied signing secret, once. */
 export type CreateWebhookResult = Webhook & { secret?: string };
+
+/** Read-only rankings returned by GET /banking/transactions/{id}/suggestions. */
+export interface ReconciliationSuggestion {
+  documentId: string;
+  documentType: "invoice" | "expense";
+  score: number;
+  confidence: number;
+  suggested: boolean;
+  amountDiff: number;
+  dateDiff: number;
+  reasons: string[];
+  breakdown: Array<{
+    signal: "amount" | "date" | "reference" | "counterparty";
+    points: number;
+    similarity: number;
+    reason: string;
+  }>;
+}
+
+export interface BankTransactionSuggestions {
+  transactionId: string;
+  limit: number;
+  suggestions: ReconciliationSuggestion[];
+  _demo?: true;
+  _demoNotice?: string;
+}

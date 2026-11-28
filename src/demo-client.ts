@@ -20,6 +20,7 @@
 
 import type { IFrihetClient } from "./client-interface.js";
 import type {
+  BankTransactionSuggestions,
   CreateWebhookInput,
   CreateWebhookResult,
   PaginatedResponse,
@@ -702,6 +703,9 @@ export class DemoFrihetClient implements IFrihetClient {
       && (!params?.category || row.category === params.category),
     );
     return demoPage(filtered, params, ["postedAt", "id"]);
+  }
+  async getBankingTransactionSuggestions(transactionId: string, params?: { limit?: number }): Promise<BankTransactionSuggestions> {
+    return { transactionId, limit: params?.limit ?? 5, suggestions: [], ...READ_STAMP };
   }
   async categorizeTransaction(id: string, data: { category: string; notes?: string }): Promise<Rec> {
     return simulateAction(id, { category: data.category, ...(data.notes ? { notes: data.notes } : {}) });

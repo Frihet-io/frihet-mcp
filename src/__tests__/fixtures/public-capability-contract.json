@@ -1,7 +1,7 @@
 {
   "contractVersion": 2,
   "catalogue": {
-    "canonicalOperations": 162,
+    "canonicalOperations": 163,
     "aliasNames": 5,
     "discoveryNames": 3
   },
@@ -1132,6 +1132,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_bank_account",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "get_banking_transaction_suggestions",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_banking_transaction_suggestions",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
@@ -4103,6 +4120,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_bank_account",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "get_banking_transaction_suggestions",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_banking_transaction_suggestions",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []

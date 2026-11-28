@@ -14,6 +14,7 @@
 
 import { rejectRedirectResponse } from "./fetch-no-redirect.js";
 import type {
+  BankTransactionSuggestions,
   ApiError,
   CreateWebhookInput,
   CreateWebhookResult,
@@ -1949,7 +1950,7 @@ export class FrihetClient {
 
   // ---------------------------------------------------------------- Banking
   // /v1/banking/* endpoints are LIVE in Frihet-ERP (#848): accounts list/get,
-  // transactions list/categorize/match. Paths below match the shipped server
+  // transactions list/suggestions/categorize/match. Paths below match the shipped server
   // actions verbatim. Client contract smoke: src/__tests__/banking-client-contract.test.ts.
 
   async listBankAccounts(
@@ -1977,6 +1978,12 @@ export class FrihetClient {
       limit: params?.limit,
       offset: params?.offset,
       cursor: params?.after,
+    });
+  }
+
+  async getBankingTransactionSuggestions(transactionId: string, params?: { limit?: number }): Promise<BankTransactionSuggestions> {
+    return this.requestUnwrapped("GET", `/banking/transactions/${pathSegment(transactionId)}/suggestions`, undefined, {
+      limit: params?.limit,
     });
   }
 

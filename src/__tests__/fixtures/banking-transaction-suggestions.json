@@ -1,0 +1,41 @@
+{
+  "data": {
+    "transactionId": "tx_2026_104",
+    "limit": 5,
+    "suggestions": [
+      {
+        "documentId": "inv_2026_104",
+        "documentType": "invoice",
+        "score": 100,
+        "confidence": 100,
+        "suggested": true,
+        "amountDiff": 0,
+        "dateDiff": 0,
+        "reasons": ["Amount matches within tolerance", "Exact date", "Reference matches", "Counterparty is similar"],
+        "breakdown": [
+          { "signal": "amount", "points": 40, "similarity": 1, "reason": "Amount matches within tolerance" },
+          { "signal": "date", "points": 30, "similarity": 1, "reason": "Exact date" },
+          { "signal": "reference", "points": 20, "similarity": 1, "reason": "Reference matches" },
+          { "signal": "counterparty", "points": 10, "similarity": 1, "reason": "Counterparty is similar" }
+        ]
+      },
+      {
+        "documentId": "exp_2026_105",
+        "documentType": "expense",
+        "score": 60,
+        "confidence": 60,
+        "suggested": false,
+        "amountDiff": 0.5,
+        "dateDiff": 999999,
+        "reasons": ["Amount matches within tolerance", "Reference matches"],
+        "breakdown": [
+          { "signal": "amount", "points": 40, "similarity": 1, "reason": "Amount matches within tolerance" },
+          { "signal": "date", "points": 0, "similarity": 0, "reason": "Date is outside tolerance" },
+          { "signal": "reference", "points": 20, "similarity": 1, "reason": "Reference matches" },
+          { "signal": "counterparty", "points": 0, "similarity": 0, "reason": "No counterparty" }
+        ]
+      }
+    ]
+  },
+  "meta": { "requestId": "req_suggestions_fixture", "source": "publicApi" }
+}

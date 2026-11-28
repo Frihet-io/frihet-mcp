@@ -9,8 +9,8 @@
     "description": "AI-native MCP server for Frihet ERP"
   },
   "summary": {
-    "totalTools": 167,
-    "canonicalOperations": 162,
+    "totalTools": 168,
+    "canonicalOperations": 163,
     "fiscalAliases": 5,
     "resources": 11,
     "prompts": 10,
@@ -43,7 +43,7 @@
       "name": "Exhaustive Tool Enumeration",
       "category": "tools",
       "status": "PASS",
-      "detail": "Enumerated 167 tools (162 canonical + 5 aliases)"
+      "detail": "Enumerated 168 tools (163 canonical + 5 aliases)"
     },
     {
       "id": "tools.canonical_names",
@@ -3475,6 +3475,49 @@
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "get_bank_account",
+        "writesFrihet": false,
+        "externalInteraction": false,
+        "externalSideEffects": []
+      }
+    },
+    {
+      "name": "get_banking_transaction_suggestions",
+      "title": "Get Banking Transaction Suggestions",
+      "description": "Read server-ranked invoice and expense reconciliation candidates with scores, reasons and signal breakdown. Read scope; limit 1-10, default 5. Does not match documents or change reconciliation records. / Lee candidatos de conciliacion ordenados por el servidor con puntuacion, motivos y desglose. Permiso de lectura; limite 1-10, por defecto 5. No vincula documentos ni modifica la conciliacion.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1500,
+            "pattern": "^(?!__)(?!\\.{1,2}$)[^/\\u0000]+$",
+            "description": "Bank transaction ID / ID del movimiento bancario"
+          },
+          "limit": {
+            "description": "Max candidates (default 5) / Candidatos maximos (por defecto 5)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "transactionId"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      },
+      "hasOutputSchema": true,
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "capabilityMeta": {
+        "registered": true,
+        "callability": "api_dependent",
+        "canonicalOperation": "get_banking_transaction_suggestions",
         "writesFrihet": false,
         "externalInteraction": false,
         "externalSideEffects": []
