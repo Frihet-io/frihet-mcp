@@ -87,7 +87,7 @@ test("source launch with declared demo values serves fixtures over MCP without a
   await client.connect(transport);
   assert.equal(client.getServerVersion().version, manifest.version);
   const catalogue = await client.listTools();
-  assert.equal(catalogue.tools.length, 163);
+  assert.equal(catalogue.tools.length, 168);
   assert.ok(catalogue.tools.some((tool) => tool.name === "get_business_context"));
   const context = await client.callTool({ name: "get_business_context", arguments: {} });
   assert.notEqual(context.isError, true);
