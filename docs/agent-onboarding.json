@@ -68,11 +68,11 @@
       "FRIHET_TOOL_MODE": "grouped"
     },
     "counts": {
-      "toolNames": 163,
-      "readOnly": 83,
-      "writesFrihet": 80,
-      "externalInteraction": 37,
-      "destructive": 60,
+      "toolNames": 166,
+      "readOnly": 85,
+      "writesFrihet": 81,
+      "externalInteraction": 38,
+      "destructive": 61,
       "resources": 11,
       "prompts": 10
     }
@@ -110,6 +110,7 @@
       "delete_recurring_invoice",
       "delete_time_entry",
       "face_submit",
+      "issue_invoice",
       "match_transaction_to_invoice",
       "period_close",
       "period_reopen",
@@ -244,6 +245,13 @@
         "tool": "invite_team_member",
         "effects": [
           "email_or_invitation"
+        ]
+      },
+      {
+        "tool": "issue_invoice",
+        "effects": [
+          "webhook_delivery_or_configuration",
+          "fiscal_or_einvoice_submission"
         ]
       },
       {

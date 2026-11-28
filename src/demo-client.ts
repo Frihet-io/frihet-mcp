@@ -264,6 +264,29 @@ export class DemoFrihetClient implements IFrihetClient {
   }
 
   // ---------------------------------------------------------------- Invoice actions
+  async getInvoicePaymentLink(id: string): Promise<import("./invoice-payment-link.js").UpstreamInvoicePaymentLinkResponse> {
+    return {
+      invoiceId: id, invoiceNumber: null, status: "sent", currency: "EUR",
+      totalAmount: null, amountPaid: null, amountDue: null, payable: false,
+      unavailableReason: "authority_state_unknown", paymentUrl: null,
+      paymentState: "unknown", authoritySource: "payment_authority_v1", authorityState: "unknown",
+      tokenPolicy: { version: "v1", expires: false, revalidatesOnOpenAndPay: true },
+      observedAt: DEMO_NOW, ...READ_STAMP,
+    };
+  }
+  async issueInvoice(id: string, _idempotencyKey?: string): Promise<Rec> {
+    return {
+      id, documentNumber: "DEMO-ISSUED-001", status: "sent",
+      fiscal: { verifactuStatusUrl: `https://api.frihet.io/v1/fiscal/verifactu/${encodeURIComponent(id)}/status` },
+      ...FISCAL_STAMP,
+    };
+  }
+  async listSeries(): Promise<{ data: Rec[]; _demo: true; _demoNotice: string }> {
+    return {
+      data: [{ id: "default", name: "Demo", pattern: "DEMO{SEQ4}", prefix: "DEMO", purpose: "ordinary", documentFamily: null }],
+      ...READ_STAMP,
+    };
+  }
   async sendInvoice(id: string, to?: string): Promise<Rec> {
     // Email dispatch — simulated, no email is actually sent.
     return { id, status: "sent", sentAt: DEMO_NOW, ...(to ? { to } : {}), ...FISCAL_STAMP };

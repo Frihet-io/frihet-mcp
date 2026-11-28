@@ -1,0 +1,8 @@
+{
+  "data": [
+    { "id": "default", "name": "Default", "pattern": "F{YEAR}{SEQ4}", "prefix": "F", "purpose": "ordinary", "documentFamily": "complete" },
+    { "id": "correction", "name": "Corrections", "pattern": "R{SEQ4}", "prefix": "R", "purpose": "rectificativa", "documentFamily": "complete" },
+    { "id": "broken", "name": "Unresolvable slot", "pattern": null, "prefix": null, "purpose": "ordinary", "documentFamily": null }
+  ],
+  "meta": { "requestId": "req_fixture", "timestamp": "2026-11-28T12:00:00.000Z" }
+}

@@ -15,9 +15,10 @@ import { assertClaudeCandidateCaptureParity, captureClaudeCandidateContract, ser
 import { FISCAL_MODELO_ALIASES } from "../fiscal-aliases.js";
 import { CAPABILITY_META_KEY } from "../capability-truth.js";
 import { localMcpSurfaceComposition, remoteMcpSurfaceComposition, registerMcpSurface } from "../server-composition.js";
+import { CANONICAL_COUNT } from "./helpers/surface-counts.js";
 
 const readFixture = (name: string) => readFileSync(new URL(`../../src/__tests__/fixtures/${name}`, import.meta.url), "utf8");
-// Independent inventory oracle: all 156 canonical names in the existing public capture.
+// Independent inventory oracle: canonical names in the generated public capture.
 const publicSurfaces = JSON.parse(readFixture("public-capability-contract.json")).surfaces as Record<string, {
   tools: Array<{ name: string; annotations: Record<string, boolean> }>;
 }>;
@@ -27,6 +28,7 @@ const originalAnnotations = new Map([
   ...publicSurfaces.remoteGrouped.tools,
 ].map((tool) => [tool.name, tool.annotations]));
 const excluded = [
+  "get_invoice_payment_link", "issue_invoice", "list_series",
   "ksef_submit", "get_modelo_180_summary", "frihet_modelo_415_summary", "frihet_modelo_418_summary", "frihet_modelo_425_summary", "frihet_aiem_calculate", "frihet_modelo_200_summary", "frihet_modelo_202_summary",
   "period_close", "period_reopen", "gestoria_message_send", "gestoria_messages_list", "gestoria_template_bulk_send", "gestoria_aging_consolidated", "create_reservation", "sync_channel",
   "refund_sale", "delete_client", "delete_expense", "send_quote",
@@ -76,9 +78,9 @@ async function denied(client: Client, name: string) {
 }
 
 test("Claude candidate exactly matches the regenerated SDK descriptor and inventory arithmetic", async () => {
-  assert.equal(fullNames.length - Object.keys(FISCAL_MODELO_ALIASES).length, 158);
+  assert.equal(fullNames.length - Object.keys(FISCAL_MODELO_ALIASES).length, CANONICAL_COUNT);
   assert.equal(canonical.length, 125);
-  assert.equal(excluded.length, 33);
+  assert.equal(excluded.length, CANONICAL_COUNT - 125);
   assert.equal(allowedAliases.length, 4);
   assert.deepEqual([...CLAUDE_CANDIDATE_TOOLS].sort(), canonical);
   assert.deepEqual(Object.keys(CLAUDE_EXCLUDED_TOOLS).sort(), excluded);

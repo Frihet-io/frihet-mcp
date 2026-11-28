@@ -379,11 +379,11 @@ const TOOL_NOUNS = [
   'εργαλείο', 'εργαλεία',
   'araç', 'araçlar', 'araclar',
   'eszköz', 'eszközök',
-  'ツール',
+  '\u30c4\u30fc\u30eb',
 ];
 const TOOL_NOUN_RE = TOOL_NOUNS.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 // e.g. "94 tools", "94 herramientas", "157 MCP tools", "157 source-verified
-// tools", "31 de instrumente", "31ツール".
+// tools", "31 de instrumente", "31\u30c4\u30fc\u30eb".
 //
 // Three drift classes escaped the previous pattern
 // (`\b(\d{1,4})[\s_-]+(?:MCP[\s_-]+)?(NOUN)\b`). Each was found in files this
@@ -392,9 +392,9 @@ const TOOL_NOUN_RE = TOOL_NOUNS.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$
 //     "157 source-verified tools" claims in Frihet-ERP/apps/erp/public/llms.txt
 //     — a public AI-discovery surface — drifted unseen.
 //   - The trailing `\b` is ASCII-only without the `u` flag, so a noun ending in
-//     a non-ASCII letter could never match. `araç`, `εργαλεία` and `ツール` sat
+//     a non-ASCII letter could never match. `araç`, `εργαλεία` and `\u30c4\u30fc\u30eb` sat
 //     in TOOL_NOUNS as unreachable entries.
-//   - CJK writes the count with no separator at all ("31ツール").
+//   - CJK writes the count with no separator at all ("31\u30c4\u30fc\u30eb").
 // Together these are why the ERP's stale "31 tools" was visible in only 22 of
 // its 34 locale files.
 //

@@ -191,6 +191,7 @@ const WRITE_OVERRIDES = new Set([
 ]);
 
 const EXTERNAL_SIDE_EFFECTS: Readonly<Record<string, readonly ExternalSideEffect[]>> = {
+  issue_invoice: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
   create_invoice: ["webhook_delivery_or_configuration", "fiscal_or_einvoice_submission"],
   duplicate_invoice: ["webhook_delivery_or_configuration"],
   create_credit_note: ["webhook_delivery_or_configuration"],

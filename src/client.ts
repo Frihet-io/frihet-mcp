@@ -1269,6 +1269,26 @@ export class FrihetClient {
   // ---------------------------------------------------------------- Invoice Actions
   // ----------------------------------------------------------------
 
+  async getInvoicePaymentLink(id: string): Promise<import("./invoice-payment-link.js").UpstreamInvoicePaymentLinkResponse> {
+    return this.requestUnwrapped("GET", `/invoices/${pathSegment(id)}/payment-link`);
+  }
+
+  async issueInvoice(id: string, idempotencyKey?: string): Promise<Record<string, unknown>> {
+    // The fiscal status URL is a sibling of data, not part of data. Keep it
+    // while dropping transport metadata; requestUnwrapped would lose it.
+    const result = await this.request<{
+      data: Record<string, unknown>;
+      fiscal: { verifactuStatusUrl: string };
+    }>("POST", `/invoices/${pathSegment(id)}/issue`, undefined, undefined, 0, idempotencyKey);
+    return { ...result.data, fiscal: result.fiscal };
+  }
+
+  async listSeries(): Promise<{ data: Record<string, unknown>[] }> {
+    // This is a complete configuration list, with no pagination contract.
+    const result = await this.request<{ data: Record<string, unknown>[] }>("GET", "/series");
+    return { data: result.data };
+  }
+
   async sendInvoice(id: string, to?: string): Promise<Record<string, unknown>> {
     return this.requestUnwrapped(
       "POST",

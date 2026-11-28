@@ -71,6 +71,9 @@ export interface IFrihetClient {
   getPurchaseOrder(id: string): Promise<Record<string, unknown>>;
 
   // Invoice actions
+  getInvoicePaymentLink(id: string): Promise<import("./invoice-payment-link.js").UpstreamInvoicePaymentLinkResponse>;
+  issueInvoice(id: string, idempotencyKey?: string): Promise<Record<string, unknown>>;
+  listSeries(): Promise<{ data: Record<string, unknown>[]; _demo?: true; _demoNotice?: string }>;
   sendInvoice(id: string, to?: string): Promise<Record<string, unknown>>;
   markInvoicePaid(id: string, paidDate?: string): Promise<Record<string, unknown>>;
   // #1393: bounded, content-type-aware document responses. Invoice PDFs and

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "id": "inv_2026_104",
+    "documentNumber": "F20260104",
+    "status": "sent",
+    "seriesId": "default",
+    "issueDate": "2026-11-28",
+    "clientId": "cli_01",
+    "clientName": "Example Client",
+    "currency": "EUR",
+    "total": 1210
+  },
+  "fiscal": { "verifactuStatusUrl": "https://api.frihet.io/v1/fiscal/verifactu/inv_2026_104/status" },
+  "meta": { "requestId": "req_fixture", "timestamp": "2026-11-28T12:00:00.000Z" }
+}

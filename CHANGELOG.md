@@ -4,6 +4,9 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+- Register `get_invoice_payment_link`, `issue_invoice` and `list_series` against the ERP OpenAPI contract, with strict schemas, read-only payment-link reads and idempotent headless fiscal issuance.
+- Sync the full OpenAPI projection to the 88-path ERP source (#4033) and refresh the offline cross-surface authority. The deployed origin observed on 2026-11-28 still published 87 paths.
+
 ## [2.0.2] — 2026-11-09
 
 ### Added
@@ -14,7 +17,7 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ### Changed
 
-- **Release projections now agree on 2.0.2 and the generated runtime inventory.** The catalogue has 158 canonical operations (157 measured in 1.17.0, minus the two withdrawn tools, plus `global_search`, plus the read-only `list_purchase_orders` and `get_purchase_order`; #124 withdrew the dead `onboarding_status` / `onboarding_persona_set` tools pending Frihet-ERP shipping the `/v1/onboarding/*` family). `localFull` exposes 163 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 166 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth.
+- **Release projections now agree on 2.0.2 and the generated runtime inventory.** The catalogue has 161 canonical operations (including the source additions under Unreleased). `localFull` exposes 166 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 169 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth.
 
 ## [2.0.1] — 2026-11-08
 
