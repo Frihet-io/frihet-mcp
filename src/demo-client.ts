@@ -357,6 +357,11 @@ export class DemoFrihetClient implements IFrihetClient {
   }
 
   // ---------------------------------------------------------------- Quote actions
+  async getQuotePdf(id: string): Promise<BinaryDocument> {
+    const bytes = Buffer.from(`%PDF-1.4\n%%DEMO quote for ${id}\n%%EOF\n`, "utf8");
+    return { id, contentType: "application/pdf", sizeBytes: bytes.byteLength, base64: bytes.toString("base64"), ...READ_STAMP };
+  }
+
   async sendQuote(id: string, to?: string): Promise<Rec> {
     return { id, status: "sent", sentAt: DEMO_NOW, ...(to ? { to } : {}), ...FISCAL_STAMP };
   }

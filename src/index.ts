@@ -142,7 +142,7 @@ function main(): void {
       ? `Frihet ERP connector for Meta Muse: ${MUSE_CANDIDATE_TOOL_COUNT} canonical operations with draft-only human-in-the-loop protection.`
       :
       "AI-native MCP server for Frihet ERP — invoices, expenses, clients, products, quotes, webhooks, and deposits. " +
-      "Provides a catalogue of 161 canonical operations; fiscal aliases and optional grouped discovery names are reported separately. " +
+      "Provides a catalogue of 162 canonical operations; fiscal aliases and optional grouped discovery names are reported separately. " +
       "The local package serves 11 resources (7 static + 4 API-backed) and 10 workflow prompts " +
       "with full Spanish tax compliance (IVA, IGIC, IPSI).",
   }, {

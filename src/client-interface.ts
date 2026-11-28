@@ -84,6 +84,7 @@ export interface IFrihetClient {
   applyLateFee(invoiceId: string, data?: { amount?: number; daysOverdue?: number }): Promise<any>;
 
   // Quote actions
+  getQuotePdf(id: string): Promise<import("./client.js").BinaryDocument>;
   sendQuote(id: string, to?: string): Promise<Record<string, unknown>>;
 
   // Webhooks

@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
-import { withToolLogging, confirmationRequiredError, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, quoteItemOutput, actionResultOutput } from "./shared.js";
+import { withToolLogging, confirmationRequiredError, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, quoteItemOutput, actionResultOutput, pdfResultOutput } from "./shared.js";
 
 const quoteItemSchema = z.object({
   description: z.string().trim().min(1).max(500).describe("Description of the line item / Descripcion del concepto"),
@@ -61,6 +61,29 @@ const quoteOptionalFields = {
 };
 
 export function registerQuoteTools(server: McpServer, client: IFrihetClient): void {
+  server.registerTool(
+    "get_quote_pdf",
+    {
+      title: "Get Quote PDF",
+      description:
+        "Download a quote PDF with read scope. Returns base64, contentType, sizeBytes and document ID; rejects PDFs above 25 MiB. " +
+        "/ Descarga el PDF de un presupuesto con permiso de lectura. Devuelve base64, contentType, sizeBytes e ID; rechaza PDFs mayores de 25 MiB.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: z.object({
+        id: z.string().trim().min(1).max(128).describe("Quote ID / ID del presupuesto"),
+      }).strict(),
+      outputSchema: pdfResultOutput,
+    },
+    async ({ id }) => withToolLogging("get_quote_pdf", async () => {
+      const result = await client.getQuotePdf(id);
+      const { id: documentId, contentType, sizeBytes, filename } = result;
+      return {
+        content: [getContent(formatRecord("Quote PDF", { id: documentId, contentType, sizeBytes, ...(filename ? { filename } : {}) }))],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    }),
+  );
+
   // -- list_quotes --
 
   server.registerTool(

@@ -1,7 +1,7 @@
 {
   "contractVersion": 2,
   "catalogue": {
-    "canonicalOperations": 161,
+    "canonicalOperations": 162,
     "aliasNames": 5,
     "discoveryNames": 3
   },
@@ -1472,6 +1472,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_quote",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "get_quote_pdf",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_quote_pdf",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
@@ -4426,6 +4443,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_quote",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "get_quote_pdf",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_quote_pdf",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []

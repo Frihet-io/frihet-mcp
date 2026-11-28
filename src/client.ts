@@ -61,7 +61,7 @@ const MAX_ERROR_BYTES = 64 * 1024;
  * sparse object on the wire.
  */
 export interface BinaryDocument {
-  /** Echoed id from the request (invoice id), so callers can correlate. */
+  /** Echoed document id from the request, so callers can correlate. */
   id: string;
   /** Verbatim `Content-Type` from the response (e.g. `application/pdf`). */
   contentType: string;
@@ -1302,14 +1302,17 @@ export class FrihetClient {
   }
 
   async getInvoicePdf(id: string): Promise<BinaryDocument> {
+    return this.getDocumentPdf(id, `/invoices/${pathSegment(id)}/pdf`, "Invoice");
+  }
+
+  private async getDocumentPdf(id: string, path: string, label: "Invoice" | "Quote"): Promise<BinaryDocument> {
     // One fetch, one Response: validate MIME and signature only after the
     // bounded stream completes. The ERP endpoint has always returned raw bytes
     // (functions/src/publicApi.ts:6149-6167); there is no pre-signed-URL or JSON
     // success contract to emulate.
-    const url = `/invoices/${pathSegment(id)}/pdf`;
     const doc = await this.requestDocument(
       "GET",
-      url,
+      path,
       undefined,
       undefined,
       undefined,
@@ -1328,19 +1331,19 @@ export class FrihetClient {
       throw new FrihetApiError(
         200,
         "invalid_response",
-        `Invoice PDF endpoint returned unexpected Content-Type: ${doc.contentType}`,
+        `${label} PDF endpoint returned unexpected Content-Type: ${doc.contentType}`,
       );
     }
 
     if (!hasPdfSignature(doc.bytes)) {
-      throw new FrihetApiError(200, "invalid_response", "Invoice PDF response is malformed");
+      throw new FrihetApiError(200, "invalid_response", `${label} PDF response is malformed`);
     }
 
     if (doc.sizeBytes > MAX_PDF_BYTES) {
       throw new FrihetApiError(
         413,
         "payload_too_large",
-        `Invoice PDF exceeds maximum allowed size of ${MAX_PDF_BYTES} bytes`,
+        `${label} PDF exceeds maximum allowed size of ${MAX_PDF_BYTES} bytes`,
       );
     }
 
@@ -1437,6 +1440,10 @@ export class FrihetClient {
 
   // ---------------------------------------------------------------- Quote Actions
   // ----------------------------------------------------------------
+
+  async getQuotePdf(id: string): Promise<BinaryDocument> {
+    return this.getDocumentPdf(id, `/quotes/${pathSegment(id)}/pdf`, "Quote");
+  }
 
   async sendQuote(id: string, to?: string): Promise<Record<string, unknown>> {
     return this.requestUnwrapped(

@@ -143,6 +143,7 @@ export const CLAUDE_CANDIDATE_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 export const CLAUDE_EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
+  "get_quote_pdf": "Opaque quote PDF bytes can contain sensitive fields and cannot be safely redacted by the Claude output boundary.",
   "get_invoice_payment_link": "Added after the Claude candidate freeze; signed payment capabilities have not been admitted to this profile.",
   "issue_invoice": "Added after the Claude candidate freeze; headless fiscal issuance has not been admitted to this profile.",
   "list_series": "Added after the Claude candidate freeze; invoice series discovery has not been admitted to this profile.",

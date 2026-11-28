@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.frihet/erp",
   "title": "Frihet ERP",
-  "description": "AI-native ERP MCP server with a 161-operation catalogue; the grouped remote profile exposes 169 tool names, 7 resources, and 10 prompts with callability and side effects reported separately.",
+  "description": "AI-native ERP MCP server with a 162-operation catalogue; the grouped remote profile exposes 170 tool names, 7 resources, and 10 prompts with callability and side effects reported separately.",
   "version": "2.0.2",
   "license": "MIT",
   "repository": {

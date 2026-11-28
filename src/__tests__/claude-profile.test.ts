@@ -28,6 +28,7 @@ const originalAnnotations = new Map([
   ...publicSurfaces.remoteGrouped.tools,
 ].map((tool) => [tool.name, tool.annotations]));
 const excluded = [
+  "get_quote_pdf",
   "get_invoice_payment_link", "issue_invoice", "list_series",
   "ksef_submit", "get_modelo_180_summary", "frihet_modelo_415_summary", "frihet_modelo_418_summary", "frihet_modelo_425_summary", "frihet_aiem_calculate", "frihet_modelo_200_summary", "frihet_modelo_202_summary",
   "period_close", "period_reopen", "gestoria_message_send", "gestoria_messages_list", "gestoria_template_bulk_send", "gestoria_aging_consolidated", "create_reservation", "sync_channel",

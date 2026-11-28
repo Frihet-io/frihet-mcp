@@ -9,8 +9,8 @@
     "description": "AI-native MCP server for Frihet ERP"
   },
   "summary": {
-    "totalTools": 166,
-    "canonicalOperations": 161,
+    "totalTools": 167,
+    "canonicalOperations": 162,
     "fiscalAliases": 5,
     "resources": 11,
     "prompts": 10,
@@ -43,7 +43,7 @@
       "name": "Exhaustive Tool Enumeration",
       "category": "tools",
       "status": "PASS",
-      "detail": "Enumerated 166 tools (161 canonical + 5 aliases)"
+      "detail": "Enumerated 167 tools (162 canonical + 5 aliases)"
     },
     {
       "id": "tools.canonical_names",
@@ -4110,6 +4110,42 @@
         "registered": true,
         "callability": "api_dependent",
         "canonicalOperation": "get_quote",
+        "writesFrihet": false,
+        "externalInteraction": false,
+        "externalSideEffects": []
+      }
+    },
+    {
+      "name": "get_quote_pdf",
+      "title": "Get Quote PDF",
+      "description": "Download a quote PDF with read scope. Returns base64, contentType, sizeBytes and document ID; rejects PDFs above 25 MiB. / Descarga el PDF de un presupuesto con permiso de lectura. Devuelve base64, contentType, sizeBytes e ID; rechaza PDFs mayores de 25 MiB.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Quote ID / ID del presupuesto"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      },
+      "hasOutputSchema": true,
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "capabilityMeta": {
+        "registered": true,
+        "callability": "api_dependent",
+        "canonicalOperation": "get_quote_pdf",
         "writesFrihet": false,
         "externalInteraction": false,
         "externalSideEffects": []

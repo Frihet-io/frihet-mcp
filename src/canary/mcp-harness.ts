@@ -39,7 +39,7 @@ const PKG_VERSION: string = (() => {
 export const HARNESS_CONTRACT_VERSION = 1;
 export const INSPECTOR_PINNED_VERSION = "2.3.0";
 // OpenAPI parity: payment link, headless issuance and series configuration.
-export const CANONICAL_OPERATIONS_COUNT = 161;
+export const CANONICAL_OPERATIONS_COUNT = 162;
 export const FISCAL_ALIASES_COUNT = Object.keys(FISCAL_MODELO_ALIASES).length;
 
 export type CheckStatus = "PASS" | "FAIL" | "UNSUPPORTED" | "NOT_EXERCISED";

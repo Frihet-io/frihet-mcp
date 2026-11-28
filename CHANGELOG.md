@@ -4,6 +4,7 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ## [Unreleased]
 
+- Add read-only `get_quote_pdf`, sharing bounded PDF transport with invoice downloads and preserving the reviewed profile inventories.
 - Register `get_invoice_payment_link`, `issue_invoice` and `list_series` against the ERP OpenAPI contract, with strict schemas, read-only payment-link reads and idempotent headless fiscal issuance.
 - Sync the full OpenAPI projection to the 88-path ERP source (#4033) and refresh the offline cross-surface authority. The deployed origin observed on 2026-11-28 still published 87 paths.
 
@@ -17,7 +18,7 @@ All notable changes to `@frihet/mcp-server` are documented here.
 
 ### Changed
 
-- **Release projections now agree on 2.0.2 and the generated runtime inventory.** The catalogue has 161 canonical operations (including the source additions under Unreleased). `localFull` exposes 166 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 169 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth.
+- **Release projections now agree on 2.0.2 and the generated runtime inventory.** The catalogue has 162 canonical operations (including the source additions under Unreleased). `localFull` exposes 167 tool names, 11 resources, and 10 prompts; `remoteGrouped` exposes 170 tool names, 7 resources, and 10 prompts; `openaiFull` remains 33 tool names, 0 resources, and 0 prompts. The package, lockfile, MCP Registry server descriptor, README, Glama descriptor, Anthropic connector, skills, and default Worker release metadata carry the same current version/count truth.
 
 ## [2.0.1] — 2026-11-08
 
