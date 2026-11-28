@@ -3,7 +3,7 @@
   "generatedBy": "scripts/conformance/run-phase0.mjs",
   "deterministic": "No timestamps, ports, session ids or durations are recorded — rerunning on the same SHA must produce a byte-identical file.",
   "versions": {
-    "serverSha": "3ff3840e57288eb4143562b4c450ddd7282ba22d",
+    "serverSha": "66a975da6a67ab841ee17e94d727a6ca73293b3a",
     "serverPackageVersion": "2.0.2",
     "sdkVersion": "1.32.2",
     "sdkDeclaredRange": "1.32.2",
@@ -33,7 +33,7 @@
     },
     "serverInfoName": "frihet-erp",
     "inventoryCounts": {
-      "tools": 163,
+      "tools": 168,
       "resources": 11,
       "prompts": 10
     }
