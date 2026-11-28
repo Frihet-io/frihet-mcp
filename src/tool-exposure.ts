@@ -192,6 +192,7 @@ export const FILE_TO_GROUP: Record<string, ToolGroupId> = {
  * (e.g. e-invoicing tools say "invoice" but belong to fiscal/compliance).
  */
 const NAME_OVERRIDES: Record<string, ToolGroupId> = {
+  list_series: "invoicing",
   send_einvoice: "fiscal",
   get_einvoice_status: "fiscal",
   validate_einvoice_xml: "fiscal",

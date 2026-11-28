@@ -19,7 +19,7 @@
   <a href="https://www.npmjs.com/package/@frihet/mcp-server"><img src="https://img.shields.io/npm/v/@frihet/mcp-server?style=flat&color=18181b&labelColor=09090b" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/@frihet/mcp-server"><img src="https://img.shields.io/npm/dm/@frihet/mcp-server?style=flat&color=18181b&labelColor=09090b&label=downloads" alt="npm downloads"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.frihet"><img src="https://img.shields.io/badge/MCP_Registry-io.frihet%2Ferp-4A90D9?style=flat&logo=anthropic&logoColor=white" alt="MCP Registry"></a>
-  <img src="https://img.shields.io/badge/catalogue-158_operations-18181b?style=flat&labelColor=09090b" alt="158 canonical catalogue operations">
+  <img src="https://img.shields.io/badge/catalogue-163_operations-18181b?style=flat&labelColor=09090b" alt="163 canonical catalogue operations">
   <a href="https://github.com/Frihet-io/frihet-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-18181b?style=flat&labelColor=09090b" alt="license"></a>
 </p>
 
@@ -38,7 +38,7 @@ You:     "Create an invoice for TechStart SL, 40 hours of consulting at 75 EUR/h
 Claude:  Done. Invoice INV-2026-089 created. Total: 3,000.00 EUR + 21% IVA = 3,630.00 EUR.
 ```
 
-158 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources; the hosted Worker deliberately serves the 7 static resources, while API-backed workspace resources remain local-profile only.
+163 canonical operations. Five fiscal aliases. Ten prompts. The local package serves 11 resources; the hosted Worker deliberately serves the 7 static resources, while API-backed workspace resources remain local-profile only.
 
 ---
 
@@ -77,7 +77,7 @@ Local installs need Node 22.23.4+, 24.22.1+ or 26.12.1+. Other clients are cover
 
 Also listed on [Glama](https://glama.ai/mcp/servers/Frihet-io/frihet-mcp), [Cursor Directory](https://cursor.directory/plugins/mcp-frihet), [mcp.so](https://mcp.so/servers/frihet-mcp), [mcpservers.org](https://mcpservers.org/servers/frihet-io/frihet-mcp) and the [ToolSDK registry](https://github.com/toolsdk-ai/toolsdk-mcp-registry/blob/main/packages/finance-fintech/frihet-mcp.json).
 
-> **Surface truth:** the catalogue contains 158 canonical operations. The local full profile serves 163 tool names, 11 resources, and 10 prompts (158 canonical operations plus 5 fiscal aliases). The hosted grouped profile serves 166 tool names, 7 resources, and 10 prompts (the same names plus 3 discovery tools, with API-backed resources kept local-only). The separately reviewed OpenAI profile serves 33 tool names, 0 resources, and 0 prompts. These counts describe the current source release; the hosted server reports the version it is running at `/health`. Catalogue membership is not a promise that a backing API is enabled for every workspace.
+> **Surface truth:** the catalogue contains 163 canonical operations. The local full profile serves 168 tool names, 11 resources, and 10 prompts (163 canonical operations plus 5 fiscal aliases). The hosted grouped profile serves 171 tool names, 7 resources, and 10 prompts (the same names plus 3 discovery tools, with API-backed resources kept local-only). The separately reviewed OpenAI profile serves 33 tool names, 0 resources, and 0 prompts. These counts describe the current source release; the hosted server reports the version it is running at `/health`. Catalogue membership is not a promise that a backing API is enabled for every workspace.
 
 ---
 
@@ -197,7 +197,7 @@ If you are an agent reading this repository, the contract is machine-readable an
 
 ## What to expect
 
-This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. Most of the 158 canonical operations are CRUD operations over the REST API; the rest are read-only summaries and fiscal/e-invoice actions. Alias and discovery names are counted separately.
+This MCP is a **structured data interface** -- you describe what you want in natural language, and the AI creates, queries, or modifies business records in Frihet. Most of the 163 canonical operations are CRUD operations over the REST API; the rest are read-only summaries and fiscal/e-invoice actions. Alias and discovery names are counted separately.
 
 It does not do OCR, PDF scanning, file upload or image processing. To digitize a paper invoice, extract the data first (a vision model, an OCR service, or manual entry), then ask the assistant to create the record. One API key maps to one Frihet workspace, and you need a Frihet account at [app.frihet.io](https://app.frihet.io).
 
@@ -206,14 +206,23 @@ It does not do OCR, PDF scanning, file upload or image processing. To digitize a
 ## Full catalogue
 
 <details>
-<summary><strong>All 158 canonical operations, resources and prompts</strong></summary>
+<summary><strong>All 163 canonical operations, resources and prompts</strong></summary>
 
-### Invoices (12)
+The full catalogue includes `get_invoice_payment_link` (canonical balance and a validated signed portal URL),
+`issue_invoice` (confirmed fiscal issuance without email, with idempotent retries), and `list_series`
+(read-only invoice numbering configuration). These use the ERP OpenAPI contract; the reviewed OpenAI profile is unchanged.
+The committed OpenAPI projection tracks the 88-path ERP source at `c61a00c56` (#4033).
+At validation on 2026-11-28 the deployed origin still published 87 paths, so payment-link deployment is not established by this branch.
+
+### Invoices (15)
 
 | Tool | What it does |
 |------|-------------|
 | `list_invoices` | List invoices with pagination |
 | `get_invoice` | Get full invoice details by ID |
+| `get_invoice_payment_link` | Read canonical balance and a validated signed payment portal URL |
+| `issue_invoice` | Issue a draft with its fiscal number, without email (`confirm=true`; supports `idempotencyKey`) |
+| `list_series` | List invoice numbering configuration without consuming counters |
 | `create_invoice` | Create a new invoice with line items |
 | `update_invoice` | Update any invoice field |
 | `delete_invoice` | Delete a draft invoice; a sent/paid one is cancelled, not destroyed (`confirm=true` required) |
@@ -278,12 +287,13 @@ It does not do OCR, PDF scanning, file upload or image processing. To digitize a
 | `update_product` | Update pricing or details |
 | `delete_product` | Remove a product |
 
-### Quotes (6)
+### Quotes (7)
 
 | Tool | What it does |
 |------|-------------|
 | `list_quotes` | List all quotes |
 | `get_quote` | Get quote details |
+| `get_quote_pdf` | Download the quote PDF as bounded, validated base64 |
 | `create_quote` | Draft a new quote |
 | `update_quote` | Modify a quote |
 | `delete_quote` | Delete only a clean draft with no delivery, response, attachment, or conversion evidence; refuse protected drafts; cancel non-drafts (`confirm=true` required) |
@@ -435,13 +445,14 @@ It does not do OCR, PDF scanning, file upload or image processing. To digitize a
 | `update_vendor` | Update vendor info |
 | `delete_vendor` | Remove a vendor |
 
-### Banking (5)
+### Banking (6)
 
 | Tool | What it does |
 |------|-------------|
 | `list_bank_accounts` | List connected bank accounts |
 | `get_bank_account` | Get details for a bank account |
 | `list_transactions` | List bank transactions with filters |
+| `get_banking_transaction_suggestions` | Read ranked invoice/expense candidates and scoring reasons without reconciling |
 | `categorize_transaction` | Assign a category and expense/income type to a transaction |
 | `match_transaction_to_invoice` | Link a bank transaction to an existing invoice |
 
@@ -629,7 +640,7 @@ Test with the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspect
 
 | Package | What it is |
 |---------|-----------|
-| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (158 canonical operations + 5 alias names; 11 local resources; 10 prompts) |
+| [`@frihet/mcp-server`](https://www.npmjs.com/package/@frihet/mcp-server) | This MCP server (163 canonical operations + 5 alias names; 11 local resources; 10 prompts) |
 | [`@frihet/sdk`](https://github.com/Frihet-io/frihet-sdk) | TypeScript SDK (`frihet.invoices.create()`) |
 | [`frihet`](https://www.npmjs.com/package/frihet) | CLI (`frihet invoices list --status overdue`) |
 | [`n8n-nodes-frihet`](https://www.npmjs.com/package/n8n-nodes-frihet) | n8n community node for workflow automation |

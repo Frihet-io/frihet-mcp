@@ -5,6 +5,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v4";
 import type { IFrihetClient } from "../client-interface.js";
+import { InvoicePaymentLinkOutputSchema, paymentLinkInvoiceId, projectInvoicePaymentLinkOutput } from "../invoice-payment-link.js";
+import { invoiceIssueResultOutput, invoiceSeriesListOutput } from "./shared.js";
 import { withToolLogging, confirmationRequiredError, formatPaginatedResponse, formatRecord, listContent, getContent, mutateContent, enrichResponse, READ_ONLY_ANNOTATIONS, CREATE_ANNOTATIONS, UPDATE_ANNOTATIONS, DELETE_ANNOTATIONS, paginatedOutput, documentDeleteResultOutput, invoiceItemOutput, actionResultOutput, creditNoteResultOutput, pdfResultOutput, einvoiceResultOutput } from "./shared.js";
 
 const invoiceItemSchema = z.object({
@@ -100,6 +102,82 @@ const invoiceFiscalFields = {
 };
 
 export function registerInvoiceTools(server: McpServer, client: IFrihetClient): void {
+  server.registerTool(
+    "get_invoice_payment_link",
+    {
+      title: "Get Invoice Payment Link",
+      description:
+        "Read the signed client payment portal URL and canonical server balance with read scope. " +
+        "Unknown balances remain null. Does not issue, email, charge, create Checkout sessions or mark paid. " +
+        "/ Lee el enlace firmado al portal de cobro y el saldo del servidor con permiso de lectura. " +
+        "Los saldos desconocidos siguen siendo null. No emite, envia correos, cobra ni marca pagos.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: z.object({ id: paymentLinkInvoiceId }).strict(),
+      outputSchema: InvoicePaymentLinkOutputSchema,
+    },
+    async ({ id }) => withToolLogging("get_invoice_payment_link", async () => {
+      const result = projectInvoicePaymentLinkOutput(await client.getInvoicePaymentLink(id), id);
+      return {
+        content: [getContent(formatRecord("Invoice payment link", result))],
+        structuredContent: result,
+      };
+    }),
+  );
+
+  server.registerTool(
+    "issue_invoice",
+    {
+      title: "Issue Invoice",
+      description:
+        "Issue a draft using its configured series, assigning its fiscal number and sent status without email. " +
+        "Requires write scope and confirm=true. Reuse idempotencyKey on retries; one is generated per call if omitted. " +
+        "Numbering cannot be undone; configured webhooks and asynchronous conditional VeriFactu submission may follow. " +
+        "The response is issuance, not tax authority acceptance; read fiscal.verifactuStatusUrl for that. " +
+        "/ Emite un borrador con su serie y numero fiscal sin enviar email. Requiere escritura y confirm=true. " +
+        "Reutiliza idempotencyKey al reintentar. La numeracion es irreversible; puede activar webhooks y VeriFactu. " +
+        "La respuesta confirma emision, no aceptacion fiscal.",
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+      inputSchema: z.object({
+        id: paymentLinkInvoiceId,
+        confirm: z.boolean().describe("Confirm fiscal issuance / Confirmar emision fiscal"),
+        idempotencyKey: z.string().trim().min(1).max(64).optional()
+          .describe("Reuse the same key for this issuance on retries / Reutiliza la misma clave al reintentar esta emision"),
+      }).strict(),
+      outputSchema: invoiceIssueResultOutput,
+    },
+    async ({ id, confirm, idempotencyKey }) => withToolLogging("issue_invoice", async () => {
+      if (!confirm) return confirmationRequiredError(
+        "confirm=true is required to assign an irreversible fiscal number. / Se requiere confirm=true para asignar un numero fiscal irreversible.",
+      );
+      const result = await client.issueInvoice(id, idempotencyKey);
+      return {
+        content: [mutateContent(formatRecord("Invoice issued (tax acceptance pending verification)", result))],
+        structuredContent: result,
+      };
+    }),
+  );
+
+  server.registerTool(
+    "list_series",
+    {
+      title: "List Invoice Series",
+      description:
+        "List workspace invoice series configuration with read scope. Includes numbering pattern, prefix, purpose and document family. " +
+        "Consumes no counter. / Lista la configuracion de series de facturacion con permiso de lectura, patron, prefijo, finalidad " +
+        "y familia documental. No consume numeracion.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: z.object({}).strict(),
+      outputSchema: invoiceSeriesListOutput,
+    },
+    async () => withToolLogging("list_series", async () => {
+      const result = await client.listSeries();
+      return {
+        content: [listContent(formatRecord("Invoice series", result))],
+        structuredContent: result,
+      };
+    }),
+  );
+
   // -- list_invoices --
 
   server.registerTool(

@@ -20,6 +20,7 @@
 
 import type { IFrihetClient } from "./client-interface.js";
 import type {
+  BankTransactionSuggestions,
   CreateWebhookInput,
   CreateWebhookResult,
   PaginatedResponse,
@@ -264,6 +265,29 @@ export class DemoFrihetClient implements IFrihetClient {
   }
 
   // ---------------------------------------------------------------- Invoice actions
+  async getInvoicePaymentLink(id: string): Promise<import("./invoice-payment-link.js").UpstreamInvoicePaymentLinkResponse> {
+    return {
+      invoiceId: id, invoiceNumber: null, status: "sent", currency: "EUR",
+      totalAmount: null, amountPaid: null, amountDue: null, payable: false,
+      unavailableReason: "authority_state_unknown", paymentUrl: null,
+      paymentState: "unknown", authoritySource: "payment_authority_v1", authorityState: "unknown",
+      tokenPolicy: { version: "v1", expires: false, revalidatesOnOpenAndPay: true },
+      observedAt: DEMO_NOW, ...READ_STAMP,
+    };
+  }
+  async issueInvoice(id: string, _idempotencyKey?: string): Promise<Rec> {
+    return {
+      id, documentNumber: "DEMO-ISSUED-001", status: "sent",
+      fiscal: { verifactuStatusUrl: `https://api.frihet.io/v1/fiscal/verifactu/${encodeURIComponent(id)}/status` },
+      ...FISCAL_STAMP,
+    };
+  }
+  async listSeries(): Promise<{ data: Rec[]; _demo: true; _demoNotice: string }> {
+    return {
+      data: [{ id: "default", name: "Demo", pattern: "DEMO{SEQ4}", prefix: "DEMO", purpose: "ordinary", documentFamily: null }],
+      ...READ_STAMP,
+    };
+  }
   async sendInvoice(id: string, to?: string): Promise<Rec> {
     // Email dispatch — simulated, no email is actually sent.
     return { id, status: "sent", sentAt: DEMO_NOW, ...(to ? { to } : {}), ...FISCAL_STAMP };
@@ -334,6 +358,11 @@ export class DemoFrihetClient implements IFrihetClient {
   }
 
   // ---------------------------------------------------------------- Quote actions
+  async getQuotePdf(id: string): Promise<BinaryDocument> {
+    const bytes = Buffer.from(`%PDF-1.4\n%%DEMO quote for ${id}\n%%EOF\n`, "utf8");
+    return { id, contentType: "application/pdf", sizeBytes: bytes.byteLength, base64: bytes.toString("base64"), ...READ_STAMP };
+  }
+
   async sendQuote(id: string, to?: string): Promise<Rec> {
     return { id, status: "sent", sentAt: DEMO_NOW, ...(to ? { to } : {}), ...FISCAL_STAMP };
   }
@@ -674,6 +703,9 @@ export class DemoFrihetClient implements IFrihetClient {
       && (!params?.category || row.category === params.category),
     );
     return demoPage(filtered, params, ["postedAt", "id"]);
+  }
+  async getBankingTransactionSuggestions(transactionId: string, params?: { limit?: number }): Promise<BankTransactionSuggestions> {
+    return { transactionId, limit: params?.limit ?? 5, suggestions: [], ...READ_STAMP };
   }
   async categorizeTransaction(id: string, data: { category: string; notes?: string }): Promise<Rec> {
     return simulateAction(id, { category: data.category, ...(data.notes ? { notes: data.notes } : {}) });

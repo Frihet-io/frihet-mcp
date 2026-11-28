@@ -2,7 +2,7 @@
   "consumer": "frihet-mcp",
   "pinnedProjection": {
     "source": "workers/remote-mcp/public/openapi.json",
-    "fingerprint": "77e5397dd4b5e14a6297fee018911f52947fb21e1c11eaff424e759433cc62a5",
+    "fingerprint": "628807ba34f2b3c523812408200d3743b96417d40667702cc2ad53e1892ac066",
     "openapiVersion": "3.1.0",
     "infoVersion": "2026-03-18",
     "rootSecurity": [
@@ -10,7 +10,7 @@
         "ApiKeyAuth": []
       }
     ],
-    "frozenAt": "2026-11-17"
+    "frozenAt": "2026-11-28"
   },
   "required": [
     {
@@ -751,6 +751,19 @@
       "operationId": "getInvoice",
       "method": "GET",
       "path": "/v1/invoices/{invoiceId}",
+      "security": "required",
+      "responseCodes": [
+        "200",
+        "401",
+        "404",
+        "429",
+        "500"
+      ]
+    },
+    {
+      "operationId": "getInvoicePaymentLink",
+      "method": "GET",
+      "path": "/v1/invoices/{invoiceId}/payment-link",
       "security": "required",
       "responseCodes": [
         "200",
@@ -1664,6 +1677,7 @@
         "401",
         "403",
         "404",
+        "409",
         "422",
         "429",
         "500"

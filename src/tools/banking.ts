@@ -1,5 +1,5 @@
 /**
- * Banking tools for the Frihet MCP server — Wave 6 (5 tools).
+ * Banking tools for the Frihet MCP server — Wave 6 plus read-only rankings (6 tools).
  *
  * Tools:
  *   1. list_bank_accounts  — list connected bank accounts per workspace
@@ -7,11 +7,12 @@
  *   3. list_transactions   — list bank transactions (filter: account, dateRange, status, category)
  *   4. categorize_transaction — apply category to a transaction (manual classification)
  *   5. match_transaction_to_invoice — link transaction to invoice/expense (reconciliation)
+ *   6. get_banking_transaction_suggestions — read ranked reconciliation candidates
  *
  * REST surface: /v1/banking/accounts, /v1/banking/transactions
  *
  * NOTE: ERP backend endpoints /v1/banking/* are LIVE in Frihet-ERP (#848):
- * accounts list/get, transactions list/categorize/match. Tools are wired and
+ * accounts list/get, transactions list/suggestions/categorize/match. Tools are wired and
  * hit the shipped server actions. Client contract smoke:
  * src/__tests__/banking-client-contract.test.ts.
  */
@@ -32,6 +33,7 @@ import {
   paginatedOutput,
   bankAccountItemOutput,
   bankTransactionItemOutput,
+  bankTransactionSuggestionsOutput,
 } from "./shared.js";
 
 export function registerBankingTools(server: McpServer, client: IFrihetClient): void {
@@ -125,6 +127,35 @@ export function registerBankingTools(server: McpServer, client: IFrihetClient): 
           structuredContent: result as unknown as Record<string, unknown>,
         };
       }),
+  );
+
+  server.registerTool(
+    "get_banking_transaction_suggestions",
+    {
+      title: "Get Banking Transaction Suggestions",
+      description:
+        "Read server-ranked invoice and expense reconciliation candidates with scores, reasons and signal breakdown. " +
+        "Read scope; limit 1-10, default 5. Does not match documents or change reconciliation records. " +
+        "/ Lee candidatos de conciliacion ordenados por el servidor con puntuacion, motivos y desglose. " +
+        "Permiso de lectura; limite 1-10, por defecto 5. No vincula documentos ni modifica la conciliacion.",
+      annotations: READ_ONLY_ANNOTATIONS,
+      inputSchema: z.object({
+        transactionId: z.string().trim().min(1).max(1500).regex(/^(?!__)(?!\.{1,2}$)[^/\u0000]+$/)
+          .describe("Bank transaction ID / ID del movimiento bancario"),
+        limit: z.number().int().min(1).max(10).optional().describe("Max candidates (default 5) / Candidatos maximos (por defecto 5)"),
+      }).strict(),
+      outputSchema: bankTransactionSuggestionsOutput,
+    },
+    async ({ transactionId, limit }) => withToolLogging("get_banking_transaction_suggestions", async () => {
+      const result = await client.getBankingTransactionSuggestions(transactionId, { limit });
+      if (result.transactionId !== transactionId) {
+        throw new Error("Suggestions response does not match the requested bank transaction");
+      }
+      return {
+        content: [getContent(formatRecord("Reconciliation suggestions (read-only)", result as unknown as Record<string, unknown>))],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    }),
   );
 
   // -- categorize_transaction --

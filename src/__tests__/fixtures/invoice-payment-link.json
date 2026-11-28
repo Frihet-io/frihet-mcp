@@ -1,0 +1,17 @@
+{
+  "invoiceId": "inv_2026_104",
+  "invoiceNumber": "F20260104",
+  "status": "sent",
+  "currency": "EUR",
+  "totalAmount": 1210,
+  "amountPaid": 210,
+  "amountDue": 1000,
+  "payable": true,
+  "unavailableReason": null,
+  "paymentUrl": "https://app.frihet.io/pay/ws_prod_01/inv_2026_104/0123456789abcdef0123456789abcdef",
+  "paymentState": "ready",
+  "authoritySource": "payment_authority_v1",
+  "authorityState": "verified",
+  "tokenPolicy": { "version": "v1", "expires": false, "revalidatesOnOpenAndPay": true },
+  "observedAt": "2026-11-28T12:00:00.000Z"
+}

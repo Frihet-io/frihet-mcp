@@ -42,7 +42,7 @@ export const APPROVED_LIFECYCLE_SCRIPTS = Object.freeze({
   postinstall: "node scripts/postinstall.js || true",
 });
 export const APPROVED_PACKAGE_SCRIPT_HASHES = Object.freeze({
-  "package.json": "65cbf7c8253c5abf7a7fac7712e47e3c98bd786db53a7579425ad095179f4b75", // adds paginated-metadata-contract.test.js and purchase-orders tests to the reviewed test script; all other scripts, deps, lifecycle and network settings unchanged
+  "package.json": "b20453031739c44bca08e59ad081d41c1a5e04686af77affff9959642db2596a", // adds W4 ERP parity tests only; all other scripts, deps, lifecycle and network settings unchanged
   "workers/remote-mcp/package.json": "0248007796a87b37d4f7060566b48d767aa4dcdc7a70b9fdb5883387997d1c72", // OAuth/OIDC review: test loader resolves production-style .js specifiers to TypeScript sources only in tests
 });
 export const APPROVED_WORKER_MAINS = Object.freeze({
@@ -273,12 +273,12 @@ export const APPROVED_STATIC_BINDINGS = Object.freeze({
  * reproduced after shadowing `fetch`, so partial function hashes are not enough.
  */
 export const APPROVED_SOURCE_FILE_HASHES = Object.freeze({
-  "src/client.ts": "bdaac75fafde4e1532fb5e02aa898e1475125a6740acfe23eb6d84ae385fe6f1", // #251: reviewed applyDeposit body validation before request I/O + two read-only GET purchase-order methods (ADR 0027 S2); existing sinks, authorities and payloads unchanged
+  "src/client.ts": "f5acb3b21841cfe2be027b17346b3f3135419b7ef3fe5c37b9582c3817202476", // W4 ERP parity methods reuse existing transports, fixed authority and idempotency handling
   "workers/remote-mcp/src/claude-public-surface.ts": "1161f124f2afc721e5c7b92f9fa1ccd46819de9d5dff0f940b034149486a0c62", // cd82dc3: support@frihet.io mailto alignment; isolated Claude host and authorization boundary preserved, no new sink
   "workers/remote-mcp/src/oauth-profile.ts": "d404aaf7c51a6fe675e7d1daae2317f7ea72b9e70b83f687b9359f857e6107b8", // #246: strict versioned admission policy and verified identity boundary, no new sink
   "src/observability.ts": "18ab9f86c3605e28d6af2bd85ee2633ddf12a11a329f80c25703dfc6eb90a8aa",
   "src/openai-review-oauth.ts": "bfde5584b9b37fd24c4d7b4a32b149813c08e22dc06aa46b9b4d8afae3b77d90", // OAuth/OIDC review: exact connector scopes, discovery and UserInfo claim validation (pure metadata, no sink); confirm comment no longer claims every mutating tool requires it
-  "workers/api-proxy/worker.js": "54a7e12aa31aa9a474668597d7d7bee31a9c8fbff1cf2afec6ba702e1947c680",
+  "workers/api-proxy/worker.js": "e60e1720bba3b71de414786b300386f2b62720b98665f671418a4d0541b168a4", // W4 updates only full-profile advertised tool counts; sinks and authority unchanged
   "workers/remote-mcp/src/api-url.ts": "d30673b8814eae5fc2f0cc0ea6ebdfa0885a710fab0571f2efdd8ac10d85d518",
   "workers/remote-mcp/src/auth-handler.ts": "2e050bfc605df98410fd305c6b8e113b1c9d07ab6b3c607f264b714baf687aba", // #249: return the existing full-profile hold before consent/token processing; no new I/O or destination. #246: admission enforced before provisioning; #221 M1: revoke unredeemed grant in KV when commit responses are lost (no new destination); #205: commit carries the replaced grant ids into the durable state outbox; inline replacement kept as fast path (no new destination); #203: callback reserve/commit — state leased before I/O, unknown provisioning outcomes revoked by correlation through the same lifecycle authority (no new destination); earlier note: OAuth/OIDC review: verified email and issuer/audience/scope bindings added to the existing reviewed grant
   "workers/remote-mcp/src/client.ts": "42332431accd5dfcd7ebc582dcd6f185aea740838ba3b00bbdbb493aac3070d4", // adapter no longer forwards the provisioning credential
@@ -302,8 +302,8 @@ export const APPROVED_PUBLISHED_FILE_HASHES = Object.freeze({
   "assets/banner.svg": "2b32a68014580c334f8b180d8812d842c744a9a59bd2298a586bb95bd6179ebc",
   "assets/banner-light.svg": "4e9a087513a09a507b37578d80ef967f533b924a21dd39b14f4ec674f9d7a5b6",
   "assets/logo-400.png": "5d9da4692a5f34cef61c59a40521a10c9bbe5d70a39e67f34dd49ec05b2da2dd",
-  "docs/agent-onboarding.json": "7c4ea70bdcd5ceda293d54e08234c23da3b678375eb387a601665f4f5b3383b6", // Task 1 recurring confirmation and declared fiscal/webhook effects; no new emitter
-  "README.md": "b5683aed1c4026b2e6146cccd9c5706f2396eb6f9966b60ff6f57f3fe9a3d3f4", // public README front-page rewrite (docs-only) + count-only 156->158 edits; no new runtime emitter or destination
+  "docs/agent-onboarding.json": "17ea0400ced9f6494dbfe766a9ee86b7fcc011213e2d8f054b0ac1f35f7d3dbe", // W4 tool inventory and conditional issuance effects; no new emitter
+  "README.md": "cac0ce52fd73bd52f826de8f8f4bd8f154df91c442e5945219bf5a7a87b1b024", // W4 tool/count documentation and explicit source-versus-deployed OpenAPI status; no runtime emitter
   "LICENSE": "4114205a864bbaf10b8c6fe8659cb7504562447c47c500fe4d0032dcf3aa2c97",
 });
 export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
@@ -311,7 +311,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/verify-claude-erp-source-release.mjs": "c9bbfdcea3f070a925c5d77bf1b0ed082f791485c1ee42bbee240f9d9d4b8ccd", // authenticated read-only GitHub artifacts and exact approved BEFORE-version backup; no telemetry or cloud mutation
   "scripts/check-claude-bootstrap-secrets.mjs": "4d4700482718ea1ae88480dd215521f07dbc9e8342838775826a8846d20925e4", // local Claude bootstrap secret check; no network or raw credential output
   "scripts/__tests__/claude-bootstrap-secrets.test.mjs": "90159f0a689cb8f5d6ffc6630871b0b596510b1e9f24e32adbdfe4dc2c779095", // local Claude bootstrap secret check; no network or raw credential output
-  "scripts/check-claude-hosted-release.mjs": "579a6ed7ede90a8f5201f6f3f686e234e916996d827074ae22525d57c92095de", // reviewed Claude ERP source-only provenance admission and mandatory write hints; no telemetry emitter or new sink
+  "scripts/check-claude-hosted-release.mjs": "e1a936872bd6cd11f700653176d0fa975eccc0dd3f2de6b21ab5caa6478cae63", // W4 excludes all new operations; admitted Claude tools and immutable credential ceiling unchanged
   "scripts/prepare-claude-oauth-provider.mjs": "dad174646f224c4e94c146e1a88c4df47900e1443c8051ee82adc5b639f14859", // isolated Claude build and release boundary
   "scripts/__tests__/claude-hosted-release.test.mjs": "cdd433a3eadee50d26f00a618f34479c2cf9201399554101ad89f81035011408", // reviewed source-only admission, authenticated backup-version and topology tests; no telemetry emitter or new sink
   "scripts/__tests__/claude-oauth-provider.test.mjs": "38574a639ea001da69eff795d3d9c7a22959c355a0430e6b0065328ed6e30447", // isolated Claude build and release boundary
@@ -325,7 +325,7 @@ export const APPROVED_OPERATIONAL_FILE_HASHES = Object.freeze({
   "scripts/__tests__/sync-openapi-retry.test.mjs": "67828e32c4fb6ad007ab0b940625f5c40edfbde22149eddf7e0de5527f78b41a",
   "scripts/analytics-tripwire.sh": "ddc434ddb44b7e7c9cb55f935d3b64c2b7e4e299fe7da1398f107e020068defd",
   "scripts/assert-publish-anchor.mjs": "3f256bb41969b75db8cb4be5cd5758a15b604f67b4770997f1ba57d22d951230",
-  "scripts/audit-mcp-refs.mjs": "c70fdf8138437a4992a156fd65c98463ed5ee6604eb88f79063d3cd7ed18b6ab", // MCP recovery (published-artifact SoT, bounded npm metadata + sha512-verified tarball, exit 4 on unverifiable bytes, 2.0.x claude/google/muse/server-composition adapter interception + opt-in sandbox/candidate/paylink modules recognized; see docs/reviews/mcp-published-recovery/pin-review.md); previously fix/mcp-refs-watch-locales: tool-count detector widened (qualifier words, non-ASCII noun endings, CJK), glob watch lists, --root override for hermetic fixtures, --fix kept symmetric with the detector
+  "scripts/audit-mcp-refs.mjs": "569ec5327defe360e23831db5ac64c624dec8f074083d0172ab66f2f91e45e13", // W4 encodes existing locale literals with Unicode escapes; detector runtime behavior unchanged
   "scripts/canary-mcp.mjs": "85dc19431bbd2677c944645b67e1132922c286cdb37a6332aa716a6512225243",
   "scripts/check-openai-worker-topology.mjs": "9faa435df74bda80ef9a1ecf52d322e7604f3d751c67f6ecab4213643e98172f",
   "scripts/check-openai-review-descriptor.mjs": "494acb06357f8ce080cb755b96d40b4959811223271b6d1419448e4fa76065cd",
@@ -361,7 +361,7 @@ export const APPROVED_REVIEW_FILE_HASHES = Object.freeze({
   "marketplace/openai/frihet-composer.png": "3f2260512beeb70b248f515f43ea669015f060ef6427dba6ed89128649c12f51",
   "marketplace/openai/frihet-directory-dark.png": "7e96f15a8b06125964ccee51d2314835fb7c62968766a8625f7be204fe9b15ab",
   "src/__tests__/fixtures/openai-review-descriptor.snapshot.json": "cf60256978068db68e308c5240f76c40f9f3682c4c1c2ab5bedc0e48f4e017c2", // SDK 1.32.2/Zod 4.6.7 schema recapture: safer email regex, nullable types and exclusive delete result; OAuth and the 33-tool inventory are unchanged
-  "src/__tests__/fixtures/public-capability-contract.json": "cf7ab3bcdde3f8e270e4517ba2c7d311d8bfe685877c123a8c92c2cb1a46d18d", // Task 1 deposit retry hint and recurring fiscal/webhook capability truth + purchase-order read tools; no new emitter
+  "src/__tests__/fixtures/public-capability-contract.json": "0318b9cece723d71ba1d901a918413de0a1b9ee1f43559f385ee59f1781cf659", // W4 ERP parity tools; reviewed OpenAI surface unchanged
   "workers/remote-mcp/public-openai/releases.json": "83d3a24a90dac747e0e7a0bd28c76f13c9a84d86e48a6900f077d45d3e59e8a7",
 });
 

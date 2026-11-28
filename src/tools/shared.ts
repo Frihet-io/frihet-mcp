@@ -1207,6 +1207,60 @@ export const pdfResultOutput = z.object({
   filename: z.string().optional(),
 }).passthrough();
 
+/** Headless issuance: the fiscal number is committed; authority acceptance is not implied. */
+export const invoiceIssueResultOutput = z.object({
+  id: z.string(),
+  documentNumber: z.string(),
+  status: z.literal("sent"),
+  seriesId: z.string().nullable().optional(),
+  issueDate: z.string().nullable().optional(),
+  clientId: z.string().nullable().optional(),
+  clientName: z.string().nullable().optional(),
+  currency: z.string().nullable().optional(),
+  total: z.number().finite().nullable().optional(),
+  fiscal: z.object({ verifactuStatusUrl: z.url() }).strict(),
+  _demo: z.literal(true).optional(),
+  _demoNotice: z.string().optional(),
+}).strict();
+
+/** Unpaginated server-ranked reconciliation suggestions; no matching action. */
+export const bankTransactionSuggestionsOutput = z.object({
+  transactionId: z.string(),
+  limit: z.number().int().min(1).max(10),
+  suggestions: z.array(z.object({
+    documentId: z.string(),
+    documentType: z.enum(["invoice", "expense"]),
+    score: z.number().int().min(0).max(100),
+    confidence: z.number().int().min(0).max(100),
+    suggested: z.boolean(),
+    amountDiff: z.number().finite().nonnegative(),
+    dateDiff: z.number().finite().nonnegative(),
+    reasons: z.array(z.string()),
+    breakdown: z.array(z.object({
+      signal: z.enum(["amount", "date", "reference", "counterparty"]),
+      points: z.number().int().nonnegative(),
+      similarity: z.number().min(0).max(1),
+      reason: z.string(),
+    }).strict()),
+  }).strict()).max(10),
+  _demo: z.literal(true).optional(),
+  _demoNotice: z.string().optional(),
+}).strict();
+
+/** GET /series returns configuration, without total/limit/offset. */
+export const invoiceSeriesListOutput = z.object({
+  data: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    pattern: z.string().nullable(),
+    prefix: z.string().nullable(),
+    purpose: z.enum(["ordinary", "rectificativa"]),
+    documentFamily: z.enum(["complete", "simplified"]).nullable(),
+  }).strict()),
+  _demo: z.literal(true).optional(),
+  _demoNotice: z.string().optional(),
+}).strict();
+
 /* --- Time summary schema --------------------------------------------------- */
 
 const timeSummaryGroupItemSchema = z.object({

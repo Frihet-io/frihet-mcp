@@ -1,7 +1,7 @@
 {
   "contractVersion": 2,
   "catalogue": {
-    "canonicalOperations": 158,
+    "canonicalOperations": 163,
     "aliasNames": 5,
     "discoveryNames": 3
   },
@@ -1138,6 +1138,23 @@
           }
         },
         {
+          "name": "get_banking_transaction_suggestions",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_banking_transaction_suggestions",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
           "name": "get_business_context",
           "annotations": {
             "readOnlyHint": true,
@@ -1251,6 +1268,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_invoice_einvoice",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "get_invoice_payment_link",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_invoice_payment_link",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
@@ -1461,6 +1495,23 @@
           }
         },
         {
+          "name": "get_quote_pdf",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_quote_pdf",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
           "name": "get_recurring_invoice",
           "annotations": {
             "readOnlyHint": true,
@@ -1612,6 +1663,26 @@
             "externalInteraction": true,
             "externalSideEffects": [
               "email_or_invitation"
+            ]
+          }
+        },
+        {
+          "name": "issue_invoice",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": true
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "issue_invoice",
+            "writesFrihet": true,
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
             ]
           }
         },
@@ -2035,6 +2106,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "list_sales",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "list_series",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "list_series",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
@@ -4038,6 +4126,23 @@
           }
         },
         {
+          "name": "get_banking_transaction_suggestions",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_banking_transaction_suggestions",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
           "name": "get_business_context",
           "annotations": {
             "readOnlyHint": true,
@@ -4151,6 +4256,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "get_invoice_einvoice",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "get_invoice_payment_link",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_invoice_payment_link",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []
@@ -4361,6 +4483,23 @@
           }
         },
         {
+          "name": "get_quote_pdf",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "get_quote_pdf",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
           "name": "get_recurring_invoice",
           "annotations": {
             "readOnlyHint": true,
@@ -4512,6 +4651,26 @@
             "externalInteraction": true,
             "externalSideEffects": [
               "email_or_invitation"
+            ]
+          }
+        },
+        {
+          "name": "issue_invoice",
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": true
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "issue_invoice",
+            "writesFrihet": true,
+            "externalInteraction": true,
+            "externalSideEffects": [
+              "webhook_delivery_or_configuration",
+              "fiscal_or_einvoice_submission"
             ]
           }
         },
@@ -4935,6 +5094,23 @@
             "registered": true,
             "callability": "api_dependent",
             "canonicalOperation": "list_sales",
+            "writesFrihet": false,
+            "externalInteraction": false,
+            "externalSideEffects": []
+          }
+        },
+        {
+          "name": "list_series",
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          },
+          "capability": {
+            "registered": true,
+            "callability": "api_dependent",
+            "canonicalOperation": "list_series",
             "writesFrihet": false,
             "externalInteraction": false,
             "externalSideEffects": []

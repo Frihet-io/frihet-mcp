@@ -14,6 +14,7 @@
 
 import { rejectRedirectResponse } from "./fetch-no-redirect.js";
 import type {
+  BankTransactionSuggestions,
   ApiError,
   CreateWebhookInput,
   CreateWebhookResult,
@@ -61,7 +62,7 @@ const MAX_ERROR_BYTES = 64 * 1024;
  * sparse object on the wire.
  */
 export interface BinaryDocument {
-  /** Echoed id from the request (invoice id), so callers can correlate. */
+  /** Echoed document id from the request, so callers can correlate. */
   id: string;
   /** Verbatim `Content-Type` from the response (e.g. `application/pdf`). */
   contentType: string;
@@ -1269,6 +1270,26 @@ export class FrihetClient {
   // ---------------------------------------------------------------- Invoice Actions
   // ----------------------------------------------------------------
 
+  async getInvoicePaymentLink(id: string): Promise<import("./invoice-payment-link.js").UpstreamInvoicePaymentLinkResponse> {
+    return this.requestUnwrapped("GET", `/invoices/${pathSegment(id)}/payment-link`);
+  }
+
+  async issueInvoice(id: string, idempotencyKey?: string): Promise<Record<string, unknown>> {
+    // The fiscal status URL is a sibling of data, not part of data. Keep it
+    // while dropping transport metadata; requestUnwrapped would lose it.
+    const result = await this.request<{
+      data: Record<string, unknown>;
+      fiscal: { verifactuStatusUrl: string };
+    }>("POST", `/invoices/${pathSegment(id)}/issue`, undefined, undefined, 0, idempotencyKey);
+    return { ...result.data, fiscal: result.fiscal };
+  }
+
+  async listSeries(): Promise<{ data: Record<string, unknown>[] }> {
+    // This is a complete configuration list, with no pagination contract.
+    const result = await this.request<{ data: Record<string, unknown>[] }>("GET", "/series");
+    return { data: result.data };
+  }
+
   async sendInvoice(id: string, to?: string): Promise<Record<string, unknown>> {
     return this.requestUnwrapped(
       "POST",
@@ -1282,14 +1303,17 @@ export class FrihetClient {
   }
 
   async getInvoicePdf(id: string): Promise<BinaryDocument> {
+    return this.getDocumentPdf(id, `/invoices/${pathSegment(id)}/pdf`, "Invoice");
+  }
+
+  private async getDocumentPdf(id: string, path: string, label: "Invoice" | "Quote"): Promise<BinaryDocument> {
     // One fetch, one Response: validate MIME and signature only after the
     // bounded stream completes. The ERP endpoint has always returned raw bytes
     // (functions/src/publicApi.ts:6149-6167); there is no pre-signed-URL or JSON
     // success contract to emulate.
-    const url = `/invoices/${pathSegment(id)}/pdf`;
     const doc = await this.requestDocument(
       "GET",
-      url,
+      path,
       undefined,
       undefined,
       undefined,
@@ -1308,19 +1332,19 @@ export class FrihetClient {
       throw new FrihetApiError(
         200,
         "invalid_response",
-        `Invoice PDF endpoint returned unexpected Content-Type: ${doc.contentType}`,
+        `${label} PDF endpoint returned unexpected Content-Type: ${doc.contentType}`,
       );
     }
 
     if (!hasPdfSignature(doc.bytes)) {
-      throw new FrihetApiError(200, "invalid_response", "Invoice PDF response is malformed");
+      throw new FrihetApiError(200, "invalid_response", `${label} PDF response is malformed`);
     }
 
     if (doc.sizeBytes > MAX_PDF_BYTES) {
       throw new FrihetApiError(
         413,
         "payload_too_large",
-        `Invoice PDF exceeds maximum allowed size of ${MAX_PDF_BYTES} bytes`,
+        `${label} PDF exceeds maximum allowed size of ${MAX_PDF_BYTES} bytes`,
       );
     }
 
@@ -1417,6 +1441,10 @@ export class FrihetClient {
 
   // ---------------------------------------------------------------- Quote Actions
   // ----------------------------------------------------------------
+
+  async getQuotePdf(id: string): Promise<BinaryDocument> {
+    return this.getDocumentPdf(id, `/quotes/${pathSegment(id)}/pdf`, "Quote");
+  }
 
   async sendQuote(id: string, to?: string): Promise<Record<string, unknown>> {
     return this.requestUnwrapped(
@@ -1922,7 +1950,7 @@ export class FrihetClient {
 
   // ---------------------------------------------------------------- Banking
   // /v1/banking/* endpoints are LIVE in Frihet-ERP (#848): accounts list/get,
-  // transactions list/categorize/match. Paths below match the shipped server
+  // transactions list/suggestions/categorize/match. Paths below match the shipped server
   // actions verbatim. Client contract smoke: src/__tests__/banking-client-contract.test.ts.
 
   async listBankAccounts(
@@ -1950,6 +1978,12 @@ export class FrihetClient {
       limit: params?.limit,
       offset: params?.offset,
       cursor: params?.after,
+    });
+  }
+
+  async getBankingTransactionSuggestions(transactionId: string, params?: { limit?: number }): Promise<BankTransactionSuggestions> {
+    return this.requestUnwrapped("GET", `/banking/transactions/${pathSegment(transactionId)}/suggestions`, undefined, {
+      limit: params?.limit,
     });
   }
 

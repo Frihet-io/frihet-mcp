@@ -3,24 +3,24 @@
   "info": {
     "title": "Frihet API",
     "version": "2026-03-18",
-    "description": "The Frihet REST API provides programmatic access to your business data\nin Frihet, the AI-native business management platform for modern businesses.\n\n## Authentication\n\nAll API requests require an API key passed via the `X-API-Key` header.\nGenerate keys from **Settings > API Keys** in the Frihet app.\n\n```\nX-API-Key: fri_your_api_key_here\n```\n\n### API-key scopes\n\nA key without scopes (no list, or an empty one) is unrestricted. A key with a\nnon-empty scope list gets only what the list grants. On such a key, every\nrequest other than `GET` and `HEAD` needs the `write` scope (or `*`), except\nthe read-only `POST /v1/gestoria/aging` and the POS and purchase-order routes,\nwhich check their own `pos:` and `purchase-orders:` scopes. E-invoicing endpoints need an `einvoice:` scope,\nand the sends (`einvoice/export`, `face/submit`, `ticketbai/submit`) also need\n`write` or `einvoice:write`. A request without the scope it needs gets\n`403 Forbidden` with a `detail` naming that scope. The refusal happens before\nthe idempotency gate, so it does not reserve the `Idempotency-Key`.\n`GET /v1/permissions/me` reports `denied.write`, `denied.einvoice` and\n`denied.einvoiceSend` for the calling key.\n\n## Rate Limiting\n\nThe API enforces a rate limit of **100 requests per minute** per API key.\nWhen exceeded, the API returns `429 Too Many Requests` with an integer\ndelta-seconds `Retry-After` header and matching `retryAfter` JSON field.\n\nEvery authenticated response includes rate limit headers:\n\n| Header | Description |\n|--------|-------------|\n| `X-RateLimit-Limit` | Maximum requests per window (100) |\n| `X-RateLimit-Remaining` | Remaining requests in current window |\n| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |\n| `Retry-After` | Integer seconds until the window resets (429 responses) |\n\n## Idempotency\n\nMost POST requests accept an `Idempotency-Key` header to prevent duplicate\nresource creation from network retries. For protected routes, the key is\nreserved against the operation *before* the request is executed, and it stays\nreserved for 24 hours unless released by an explicit pre-write refusal.\n\n```\nIdempotency-Key: 550e8400-e29b-41d4-a716-446655440000\n```\n\nKeys must be at most 64 characters. We recommend UUID v4.\n\nA retry of the same operation gets one of three answers:\n\n| Situation | Response |\n|---|---|\n| The first request finished | The **original status and body**, verbatim, with `X-Idempotent-Replayed: true` |\n| The first request is still running, or its outcome could not be recorded | `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` |\n| The key is live but was used for a **different** operation | `409 IDEMPOTENCY_KEY_REUSED` — the second operation is not executed |\n\nThe replayed status is the **stored** one. A `201` replays as `201`, not `200`.\nThis includes stored error responses: a request that answered `4xx` or `5xx`\nreplays that same status and body, it does not re-execute — except explicit\npre-mutation refusals on `POST /v1/pos/cash-sessions/{id}/close` (`503` when\nthe workspace POS money-authority grant is not enabled and `403 POS_INACTIVE`\nbefore the POS app is activated), which release the reservation instead of\ncaching the refusal for 24 hours.\n\n### When a retry is refused\n\nA `409 IDEMPOTENCY_REQUEST_IN_PROGRESS` after the first request already\nreturned means the outcome could not be recorded — the response was too large\nor unserializable, or the bookkeeping write failed. The API refuses rather than\nexecute a second time, because for a fiscal document a duplicate is not\nrecoverable.\n\n**Reconcile; do not simply retry with a fresh key.** Read the resource back\n(`GET` the collection, or look for the document the operation would have\ncreated) and decide from its actual state. A new key would happily create a\nsecond document, which is exactly what the first key existed to prevent.\n\nAuthentication, rate limiting, and the maximum-request-size check happen before\nthe idempotency gate. Their `401`, `429`, and `413` responses do not reserve a\nkey and are never idempotency replays. API-key scope authorization also\nhappens before replay: the `write` scope for mutations, and the fiscal-send\nscopes for `einvoice/export`, `face/submit`, and `ticketbai/submit`; a current\n`403` does not reserve or alter the key. Authorized writes and fiscal sends\nremain idempotency-protected.\n\nTwo current-state report/check routes deliberately bypass the idempotency gate:\n`POST /v1/gestoria/aging` and\n`POST /v1/portal/domain/{domain}/verify`. They ignore `Idempotency-Key` and\nalways re-evaluate current workspace membership or domain ownership/DNS/SSL.\n\nIdentity note: for every idempotency-protected `POST`, the complete received\nJSON request body and parsed query parameters are part of the operation\nidentity. Object-key order does not matter, including in nested objects, but\narray order does. The credit-note endpoint applies its documented defaults\nfirst, so omitting `fullCredit` is equivalent to sending `fullCredit: true`.\nReusing the same key and path with a different body or query returns\n`409 IDEMPOTENCY_KEY_REUSED` without executing the request.\n\n## API Versioning\n\nEvery response includes an `X-API-Version` header (e.g., `2026-03-18`)\nindicating the current API version. Monitor this header to detect changes.\n\n## Pagination\n\nList endpoints support two pagination strategies:\n\n**Offset pagination:** Use `limit` and `offset` query parameters.\nDefault limit is 50, maximum is 100.\n\n**Cursor pagination:** Use `cursor` and `limit` query parameters.\nPass the `nextCursor` value from a previous response to fetch the next page.\nCursor pagination is more efficient for large datasets and avoids skipped/duplicated\nitems when data changes between requests. When `cursor` is provided, `offset` is ignored.\n\nResponses include `total`, `limit`, `offset`, and optionally `nextCursor`.\n\n## Filtering\n\nList endpoints support filtering by `status` (where applicable), date\nranges using `from` and `to` query parameters in ISO 8601 format (`YYYY-MM-DD`),\nand resource-specific filters like `clientId`, `seriesId`, `vendorId`,\n`category`, `isActive`, and `stage`.\n\n## Field Selection\n\nAll GET endpoints support a `fields` query parameter to select specific fields.\nPass a comma-separated list of field names: `?fields=id,name,total`.\nThe `id` field is always included.\n\n## Errors\n\nAll errors follow a consistent format:\n\n```json\n{\n  \"error\": \"Human-readable error message\",\n  \"details\": [],\n  \"meta\": { \"requestId\": \"uuid\" }\n}\n```\n\nThe `details` array is only present on validation errors (Zod issues).\nThe `meta.requestId` is included on every error response for tracing.\n\n## Resources\n\n- [Documentation](https://docs.frihet.io/desarrolladores/api-rest)\n- [MCP Server](https://mcp.frihet.io)\n- [Status](https://status.frihet.io)\n",
+    "description": "REST API for Frihet ERP. Full documentation at https://docs.frihet.io/developers/api-rest",
     "contact": {
-      "name": "Frihet API Support",
-      "url": "https://docs.frihet.io/desarrolladores/api-rest",
-      "email": "api@frihet.io"
+      "name": "Frihet Support",
+      "url": "https://docs.frihet.io",
+      "email": "ayuda@frihet.io"
     },
     "license": {
       "name": "MIT",
       "url": "https://opensource.org/licenses/MIT"
     },
     "x-logo": {
-      "url": "https://www.frihet.io/brand/frihet-mark-ink.svg"
+      "url": "https://www.frihet.io/logo.png"
     }
   },
   "servers": [
     {
       "url": "https://api.frihet.io",
-      "description": "Production"
+      "description": "Frihet production API"
     }
   ],
   "security": [
@@ -6016,7 +6016,7 @@
       "post": {
         "operationId": "exportEInvoice",
         "summary": "Export e-invoice XML",
-        "description": "Generate and return an e-invoice XML document for the invoice in one of 9 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Conforms to EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, FA-2-KSeF (Polish KSeF FA(3)), UBL 2.1, CII D16B.\n\nRequires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\n",
+        "description": "Generate and return an e-invoice XML document for the invoice in one of 9 supported formats.\nOptionally sign with XAdES-EPES (Facturae only). Uses the EN16931 semantic model.\n\nSupported formats: Facturae 3.2.2, XRechnung-CII, XRechnung-UBL, Factur-X (EN16931),\nFatturaPA 1.2.2, PEPPOL-BIS-3, FA-2-KSeF (Polish KSeF FA(3)), UBL 2.1, CII D16B.\n\nFor `PEPPOL-BIS-3`, provide both participant IDs and either a buyer reference or a\npurchase order reference. The buyer reference falls back to the client's stored valid\nGerman `leitwegId`; the purchase order reference falls back to the invoice's `poNumber`.\nRouting strings are trimmed; blank values use the same fallbacks as omitted values.\nParticipant IDs use `<EAS scheme>:<address>`, with a supported four-digit scheme.\nInvalid or missing Peppol routing data returns `422` with validation issues.\n\nThis operation returns XML. It does not register participants, verify network\nregistration, submit the document to Peppol, or report delivery acceptance.\n\nRequires owner role, or an API key with `einvoice:*` scope plus `write` or `einvoice:write`.\n",
         "tags": [
           "E-Invoicing"
         ],
@@ -6049,13 +6049,90 @@
                       "UBL",
                       "CII"
                     ],
-                    "description": "Target e-invoice format.\n- Facturae: Spanish B2G (Agencia Tributaria, FACe)\n- XRechnung-CII/UBL: German B2G (PEPPOL/ZRE/OZG-RE)\n- Factur-X: French standard (PDF/A-3 XML component)\n- FatturaPA: Italian SDI clearance\n- PEPPOL-BIS-3: Pan-European PEPPOL network\n- FA-2-KSeF: Polish KSeF FA(3) XML\n- UBL/CII: Generic cross-border EU\n",
+                    "description": "Target e-invoice format.\n- Facturae: Spanish B2G (Agencia Tributaria, FACe)\n- XRechnung-CII/UBL: German B2G (PEPPOL/ZRE/OZG-RE)\n- Factur-X: French standard (PDF/A-3 XML component)\n- FatturaPA: Italian SDI clearance\n- PEPPOL-BIS-3: Peppol BIS Billing 3 XML\n- FA-2-KSeF: Polish KSeF FA(3) XML\n- UBL/CII: Generic cross-border EU\n",
                     "example": "Facturae"
                   },
                   "signed": {
                     "type": "boolean",
                     "default": false,
                     "description": "Sign the XML with XAdES-EPES. Only supported for `format: Facturae`.\nRequires a valid PKCS#12 certificate uploaded in Settings > Compliance.\n"
+                  },
+                  "buyerReference": {
+                    "description": "Buyer-provided routing reference. Falls back to the client's stored valid\nGerman leitwegId when omitted or blank. PEPPOL-BIS-3 requires this reference\nor a purchase order reference. Surrounding whitespace is trimmed.\n",
+                    "example": "TEST-BUYER-REFERENCE",
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  "deliveryCountry": {
+                    "description": "Optional deliver-to country (`BT-80`), supplied as ISO 3166-1 alpha-2 code or recognized country name.\nRecommended for EU intra-community VAT category `K` supplies (`BR-IC-12`). Never inferred from buyer address.\n",
+                    "example": "DE",
+                    "maxLength": 64,
+                    "minLength": 2,
+                    "type": "string"
+                  },
+                  "deliveryDate": {
+                    "description": "Optional actual delivery date (`BT-72`, `YYYY-MM-DD`). Recommended for EU\nintra-community VAT category `K` supplies (`BR-IC-11`). Never fabricated from `issueDate`.\n",
+                    "example": "2026-04-10",
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "invoicingPeriodEnd": {
+                    "description": "Optional invoicing period end date (`BG-14` / `BT-74`, `YYYY-MM-DD`), on or after `invoicingPeriodStart`.",
+                    "example": "2026-04-30",
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "invoicingPeriodStart": {
+                    "description": "Optional invoicing period start date (`BG-14` / `BT-73`, `YYYY-MM-DD`).",
+                    "example": "2026-04-01",
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "operationDate": {
+                    "description": "Optional operation date alias for `BT-72` (`YYYY-MM-DD`) when `deliveryDate`/`serviceDate` are omitted.",
+                    "example": "2026-04-10",
+                    "format": "date",
+                    "type": "string"
+                  },
+                  "purchaseOrderReference": {
+                    "description": "Buyer purchase order reference. Falls back to the invoice's poNumber\nwhen omitted or blank. Satisfies the PEPPOL-BIS-3 reference requirement\nwhen no buyer reference is available. Surrounding whitespace is trimmed.\n",
+                    "example": "TEST-PO-001",
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  "receiverParticipantId": {
+                    "description": "Buyer electronic address as `<EAS scheme>:<address>`. Required for\nPEPPOL-BIS-3, including cross-border invoices. Use the buyer's actual\nregistered participant identifier. Surrounding whitespace is trimmed\nand blank values are treated as absent.\n",
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  "senderParticipantId": {
+                    "description": "Seller electronic address as `<EAS scheme>:<address>`. Required for\nPEPPOL-BIS-3. Use the seller's actual registered participant identifier;\nit is not inferred from a VAT number or country. Surrounding whitespace\nis trimmed and blank values are treated as absent.\n",
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  "serviceDate": {
+                    "description": "Optional service delivery date alias for `BT-72` (`YYYY-MM-DD`) when `deliveryDate` is omitted.",
+                    "example": "2026-04-10",
+                    "format": "date",
+                    "type": "string"
+                  }
+                }
+              },
+              "examples": {
+                "genericXml": {
+                  "summary": "Generic UBL export without Peppol routing requirements",
+                  "value": {
+                    "format": "UBL"
+                  }
+                },
+                "peppolTestFixture": {
+                  "description": "Illustrates request syntax only. Replace the fixture identifiers with\nthe parties' actual registered participant IDs and the reference agreed\nwith the buyer. This example makes no registration or delivery claim.\n",
+                  "summary": "Peppol XML preparation using test fixture identifiers",
+                  "value": {
+                    "buyerReference": "TEST-BUYER-REFERENCE",
+                    "format": "PEPPOL-BIS-3",
+                    "receiverParticipantId": "0192:923609016",
+                    "senderParticipantId": "0007:5560160680"
                   }
                 }
               }
@@ -6108,7 +6185,7 @@
             }
           },
           "400": {
-            "description": "Invalid format, signing not supported for this format, or body validation error",
+            "description": "Invalid format, unsupported signing request, unknown body keys, non-string routing fields, or routing fields longer than 256 characters after trimming",
             "content": {
               "application/json": {
                 "schema": {
@@ -6131,7 +6208,31 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "detail": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "items": {
+                            "$ref": "#/components/schemas/EInvoiceValidationIssue"
+                          },
+                          "type": "array"
+                        },
+                        "warnings": {
+                          "items": {
+                            "$ref": "#/components/schemas/EInvoiceValidationIssue"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
                 }
               }
             }
@@ -6260,6 +6361,21 @@
                           }
                         }
                       }
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "items": {
+                        "$ref": "#/components/schemas/EInvoiceValidationIssue"
+                      },
+                      "type": "array"
+                    },
+                    "warnings": {
+                      "items": {
+                        "$ref": "#/components/schemas/EInvoiceValidationIssue"
+                      },
+                      "type": "array"
                     }
                   }
                 }
@@ -6271,6 +6387,35 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "enum": [
+                        "HISTORICAL_IMPORT_NOT_DELIVERABLE"
+                      ],
+                      "type": "string"
+                    },
+                    "reason": {
+                      "enum": [
+                        "HISTORICAL_IMPORT_NOT_ISSUABLE",
+                        "IMPORTED_INVOICE_PROVENANCE_UNRESOLVED"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "HISTORICAL_IMPORT_NOT_DELIVERABLE: the invoice was imported from a previous system, where it was already issued (`reason` `HISTORICAL_IMPORT_NOT_ISSUABLE` or `IMPORTED_INVOICE_PROVENANCE_UNRESOLVED`). Refused before reading the client, generating Facturae XML, loading the certificate, or calling FACe."
           }
         }
       }
@@ -8867,6 +9012,45 @@
             "$ref": "#/components/responses/RateLimited"
           }
         }
+      }
+    },
+    "/v1/invoices/{invoiceId}/payment-link": {
+      "get": {
+        "description": "Returns the signed client payment portal URL (when collectable) and the\nserver-computed payable balance for an invoice without mutating the\ninvoice, sending emails, creating Stripe Checkout sessions, or marking\npayments. When Payment Authority V1 is unreadable or degraded, balances\nstay `null` with `authorityState: \"unknown\"` (never coerced to `0`).",
+        "operationId": "getInvoicePaymentLink",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoiceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicePaymentLinkResult"
+                }
+              }
+            },
+            "description": "Payment link availability and authoritative invoice balance"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Get signed client payment portal link and payable balance",
+        "tags": [
+          "Invoices"
+        ]
       }
     }
   },
@@ -12926,6 +13110,176 @@
           }
         },
         "additionalProperties": false
+      },
+      "InvoicePaymentLinkResult": {
+        "properties": {
+          "data": {
+            "properties": {
+              "amountDue": {
+                "example": 100,
+                "nullable": true,
+                "type": "number"
+              },
+              "amountPaid": {
+                "example": 21,
+                "nullable": true,
+                "type": "number"
+              },
+              "authoritySource": {
+                "enum": [
+                  "payment_authority_v1",
+                  "legacy_projection"
+                ],
+                "example": "payment_authority_v1",
+                "type": "string"
+              },
+              "authorityState": {
+                "enum": [
+                  "verified",
+                  "unknown"
+                ],
+                "example": "verified",
+                "type": "string"
+              },
+              "currency": {
+                "example": "EUR",
+                "type": "string"
+              },
+              "invoiceId": {
+                "example": "inv_abc123",
+                "type": "string"
+              },
+              "invoiceNumber": {
+                "example": "F20260001",
+                "nullable": true,
+                "type": "string"
+              },
+              "observedAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "payable": {
+                "example": true,
+                "type": "boolean"
+              },
+              "paymentState": {
+                "enum": [
+                  "ready",
+                  "processing",
+                  "stale",
+                  "paid",
+                  "cancelled",
+                  "unknown"
+                ],
+                "example": "ready",
+                "type": "string"
+              },
+              "paymentUrl": {
+                "example": "https://app.frihet.io/pay/ws_123/inv_abc123/0123456789abcdef",
+                "format": "uri",
+                "nullable": true,
+                "type": "string"
+              },
+              "status": {
+                "example": "sent",
+                "type": "string"
+              },
+              "tokenPolicy": {
+                "properties": {
+                  "expires": {
+                    "enum": [
+                      false
+                    ],
+                    "type": "boolean"
+                  },
+                  "revalidatesOnOpenAndPay": {
+                    "enum": [
+                      true
+                    ],
+                    "type": "boolean"
+                  },
+                  "version": {
+                    "enum": [
+                      "v1"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "version",
+                  "expires",
+                  "revalidatesOnOpenAndPay"
+                ],
+                "type": "object"
+              },
+              "totalAmount": {
+                "example": 121,
+                "nullable": true,
+                "type": "number"
+              },
+              "unavailableReason": {
+                "enum": [
+                  "invoice_draft",
+                  "historical_import",
+                  "credit_note_not_payable",
+                  "already_paid",
+                  "cancelled",
+                  "client_portal_plan_required",
+                  "connect_not_configured",
+                  "authority_state_unknown",
+                  "zero_balance_due",
+                  "payment_processing",
+                  "payment_state_unknown",
+                  "portal_secret_not_configured",
+                  "invalid_portal_id",
+                  null
+                ],
+                "example": null,
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "required": [
+              "invoiceId",
+              "invoiceNumber",
+              "status",
+              "currency",
+              "totalAmount",
+              "amountPaid",
+              "amountDue",
+              "payable",
+              "unavailableReason",
+              "paymentUrl",
+              "paymentState",
+              "authoritySource",
+              "authorityState",
+              "tokenPolicy",
+              "observedAt"
+            ],
+            "type": "object"
+          },
+          "meta": {
+            "properties": {
+              "requestId": {
+                "type": "string"
+              },
+              "timestamp": {
+                "format": "date-time",
+                "type": "string"
+              }
+            },
+            "required": [
+              "requestId",
+              "timestamp"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "type": "object"
       }
     },
     "responses": {

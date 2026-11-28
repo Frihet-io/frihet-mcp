@@ -7,6 +7,7 @@
  */
 
 import type {
+  BankTransactionSuggestions,
   CreateWebhookInput,
   CreateWebhookResult,
   PaginatedResponse,
@@ -71,6 +72,9 @@ export interface IFrihetClient {
   getPurchaseOrder(id: string): Promise<Record<string, unknown>>;
 
   // Invoice actions
+  getInvoicePaymentLink(id: string): Promise<import("./invoice-payment-link.js").UpstreamInvoicePaymentLinkResponse>;
+  issueInvoice(id: string, idempotencyKey?: string): Promise<Record<string, unknown>>;
+  listSeries(): Promise<{ data: Record<string, unknown>[]; _demo?: true; _demoNotice?: string }>;
   sendInvoice(id: string, to?: string): Promise<Record<string, unknown>>;
   markInvoicePaid(id: string, paidDate?: string): Promise<Record<string, unknown>>;
   // #1393: bounded, content-type-aware document responses. Invoice PDFs and
@@ -81,6 +85,7 @@ export interface IFrihetClient {
   applyLateFee(invoiceId: string, data?: { amount?: number; daysOverdue?: number }): Promise<any>;
 
   // Quote actions
+  getQuotePdf(id: string): Promise<import("./client.js").BinaryDocument>;
   sendQuote(id: string, to?: string): Promise<Record<string, unknown>>;
 
   // Webhooks
@@ -185,6 +190,7 @@ export interface IFrihetClient {
   listBankAccounts(params?: { limit?: number; offset?: number }): Promise<PaginatedResponse<Record<string, unknown>>>;
   getBankAccount(id: string): Promise<Record<string, unknown>>;
   listTransactions(params?: { accountId?: string; from?: string; to?: string; status?: string; category?: string; limit?: number; offset?: number; after?: string }): Promise<PaginatedResponse<Record<string, unknown>>>;
+  getBankingTransactionSuggestions(transactionId: string, params?: { limit?: number }): Promise<BankTransactionSuggestions>;
   categorizeTransaction(id: string, data: { category: string; notes?: string }): Promise<Record<string, unknown>>;
   matchTransactionToDocument(transactionId: string, data: { documentId: string; documentType: "invoice" | "expense"; notes?: string }): Promise<Record<string, unknown>>;
 

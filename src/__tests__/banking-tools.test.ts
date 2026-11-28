@@ -1,11 +1,11 @@
 /**
- * Tests for Banking MCP tools — Wave 6 (5 tools).
+ * Tests for Banking MCP tools — Wave 6 plus read-only rankings (6 tools).
  *
  * Uses Node.js built-in test runner (node:test + node:assert).
  * Run: npm test (after build)
  *
  * Coverage:
- *   1. Tool registration — all 5 banking tools registered
+ *   1. Tool registration — all 6 banking tools registered
  *   2. list_bank_accounts — success path + structuredContent shape
  *   3. get_bank_account — success path
  *   4. list_transactions — success path + filters
@@ -93,6 +93,7 @@ function makeSuccessClient(): import("../client-interface.js").IFrihetClient {
     listBankAccounts: async () => MOCK_ACCOUNTS_LIST,
     getBankAccount: async (_id: string) => MOCK_ACCOUNT,
     listTransactions: async () => MOCK_TRANSACTIONS_LIST,
+    getBankingTransactionSuggestions: async (transactionId: string) => ({ transactionId, limit: 5, suggestions: [] }),
     categorizeTransaction: async (_id: string, data: Record<string, unknown>) => ({ ...MOCK_TRANSACTION, category: data["category"] }),
     matchTransactionToDocument: async (_txId: string, data: Record<string, unknown>) => ({
       ...MOCK_TRANSACTION,
@@ -110,6 +111,7 @@ function make404Client(): import("../client-interface.js").IFrihetClient {
     listBankAccounts: notFound,
     getBankAccount: notFound,
     listTransactions: notFound,
+    getBankingTransactionSuggestions: notFound,
     categorizeTransaction: notFound,
     matchTransactionToDocument: notFound,
   } as unknown as import("../client-interface.js").IFrihetClient;
@@ -138,8 +140,11 @@ describe("Banking Tools — Registration", () => {
     server = await makeServer(makeSuccessClient);
   });
 
-  test("registers exactly 5 banking tools", () => {
-    assert.equal(server.tools.size, 5);
+  test("registers exactly the six canonical banking tools", () => {
+    assert.deepEqual([...server.tools.keys()].sort(), [
+      "list_bank_accounts", "get_bank_account", "list_transactions",
+      "get_banking_transaction_suggestions", "categorize_transaction", "match_transaction_to_invoice",
+    ].sort());
   });
 
   test("registers list_bank_accounts", () => {

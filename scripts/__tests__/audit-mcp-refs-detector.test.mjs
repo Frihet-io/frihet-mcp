@@ -10,7 +10,7 @@
  *      "157 source-verified tools" in four places, drifting unseen on a public
  *      AI-discovery surface the gate already had in its file list.
  *   2. NON-ASCII NOUN ENDINGS. The trailing `\b` is ASCII-only without the `u`
- *      flag, so `araç`, `εργαλεία` and `ツール` could never match even though
+ *      flag, so `araç`, `εργαλεία` and `\u30c4\u30fc\u30eb` could never match even though
  *      all three were already listed in TOOL_NOUNS. They were dead entries.
  *   3. MISSING NOUNS. Danish `værktøjer` and Norwegian `verktøy` were absent.
  *
@@ -70,7 +70,7 @@ const HISTORICAL_LOCALE_VALUES = {
   fr: "mcpServerDetail: '31 tools, npm @frihet/mcp-server',",
   hu: "mcpServerDetail: '31 eszköz, npm @frihet/mcp-server',",
   it: "mcpServerDetail: '31 strumenti, npm @frihet/mcp-server',",
-  ja: "mcpServerDetail: '31ツール、npm @frihet/mcp-server',",
+  ja: "mcpServerDetail: '31\u30c4\u30fc\u30eb\u3001npm @frihet/mcp-server',",
   nl: "mcpServerDetail: '31 tools, npm @frihet/mcp-server',",
   no: "mcpServerDetail: '31 verktøy, npm @frihet/mcp-server',",
   pl: "mcpServerDetail: '31 narzędzi, npm @frihet/mcp-server',",
@@ -124,7 +124,7 @@ describe('tool-count detector — qualifier words', () => {
 });
 
 describe('non-ASCII nouns are reachable, not dead entries', () => {
-  for (const noun of ['araç', 'εργαλεία', 'ツール', 'työkalua', 'narzędzi', 'eszköz']) {
+  for (const noun of ['araç', 'εργαλεία', '\u30c4\u30fc\u30eb', 'työkalua', 'narzędzi', 'eszköz']) {
     test(`${noun} is listed AND matchable`, () => {
       assert.ok(TOOL_NOUNS.includes(noun), `${noun} missing from TOOL_NOUNS`);
       assert.equal(
@@ -136,7 +136,7 @@ describe('non-ASCII nouns are reachable, not dead entries', () => {
   }
 
   test('CJK counts carry no separator', () => {
-    assert.equal(matches('31ツール'), true);
+    assert.equal(matches('31\u30c4\u30fc\u30eb'), true);
   });
 });
 
@@ -145,7 +145,7 @@ describe('anti-defang: the noun list cannot be silently trimmed', () => {
     for (const noun of [
       'tools', 'herramientas', 'outils', 'Werkzeuge', 'strumenti',
       'ferramentas', 'verktyg', 'työkalua', 'gereedschappen', 'narzędzi',
-      'instrumente', 'εργαλεία', 'araç', 'eszköz', 'ツール',
+      'instrumente', 'εργαλεία', 'araç', 'eszköz', '\u30c4\u30fc\u30eb',
       'værktøjer', 'verktøy',
     ]) {
       assert.ok(TOOL_NOUNS.includes(noun), `TOOL_NOUNS lost ${noun}`);
